@@ -38,6 +38,22 @@ public interface IFileTreeService
 
     /// <summary>Watches one file for being written, replaced, renamed or deleted; <paramref name="onChanged"/> is called once after a quiet period, on a background thread.</summary>
     IDisposable WatchFile(string path, Action onChanged, TimeSpan debounce);
+
+    /// <summary>Creates an empty file. Throws <see cref="IOException"/> when the name is taken.</summary>
+    Task CreateFileAsync(string path, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This file tree cannot create files.");
+
+    /// <summary>Creates a folder. Throws <see cref="IOException"/> when the name is taken.</summary>
+    Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This file tree cannot create folders.");
+
+    /// <summary>Renames or moves a file or folder. Throws <see cref="IOException"/> when the new name is taken.</summary>
+    Task RenameAsync(string path, string newPath, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This file tree cannot rename.");
+
+    /// <summary>Deletes a file or folder: into the trash where this computer has one, otherwise for good.</summary>
+    Task DeleteAsync(string path, bool isDirectory, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This file tree cannot delete.");
 }
 
 /// <summary>A line of a file that contains the search text.</summary>

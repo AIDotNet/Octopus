@@ -1,8 +1,67 @@
+using Octopus.Platform;
+
 namespace Octopus.FileSystem;
 
 /// <summary>Lists directories with <see cref="Directory"/> and watches a tree with <see cref="FileSystemWatcher"/>.</summary>
-public sealed class FileTreeService : IFileTreeService
+public sealed class FileTreeService(ITrashService? trash = null) : IFileTreeService
 {
+    public async Task CreateFileAsync(string path, CancellationToken cancellationToken = default) =>
+        await Task.Run(() =>
+        {
+            EnsureFree(path);
+            using (File.Create(path))
+            {
+            }
+        }, cancellationToken);
+
+    public async Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default) =>
+        await Task.Run(() =>
+        {
+            EnsureFree(path);
+            Directory.CreateDirectory(path);
+        }, cancellationToken);
+
+    public async Task RenameAsync(string path, string newPath, CancellationToken cancellationToken = default) =>
+        await Task.Run(() =>
+        {
+            var isDirectory = Directory.Exists(path);
+            // A name that differs only in case is the same entry on a case-insensitive disk: it is moved through a temporary name.
+            if (string.Equals(path, newPath, StringComparison.OrdinalIgnoreCase) && !string.Equals(path, newPath, StringComparison.Ordinal))
+            {
+                var temporary = path + ".octopus-rename";
+                EnsureFree(temporary);
+                Move(path, temporary, isDirectory);
+                path = temporary;
+            }
+            else
+            {
+                EnsureFree(newPath);
+            }
+            Move(path, newPath, isDirectory);
+        }, cancellationToken);
+
+    public async Task DeleteAsync(string path, bool isDirectory, CancellationToken cancellationToken = default) =>
+        await Task.Run(() =>
+        {
+            if (trash is not null && trash.MoveToTrash(path)) return;
+            if (isDirectory) Directory.Delete(path, recursive: true);
+            else File.Delete(path);
+        }, cancellationToken);
+
+    private static void EnsureFree(string path)
+    {
+        if (File.Exists(path) || Directory.Exists(path))
+        {
+            throw new IOException($"The name is taken: {Path.GetFileName(path)}");
+        }
+    }
+
+    private static void Move(string from, string to, bool isDirectory)
+    {
+        if (isDirectory) Directory.Move(from, to);
+        else File.Move(from, to);
+    }
+
     public IReadOnlyList<FileEntry> List(string directory)
     {
         try

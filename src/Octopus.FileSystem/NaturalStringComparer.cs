@@ -1,7 +1,7 @@
 namespace Octopus.FileSystem;
 
 /// <summary>File-manager order: case-insensitive, runs of digits compare by value.</summary>
-internal sealed class NaturalStringComparer : IComparer<string>
+public sealed class NaturalStringComparer : IComparer<string>
 {
     public static readonly NaturalStringComparer Instance = new();
 
