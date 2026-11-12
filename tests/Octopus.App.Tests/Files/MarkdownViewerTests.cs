@@ -77,7 +77,8 @@ public class MarkdownViewerTests
         Assert.True(h.Editor.IsEffectivelyVisible);
         Assert.False(h.Markdown.IsDirty);
         Assert.False(h.Editor.CanUndo, "undo must not be able to step back past the loaded file");
-        Assert.Contains(h.View.GetVisualDescendants(), d => d is SegmentedControl);
+        // The rendered/source switch is two icon buttons in the header bar.
+        Assert.Equal(2, h.View.GetVisualDescendants().Count(d => d is Avalonia.Input.ICommandSource s && ReferenceEquals(s.Command, h.Markdown.SetViewModeCommand)));
     }
 
     [AvaloniaFact]
