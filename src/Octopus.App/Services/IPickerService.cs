@@ -5,4 +5,6 @@ public interface IPickerService
 {
     Task<string?> PickFolderAsync();
     Task<string?> PickFileAsync(string? startDirectory);
+    /// <summary>An image file (png, jpg, gif, webp, bmp, ico); null when cancelled.</summary>
+    Task<string?> PickImageAsync();
 }

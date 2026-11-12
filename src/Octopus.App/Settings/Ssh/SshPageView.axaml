@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:ssh="using:Octopus.App.Settings.Ssh"
+             x:Class="Octopus.App.Settings.Ssh.SshPageView"
+             x:DataType="ssh:SshSettingsViewModel">
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsSshTitle}" />
+            <TextBlock Classes="subtitle" Text="{Binding Subtitle}" />
+        </StackPanel>
+
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="14,10">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsSshConfigFile}" />
+                    <TextBlock Classes="mono" Text="{Binding ConfigPath}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsSshHint}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Classes="hint"
+                           VerticalAlignment="Center"
+                           Text="{Binding LastScanText}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <arc:Button Variant="Primary"
+                                Size="Small"
+                                Content="{l:AppLangResource SettingsSshAdd}"
+                                Command="{Binding AddHostCommand}" />
+                    <arc:Button Variant="Secondary"
+                                Size="Small"
+                                IsVisible="{Binding ConfigExists}"
+                                Content="{l:AppLangResource SettingsSshOpenConfig}"
+                                Command="{Binding OpenConfigCommand}" />
+                    <arc:Button Variant="Secondary"
+                                Size="Small"
+                                Content="{l:AppLangResource SettingsRescan}"
+                                Command="{Binding RescanCommand}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <arc:Alert Tone="Danger"
+                   Content="{Binding ErrorText}"
+                   IsVisible="{Binding HasError}" />
+
+        <TextBlock Classes="hint"
+                   Margin="2,0,0,0"
+                   Text="{Binding EmptyText}"
+                   IsVisible="{Binding !HasHosts}" />
+
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                ClipToBounds="True"
+                IsVisible="{Binding HasHosts}">
+            <ItemsControl ItemsSource="{Binding Hosts}" Margin="0,-1,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="ssh:SshHostRow">
+                        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,10">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                                <lucide:LucideIcon Kind="Server"
+                                                   Size="16"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Classes="name" Text="{Binding Alias}" />
+                                    <TextBlock Classes="mono" Text="{Binding Address}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasAddress}" />
+                                    <TextBlock Classes="hint" Text="{Binding Details}" IsVisible="{Binding HasDetails}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+    </StackPanel>
+</UserControl>

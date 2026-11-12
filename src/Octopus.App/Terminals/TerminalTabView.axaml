@@ -4,6 +4,7 @@
              xmlns:l="using:Octopus.App.Localization"
              xmlns:term="using:Octopus.Terminal.Avalonia"
              xmlns:vm="using:Octopus.App.Terminals"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              x:Class="Octopus.App.Terminals.TerminalTabView"
              x:DataType="vm:TerminalTabViewModel">
     <Grid>
@@ -11,6 +12,60 @@
                               FontSize="{Binding TerminalFontSize}"
                               ScrollbackLines="{Binding ScrollbackLines}"
                               ConfirmMultilinePaste="{Binding ConfirmMultilinePaste}" />
+        <!-- The connection of a terminal on an SSH host: its steps and the protocol lines, while it is made or when it failed. -->
+        <!-- With no connection (a terminal on this computer) the binding has no source: FallbackValue keeps the card hidden. -->
+        <Border x:Name="ConnectCard" DataContext="{Binding Connect}" x:DataType="vm:SshConnectProgress"
+                IsVisible="{Binding IsVisible, FallbackValue=False}"
+                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24"
+                Width="520" Padding="18,14"
+                Background="{arc:ArcDesignTokenResource Background}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}">
+            <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <arc:ArcSpinner Width="14" Height="14" VerticalAlignment="Center"
+                                    IsVisible="{Binding IsConnecting}"
+                                    Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                    <lucide:LucideIcon Kind="CircleAlert" Size="16" VerticalAlignment="Center"
+                                       IsVisible="{Binding !IsConnecting}"
+                                       Foreground="{arc:ArcDesignTokenResource Warning}" />
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap" />
+                </StackPanel>
+                <ItemsControl ItemsSource="{Binding Steps}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SshConnectStep">
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="2,2">
+                                <lucide:LucideIcon Kind="Check" Size="14" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsDone}"
+                                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center"
+                                                IsVisible="{Binding IsCurrent}"
+                                                Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                <lucide:LucideIcon Kind="Circle" Size="8" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsPending}"
+                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding ProtocolTitle}" FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                <ScrollViewer MaxHeight="220">
+                    <ItemsControl ItemsSource="{Binding RecentLines}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap"
+                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
         <arc:Alert Tone="Danger"
                    Margin="16"
                    VerticalAlignment="Top"

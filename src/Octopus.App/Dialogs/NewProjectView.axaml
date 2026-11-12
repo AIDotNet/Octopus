@@ -5,10 +5,14 @@
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              x:Class="Octopus.App.Dialogs.NewProjectView">
     <StackPanel Spacing="14">
+        <!-- Shown only when the SSH config has hosts: the folder then is a path on that host. -->
+        <arc:Select x:Name="LocationSelect" Size="Small"
+                    Label="{l:AppLangResource NewProjectLocation}"
+                    AutoScrollToSelectedItem="False"
+                    IsVisible="False" />
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <arc:Input x:Name="PathInput" Size="Small"
-                       Label="{l:AppLangResource NewProjectFolder}"
-                       Placeholder="{l:AppLangResource NewProjectFolderPlaceholder}" />
+            <!-- Label and placeholder are set in code (OnLocationChanged): a markup binding would put back the local text. -->
+            <arc:Input x:Name="PathInput" Size="Small" />
             <arc:Button x:Name="BrowseButton" Grid.Column="1" Variant="Secondary" Size="Small" VerticalAlignment="Top" Margin="0,24,0,0">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <lucide:LucideIcon Kind="FolderOpen" Size="14" />

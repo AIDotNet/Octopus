@@ -42,4 +42,28 @@ public sealed class PickerService(IWindowAccessor windows) : IPickerService
         });
         return files.Count == 0 ? null : files[0].TryGetLocalPath();
     }
+
+    public async Task<string?> PickImageAsync()
+    {
+        var storage = windows.Window?.StorageProvider;
+        if (storage is null)
+        {
+            return null;
+        }
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = AppLangResources.Get(AppLangResourceKind.ProjectAppearanceChoosePicture),
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType(AppLangResources.Get(AppLangResourceKind.ProjectAppearancePictureFilter))
+                {
+                    Patterns = ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.bmp", "*.ico"],
+                    AppleUniformTypeIdentifiers = ["public.image"],
+                    MimeTypes = ["image/*"],
+                },
+            ],
+        });
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
+    }
 }

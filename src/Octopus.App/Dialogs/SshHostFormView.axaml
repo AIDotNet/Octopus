@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             x:Class="Octopus.App.Dialogs.SshHostFormView">
+    <StackPanel Spacing="14">
+        <arc:Input x:Name="AliasInput" Size="Small"
+                   Label="{l:AppLangResource SettingsSshFieldAlias}"
+                   Description="{l:AppLangResource SettingsSshFieldAliasHint}"
+                   Placeholder="prod-web" />
+        <arc:Input x:Name="HostNameInput" Size="Small"
+                   Label="{l:AppLangResource SettingsSshFieldHostName}"
+                   Description="{l:AppLangResource SettingsSshFieldHostNameHint}"
+                   Placeholder="10.0.0.5" />
+        <Grid ColumnDefinitions="*,120" ColumnSpacing="8">
+            <arc:Input x:Name="UserInput" Size="Small"
+                       Label="{l:AppLangResource SettingsSshFieldUser}"
+                       Placeholder="root" />
+            <arc:Input x:Name="PortInput" Grid.Column="1" Size="Small"
+                       Label="{l:AppLangResource SettingsSshFieldPort}"
+                       Placeholder="22" />
+        </Grid>
+        <arc:Input x:Name="IdentityFileInput" Size="Small"
+                   Label="{l:AppLangResource SettingsSshFieldIdentityFile}"
+                   Placeholder="~/.ssh/id_ed25519" />
+        <arc:Input x:Name="ProxyJumpInput" Size="Small"
+                   Label="{l:AppLangResource SettingsSshFieldProxyJump}"
+                   Placeholder="bastion" />
+    </StackPanel>
+</UserControl>
