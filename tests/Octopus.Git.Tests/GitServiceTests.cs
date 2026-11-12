@@ -182,7 +182,7 @@ public class GitServiceTests : IDisposable
         var dirs = await _service.GetGitDirectoriesAsync(Path.Combine(_dir, "sub", "deep"), TestContext.Current.CancellationToken);
 
         Assert.NotNull(dirs);
-        Assert.Equal(Path.GetFileName(dirs.GitDirectory), ".git");
+        Assert.Equal(".git", Path.GetFileName(dirs.GitDirectory));
         Assert.True(Directory.Exists(dirs.GitDirectory));
         Assert.Equal(dirs.GitDirectory, dirs.CommonDirectory);
         Assert.Null(await _service.GetGitDirectoriesAsync(Directory.CreateTempSubdirectory("octopus-nogit-").FullName, TestContext.Current.CancellationToken));
@@ -256,5 +256,52 @@ public class GitServiceTests : IDisposable
     {
         public Task<IReadOnlyDictionary<string, string>> GetAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string> { ["PATH"] = "/nonexistent" });
+    }
+    [Fact]
+    public async Task Staging_unstaging_and_committing_change_the_repository()
+    {
+        if (_git is null) return;
+        var ct = TestContext.Current.CancellationToken;
+        InitWithCommit();
+        Git("config", "commit.gpgsign", "false");
+        Write("a.txt", "one\ntwo\n");
+        Write("new dir/c.txt", "see\n");
+        File.Delete(Path.Combine(_dir, "b.txt"));
+
+        Assert.True((await _service.StageAsync(_dir, ["a.txt", "new dir/c.txt", "b.txt"], ct)).Succeeded);
+        var status = await _service.GetStatusAsync(_dir, ct);
+        Assert.All(status!.Changes, c => Assert.True(c.IsStaged));
+        Assert.Equal(3, status.Changes.Count);
+
+        Assert.True((await _service.UnstageAsync(_dir, ["a.txt"], ct)).Succeeded);
+        status = await _service.GetStatusAsync(_dir, ct);
+        Assert.False(status!.Changes.Single(c => c.Path == "a.txt").IsStaged);
+
+        var commit = await _service.CommitAsync(_dir, "second commit\n\nwith a body", ct);
+        Assert.True(commit.Succeeded, commit.Error);
+        var log = await _service.GetLogAsync(_dir, 5, ct);
+        Assert.Equal("second commit", log[0].Subject);
+        status = await _service.GetStatusAsync(_dir, ct);
+        // Only what was staged went in: a.txt is still changed.
+        Assert.Equal(["a.txt"], status!.Changes.Select(c => c.Path).ToArray());
+
+        // Nothing staged: git says so.
+        var nothing = await _service.CommitAsync(_dir, "third", ct);
+        Assert.False(nothing.Succeeded);
+        Assert.False(string.IsNullOrWhiteSpace(nothing.Error));
+        Assert.False((await _service.CommitAsync(_dir, "  ", ct)).Succeeded);
+    }
+
+    [Fact]
+    public async Task The_first_commit_of_a_new_repository_can_be_staged_and_unstaged()
+    {
+        if (_git is null) return;
+        var ct = TestContext.Current.CancellationToken;
+        Git("init", "-q");
+        Write(":odd.txt", "x\n");
+        Assert.True((await _service.StageAsync(_dir, [":odd.txt"], ct)).Succeeded);
+        Assert.True((await _service.GetStatusAsync(_dir, ct))!.Changes.Single().IsStaged);
+        Assert.True((await _service.UnstageAsync(_dir, [":odd.txt"], ct)).Succeeded);
+        Assert.Equal(GitChangeKind.Untracked, (await _service.GetStatusAsync(_dir, ct))!.Changes.Single().Kind);
     }
 }
