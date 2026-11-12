@@ -42,5 +42,26 @@
     "features": [
       { "id": "agent", "type": "string", "label": "Primary agent", "args": ["--agent", "{value}"], "localized": { "zh-CN": { "label": "主智能体" } } }
     ]
+  },
+  // OpenCode's extensions are in-process JS plugins, so Octopus generates a small one (it writes the forwarder's
+  // envelope to the socket itself). 1.19.3 merges OPENCODE_CONFIG_CONTENT over the user's config and appends its
+  // plugins (read from the binary). An event is matched by its type, and session.status also as "type:status".
+  "signals": {
+    "minVersion": "1.19.3",
+    "attach": [
+      { "env": { "OPENCODE_CONFIG_CONTENT": "{signalConfig}" }, "note": "merge and file:// plugin loading read from the 1.19.3 binary; Bun connecting to the socket or pipe not yet run (research §7)" }
+    ],
+    "channels": {
+      "session-usage": { "via": "plugin", "event": "session.usage.updated" },
+      "session-busy": { "via": "plugin", "event": "session.status:busy" },
+      "session-idle": { "via": "plugin", "event": "session.idle" },
+      "session-error": { "via": "plugin", "event": "session.error" }
+    },
+    "status": {
+      "working": ["session-busy"],
+      "done": ["session-idle"],
+      "error": ["session-error"]
+    },
+    "credentialFiles": ["auth.json"]
   }
 }

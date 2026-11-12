@@ -56,5 +56,34 @@
       ],
       "allowCustom": true
     }
+  },
+  // Cursor has no status line; only hooks. 2026.08.11 has --plugin-dir and its bundle reads a plugin's
+  // .cursor-plugin/plugin.json and hooks/hooks.json ({"version":1,"hooks":{…}}), but no real session has run it.
+  // Hooks get the reply {} because beforeSubmitPrompt blocks only on "continue": false.
+  "signals": {
+    "minVersion": "2026.08.11",
+    "attach": [
+      { "args": ["--plugin-dir", "{signalPluginDir}"], "note": "plugin hooks loaded from --plugin-dir: read from the 2026.08.11 bundle, not yet run (research §3.2)" }
+    ],
+    "channels": {
+      "session-start": { "via": "hook", "event": "sessionStart" },
+      "prompt-submit": { "via": "hook", "event": "beforeSubmitPrompt" },
+      "stop": { "via": "hook", "event": "stop" },
+      "session-end": { "via": "hook", "event": "sessionEnd" }
+    },
+    "status": {
+      "working": ["prompt-submit"],
+      "done": ["stop"]
+    }
+  },
+  "probes": {
+    // The output also carries the user's email; only the tier leaves Octopus.
+    "account": {
+      "kind": "command",
+      "args": ["about", "--format", "json"],
+      "parse": "json",
+      "select": ["subscriptionTier"],
+      "minIntervalSec": 86400
+    }
   }
 }

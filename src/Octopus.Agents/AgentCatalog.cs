@@ -20,9 +20,13 @@ public sealed class AgentCatalog : IAgentCatalog
     private IReadOnlyList<AgentDefinition> _definitions = [];
     private IReadOnlyList<string> _loadErrors = [];
 
-    public AgentCatalog(IAppPaths paths)
+    private readonly IReadOnlyList<IAgentDefinitionSource> _sources;
+
+    public AgentCatalog(IAppPaths paths, IEnumerable<IAgentDefinitionSource>? sources = null)
     {
         _paths = paths;
+        _sources = sources?.ToList() ?? [];
+        foreach (var source in _sources) source.Changed += (_, _) => Reload();
         Reload();
     }
 
@@ -46,6 +50,17 @@ public sealed class AgentCatalog : IAgentCatalog
             list.Add(def);
         }
         list.Sort((a, b) => OrderOf(a.Id).CompareTo(OrderOf(b.Id)));
+
+        // Plugins add agents; one with an id that is already taken is left out (it would change what a person chose).
+        foreach (var def in LoadFromSources(errors))
+        {
+            if (list.Any(d => string.Equals(d.Id, def.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                errors.Add($"{def.OriginName}: the agent \"{def.Id}\" already exists and is not replaced by a plugin.");
+                continue;
+            }
+            list.Add(def);
+        }
 
         foreach (var def in LoadUser(errors))
         {
@@ -96,6 +111,31 @@ public sealed class AgentCatalog : IAgentCatalog
             if (def is not null && Validate(def, name, errors))
             {
                 yield return def;
+            }
+        }
+    }
+
+    private IEnumerable<AgentDefinition> LoadFromSources(List<string> errors)
+    {
+        foreach (var source in _sources)
+        {
+            foreach (var file in source.Files)
+            {
+                AgentDefinition? def = null;
+                try
+                {
+                    def = JsonSerializer.Deserialize(File.ReadAllText(file.Path), AgentJsonContext.Default.AgentDefinition);
+                }
+                catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+                {
+                    errors.Add($"{file.OriginName} ({Path.GetFileName(file.Path)}): {ex.Message}");
+                }
+                if (def is not null && Validate(def, $"{file.OriginName} ({Path.GetFileName(file.Path)})", errors))
+                {
+                    def.Origin = file.Origin;
+                    def.OriginName = file.OriginName;
+                    yield return def;
+                }
             }
         }
     }

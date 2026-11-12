@@ -69,5 +69,42 @@
       { "id": "strictMcp", "type": "bool", "label": "Use only the given MCP servers", "args": ["--strict-mcp-config"], "localized": { "zh-CN": { "label": "仅使用指定的 MCP 服务器" } } },
       { "id": "settings", "type": "file", "label": "Extra settings", "args": ["--settings", "{value}"], "localized": { "zh-CN": { "label": "额外 settings 文件" } } }
     ]
+  },
+  // design/plugins/11-补充能力.md §1.2. The status line goes through --settings (it replaces the key, so the
+  // forwarder chains the user's own command); hooks go through --plugin-dir (expected to add to the user's hooks).
+  "probes": {
+    "account": {
+      "kind": "command",
+      "args": ["auth", "status", "--json"],
+      "parse": "json",
+      "select": ["subscriptionType", "planTier", "authMethod", "apiProvider", "loggedIn"],
+      "timeoutMs": 10000,
+      "minIntervalSec": 3600
+    }
+  },
+  "signals": {
+    "minVersion": "2.1.80",
+    "account": { "env": "CLAUDE_CONFIG_DIR", "default": "~/.claude" },
+    "attach": [
+      { "args": ["--settings", "{signalSettings}"], "note": "statusLine incl. refreshInterval is in the 2.1.322 settings schema; not yet run in a real session (13-P0 §4)" },
+      { "args": ["--plugin-dir", "{signalPluginDir}"], "note": "--plugin-dir is in 2.1.322 --help; whether plugin hooks add to the user's hooks is not yet checked (13-P0 §4)" }
+    ],
+    "channels": {
+      "statusline": { "via": "statusLine", "chainUserCommand": true, "refreshInterval": 30 },
+      "session-start": { "via": "hook", "event": "SessionStart" },
+      "prompt-submit": { "via": "hook", "event": "UserPromptSubmit" },
+      "permission-request": { "via": "hook", "event": "PermissionRequest" },
+      "notification": { "via": "hook", "event": "Notification" },
+      "stop": { "via": "hook", "event": "Stop" },
+      "stop-failure": { "via": "hook", "event": "StopFailure" },
+      "session-end": { "via": "hook", "event": "SessionEnd" }
+    },
+    "status": {
+      "working": ["prompt-submit"],
+      "waiting": ["permission-request", "notification"],
+      "done": ["stop"],
+      "error": ["stop-failure"]
+    },
+    "credentialFiles": [".credentials.json"]
   }
 }

@@ -44,6 +44,10 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
         {
             env[k] = v;
         }
+        if (request.Signals is { } signals)
+        {
+            args.AddRange(signals.Arguments);
+        }
 
         var model = Normalize(launch?.Model ?? profile.Model);
         var effort = Normalize(launch?.Effort ?? profile.Effort);
@@ -136,6 +140,15 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
         foreach (var (k, v) in profile.Env)
         {
             env[k] = v;
+        }
+
+        // Last: an overlay variable the user also sets was already merged with theirs by the planner.
+        if (request.Signals is { } attached)
+        {
+            foreach (var (k, v) in attached.Environment)
+            {
+                env[k] = v;
+            }
         }
 
         return new AgentCommand(executable, args, env);

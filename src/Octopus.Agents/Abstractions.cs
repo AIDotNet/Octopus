@@ -1,3 +1,4 @@
+using Octopus.Agents.Signals;
 using Octopus.Core.Agents;
 
 namespace Octopus.Agents;
@@ -9,6 +10,24 @@ public interface IAgentCatalog
     AgentDefinition? Find(string agentId);
     /// <summary>Reads the user's definitions again.</summary>
     void Reload();
+    event EventHandler? Changed;
+}
+
+/// <summary>An agent definition file that does not live in the user's agents folder: one a plugin ships.</summary>
+/// <param name="Path">The JSON file (same schema as the agents folder).</param>
+/// <param name="Origin">Who provides it (a plugin id).</param>
+/// <param name="OriginName">Its name as people read it.</param>
+public sealed record AgentDefinitionFile(string Path, string Origin, string OriginName);
+
+/// <summary>
+/// More agent definitions for <see cref="IAgentCatalog"/> (design/plugins/08 §3: user folder &gt; plugins &gt; built-in).
+/// A definition from here may add an agent but never replace a built-in or a user's one.
+/// </summary>
+public interface IAgentDefinitionSource
+{
+    IReadOnlyList<AgentDefinitionFile> Files { get; }
+
+    /// <summary>The files changed (a plugin was enabled, disabled, installed or removed).</summary>
     event EventHandler? Changed;
 }
 
@@ -33,16 +52,22 @@ public interface IAgentScanner
 /// <summary>Inputs of one compilation.</summary>
 /// <param name="GlobalPermission">The permission level used when the profile has none.</param>
 /// <param name="InstalledPath">The detected executable; null when not detected (the first executable name is used).</param>
+/// <param name="Signals">
+/// From <see cref="ISignalAttachPlanner"/>: its arguments go right after the base arguments (before anything that
+/// could end option parsing, such as a prompt after <c>--</c>); its variables go last, because an overlay variable
+/// the profile also sets was already merged with the profile's value by the planner.
+/// </param>
 public sealed record AgentCompileRequest(
     AgentDefinition Definition,
     AgentProfile Profile,
     AgentLaunchOptions? Launch,
     string GlobalPermission,
-    string? InstalledPath);
+    string? InstalledPath,
+    SignalAttachment? Signals = null);
 
 /// <summary>
 /// Pure function from a definition, the user's profile and one launch's options to a command. No IO.
-/// Order: command → base args → model → effort → fast → permission → features → extra args → resume → prompt.
+/// Order: command → base args → signals → model → effort → fast → permission → features → extra args → resume → prompt.
 /// </summary>
 public interface IAgentCommandCompiler
 {

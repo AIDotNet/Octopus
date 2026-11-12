@@ -62,5 +62,36 @@
       { "id": "search", "type": "bool", "label": "Live web search", "args": ["--search"], "localized": { "zh-CN": { "label": "联网搜索" } } },
       { "id": "profile", "type": "string", "label": "Profile", "args": ["--profile", "{value}"], "localized": { "zh-CN": { "label": "配置档" } } }
     ]
+  },
+  // Codex has no status line. notify is a single slot (the user's own program is chained); whether hooks can be
+  // added per session with -c is unknown (research/智能体用量来源调研.md §1.3), so only turn completion is heard.
+  "signals": {
+    "minVersion": "0.167.0",
+    "account": { "env": "CODEX_HOME", "default": "~/.codex" },
+    "attach": [
+      { "args": ["-c", "notify={signalNotify}"], "note": "-c overrides any config key; notify passing its JSON as the last argument is from memory of the Codex docs, not yet run (13-P0 §4)" }
+    ],
+    "channels": {
+      "turn-complete": { "via": "notify", "chainUserCommand": true }
+    },
+    "status": {
+      "done": ["turn-complete"]
+    },
+    "credentialFiles": ["auth.json"]
+  },
+  // Read-only account query through the official app-server protocol (13-P0 §3: 1.3–2.9 s, found a 43200-minute window).
+  "probes": {
+    "rateLimits": {
+      "kind": "jsonRpcStdio",
+      "args": ["app-server"],
+      "requests": [
+        { "method": "initialize", "params": { "clientInfo": { "name": "octopus", "version": "{appVersion}" } } },
+        { "method": "account/rateLimits/read", "result": true }
+      ],
+      "select": ["rateLimits", "rateLimitsByLimitId"],
+      "timeoutMs": 30000,
+      "minIntervalSec": 120,
+      "exclusivePer": "account"
+    }
   }
 }

@@ -9,4 +9,7 @@
     <ItemGroup>
         <EmbeddedResource Include="Catalog/*.json" />
     </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Agents.Tests" />
+    </ItemGroup>
 </Project>

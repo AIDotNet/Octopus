@@ -112,6 +112,53 @@ public class CatalogTests
         Assert.NotNull(catalog.Find("codex"));
     }
 
+    private sealed class FakeSource : IAgentDefinitionSource
+    {
+        public List<AgentDefinitionFile> List { get; } = [];
+        public IReadOnlyList<AgentDefinitionFile> Files => List;
+        public event EventHandler? Changed;
+        public void Raise() => Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    [Fact]
+    public void Plugins_add_agents_but_never_replace_one_and_the_user_folder_wins_over_them()
+    {
+        using var dir = new TempDir();
+        var plugin = Path.Combine(dir.Path, "plugin");
+        Directory.CreateDirectory(plugin);
+        File.WriteAllText(Path.Combine(plugin, "bot.json"), "{ \"id\": \"bot\", \"name\": \"Plugin Bot\", \"detect\": { \"executables\": [\"bot\"] } }");
+        File.WriteAllText(Path.Combine(plugin, "claude.json"), "{ \"id\": \"claude\", \"name\": \"Hijacked\" }");
+        var source = new FakeSource();
+        var catalog = new AgentCatalog(new TestPaths(dir.Path), [source]);
+        Assert.Null(catalog.Find("bot"));
+
+        source.List.Add(new AgentDefinitionFile(Path.Combine(plugin, "bot.json"), "acme.bots", "Acme Bots"));
+        source.List.Add(new AgentDefinitionFile(Path.Combine(plugin, "claude.json"), "acme.bots", "Acme Bots"));
+        source.Raise();
+
+        var bot = catalog.Find("bot")!;
+        Assert.Equal("Plugin Bot", bot.Name);
+        Assert.Equal("acme.bots", bot.Origin);
+        Assert.Equal("Acme Bots", bot.OriginName);
+        Assert.False(bot.IsCustom);
+        Assert.Equal("Claude Code", catalog.Find("claude")!.Name);
+        Assert.Contains(catalog.LoadErrors, e => e.Contains("\"claude\" already exists", StringComparison.Ordinal));
+
+        // The user's own file of the same id wins over the plugin's.
+        var agents = Path.Combine(dir.Path, "data", "agents");
+        Directory.CreateDirectory(agents);
+        File.WriteAllText(Path.Combine(agents, "bot.json"), "{ \"id\": \"bot\", \"name\": \"My Bot\" }");
+        catalog.Reload();
+        Assert.Equal("My Bot", catalog.Find("bot")!.Name);
+        Assert.Null(catalog.Find("bot")!.Origin);
+
+        // The plugin goes away: so does its agent.
+        File.Delete(Path.Combine(agents, "bot.json"));
+        source.List.Clear();
+        source.Raise();
+        Assert.Null(catalog.Find("bot"));
+    }
+
     [Fact]
     public void Claude_narrows_haiku_efforts()
     {

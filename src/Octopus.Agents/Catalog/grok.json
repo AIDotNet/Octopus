@@ -50,5 +50,44 @@
       { "id": "agent", "type": "string", "label": "Agent", "args": ["--agent", "{value}"], "localized": { "zh-CN": { "label": "智能体" } } },
       { "id": "rules", "type": "text", "label": "Extra rules", "args": ["--rules", "{value}"], "localized": { "zh-CN": { "label": "额外规则" } } }
     ]
+  },
+  // The design attaches through the GROK_CONFIG overlay. Grok 1.0.62's own guide (~/.grok/docs/user-guide,
+  // 05-configuration.md and 25-status-line.md) says the overlay is inline JSON confined to an allowlist (models,
+  // features, toolset, shell_environment_policy): [ui.status_line] and hooks are dropped, and "only your own config
+  // can set" a status line. --plugin-dir exists only on `grok agent … stdio`, not on the interactive `grok`. So the
+  // attach entry stays commented out: the generator for {signalConfig} (a JSON overlay with ui.status_line and hooks)
+  // is implemented and tested, and enabling it is this one line once a Grok version accepts it.
+  "signals": {
+    "minVersion": "1.0.62",
+    "account": { "env": "GROK_HOME", "default": "~/.grok" },
+    "attach": [
+      // { "env": { "GROK_CONFIG": "{signalConfig}" }, "note": "dropped by the overlay allowlist in 1.0.62" }
+    ],
+    "channels": {
+      "statusline": { "via": "statusLine", "chainUserCommand": true, "refreshInterval": 30 },
+      "session-start": { "via": "hook", "event": "SessionStart" },
+      "prompt-submit": { "via": "hook", "event": "UserPromptSubmit" },
+      "notification": { "via": "hook", "event": "Notification" },
+      "stop": { "via": "hook", "event": "Stop" },
+      "stop-failure": { "via": "hook", "event": "StopFailure" },
+      "session-end": { "via": "hook", "event": "SessionEnd" }
+    },
+    "status": {
+      "working": ["prompt-submit"],
+      "waiting": ["notification"],
+      "done": ["stop"],
+      "error": ["stop-failure"]
+    },
+    "credentialFiles": ["auth.json"]
+  },
+  "probes": {
+    // The guide (17-sessions.md): "prints persisted token and cost usage; use it rather than reading session files".
+    "sessionUsage": {
+      "kind": "command",
+      "args": ["usage", "{sessionId}"],
+      "parse": "json",
+      "select": ["sessionId", "updatedAt", "session"],
+      "minIntervalSec": 10
+    }
   }
 }
