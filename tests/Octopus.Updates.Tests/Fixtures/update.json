@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "version": "1.3.1201-preview.2",
+  "publishedAt": "2026-11-12T09:16:36Z",
+  "notesUrl": "https://github.com/AIDotNet/Octopus/releases/tag/v1.3.1201-preview.2",
+  "assets": {
+    "linux-x64": {
+      "name": "Octopus-1.3.1201-preview.2-linux-x64.run",
+      "url": "https://github.com/AIDotNet/Octopus/releases/download/v1.3.1201-preview.2/Octopus-1.3.1201-preview.2-linux-x64.run",
+      "size": 1000,
+      "sha256": "0a32797e6398f10306212f0c7405bdf46a5e0747b3e3be29065504a9edb16b6e"
+    },
+    "osx-arm64": {
+      "name": "Octopus-1.3.1201-preview.2-osx-arm64.zip",
+      "url": "https://github.com/AIDotNet/Octopus/releases/download/v1.3.1201-preview.2/Octopus-1.3.1201-preview.2-osx-arm64.zip",
+      "size": 1000,
+      "sha256": "fdeea890358f161e3dc20049d8c33b88949f7b906dabb18cfdf97f1fd216a08c"
+    },
+    "osx-x64": {
+      "name": "Octopus-1.3.1201-preview.2-osx-x64.zip",
+      "url": "https://github.com/AIDotNet/Octopus/releases/download/v1.3.1201-preview.2/Octopus-1.3.1201-preview.2-osx-x64.zip",
+      "size": 1000,
+      "sha256": "4f3b1727d6ee51ff07e282abfd1bc27724cd8225e91f65d797bb951b7dd2ad3c"
+    },
+    "win-x64": {
+      "name": "Octopus-1.3.1201-preview.2-win-x64-setup.exe",
+      "url": "https://github.com/AIDotNet/Octopus/releases/download/v1.3.1201-preview.2/Octopus-1.3.1201-preview.2-win-x64-setup.exe",
+      "size": 1000,
+      "sha256": "75d0656a63d057e31c865e4fba7e5df16c0a9603a3c1b780549cefc9faa9c7a9"
+    }
+  }
+}

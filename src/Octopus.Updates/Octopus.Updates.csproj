@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Automatic updates (design/10-自动更新.md): the signed manifest, the download, the state machine. No UI. -->
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Core/Octopus.Core.csproj" />
+        <ProjectReference Include="../Octopus.Platform/Octopus.Platform.csproj" />
+        <ProjectReference Include="../Octopus.Storage/Octopus.Storage.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Updates.Tests" />
+    </ItemGroup>
+</Project>

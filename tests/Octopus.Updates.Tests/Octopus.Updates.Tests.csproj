@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+        <NoWarn>$(NoWarn);CA1416;xUnit1051</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="xunit.v3" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Octopus.Updates/Octopus.Updates.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- A manifest made by tools/make-update-manifest.py and signed by openssl with a throw-away key. -->
+        <None Include="Fixtures/**" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>
