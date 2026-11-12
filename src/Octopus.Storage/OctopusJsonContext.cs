@@ -15,7 +15,7 @@ namespace Octopus.Storage;
     ReadCommentHandling = JsonCommentHandling.Skip,
     AllowTrailingCommas = true,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip,
-    Converters = [typeof(OctopusJsonContext.KindConverter), typeof(OctopusJsonContext.PluginSourceConverter), typeof(OctopusJsonContext.FileAccessConverter)])]
+    Converters = [typeof(OctopusJsonContext.KindConverter), typeof(OctopusJsonContext.PluginSourceConverter), typeof(OctopusJsonContext.FileAccessConverter), typeof(OctopusJsonContext.TunnelKindConverter)])]
 [JsonSerializable(typeof(ProjectsDocument))]
 [JsonSerializable(typeof(AppSettingsModel))]
 [JsonSerializable(typeof(PluginsDocument))]
@@ -23,6 +23,8 @@ public sealed partial class OctopusJsonContext : JsonSerializerContext
 {
     /// <summary>Writes <see cref="ProjectItemKind"/> as a camelCase string.</summary>
     public sealed class KindConverter() : JsonStringEnumConverter<ProjectItemKind>(JsonNamingPolicy.CamelCase);
+
+    public sealed class TunnelKindConverter() : JsonStringEnumConverter<TunnelKind>(JsonNamingPolicy.CamelCase);
 
     public sealed class PluginSourceConverter() : JsonStringEnumConverter<PluginSource>(JsonNamingPolicy.CamelCase);
 

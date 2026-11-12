@@ -14,6 +14,12 @@ public interface IDialogService
     /// <summary>Asks for a host to add to ~/.ssh/config; null when the dialog was dismissed.</summary>
     Task<SshHostDraft?> AskNewSshHostAsync();
 
+    /// <summary>
+    /// Asks for a tunnel of a project on <paramref name="host"/> (design/11-SSH隧道.md): a new one, or the changes to
+    /// <paramref name="initial"/>, which keeps its id. The form comes back until what is typed is valid; null when dismissed.
+    /// </summary>
+    Task<Octopus.Core.Projects.TunnelSpec?> AskTunnelAsync(Octopus.Core.Projects.TunnelSpec? initial, string host);
+
     /// <summary>Asks for one name (a new file, a rename); the trimmed name, or null when the dialog was dismissed.</summary>
     Task<string?> AskNameAsync(string title, string label, string? initial, string confirmText);
 

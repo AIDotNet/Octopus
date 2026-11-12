@@ -32,6 +32,8 @@ public class App : Application
         var projects = AppHost.Get<IProjectService>();
         Task.Run(projects.LoadAsync).GetAwaiter().GetResult();
         _ = StartAgentScanAsync();
+        // Ends the ssh processes that a run that did not end properly left, and starts the automatic tunnels of the project.
+        AppHost.Get<Octopus.App.Services.ITunnelService>().Initialize();
         // The signal channel's private endpoint (design/plugins/11 §1.3); agents launched from now on report to it.
         if (Plugins.PluginStartup.AutoStart)
         {
@@ -49,6 +51,8 @@ public class App : Application
             // services hold (file watchers, timers).
             desktop.Exit += (_, _) =>
             {
+                // No ssh process of a tunnel outlives the app (an installer that starts now may replace the files they run from).
+                AppHost.Get<Octopus.App.Services.ITunnelService>().StopAll();
                 Updates.UpdateLifecycle.InstallOnExit();
                 AppHost.Reset();
             };

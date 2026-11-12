@@ -11,7 +11,7 @@ namespace Octopus.App.Services;
 /// the files that were opened. Nothing is written to a host.
 /// </summary>
 /// <param name="controlDirectory">Where the shared connections' sockets go; null: the folder in the home folder.</param>
-public sealed class RemoteFiles(IProcessRunner runner, IAppPaths paths, string? controlDirectory = null)
+public sealed class RemoteFiles(IProcessRunner runner, IAppPaths paths, string? controlDirectory = null) : ISharedConnection
 {
     /// <summary>The largest file that is copied to this computer.</summary>
     public const long MaxCopyBytes = 5 * 1024 * 1024;
@@ -21,6 +21,9 @@ public sealed class RemoteFiles(IProcessRunner runner, IAppPaths paths, string? 
 
     /// <summary>The options that let every run for a host share one connection; the terminal uses them too, so a password is asked once.</summary>
     public IReadOnlyList<string> SharedOptions => SshCommands.SharedConnection(_control.Value);
+
+    /// <summary>The options for riding on the connection of the terminal without becoming a master; empty where that is not possible.</summary>
+    public IReadOnlyList<string> ClientOptions => SshCommands.SharedClient(_control.Value);
 
     /// <summary>The options of the terminal's ssh: the connection is kept alive, so a dropped network ends the terminal's session with a message.</summary>
     public IReadOnlyList<string> TerminalOptions => [.. SshCommands.KeepAlive, .. SharedOptions];

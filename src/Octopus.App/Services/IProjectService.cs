@@ -25,6 +25,12 @@ public interface IProjectService
     void SetProjectAppearance(string projectId, string? color, string? icon, string? image);
     void SetCurrent(string projectId);
 
+    /// <summary>Adds a port forward to a project on an SSH host (design/11-SSH隧道.md); saved after a pause.</summary>
+    void AddTunnel(Project project, TunnelSpec tunnel);
+    /// <summary>Replaces the tunnel that has the same id with this one (a new object, so that what runs can tell it was edited).</summary>
+    void UpdateTunnel(Project project, TunnelSpec tunnel);
+    void RemoveTunnel(Project project, string tunnelId);
+
     /// <summary>The groups of the rail, in order.</summary>
     IReadOnlyList<ProjectGroup> Groups { get; }
     /// <summary>The one open group; null when all are closed.</summary>

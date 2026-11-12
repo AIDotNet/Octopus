@@ -106,6 +106,20 @@ public sealed class FakeDialogService : IDialogService
     public Task<Octopus.Core.Agents.AgentDefinition?> AskAgentDefinitionAsync(Octopus.App.Settings.Agents.AgentEditorModel model) =>
         Task.FromResult(AgentEditor?.Invoke(model) == true ? model.Build() : null);
 
+    /// <summary>What the tunnel dialog answers; null: dismissed. The host and the tunnel it was asked about are kept.</summary>
+    public Octopus.Core.Projects.TunnelSpec? NewTunnel { get; set; }
+    public Octopus.Core.Projects.TunnelSpec? LastTunnelAsked { get; private set; }
+    public string? LastTunnelHost { get; private set; }
+    public int TunnelsAsked { get; private set; }
+
+    public Task<Octopus.Core.Projects.TunnelSpec?> AskTunnelAsync(Octopus.Core.Projects.TunnelSpec? initial, string host)
+    {
+        TunnelsAsked++;
+        LastTunnelAsked = initial;
+        LastTunnelHost = host;
+        return Task.FromResult(NewTunnel);
+    }
+
     public Octopus.Ssh.SshHostDraft? NewSshHost { get; set; }
 
     public Task<Octopus.Ssh.SshHostDraft?> AskNewSshHostAsync() => Task.FromResult(NewSshHost);

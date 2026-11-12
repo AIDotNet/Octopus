@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             x:Class="Octopus.App.Dialogs.TunnelFormView">
+    <StackPanel Spacing="14">
+        <arc:SegmentedControl x:Name="KindControl" HorizontalAlignment="Stretch" SelectedValue="local"
+                              AutomationProperties.Name="{l:AppLangResource TunnelFieldDirection}">
+            <arc:SegmentedOption Value="local" Label="{l:AppLangResource TunnelDirectionLocal}" />
+            <arc:SegmentedOption Value="remote" Label="{l:AppLangResource TunnelDirectionRemote}" />
+        </arc:SegmentedControl>
+        <arc:Input x:Name="NameInput" Size="Small"
+                   Label="{l:AppLangResource TunnelFieldName}"
+                   Description="{l:AppLangResource TunnelFieldNameHint}" />
+        <!-- Labels and hints that depend on the direction are set in code (ApplyKind): a markup binding would put back the first text. -->
+        <Grid ColumnDefinitions="*,96" ColumnSpacing="8">
+            <arc:Input x:Name="TargetHostInput" Size="Small" Placeholder="localhost" />
+            <arc:Input x:Name="TargetPortInput" Grid.Column="1" Size="Small"
+                       Label="{l:AppLangResource TunnelFieldPort}" Placeholder="5173" />
+        </Grid>
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <arc:Input x:Name="ListenPortInput" Size="Small" Placeholder="5173" />
+            <arc:Button x:Name="PickButton" Grid.Column="1" Variant="Secondary" Size="Small" VerticalAlignment="Top" Margin="0,24,0,0"
+                        Content="{l:AppLangResource TunnelPickPort}" />
+        </Grid>
+        <arc:Input x:Name="BindInput" Size="Small"
+                   Label="{l:AppLangResource TunnelFieldBind}" Placeholder="127.0.0.1" />
+        <StackPanel Spacing="8">
+            <arc:Checkbox x:Name="AutoStartBox" Content="{l:AppLangResource TunnelFieldAutoStart}" />
+            <arc:Checkbox x:Name="AutoReconnectBox" Content="{l:AppLangResource TunnelFieldAutoReconnect}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

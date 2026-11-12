@@ -72,6 +72,64 @@ public class ProjectStoreTests
     }
 
     [Fact]
+    public async Task The_tunnels_of_a_project_on_an_ssh_host_round_trip_and_are_written_by_name()
+    {
+        using var paths = new TempPaths();
+        var local = new TunnelSpec { Id = "t1", Name = "前端", Kind = TunnelKind.Local, ListenPort = 5173, TargetHost = "localhost", TargetPort = 5173, AutoStart = true };
+        var remote = new TunnelSpec
+        {
+            Id = "t2", Kind = TunnelKind.Remote, BindAddress = "0.0.0.0", ListenPort = 9000, TargetHost = "127.0.0.1", TargetPort = 3000, AutoReconnect = false,
+        };
+        var document = new ProjectsDocument { Projects = [new Project { Id = "r1", Name = "web", Path = "/srv/app", SshHost = "prod", Tunnels = [local, remote] }] };
+
+        await new JsonProjectStore(paths).SaveAsync(document, TestContext.Current.CancellationToken);
+
+        var text = File.ReadAllText(paths.ProjectsFile);
+        Assert.Contains("\"kind\": \"local\"", text);
+        Assert.Contains("\"kind\": \"remote\"", text);
+        var loaded = Assert.Single((await new JsonProjectStore(paths).LoadAsync(TestContext.Current.CancellationToken)).Projects);
+        Assert.Equal(2, loaded.Tunnels.Count);
+        var first = loaded.Tunnels[0];
+        Assert.Equal(("t1", "前端", TunnelKind.Local, "127.0.0.1", 5173, "localhost", 5173, true, true),
+            (first.Id, first.Name, first.Kind, first.BindAddress, first.ListenPort, first.TargetHost, first.TargetPort, first.AutoStart, first.AutoReconnect));
+        var second = loaded.Tunnels[1];
+        Assert.Equal(("t2", null, TunnelKind.Remote, "0.0.0.0", 9000, "127.0.0.1", 3000, false, false),
+            (second.Id, second.Name, second.Kind, second.BindAddress, second.ListenPort, second.TargetHost, second.TargetPort, second.AutoStart, second.AutoReconnect));
+    }
+
+    [Fact]
+    public async Task A_file_without_tunnels_loads_with_none()
+    {
+        using var paths = new TempPaths();
+        Directory.CreateDirectory(paths.DataDirectory);
+        File.WriteAllText(paths.ProjectsFile, """{ "version": 1, "projects": [ { "id": "p1", "name": "A", "sshHost": "prod", "path": "/srv" } ] }""");
+
+        var doc = await new JsonProjectStore(paths).LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(Assert.Single(doc.Projects).Tunnels);
+    }
+
+    [Fact]
+    public async Task A_tunnel_without_an_id_or_with_a_repeated_one_is_dropped()
+    {
+        using var paths = new TempPaths();
+        Directory.CreateDirectory(paths.DataDirectory);
+        File.WriteAllText(paths.ProjectsFile, """
+            { "version": 1, "projects": [ { "id": "p1", "name": "A", "sshHost": "prod", "path": "/srv", "tunnels": [
+                { "id": "t1", "kind": "local", "listenPort": 1000, "targetPort": 1000 },
+                { "id": "t1", "kind": "local", "listenPort": 2000, "targetPort": 2000 },
+                { "id": "", "kind": "remote", "listenPort": 3000, "targetPort": 3000 },
+                null,
+                { "id": "t2", "kind": "remote", "listenPort": 4000, "targetPort": 4000 } ] } ] }
+            """);
+
+        var doc = await new JsonProjectStore(paths).LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["t1", "t2"], Assert.Single(doc.Projects).Tunnels.Select(t => t.Id));
+        Assert.Equal(1000, doc.Projects[0].Tunnels[0].ListenPort);
+    }
+
+    [Fact]
     public async Task JsonShape()
     {
         using var paths = new TempPaths();

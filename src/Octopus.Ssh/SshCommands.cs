@@ -18,6 +18,17 @@ public static class SshCommands
             : ["-o", "ControlMaster=auto", "-o", "ControlPath=" + Path.Combine(controlDirectory, "%C"), "-o", "ControlPersist=300"];
 
     /// <summary>
+    /// Options for a run that may only ride on the connection that <see cref="SharedConnection"/> made (the terminal's):
+    /// it never becomes a master itself. Empty where there are no such connections (Windows). Note that without a master
+    /// to join ssh connects by itself, so what is run with these has to be ready for that (a <c>-O</c> command is not: it
+    /// fails with "Control socket connect").
+    /// </summary>
+    public static IReadOnlyList<string> SharedClient(string controlDirectory) =>
+        OperatingSystem.IsWindows()
+            ? []
+            : ["-o", "ControlMaster=no", "-o", "ControlPath=" + Path.Combine(controlDirectory, "%C")];
+
+    /// <summary>
     /// Options that make ssh notice a connection that has gone silent: without them a network that drops without a word
     /// keeps ssh (and the terminal running it) waiting for good. With them ssh ends after about thirty seconds.
     /// </summary>

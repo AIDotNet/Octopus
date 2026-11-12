@@ -570,5 +570,74 @@
     <unit id="IconCategoryOther"><segment><source>Other</source><target state="translated">其他</target></segment></unit>
     <unit id="SearchIcons"><segment><source>Search icons (English names)</source><target state="translated">搜索图标（英文名）</target></segment></unit>
     <unit id="NoIconFound"><segment><source>No icon has that name.</source><target state="translated">没有叫这个名字的图标。</target></segment></unit>
+    <unit id="ExplorerTabTunnels"><segment><source>Tunnels</source><target state="translated">隧道</target></segment></unit>
+    <unit id="ExplorerTabTunnelsRunning"><segment><source>Tunnels ({0} running)</source><target state="translated">隧道（{0} 条运行中）</target></segment></unit>
+    <unit id="TunnelsEmptyTitle"><segment><source>No tunnels yet</source><target state="translated">还没有隧道</target></segment></unit>
+    <unit id="TunnelsEmptyHint"><segment><source>Forward a port between this computer and {0}, for example to open a dev server running there in your browser.</source><target state="translated">在本机和 {0} 之间转发端口，比如在本机浏览器里打开它上面运行的开发服务器。</target></segment></unit>
+    <unit id="TunnelsNew"><segment><source>New tunnel</source><target state="translated">新建隧道</target></segment></unit>
+    <unit id="TunnelsStartAll"><segment><source>Start all</source><target state="translated">全部启动</target></segment></unit>
+    <unit id="TunnelsStopAll"><segment><source>Stop all</source><target state="translated">全部停止</target></segment></unit>
+    <unit id="TunnelsMore"><segment><source>More</source><target state="translated">更多</target></segment></unit>
+    <unit id="TunnelsSwitch"><segment><source>Run this tunnel</source><target state="translated">运行这条隧道</target></segment></unit>
+    <unit id="TunnelsRouteLocal"><segment><source>Host {0} → this computer :{1}</source><target state="translated">主机 {0} → 本机 :{1}</target></segment></unit>
+    <unit id="TunnelsRouteRemote"><segment><source>This computer {0} → host :{1}</source><target state="translated">本机 {0} → 主机 :{1}</target></segment></unit>
+    <unit id="TunnelsNameLocal"><segment><source>Open {0}</source><target state="translated">访问 {0}</target></segment></unit>
+    <unit id="TunnelsNameRemote"><segment><source>Share {0}</source><target state="translated">共享 {0}</target></segment></unit>
+    <unit id="TunnelsStatusStopped"><segment><source>Stopped</source><target state="translated">已停止</target></segment></unit>
+    <unit id="TunnelsStatusConnecting"><segment><source>Connecting…</source><target state="translated">正在连接…</target></segment></unit>
+    <unit id="TunnelsStatusRunning"><segment><source>Running</source><target state="translated">运行中</target></segment></unit>
+    <unit id="TunnelsStatusReconnecting"><segment><source>Reconnecting (attempt {0})…</source><target state="translated">正在重连（第 {0} 次）…</target></segment></unit>
+    <unit id="TunnelsFailInvalid"><segment><source>The address or a port of this tunnel is not valid.</source><target state="translated">这条隧道的地址或端口无效。</target></segment></unit>
+    <unit id="TunnelsFailLocalPort"><segment><source>Port {0} on this computer is in use.</source><target state="translated">本机端口 {0} 已被占用。</target></segment></unit>
+    <unit id="TunnelsFailPortTunnel"><segment><source>Another tunnel already uses port {0}.</source><target state="translated">另一条隧道已经在用端口 {0}。</target></segment></unit>
+    <unit id="TunnelsFailRemoteForward"><segment><source>The host did not give port {0}: it may be in use, or the server does not allow forwarding.</source><target state="translated">主机没有给出端口 {0}：它可能已被占用，或服务器不允许转发。</target></segment></unit>
+    <unit id="TunnelsFailLogin"><segment><source>The host refused the login. A tunnel cannot type a password: set up a key or ssh-agent for this host.</source><target state="translated">主机拒绝了登录。隧道没法输入密码，请为这台主机配置密钥或 ssh-agent。</target></segment></unit>
+    <unit id="TunnelsFailHostKey"><segment><source>The host's key is not the one that is known.</source><target state="translated">主机密钥和已知的不一致。</target></segment></unit>
+    <unit id="TunnelsFailLost"><segment><source>The connection to the host was lost.</source><target state="translated">和主机的连接断开了。</target></segment></unit>
+    <unit id="TunnelsFailTimeout"><segment><source>The host did not answer in time.</source><target state="translated">主机没有及时响应。</target></segment></unit>
+    <unit id="TunnelsFailStart"><segment><source>ssh could not be started: {0}</source><target state="translated">无法启动 ssh：{0}</target></segment></unit>
+    <unit id="TunnelsFailExited"><segment><source>ssh ended unexpectedly.</source><target state="translated">ssh 意外结束了。</target></segment></unit>
+    <unit id="TunnelsWarnTarget"><segment><source>A connection through this tunnel failed: nothing answers at the other end.</source><target state="translated">经这条隧道的一次连接失败了：另一端没有服务在响应。</target></segment></unit>
+    <unit id="TunnelsWarnProhibited"><segment><source>The server does not allow port forwarding.</source><target state="translated">服务器不允许端口转发。</target></segment></unit>
+    <unit id="TunnelsOpen"><segment><source>Open in browser</source><target state="translated">在浏览器中打开</target></segment></unit>
+    <unit id="TunnelsCopyAddress"><segment><source>Copy address</source><target state="translated">复制地址</target></segment></unit>
+    <unit id="TunnelsEdit"><segment><source>Edit</source><target state="translated">编辑</target></segment></unit>
+    <unit id="TunnelsDelete"><segment><source>Delete</source><target state="translated">删除</target></segment></unit>
+    <unit id="TunnelsShowLog"><segment><source>Show log</source><target state="translated">查看日志</target></segment></unit>
+    <unit id="TunnelsLogEmpty"><segment><source>Nothing logged yet.</source><target state="translated">还没有日志。</target></segment></unit>
+    <unit id="TunnelsDeleteTitle"><segment><source>Delete this tunnel?</source><target state="translated">删除这条隧道？</target></segment></unit>
+    <unit id="TunnelsDeleteDescription"><segment><source>"{0}" is stopped and removed from the project.</source><target state="translated">「{0}」会被停止，并从项目中移除。</target></segment></unit>
+    <unit id="TunnelFormTitleNew"><segment><source>New tunnel</source><target state="translated">新建隧道</target></segment></unit>
+    <unit id="TunnelFormTitleEdit"><segment><source>Edit tunnel</source><target state="translated">编辑隧道</target></segment></unit>
+    <unit id="TunnelFormDescription"><segment><source>Carried over the SSH connection to {0}.</source><target state="translated">经由到 {0} 的 SSH 连接转发。</target></segment></unit>
+    <unit id="TunnelFormCreate"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
+    <unit id="TunnelFieldDirection"><segment><source>Direction</source><target state="translated">方向</target></segment></unit>
+    <unit id="TunnelDirectionLocal"><segment><source>Reach a service on the host</source><target state="translated">访问主机上的服务</target></segment></unit>
+    <unit id="TunnelDirectionRemote"><segment><source>Share a local service with the host</source><target state="translated">把本机服务给主机用</target></segment></unit>
+    <unit id="TunnelFieldName"><segment><source>Name</source><target state="translated">名称</target></segment></unit>
+    <unit id="TunnelFieldNameHint"><segment><source>Optional.</source><target state="translated">可选。</target></segment></unit>
+    <unit id="TunnelFieldTargetLocal"><segment><source>Service on the host</source><target state="translated">主机上的服务</target></segment></unit>
+    <unit id="TunnelFieldTargetLocalHint"><segment><source>Address and port as the host sees them. Use localhost for the host itself.</source><target state="translated">地址和端口，按主机的视角。主机自己用 localhost。</target></segment></unit>
+    <unit id="TunnelFieldTargetRemote"><segment><source>Service on this computer</source><target state="translated">本机上的服务</target></segment></unit>
+    <unit id="TunnelFieldTargetRemoteHint"><segment><source>Address and port as this computer sees them.</source><target state="translated">地址和端口，按本机的视角。</target></segment></unit>
+    <unit id="TunnelFieldAddress"><segment><source>Address</source><target state="translated">地址</target></segment></unit>
+    <unit id="TunnelFieldPort"><segment><source>Port</source><target state="translated">端口</target></segment></unit>
+    <unit id="TunnelFieldListenLocal"><segment><source>Port on this computer</source><target state="translated">本机端口</target></segment></unit>
+    <unit id="TunnelFieldListenRemote"><segment><source>Port on the host</source><target state="translated">主机端口</target></segment></unit>
+    <unit id="TunnelFieldListenRemoteHint"><segment><source>Anyone who can log in to the host can use this port.</source><target state="translated">能登录这台主机的人都能使用这个端口。</target></segment></unit>
+    <unit id="TunnelPickPort"><segment><source>Pick a free port</source><target state="translated">选一个空闲端口</target></segment></unit>
+    <unit id="TunnelFieldBind"><segment><source>Listen on</source><target state="translated">监听地址</target></segment></unit>
+    <unit id="TunnelFieldBindHintLocal"><segment><source>127.0.0.1 keeps the port to this computer. 0.0.0.0 lets other devices on the network use it.</source><target state="translated">127.0.0.1 只有本机能用；0.0.0.0 让网络里的其他设备也能用。</target></segment></unit>
+    <unit id="TunnelFieldBindHintRemote"><segment><source>The server's GatewayPorts setting decides whether an address other than 127.0.0.1 is used.</source><target state="translated">是否采用 127.0.0.1 以外的地址，由服务器的 GatewayPorts 设置决定。</target></segment></unit>
+    <unit id="TunnelFieldAutoStart"><segment><source>Start when the project is opened</source><target state="translated">打开项目时自动启动</target></segment></unit>
+    <unit id="TunnelFieldAutoReconnect"><segment><source>Connect again when the connection drops</source><target state="translated">连接断开后自动重连</target></segment></unit>
+    <unit id="TunnelProblemAddress"><segment><source>A host name or address without spaces; an IPv6 address goes in [brackets].</source><target state="translated">主机名或地址，不能有空格；IPv6 地址要放在 [方括号] 里。</target></segment></unit>
+    <unit id="TunnelExposeTitle"><segment><source>Listen on all networks?</source><target state="translated">监听所有网络？</target></segment></unit>
+    <unit id="TunnelExposeLocal"><segment><source>Anyone who can reach this computer through {0} will be able to use port {1}, and what it leads to on the host.</source><target state="translated">能连到这台电脑的人，都可以通过 {0} 的 {1} 端口使用它通向的主机上的服务。</target></segment></unit>
+    <unit id="TunnelExposeRemote"><segment><source>Anyone who can reach the host through {0} may be able to use port {1}, and so the service on this computer.</source><target state="translated">能连到主机的人，可能都可以通过 {0} 的 {1} 端口使用你这台电脑上的服务。</target></segment></unit>
+    <unit id="TunnelExposeConfirm"><segment><source>Listen anyway</source><target state="translated">仍然监听</target></segment></unit>
+    <unit id="TunnelsStatusWaiting"><segment><source>Waiting for you to sign in to {0} in a terminal. The tunnel then uses that connection.</source><target state="translated">等你在终端里登录 {0}。登录后隧道会借用这条连接。</target></segment></unit>
+    <unit id="TunnelsStatusShared"><segment><source>Using the terminal's connection.</source><target state="translated">借用终端的连接。</target></segment></unit>
+    <unit id="TunnelsFailShared"><segment><source>The terminal's connection did not take the forward: {0}</source><target state="translated">终端的连接没有接受这个转发：{0}</target></segment></unit>
   </file>
 </xliff>

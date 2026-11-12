@@ -16,7 +16,7 @@ namespace Octopus.App.Explorer;
 
 /// <summary>
 /// The right panel: the files of the current project's folder and, when the folder is in a git repository, a source
-/// control tab. The shell hosts one instance, keeps <see cref="ProjectPath"/> and <see cref="ProjectName"/> on the
+/// control tab; for a project on an SSH host, a tunnels tab too. The shell hosts one instance, keeps <see cref="ProjectPath"/> and <see cref="ProjectName"/> on the
 /// current project, and opens a file tab on <see cref="FileOpenRequested"/>.
 /// </summary>
 public partial class ExplorerPanelView : UserControl
@@ -59,8 +59,45 @@ public partial class ExplorerPanelView : UserControl
         {
             if (e.PropertyName == nameof(ExplorerPanelViewModel.IsGitRepository)) SyncGitOption();
             else if (e.PropertyName == nameof(ExplorerPanelViewModel.GitTabTooltip) && _gitOption is not null) _gitOption.Title = Model.GitTabTooltip;
+            else if (e.PropertyName == nameof(ExplorerPanelViewModel.IsSshProject)) SyncTunnelsOption();
+            else if (e.PropertyName == nameof(ExplorerPanelViewModel.TunnelsTabTooltip) && _tunnelsOption is not null) _tunnelsOption.Title = Model.TunnelsTabTooltip;
         };
         SyncGitOption();
+        SyncTunnelsOption();
+    }
+
+    private ToggleGroupOption? _tunnelsOption;
+
+    /// <summary>The Tunnels tab exists only while the project is on an SSH host; its dot shows while some tunnel runs.</summary>
+    private void SyncTunnelsOption()
+    {
+        if (!Model.IsSshProject)
+        {
+            if (_tunnelsOption is not null) Tabs.Items.Remove(_tunnelsOption);
+            return;
+        }
+        if (_tunnelsOption is null)
+        {
+            var dot = new Ellipse
+            {
+                Width = 7,
+                Height = 7,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, -3, -4, 0),
+                IsHitTestVisible = false,
+                [!Ellipse.IsVisibleProperty] = new Binding(nameof(ExplorerPanelViewModel.HasRunningTunnels)) { Source = Model },
+            };
+            ArcTokens.Bind(dot, Shape.FillProperty, ArcDesignTokenKind.Success);
+            _tunnelsOption = new ToggleGroupOption
+            {
+                Value = "tunnels",
+                Label = AppLangResources.Get(AppLangResourceKind.ExplorerTabTunnels),
+                Title = Model.TunnelsTabTooltip,
+                Content = new Panel { Children = { new LucideIcon { Kind = LucideIconKind.Waypoints, Size = 16 }, dot } },
+            };
+        }
+        if (!Tabs.Items.Contains(_tunnelsOption)) Tabs.Items.Add(_tunnelsOption);
     }
 
     private ToggleGroupOption? _gitOption;

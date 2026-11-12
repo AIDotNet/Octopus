@@ -195,6 +195,29 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
 
     public string? ExpandedGroupId => _document.ExpandedGroupId;
 
+    public void AddTunnel(Project project, TunnelSpec tunnel)
+    {
+        if (project.SshHost is null || project.Tunnels.Any(t => t.Id == tunnel.Id)) return;
+        project.Tunnels.Add(tunnel);
+        Raise(ProjectChangeKind.Tunnels, project);
+    }
+
+    public void UpdateTunnel(Project project, TunnelSpec tunnel)
+    {
+        var index = project.Tunnels.FindIndex(t => t.Id == tunnel.Id);
+        if (index < 0) return;
+        project.Tunnels[index] = tunnel;
+        Raise(ProjectChangeKind.Tunnels, project);
+    }
+
+    public void RemoveTunnel(Project project, string tunnelId)
+    {
+        if (project.Tunnels.RemoveAll(t => t.Id == tunnelId) > 0)
+        {
+            Raise(ProjectChangeKind.Tunnels, project);
+        }
+    }
+
     public ProjectGroup AddGroup(string name, IEnumerable<string>? projectIds = null)
     {
         var group = new ProjectGroup

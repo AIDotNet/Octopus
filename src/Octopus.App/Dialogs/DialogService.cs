@@ -6,8 +6,55 @@ using TKCode.Arc;
 namespace Octopus.App.Dialogs;
 
 /// <summary>Confirmations as Arc dialogs over the main window.</summary>
-public sealed class DialogService(IWindowAccessor windows, IPickerService pickers, ISshHostCatalog sshHosts, IProjectIconStore? icons = null) : IDialogService
+public sealed class DialogService(IWindowAccessor windows, IPickerService pickers, ISshHostCatalog sshHosts, IProjectIconStore? icons = null, ILocalPorts? ports = null) : IDialogService
 {
+    public async Task<Octopus.Core.Projects.TunnelSpec?> AskTunnelAsync(Octopus.Core.Projects.TunnelSpec? initial, string host)
+    {
+        if (windows.Window is null)
+        {
+            return null;
+        }
+        var typed = initial;
+        IReadOnlyList<TunnelIssue> issues = [];
+        while (true)
+        {
+            var form = new TunnelFormView(typed, () => ports?.FindFree() ?? 0);
+            form.ShowIssues(issues);
+            var result = await Dialog.ShowAsync(
+                windows.Window,
+                AppLangResources.Get(initial is null ? AppLangResourceKind.TunnelFormTitleNew : AppLangResourceKind.TunnelFormTitleEdit),
+                form,
+                AppLangResources.Format(AppLangResourceKind.TunnelFormDescription, host),
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
+                new DialogAction(AppLangResources.Get(initial is null ? AppLangResourceKind.TunnelFormCreate : AppLangResourceKind.Save), true, ButtonVariant.Primary));
+            if (result is not true)
+            {
+                return null;
+            }
+            typed = form.Spec;
+            issues = SshTunnelCommand.Validate(typed);
+            if (issues.Count > 0)
+            {
+                // Not valid: the dialog comes back with what was typed and says under which field what is wrong.
+                continue;
+            }
+            // A port that other devices can reach is a decision to be made on purpose.
+            if (!SshTunnelCommand.IsLoopback(typed.BindAddress)
+                && !await ConfirmAsync(
+                    AppLangResources.Get(AppLangResourceKind.TunnelExposeTitle),
+                    AppLangResources.Format(
+                        typed.Kind == Octopus.Core.Projects.TunnelKind.Local ? AppLangResourceKind.TunnelExposeLocal : AppLangResourceKind.TunnelExposeRemote,
+                        typed.BindAddress,
+                        typed.ListenPort),
+                    AppLangResources.Get(AppLangResourceKind.TunnelExposeConfirm),
+                    isDanger: true))
+            {
+                continue;
+            }
+            return typed;
+        }
+    }
+
     public Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false)
     {
         if (windows.Window is null)

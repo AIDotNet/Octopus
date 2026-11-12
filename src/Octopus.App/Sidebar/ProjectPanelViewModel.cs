@@ -87,7 +87,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             row.RefreshTitle();
             return;
         }
-        if (e.Kind is not (ProjectChangeKind.Layout or ProjectChangeKind.GroupExpanded) && !_moving)
+        if (e.Kind is not (ProjectChangeKind.Layout or ProjectChangeKind.GroupExpanded or ProjectChangeKind.Tunnels) && !_moving)
         {
             Rebuild();
         }

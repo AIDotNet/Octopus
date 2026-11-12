@@ -5,6 +5,7 @@ using Octopus.App.Explorer.Files;
 using Octopus.App.Files;
 using Octopus.App.Explorer.Git;
 using Octopus.App.Explorer.Search;
+using Octopus.App.Explorer.Tunnels;
 using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.FileSystem;
@@ -32,6 +33,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         FileTreeViewModel files,
         FileSearchViewModel search,
         GitPanelViewModel gitPanel,
+        TunnelsPanelViewModel tunnels,
         IFileTreeService tree,
         IGitService git,
         ISettingsStore settings,
@@ -41,16 +43,26 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         Files = files;
         Search = search;
         Git = gitPanel;
+        Tunnels = tunnels;
         _tree = tree;
         _git = git;
         _settings = settings;
-        Tab = settings.Current.RightPanel.Tab == "git" ? ExplorerTab.Git : ExplorerTab.Files;
+        Tab = settings.Current.RightPanel.Tab switch
+        {
+            "git" => ExplorerTab.Git,
+            "tunnels" => ExplorerTab.Tunnels,
+            _ => ExplorerTab.Files,
+        };
 
         files.OpenRequested += (_, path) => FileOpenRequested?.Invoke(this, path);
         search.OpenRequested += (_, path) => FileOpenRequested?.Invoke(this, path);
         gitPanel.OpenRequested += (_, path) => FileOpenRequested?.Invoke(this, path);
         gitPanel.DiffRequested += (_, request) => DiffRequested?.Invoke(this, request);
         gitPanel.StatusChanged += OnGitStatusChanged;
+        tunnels.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(TunnelsPanelViewModel.RunningCount)) NotifyTunnelCount();
+        };
     }
 
     /// <summary>How long file changes are collected before the git status is read again.</summary>
@@ -59,6 +71,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     public FileTreeViewModel Files { get; }
     public FileSearchViewModel Search { get; }
     public GitPanelViewModel Git { get; }
+    public TunnelsPanelViewModel Tunnels { get; }
 
     [ObservableProperty] public partial string? ProjectPath { get; private set; }
 
@@ -80,6 +93,9 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     [ObservableProperty] public partial string ProjectName { get; set; } = "";
     [ObservableProperty] public partial bool IsGitRepository { get; private set; }
 
+    /// <summary>The project is on an SSH host: the panel then has a tunnels tab (and no git, no search).</summary>
+    [ObservableProperty] public partial bool IsSshProject { get; private set; }
+
     /// <summary>The number of changed files, for the badge on the Git tab.</summary>
     [ObservableProperty] public partial int ChangeCount { get; private set; }
 
@@ -88,20 +104,30 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     public bool HasProject => ProjectPath is not null;
     public bool HasNoProject => ProjectPath is null;
-    public bool IsFilesTab => HasProject && !IsGitTab;
+    public bool IsFilesTab => HasProject && !IsGitTab && !IsTunnelsTab;
     public bool IsGitTab => HasProject && IsGitRepository && Tab == ExplorerTab.Git;
+    public bool IsTunnelsTab => HasProject && IsSshProject && Tab == ExplorerTab.Tunnels;
     public bool HasChanges => ChangeCount > 0;
 
-    /// <summary>The key of the tab showing ("files" or "git"), for the tab switch; setting it chooses that tab.</summary>
+    /// <summary>The key of the tab showing ("files", "git" or "tunnels"), for the tab switch; setting it chooses that tab.</summary>
     public string TabKey
     {
-        get => IsGitTab ? "git" : "files";
+        get => IsGitTab ? "git" : IsTunnelsTab ? "tunnels" : "files";
         set
         {
             if (value == "git") ShowGit();
+            else if (value == "tunnels") ShowTunnels();
             else if (value == "files") ShowFiles();
         }
     }
+
+    /// <summary>Some tunnel of the project runs: the tunnels tab shows a dot.</summary>
+    public bool HasRunningTunnels => Tunnels.RunningCount > 0;
+
+    /// <summary>The tooltip of the tunnels tab: its name and, when some run, how many.</summary>
+    public string TunnelsTabTooltip => HasRunningTunnels
+        ? AppLangResources.Format(AppLangResourceKind.ExplorerTabTunnelsRunning, Tunnels.RunningCount)
+        : AppLangResources.Get(AppLangResourceKind.ExplorerTabTunnels);
 
     /// <summary>The tooltip of the Git tab: its name and, when there are changes, how many files changed.</summary>
     public string GitTabTooltip => HasChanges
@@ -123,6 +149,8 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     partial void OnIsGitRepositoryChanged(bool value) => NotifyTabs();
 
+    partial void OnIsSshProjectChanged(bool value) => NotifyTabs();
+
     partial void OnRemoteStatusChanged(string? value)
     {
         OnPropertyChanged(nameof(HasRemoteStatus));
@@ -141,7 +169,14 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     {
         OnPropertyChanged(nameof(IsFilesTab));
         OnPropertyChanged(nameof(IsGitTab));
+        OnPropertyChanged(nameof(IsTunnelsTab));
         OnPropertyChanged(nameof(TabKey));
+    }
+
+    private void NotifyTunnelCount()
+    {
+        OnPropertyChanged(nameof(HasRunningTunnels));
+        OnPropertyChanged(nameof(TunnelsTabTooltip));
     }
 
     [RelayCommand]
@@ -154,11 +189,23 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         SelectTab(ExplorerTab.Git);
     }
 
+    [RelayCommand]
+    public void ShowTunnels()
+    {
+        if (!IsSshProject) return;
+        SelectTab(ExplorerTab.Tunnels);
+    }
+
     private void SelectTab(ExplorerTab tab)
     {
         if (Tab == tab) return;
         Tab = tab;
-        _settings.Update(s => s.RightPanel.Tab = tab == ExplorerTab.Git ? "git" : "files");
+        _settings.Update(s => s.RightPanel.Tab = tab switch
+        {
+            ExplorerTab.Git => "git",
+            ExplorerTab.Tunnels => "tunnels",
+            _ => "files",
+        });
         if (tab == ExplorerTab.Git) _ = Git.RefreshAsync();
     }
 
@@ -170,6 +217,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     {
         var version = ++_version;
         StopWatching();
+        IsSshProject = path is not null && sshHost is not null;
         if (path is not null && sshHost is not null)
         {
             await SetRemoteProjectAsync(path, name, sshHost, version);
@@ -324,5 +372,10 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         if (ProjectPath is { } path) Files.ApplyGitStatus(status, RealPath.Resolve(path));
     }
 
-    public void Dispose() => StopWatching();
+    public void Dispose()
+    {
+        StopWatching();
+        // It listens to the projects and the tunnels, which live longer than the panel.
+        Tunnels.Dispose();
+    }
 }

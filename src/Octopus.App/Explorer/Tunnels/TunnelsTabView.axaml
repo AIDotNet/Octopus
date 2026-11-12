@@ -1,0 +1,113 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:tun="using:Octopus.App.Explorer.Tunnels"
+             x:Class="Octopus.App.Explorer.Tunnels.TunnelsTabView"
+             x:DataType="tun:TunnelsPanelViewModel">
+    <UserControl.Styles>
+        <!-- The state dot: grey stopped, amber connecting, green running, red failed. -->
+        <Style Selector="Ellipse.tunnel-dot">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="Fill" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+        <Style Selector="Ellipse.tunnel-dot.busy">
+            <Setter Property="Fill" Value="{arc:ArcDesignTokenResource Warning}" />
+        </Style>
+        <Style Selector="Ellipse.tunnel-dot.running">
+            <Setter Property="Fill" Value="{arc:ArcDesignTokenResource Success}" />
+        </Style>
+        <Style Selector="Ellipse.tunnel-dot.failed">
+            <Setter Property="Fill" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+        <Style Selector="TextBlock.tunnel-message">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.tunnel-message.problem">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+        <Style Selector="TextBlock.tunnel-message.warning">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Title row: the host, new tunnel, and the actions for all of them. -->
+        <Grid ColumnDefinitions="*,Auto" Margin="14,0,8,2" Height="32">
+            <TextBlock Classes="ex-body" FontWeight="SemiBold" VerticalAlignment="Center"
+                       Text="{Binding Host}" TextTrimming="CharacterEllipsis" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
+                <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding AddCommand}"
+                            AutomationProperties.Name="{l:AppLangResource TunnelsNew}"
+                            arc:Tooltip.Tip="{l:AppLangResource TunnelsNew}">
+                    <lucide:LucideIcon Kind="Plus" Size="14" />
+                </arc:Button>
+                <arc:Button x:Name="MoreButton" Classes="ex-icon" Variant="Ghost"
+                            AutomationProperties.Name="{l:AppLangResource TunnelsMore}"
+                            arc:Tooltip.Tip="{l:AppLangResource TunnelsMore}">
+                    <lucide:LucideIcon Kind="Ellipsis" Size="14" />
+                </arc:Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- No tunnels yet -->
+        <StackPanel Grid.Row="1" IsVisible="{Binding IsEmpty}" VerticalAlignment="Top" Margin="24,40,24,0" Spacing="10">
+            <lucide:LucideIcon Kind="Waypoints" Size="28" HorizontalAlignment="Center"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+            <TextBlock Classes="ex-body" FontWeight="SemiBold" HorizontalAlignment="Center"
+                       Text="{l:AppLangResource TunnelsEmptyTitle}" />
+            <TextBlock Classes="ex-body" Foreground="{arc:ArcDesignTokenResource TextSecondary}" TextAlignment="Center"
+                       TextWrapping="Wrap" Text="{Binding EmptyHint}" />
+            <arc:Button Variant="Secondary" Size="Small" HorizontalAlignment="Center" Margin="0,6,0,0"
+                        Command="{Binding AddCommand}" Content="{l:AppLangResource TunnelsNew}" />
+        </StackPanel>
+
+        <ItemsControl Grid.Row="1" x:Name="List" ItemsSource="{Binding Rows}" IsVisible="{Binding HasRows}" Margin="4,0,4,0">
+            <ItemsControl.Template>
+                <ControlTemplate>
+                    <arc:ScrollArea Name="PART_ScrollViewer" FadeLength="0" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="0,0,0,10" />
+                    </arc:ScrollArea>
+                </ControlTemplate>
+            </ItemsControl.Template>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="tun:TunnelRowViewModel">
+                    <Border Classes="ex-row" Cursor="Arrow" Padding="10,6,6,6" Margin="0,1">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8">
+                            <Ellipse Classes="tunnel-dot" Classes.busy="{Binding IsBusy}" Classes.running="{Binding IsRunning}"
+                                     Classes.failed="{Binding IsFailed}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Classes="ex-body" FontWeight="Medium" VerticalAlignment="Center"
+                                       Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                            <arc:Switch Grid.Column="2" VerticalAlignment="Center"
+                                        IsChecked="{Binding IsOn, Mode=TwoWay}"
+                                        AutomationProperties.Name="{l:AppLangResource TunnelsSwitch}" />
+                            <arc:Button Grid.Column="3" Classes="ex-icon" Variant="Ghost" Loaded="OnRowMoreLoaded"
+                                        AutomationProperties.Name="{l:AppLangResource TunnelsMore}"
+                                        arc:Tooltip.Tip="{l:AppLangResource TunnelsMore}">
+                                <lucide:LucideIcon Kind="Ellipsis" Size="14" />
+                            </arc:Button>
+
+                            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Classes="ex-hint" TextTrimming="CharacterEllipsis"
+                                       Text="{Binding Route}" arc:Tooltip.Tip="{Binding Route}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Classes="ex-hint tunnel-message" Margin="0,2,0,0"
+                                       Classes.problem="{Binding IsProblem}" Classes.warning="{Binding IsWarning}"
+                                       IsVisible="{Binding HasMessage}" Text="{Binding Message}" TextWrapping="Wrap"
+                                       arc:Tooltip.Tip="{Binding Detail}" />
+                            <!-- The last lines of ssh's log, when asked for. -->
+                            <Border Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" IsVisible="{Binding IsLogOpen}" Margin="0,6,4,2"
+                                    Padding="8,6" CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                    Background="{arc:ArcDesignTokenResource Background}">
+                                <ScrollViewer MaxHeight="160" HorizontalScrollBarVisibility="Auto">
+                                    <SelectableTextBlock Classes="ex-hint" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                         Text="{Binding LogText}" />
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</UserControl>

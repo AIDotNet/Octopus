@@ -28,6 +28,8 @@ public sealed class Project
     /// <summary>The workspace's dock layout (tab groups and splits) as saved by the dock control; null is the default layout.</summary>
     public string? DockLayout { get; set; }
     public List<ProjectItem> Items { get; set; } = [];
+    /// <summary>The port forwards of a project on an SSH host (design/11-SSH隧道.md); empty for any other project.</summary>
+    public List<TunnelSpec> Tunnels { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 

@@ -17,6 +17,10 @@ internal static class ProjectsDocumentNormalizer
             project.Items.RemoveAll(i => i is null || !itemIds.Add(i.Id ?? ""));
             if (project.ActiveItemId is not null && project.Items.All(i => i.Id != project.ActiveItemId))
                 project.ActiveItemId = null;
+            // A tunnel without an id cannot be started or told apart; a repeated id would make two rows one.
+            project.Tunnels ??= [];
+            var tunnelIds = new HashSet<string>();
+            project.Tunnels.RemoveAll(t => t is null || string.IsNullOrEmpty(t.Id) || !tunnelIds.Add(t.Id));
         }
         if (document.ActiveProjectId is not null && !projectIds.Contains(document.ActiveProjectId))
             document.ActiveProjectId = null;

@@ -26,7 +26,40 @@ public partial class WorkspaceView : UserControl
         LayoutUpdated += (_, _) => ApplyStrips();
         LeftInsetProperty.Changed.AddClassHandler<WorkspaceView>((view, _) => view.ApplyStrips());
         RightInsetProperty.Changed.AddClassHandler<WorkspaceView>((view, _) => view.ApplyStrips());
+        AddHandler(PointerPressedEvent, OnStripPressedTunnel, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
     }
+
+    /// <summary>
+    /// The dock library drags the whole group when a press lands on the empty part of a tab strip, which is
+    /// surprising next to a window title bar. Its drag gesture refuses to start while the layout is locked, and
+    /// the press is dispatched in one go, so the layout is locked just for this press (tunnel runs before the
+    /// gesture's bubble handler) and unlocked right after. Pressing a tab, its close button or the "+" is untouched.
+    /// </summary>
+    private void OnStripPressedTunnel(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if (CurrentLayoutOrNull() is not { IsLocked: false } layout || e.Source is not Visual source)
+        {
+            return;
+        }
+        var onStrip = false;
+        for (Visual? v = source; v is not null && !ReferenceEquals(v, this); v = v.GetVisualParent())
+        {
+            var name = v.GetType().Name;
+            if (v is Avalonia.Controls.Button || name == "DockTab" || v is StripAddButton)
+            {
+                return;
+            }
+            onStrip |= name == "DockTabStrip";
+        }
+        if (!onStrip)
+        {
+            return;
+        }
+        layout.IsLocked = true;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => layout.IsLocked = false, Avalonia.Threading.DispatcherPriority.Input);
+    }
+
+    private DockLayout? CurrentLayoutOrNull() => (DataContext as WorkspaceViewModel)?.CurrentLayout as DockLayout;
 
     /// <summary>Room the tab strip of the group at the top left keeps free (the collapsed sidebar's lead).</summary>
     public double LeftInset { get => GetValue(LeftInsetProperty); set => SetValue(LeftInsetProperty, value); }

@@ -56,7 +56,7 @@ public sealed class RightPanelSettings
 {
     public bool IsOpen { get; set; }
     public double Width { get; set; } = 300;
-    /// <summary>The tab shown last: <c>files</c> or <c>git</c>.</summary>
+    /// <summary>The tab shown last: <c>files</c>, <c>git</c> or <c>tunnels</c>.</summary>
     public string Tab { get; set; } = "files";
 }
 
