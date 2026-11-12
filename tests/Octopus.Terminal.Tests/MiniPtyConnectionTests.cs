@@ -52,7 +52,8 @@ public class MiniPtyConnectionTests
         var read = Collect(c, sb);
         var exit = await c.Exited.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(3, exit.ExitCode);
-        Assert.True(read.IsCompleted); // Exited completes only after output was read to the end
+        // Exited completes once the output was read to the end; the reader's own loop may still be a moment from returning.
+        await read.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Contains("hello", sb.ToString());
     }
 

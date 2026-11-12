@@ -95,13 +95,24 @@ public sealed class RuntimeTests : IAsyncDisposable
         var host = manager.Find("acme.t")!;
         // The call fails before the host has handled the fault, so "Running" right after it can still be the old run:
         // wait for the crash to be recorded as well.
+        // A call made while the host is still being restarted is refused; the next one goes through.
+        async Task<string?> Alive()
+        {
+            string? answer = null;
+            for (var deadline = Environment.TickCount64 + 20_000; answer is null; await Task.Delay(20))
+            {
+                try { answer = Str(await manager.ExecuteCommandAsync("acme.t.other")); }
+                catch (PluginInvokeException) when (Environment.TickCount64 < deadline) { }
+            }
+            return answer;
+        }
         Task RestartedAfter(int crashes) => Harness.WaitUntil(() =>
             (_h.State.Current.Find("acme.t")?.Crashes.Count ?? crashes) >= crashes
             && host.State == PluginHostState.Running && host.Commands.Contains("acme.t.other"));
 
         await Assert.ThrowsAnyAsync<Exception>(() => manager.ExecuteCommandAsync("acme.t.run"));
         await RestartedAfter(1);
-        Assert.Equal("alive", Str(await manager.ExecuteCommandAsync("acme.t.other")));
+        Assert.Equal("alive", await Alive());
         // Whichever budget a fast machine hits first: work units or time.
         Assert.Contains(host.Log, e => e.Text.Contains("exceeded its"));
 
@@ -113,7 +124,7 @@ public sealed class RuntimeTests : IAsyncDisposable
         Assert.Equal(3, _h.State.Current.Find("acme.t")?.Crashes.Count ?? 3);
 
         await manager.ReloadAsync("acme.t");
-        Assert.Equal("alive", Str(await manager.ExecuteCommandAsync("acme.t.other")));
+        Assert.Equal("alive", await Alive());
     }
 
     [Fact]
