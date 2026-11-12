@@ -121,7 +121,9 @@ jobs:
         run: |
           $v = $env:VERSION.TrimStart('v')
           $dir = Join-Path $env:RUNNER_TEMP 'octopus install dir'
-          $p = Start-Process "dist/Octopus-$v-win-x64-setup.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',"/DIR=$dir" -Wait -PassThru
+          # The path has spaces on purpose: Inno needs /DIR="..." quoted, and Start-Process does not quote array items.
+          $dirArg = '/DIR="' + $dir + '"'
+          $p = Start-Process "dist/Octopus-$v-win-x64-setup.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',$dirArg -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "setup exited with $($p.ExitCode)" }
           if (-not (Test-Path "$dir\Octopus.exe")) { throw "Octopus.exe was not installed into $dir" }
           $p = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
