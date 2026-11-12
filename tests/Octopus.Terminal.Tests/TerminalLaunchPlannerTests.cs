@@ -81,4 +81,44 @@ public class TerminalLaunchPlannerTests
         Assert.Equal(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), spec.WorkingDirectory);
         Assert.Equal("Posix:codex ", spec.Arguments[^1]);
     }
+
+    [Fact]
+    public void PlanRemoteShell_runs_ssh_with_the_host_alias_through_the_shell_in_the_local_home()
+    {
+        var spec = Planner().PlanRemoteShell("prod-web", "/srv/app", "/opt/fish");
+
+        Assert.Equal("ssh", spec.FileName);
+        Assert.Equal(["-t", "--", "prod-web", TerminalLaunchPlanner.RemoteShellCommand("/srv/app")], spec.Arguments);
+        Assert.Equal(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), spec.WorkingDirectory);
+    }
+
+    [Fact]
+    public void RemoteShellCommand_enters_the_folder_quoted_and_starts_the_login_shell()
+    {
+        Assert.Equal(
+            "cd -- '/srv/my app' || printf '%s\\n' 'Octopus: this folder is not on the host; the login folder is open instead.'; exec $SHELL -l",
+            TerminalLaunchPlanner.RemoteShellCommand("/srv/my app"));
+    }
+
+    [Theory]
+    [InlineData("~", "cd -- ~ || ")]
+    [InlineData("~/code/app", "cd -- ~/'code/app' || ")]
+    [InlineData("/srv/it's", "cd -- '/srv/it'\\''s' || ")]
+    public void RemoteShellCommand_keeps_tilde_for_the_host_and_quotes_quotes(string directory, string start) =>
+        Assert.StartsWith(start, TerminalLaunchPlanner.RemoteShellCommand(directory));
+
+    [Fact]
+    public void RemoteShellCommand_without_a_folder_only_starts_the_login_shell()
+    {
+        Assert.Equal("exec $SHELL -l", TerminalLaunchPlanner.RemoteShellCommand(null));
+        Assert.Equal("exec $SHELL -l", TerminalLaunchPlanner.RemoteShellCommand("  "));
+    }
+
+    [Fact]
+    public void PlanRemoteShell_puts_the_shared_connection_options_before_the_host()
+    {
+        var spec = Planner().PlanRemoteShell("prod-web", null, "/opt/fish", ["-o", "ControlMaster=auto"]);
+
+        Assert.Equal(["-o", "ControlMaster=auto", "-t", "--", "prod-web", TerminalLaunchPlanner.RemoteShellCommand(null)], spec.Arguments);
+    }
 }

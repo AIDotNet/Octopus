@@ -3,6 +3,9 @@
         <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
     <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Terminal.Tests" />
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="../Octopus.Core/Octopus.Core.csproj" />
         <ProjectReference Include="../Octopus.Platform/Octopus.Platform.csproj" />
     </ItemGroup>

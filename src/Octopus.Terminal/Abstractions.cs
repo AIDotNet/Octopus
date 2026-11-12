@@ -44,4 +44,11 @@ public interface ITerminalLaunchPlanner
     /// those of the user's own terminal. Arguments are quoted for that shell; nothing in them is reinterpreted.
     /// </summary>
     LaunchSpec PlanAgent(AgentCommand command, string? workingDirectory, string? shellPath = null);
+
+    /// <summary>
+    /// An interactive shell on an SSH host, started in <paramref name="remoteDirectory"/> on that host (null: its login
+    /// folder). The local ssh program runs through the user's shell, as an agent does, and reads ~/.ssh/config for the
+    /// connection. Nothing here is checked on the host: a missing folder is reported in the terminal.
+    /// </summary>
+    LaunchSpec PlanRemoteShell(string host, string? remoteDirectory, string? shellPath = null, IReadOnlyList<string>? sshOptions = null);
 }
