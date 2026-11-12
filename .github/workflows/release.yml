@@ -23,8 +23,22 @@ env:
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    steps:
+      # Installs compare versions to find updates (design/10-自动更新.md §3): a release tag must be vX.Y.Z or vX.Y.Z-preview.N.
+      - name: Check the tag
+        if: github.ref_type == 'tag'
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-preview\.[0-9]+)?$ ]]; then
+            echo "::error::$GITHUB_REF_NAME is not a release tag (expected vX.Y.Z or vX.Y.Z-preview.N)"
+            exit 1
+          fi
+
   macos:
     name: macOS (${{ matrix.rid }})
+    needs: version
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -75,11 +89,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: octopus-${{ matrix.rid }}
-          path: dist/*.dmg
+          # The .zip is the update package of installed copies.
+          path: |
+            dist/*.dmg
+            dist/*.zip
           if-no-files-found: error
 
   windows:
     name: Windows (win-x64)
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -141,6 +159,7 @@ jobs:
 
   linux:
     name: Linux (linux-x64)
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -189,11 +208,28 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: octopus-*
           merge-multiple: true
+
+      # update.json lists each platform's package with its size and SHA-256, signed with UPDATE_SIGNING_KEY
+      # (design/10-自动更新.md §5). Installs only take a release whose manifest is signed by a key they trust.
+      - name: Update manifest
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$UPDATE_SIGNING_KEY" ]; then
+            echo "::warning::UPDATE_SIGNING_KEY is not set: no update manifest, so installed copies will not update to this release."
+            exit 0
+          fi
+          KEY="$RUNNER_TEMP/update-signing-key.pem"
+          ( umask 077; printf '%s\n' "$UPDATE_SIGNING_KEY" > "$KEY" )
+          python3 tools/make-update-manifest.py --tag "$GITHUB_REF_NAME" --dist dist --repo "$GITHUB_REPOSITORY" --key "$KEY"
+          rm -f "$KEY"
 
       - name: Create release
         env:

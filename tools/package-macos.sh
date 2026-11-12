@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds Octopus.app + a .dmg for one macOS runtime id from a self-contained publish.
+# Builds Octopus.app + a .dmg for one macOS runtime id from a self-contained publish, and a .zip of the same app for
+# automatic updates (design/10-自动更新.md §5.3).
 #
 #   tools/package-macos.sh <rid: osx-arm64|osx-x64> <version> <out-dir>
 #
@@ -76,6 +77,12 @@ if [ "${NOTARIZE:-0}" = "1" ]; then
   xcrun stapler staple "$APP"
 fi
 
+# The update package: the final app (notarized and stapled when NOTARIZE=1), zipped so ditto -x restores it exactly.
+echo "==> update zip"
+ZIP="$OUT/Octopus-$VERSION-$RID.zip"
+rm -f "$ZIP"
+ditto -c -k --keepParent "$APP" "$ZIP"
+
 echo "==> dmg"
 DMG="$OUT/Octopus-$VERSION-$RID.dmg"
 STAGE="$WORK/dmg"
@@ -95,3 +102,4 @@ if [ "${NOTARIZE:-0}" = "1" ]; then
 fi
 
 echo "==> $DMG"
+echo "==> $ZIP"

@@ -50,3 +50,11 @@ Name: "{autodesktop}\Octopus"; Filename: "{app}\Octopus.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\Octopus.exe"; Description: "{cm:LaunchProgram,Octopus}"; Flags: nowait postinstall skipifsilent
+; Automatic updates run setup silently; /RELAUNCH=1 ("restart and update") starts the new version afterwards.
+Filename: "{app}\Octopus.exe"; Flags: nowait runasoriginaluser; Check: WantsRelaunch
+
+[Code]
+function WantsRelaunch: Boolean;
+begin
+  Result := WizardSilent and (ExpandConstant('{param:RELAUNCH|0}') = '1');
+end;
