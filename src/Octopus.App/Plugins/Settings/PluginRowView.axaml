@@ -1,0 +1,322 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:s="using:Octopus.App.Plugins.Settings"
+             x:Class="Octopus.App.Plugins.Settings.PluginRowView"
+             x:DataType="s:PluginRowViewModel">
+    <UserControl.Styles>
+        <Style Selector="SelectableTextBlock.failed">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.DataTemplates>
+        <!-- Claude usage connection (the status line bridge), shown on the usage plugin's row. -->
+        <DataTemplate DataType="s:ClaudeConnectionsViewModel">
+            <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <TextBlock Classes="group" VerticalAlignment="Center" Text="{x:Static s:PluginStrings.ClaudeConnect}" />
+                    <arc:Button Grid.Column="1" Variant="Ghost" Size="Small"
+                                IsLoading="{Binding IsScanning}"
+                                Command="{Binding RefreshCommand}"
+                                AutomationProperties.Name="{x:Static s:PluginStrings.Rescan2}"
+                                arc:Tooltip.Tip="{x:Static s:PluginStrings.Rescan2}">
+                        <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+                    </arc:Button>
+                    <arc:Button Grid.Column="2" Variant="Secondary" Size="Small"
+                                Content="{x:Static s:PluginStrings.ConnectAll}"
+                                IsVisible="{Binding CanInstallAll}"
+                                Command="{Binding InstallAllCommand}" />
+                </Grid>
+                <TextBlock Classes="hint" TextWrapping="Wrap" Text="{x:Static s:PluginStrings.ClaudeConnectHint}" />
+                <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.ClaudeNone}" IsVisible="{Binding HasNone}" />
+                <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                        BorderThickness="1"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                        ClipToBounds="True"
+                        IsVisible="{Binding !HasNone}">
+                    <ItemsControl ItemsSource="{Binding Directories}" Margin="0,-1,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="s:ClaudeConnectionRow">
+                                <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,8">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                                            <TextBlock Classes="body" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="mono" Text="{Binding DisplayPath}" TextTrimming="CharacterEllipsis"
+                                                       arc:Tooltip.Tip="{Binding Directory}" />
+                                        </StackPanel>
+                                        <arc:Badge Grid.Column="1" Size="Small" VerticalAlignment="Center"
+                                                   Tone="{Binding StateTone}" Content="{Binding State}" />
+                                        <Panel Grid.Column="2" VerticalAlignment="Center">
+                                            <arc:Button Variant="Primary" Size="Small"
+                                                        Content="{x:Static s:PluginStrings.Connect}"
+                                                        IsVisible="{Binding IsNotInstalled}"
+                                                        Command="{Binding InstallCommand}" />
+                                            <arc:Button Variant="Ghost" Size="Small"
+                                                        Content="{x:Static s:PluginStrings.Restore}"
+                                                        IsVisible="{Binding IsInstalled}"
+                                                        Command="{Binding RestoreCommand}" />
+                                        </Panel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+                <arc:Alert Tone="Info" Title="{Binding Message}" IsVisible="{Binding HasMessage}" />
+            </StackPanel>
+        </DataTemplate>
+        <!-- The plugin's own settings, one Arc control per declared type. -->
+        <DataTemplate DataType="s:BoolConfigField">
+            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}">
+                <arc:Switch IsChecked="{Binding Value, Mode=TwoWay}" AutomationProperties.Name="{Binding Label}" />
+            </arc:SettingsRow>
+        </DataTemplate>
+        <DataTemplate DataType="s:NumberConfigField">
+            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}">
+                <arc:NumberField Value="{Binding Value, Mode=TwoWay}" Size="Small" Width="160"
+                                 Label="{Binding Label}" IsLabelVisible="False" />
+            </arc:SettingsRow>
+        </DataTemplate>
+        <DataTemplate DataType="s:ChoiceConfigField">
+            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}">
+                <arc:Select AutoScrollToSelectedItem="False" Size="Small" Width="220"
+                            AutomationProperties.Name="{Binding Label}"
+                            ItemsSource="{Binding Options}"
+                            SelectedValue="{Binding Value, Mode=TwoWay}" />
+            </arc:SettingsRow>
+        </DataTemplate>
+        <DataTemplate DataType="s:TextConfigField">
+            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}">
+                <Panel>
+                    <arc:Input Text="{Binding Value, Mode=TwoWay}" Size="Small" Width="260"
+                               Label="{Binding Label}" IsLabelVisible="False"
+                               ErrorMessage="{Binding Error}" IsInvalid="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                               IsVisible="{Binding IsSingleLine}" />
+                    <arc:Textarea Text="{Binding Value, Mode=TwoWay}" FrameMinHeight="72" Width="320"
+                                  Label="{Binding Label}" IsLabelVisible="False"
+                                  IsVisible="{Binding IsMultiLine}" />
+                </Panel>
+            </arc:SettingsRow>
+        </DataTemplate>
+        <DataTemplate DataType="s:CommandConfigField">
+            <!-- A command only the user writes: full width, a test run, and what it printed. -->
+            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}" StackWidth="100000">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <arc:Input Text="{Binding Value, Mode=TwoWay}" Size="Small"
+                                   Label="{Binding Label}" IsLabelVisible="False"
+                                   Placeholder="{x:Static s:PluginStrings.CommandPlaceholder}"
+                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" />
+                        <arc:Button Grid.Column="1" Variant="Secondary" Size="Small"
+                                    Content="{x:Static s:PluginStrings.Test}"
+                                    IsLoading="{Binding IsTesting}"
+                                    Command="{Binding TestCommand}" />
+                    </Grid>
+                    <SelectableTextBlock Classes="hint" Text="{Binding TestResult}" TextWrapping="Wrap"
+                                         IsVisible="{Binding HasTestResult}"
+                                         Classes.failed="{Binding TestFailed}" />
+                    <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.CommandNote}" TextWrapping="Wrap" />
+                </StackPanel>
+            </arc:SettingsRow>
+        </DataTemplate>
+        <DataTemplate DataType="s:ListConfigField">
+            <!-- A tag list needs the full width: always stacked under its label. -->
+            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}" StackWidth="100000">
+                <arc:TagInput Value="{Binding Value, Mode=TwoWay}" Label="{Binding Label}" IsLabelVisible="False"
+                              Placeholder="{x:Static s:PluginStrings.AddTag}" />
+            </arc:SettingsRow>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+    <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0">
+        <StackPanel>
+            <!-- Summary: icon, name, version, state; the enable switch and the details chevron. -->
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="6,6,10,6">
+                <arc:Button Grid.Column="0"
+                            Variant="Ghost"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Command="{Binding ToggleExpandedCommand}"
+                            AutomationProperties.Name="{Binding Name}"
+                            arc:Tooltip.Tip="{l:AppLangResource SettingsToggleDetails}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Border Width="28" Height="28"
+                                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                BorderThickness="1"
+                                VerticalAlignment="Center">
+                            <lucide:LucideIcon Kind="{Binding Icon}" Size="16"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Classes="name" Text="{Binding Name}" VerticalAlignment="Center" />
+                                <TextBlock Classes="hint" Text="{Binding Version}" VerticalAlignment="Center" />
+                                <arc:Badge Size="Small"
+                                           Tone="{Binding StateTone}"
+                                           Content="{Binding State}"
+                                           IsVisible="{Binding ShowState}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Classes="hint"
+                                       Text="{Binding Description}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding HasDescription}" />
+                        </StackPanel>
+                    </Grid>
+                </arc:Button>
+                <arc:SegmentedControl AutoScrollToSelectedItem="False" Grid.Column="1"
+                                      VerticalAlignment="Center"
+                                      IsEnabled="{Binding CanToggle}"
+                                      SelectedValue="{Binding EnabledKey, Mode=TwoWay}">
+                    <arc:SegmentedOption Value="on" Label="{l:AppLangResource SettingsEnabled}" />
+                    <arc:SegmentedOption Value="off" Label="{l:AppLangResource SettingsDisabled}" />
+                </arc:SegmentedControl>
+                <arc:Button Grid.Column="2"
+                            Variant="Ghost"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            Command="{Binding ToggleExpandedCommand}"
+                            AutomationProperties.Name="{l:AppLangResource SettingsToggleDetails}">
+                    <Panel>
+                        <lucide:LucideIcon Kind="ChevronDown" Size="16" IsVisible="{Binding IsExpanded}" />
+                        <lucide:LucideIcon Kind="ChevronRight" Size="16" IsVisible="{Binding !IsExpanded}" />
+                    </Panel>
+                </arc:Button>
+            </Grid>
+
+            <!-- Details, indented to the name. -->
+            <StackPanel Margin="52,2,16,16" Spacing="14" IsVisible="{Binding IsExpanded}">
+                <arc:Alert Tone="Danger" Title="{x:Static s:PluginStrings.LastError}" IsVisible="{Binding HasError}">
+                    <SelectableTextBlock Text="{Binding LastError}" TextWrapping="Wrap" />
+                </arc:Alert>
+                <arc:Alert Tone="Warning" Title="{x:Static s:PluginStrings.Issues}" IsVisible="{Binding HasIssues}">
+                    <SelectableTextBlock Text="{Binding Issues}" TextWrapping="Wrap" />
+                </arc:Alert>
+
+                <ItemsControl ItemsSource="{Binding Contributions}" IsVisible="{Binding HasContributions}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="6" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="s:ContributionLine">
+                            <Grid ColumnDefinitions="132,*" ColumnSpacing="10">
+                                <TextBlock Classes="label" Text="{Binding Kind}" />
+                                <TextBlock Grid.Column="1" Classes="body" Text="{Binding Names}" TextWrapping="Wrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <ContentControl Content="{Binding ClaudeConnections}" IsVisible="{Binding HasClaudeConnections}" />
+
+                <!-- The plugin's settings. -->
+                <StackPanel Spacing="6" IsVisible="{Binding HasSettings}">
+                    <TextBlock Classes="group" Text="{x:Static s:PluginStrings.Settings}" />
+                    <arc:SettingsGroup Appearance="Card" ItemsSource="{Binding Settings}" />
+                </StackPanel>
+
+                <!-- Permissions: one compact line each, switched off on its own. -->
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="group" Text="{x:Static s:PluginStrings.Permissions}" />
+                    <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.NoPermissions}" IsVisible="{Binding HasNoPermissions}" />
+                    <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                            ClipToBounds="True"
+                            IsVisible="{Binding HasPermissions}">
+                        <ItemsControl ItemsSource="{Binding Permissions}" Margin="0,-1,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="s:PermissionRowViewModel">
+                                    <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,8">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                                            <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                <TextBlock Classes="body" Text="{Binding Title}" TextWrapping="Wrap" />
+                                                <TextBlock Classes="hint" Text="{Binding Reason}" IsVisible="{Binding HasReason}" />
+                                            </StackPanel>
+                                            <arc:Badge Grid.Column="1" Size="Small" VerticalAlignment="Center"
+                                                       Tone="{Binding RiskTone}" Content="{Binding Risk}"
+                                                       arc:Tooltip.Tip="{Binding Key}" />
+                                            <arc:Switch Grid.Column="2" VerticalAlignment="Center"
+                                                        IsChecked="{Binding IsGranted, Mode=TwoWay}"
+                                                        AutomationProperties.Name="{Binding Title}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.PermissionsHint}" IsVisible="{Binding HasPermissions}" />
+                </StackPanel>
+
+                <!-- What the plugin can reach beyond its permissions. -->
+                <arc:SettingsGroup Appearance="Card" IsVisible="{Binding ReadsFiles}">
+                    <arc:SettingsRow Header="{x:Static s:PluginStrings.Sensitive}" Description="{x:Static s:PluginStrings.SensitiveHint}">
+                        <arc:Switch IsChecked="{Binding IncludeSensitiveFiles, Mode=TwoWay}"
+                                    AutomationProperties.Name="{x:Static s:PluginStrings.Sensitive}" />
+                    </arc:SettingsRow>
+                    <arc:SettingsRow Header="{x:Static s:PluginStrings.Picked}" Description="{x:Static s:PluginStrings.PickedHint}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="hint" Text="{Binding PickedText}" VerticalAlignment="Center" />
+                            <arc:Button Variant="Secondary" Size="Small"
+                                        IsEnabled="{Binding HasPickedPaths}"
+                                        Content="{x:Static s:PluginStrings.Forget}"
+                                        Command="{Binding ForgetPickedPathsCommand}" />
+                        </StackPanel>
+                    </arc:SettingsRow>
+                </arc:SettingsGroup>
+
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="132,*" ColumnSpacing="10">
+                        <TextBlock Classes="label" Text="{x:Static s:PluginStrings.Id}" />
+                        <SelectableTextBlock Grid.Column="1" Classes="mono" Text="{Binding Id}" />
+                    </Grid>
+                    <Grid ColumnDefinitions="132,*" ColumnSpacing="10">
+                        <TextBlock Classes="label" Text="{x:Static s:PluginStrings.Location}" />
+                        <SelectableTextBlock Grid.Column="1" Classes="mono" Text="{Binding Location}" TextWrapping="Wrap" />
+                    </Grid>
+                </StackPanel>
+
+                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="8">
+                    <arc:Button Variant="Secondary" Size="Small" Command="{Binding ReloadCommand}" IsLoading="{Binding IsBusy}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <lucide:LucideIcon Kind="RotateCw" Size="14" />
+                            <TextBlock Text="{x:Static s:PluginStrings.Reload}" />
+                        </StackPanel>
+                    </arc:Button>
+                    <arc:Button Grid.Column="1" Variant="Secondary" Size="Small" Command="{Binding ToggleLogCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <lucide:LucideIcon Kind="ScrollText" Size="14" />
+                            <TextBlock Text="{x:Static s:PluginStrings.ShowLog}" />
+                        </StackPanel>
+                    </arc:Button>
+                    <arc:Button Grid.Column="2" Variant="Ghost" Size="Small" Command="{Binding OpenDataCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                            <TextBlock Text="{x:Static s:PluginStrings.OpenData}" />
+                        </StackPanel>
+                    </arc:Button>
+                    <arc:Button Grid.Column="4" Variant="Danger" Size="Small"
+                                IsVisible="{Binding CanUninstall}"
+                                Content="{x:Static s:PluginStrings.Uninstall}"
+                                Command="{Binding UninstallCommand}" />
+                </Grid>
+
+                <arc:CodeBlock Code="{Binding LogText}"
+                               Language="log"
+                               SourceCodeLabel="{x:Static s:PluginStrings.LogTitle}"
+                               CopyLabel="{x:Static s:PluginStrings.Copy}"
+                               IsCollapsible="True"
+                               MaxLines="16"
+                               IsVisible="{Binding IsLogVisible}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

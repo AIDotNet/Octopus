@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:s="using:Octopus.App.Plugins.Settings"
+             x:Class="Octopus.App.Plugins.Settings.PluginsPageView"
+             x:DataType="s:PluginsSettingsViewModel">
+    <!-- Laid out like the agents page: title, a bar of page-wide actions, then bordered lists of rows. -->
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{x:Static s:PluginStrings.Title}" />
+            <TextBlock Classes="subtitle" Text="{x:Static s:PluginStrings.Subtitle}" />
+        </StackPanel>
+
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="14,10">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                <TextBlock Classes="hint" VerticalAlignment="Center" Text="{x:Static s:PluginStrings.InstallHint}" />
+                <arc:Button Grid.Column="1"
+                            Variant="Ghost"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            Command="{Binding OpenFolderCommand}"
+                            AutomationProperties.Name="{x:Static s:PluginStrings.OpenFolder}"
+                            arc:Tooltip.Tip="{x:Static s:PluginStrings.OpenFolder}">
+                    <lucide:LucideIcon Kind="FolderOpen" Size="16" />
+                </arc:Button>
+                <arc:Button Grid.Column="2"
+                            Variant="Secondary"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            Content="{x:Static s:PluginStrings.Rescan}"
+                            Command="{Binding RescanCommand}" />
+                <arc:Button Grid.Column="3"
+                            Variant="Primary"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            Command="{Binding InstallCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <lucide:LucideIcon Kind="PackagePlus" Size="14" />
+                        <TextBlock Text="{x:Static s:PluginStrings.Install}" />
+                    </StackPanel>
+                </arc:Button>
+            </Grid>
+        </Border>
+
+        <arc:Alert Tone="{Binding MessageTone}" Title="{Binding Message}" IsVisible="{Binding HasMessage}">
+            <arc:Button Variant="Ghost" Size="Small" HorizontalAlignment="Right" Command="{Binding DismissMessageCommand}">
+                <lucide:LucideIcon Kind="X" Size="14" />
+            </arc:Button>
+        </arc:Alert>
+
+        <StackPanel Spacing="6" IsVisible="{Binding HasBuiltin}">
+            <TextBlock Classes="group" Margin="2,4,0,0" Text="{x:Static s:PluginStrings.Builtin}" />
+            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    ClipToBounds="True">
+                <ItemsControl ItemsSource="{Binding Builtin}" Margin="0,-1,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="s:PluginRowViewModel">
+                            <s:PluginRowView />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+            <TextBlock Classes="group" Margin="2,12,0,0" Text="{x:Static s:PluginStrings.Installed}" />
+            <TextBlock Classes="hint" Margin="2,0,0,0" Text="{x:Static s:PluginStrings.NoneInstalled}" IsVisible="{Binding !HasInstalled}" />
+            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    ClipToBounds="True"
+                    IsVisible="{Binding HasInstalled}">
+                <ItemsControl ItemsSource="{Binding Installed}" Margin="0,-1,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="s:PluginRowViewModel">
+                            <s:PluginRowView />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+
+        <!-- Color themes from plugins (design/plugins/07-主题.md §5): one per appearance. -->
+        <StackPanel Spacing="6">
+            <TextBlock Classes="group" Margin="2,12,0,0" Text="{x:Static s:PluginStrings.Themes}" />
+            <arc:SettingsGroup Appearance="Card" Description="{x:Static s:PluginStrings.ThemesHint}" IsEnabled="{Binding HasThemes}">
+                <arc:SettingsRow Header="{x:Static s:PluginStrings.LightTheme}">
+                    <arc:Select AutoScrollToSelectedItem="False" Size="Small" Width="220"
+                                AutomationProperties.Name="{x:Static s:PluginStrings.LightTheme}"
+                                ItemsSource="{Binding LightThemes}"
+                                SelectedValue="{Binding LightTheme, Mode=TwoWay}" />
+                </arc:SettingsRow>
+                <arc:SettingsRow Header="{x:Static s:PluginStrings.DarkTheme}">
+                    <arc:Select AutoScrollToSelectedItem="False" Size="Small" Width="220"
+                                AutomationProperties.Name="{x:Static s:PluginStrings.DarkTheme}"
+                                ItemsSource="{Binding DarkThemes}"
+                                SelectedValue="{Binding DarkTheme, Mode=TwoWay}" />
+                </arc:SettingsRow>
+            </arc:SettingsGroup>
+            <TextBlock Classes="hint" Margin="2,0,0,0" Text="{x:Static s:PluginStrings.NoThemes}" IsVisible="{Binding !HasThemes}" />
+            <arc:Alert Tone="Warning" Title="{x:Static s:PluginStrings.ThemeRefused}" Content="{Binding ThemeProblem}" IsVisible="{Binding HasThemeProblem}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

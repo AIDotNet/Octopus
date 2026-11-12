@@ -1,0 +1,120 @@
+{
+  "schema": 1,
+  "id": "octopus.agent-usage",
+  "name": "Agent Usage",
+  "version": "1.0.0",
+  "description": "Subscription windows and session cost of the coding agents installed on this machine, from their official sources only.",
+  "publisher": "Octopus",
+  "icon": "lucide:gauge",
+  "engines": { "api": 0 },
+  "main": "main.js",
+  "builtin": true,
+
+  "activation": [
+    "onAgentInstalled:claude", "onAgentInstalled:codex", "onAgentInstalled:grok",
+    "onAgentInstalled:cursor", "onAgentInstalled:opencode"
+  ],
+
+  "permissions": {
+    "agents": {
+      "signals": {
+        "claude": ["statusline"],
+        "grok": ["statusline"],
+        "opencode": ["session-usage"]
+      },
+      "probes": {
+        "claude": ["account"],
+        "codex": ["rateLimits"],
+        "cursor": ["account"]
+      }
+    },
+    "fs": {
+      "agentData": [
+        { "agent": "claude", "include": ["projects/**/*.jsonl"], "access": "read", "optional": true,
+          "reason": "Usage history: time, model and token counts of each reply (never the conversation).",
+          "localized": { "zh-CN": { "reason": "用量历史：只读每次回复的时间、模型和 token 数，不读对话内容。" } } },
+        { "agent": "codex", "include": ["sessions/**/*.jsonl"], "access": "read", "optional": true,
+          "reason": "Usage history: time, model and token counts of each turn (never the conversation).",
+          "localized": { "zh-CN": { "reason": "用量历史：只读每轮的时间、模型和 token 数，不读对话内容。" } } }
+      ]
+    },
+    "projects": "read",
+    "shell": { "open": ["cursor.com"] },
+    "notifications": { "optional": true }
+  },
+
+  "contributes": {
+    "usageProviders": [
+      { "id": "octopus.agent-usage.claude", "agent": "claude" },
+      { "id": "octopus.agent-usage.codex", "agent": "codex" },
+      { "id": "octopus.agent-usage.grok", "agent": "grok" },
+      { "id": "octopus.agent-usage.cursor", "agent": "cursor" },
+      { "id": "octopus.agent-usage.opencode", "agent": "opencode" }
+    ],
+    "indicators": [
+      { "id": "octopus.agent-usage.indicator", "title": "Agent usage", "icon": "lucide:gauge",
+        "localized": { "zh-CN": { "title": "智能体用量" } } }
+    ],
+    "views": [
+      { "id": "octopus.agent-usage.history", "title": "Usage history", "icon": "lucide:chart-column",
+        "launcher": true, "singleton": "app", "restore": true,
+        "localized": { "zh-CN": { "title": "用量历史" } } }
+    ],
+    "commands": [
+      { "id": "octopus.agent-usage.refresh", "title": "Refresh agent usage", "category": "Agent Usage",
+        "localized": { "zh-CN": { "title": "刷新智能体用量" } } }
+    ],
+    "configuration": {
+      "properties": {
+        "octopus.agent-usage.claude.source": {
+          "type": "enum", "options": ["statusline", "command"], "default": "statusline",
+          "label": "Claude usage source",
+          "description": "The status line is Claude Code's own report: from sessions started in Octopus, and from every session of the configurations connected above. A custom command can query anything you choose (a gateway, a script) and print JSON.",
+          "localized": {
+            "zh-CN": {
+              "label": "Claude 用量来源",
+              "description": "状态行是 Claude Code 自己的报告：来自 Octopus 启动的会话，以及上面“接入”过的配置里的所有会话。自定义命令可以查询你选的任何来源（网关、脚本），输出 JSON。",
+              "option.statusline": "Claude 状态行（官方）",
+              "option.command": "自定义命令"
+            },
+            "en": { "option.statusline": "Claude status line (official)", "option.command": "Custom command" }
+          }
+        },
+        "octopus.agent-usage.claude.command": {
+          "type": "command",
+          "label": "Claude usage command",
+          "description": "Prints JSON: Claude's status line shape ({\"rate_limits\": {\"five_hour\": {\"used_percentage\": 64, \"resets_at\": 1762952400}}}) or {\"windows\": [{\"label\": \"5h\", \"usedPercent\": 64, \"resetsAt\": 1762952400}], \"plan\": \"Max\"}.",
+          "localized": {
+            "zh-CN": {
+              "label": "Claude 用量查询命令",
+              "description": "输出 JSON：Claude 状态行的格式（{\"rate_limits\": {\"five_hour\": {\"used_percentage\": 64, \"resets_at\": 1762952400}}}），或 {\"windows\": [{\"label\": \"5 小时\", \"usedPercent\": 64, \"resetsAt\": 1762952400}], \"plan\": \"Max\"}。"
+            }
+          }
+        },
+        "octopus.agent-usage.claude.interval": {
+          "type": "number", "default": 5, "label": "Run the command every (minutes)",
+          "localized": { "zh-CN": { "label": "命令的查询间隔（分钟）" } }
+        },
+        "octopus.agent-usage.notifyAt": {
+          "type": "list", "default": ["80", "95"], "label": "Notify at (%)",
+          "localized": { "zh-CN": { "label": "提醒阈值（%）" } }
+        },
+        "octopus.agent-usage.notifyOnReset": {
+          "type": "bool", "default": true, "label": "Notify when a window resets",
+          "localized": { "zh-CN": { "label": "窗口重置时提醒" } }
+        },
+        "octopus.agent-usage.hidden": {
+          "type": "list", "default": [], "label": "Hide usage of these agents (ids)",
+          "localized": { "zh-CN": { "label": "不显示这些智能体（id）" } }
+        }
+      }
+    }
+  },
+
+  "localized": {
+    "zh-CN": {
+      "name": "智能体用量",
+      "description": "本机已安装的编程智能体的订阅窗口与会话成本，只用官方来源。"
+    }
+  }
+}
