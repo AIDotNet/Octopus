@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- octopus-signal: run by agent CLIs (status line, hooks, notify) to hand their JSON to Octopus.
+         design/plugins/11-补充能力.md §1.3. Base class library only, published with NativeAOT so it starts in milliseconds. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <AssemblyName>octopus-signal</AssemblyName>
+        <RootNamespace>Octopus.SignalForwarder</RootNamespace>
+        <PublishAot>true</PublishAot>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <UseSystemResourceKeys>true</UseSystemResourceKeys>
+        <OptimizationPreference>Speed</OptimizationPreference>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.SignalForwarder.Tests" />
+    </ItemGroup>
+</Project>
