@@ -52,7 +52,7 @@ public sealed partial class FileSearchViewModel(IFileSearchService service) : Ob
 
     partial void OnIsSearchingChanged(bool value) => OnPropertyChanged(nameof(HasNoMatches));
 
-    /// <summary>The folder to search; clears the box and the results.</summary>
+    /// <summary>The folder to search; clears the box and the results. Null (a folder on an SSH host): nothing is searched.</summary>
     public void SetRoot(string? root)
     {
         _cancel?.Cancel();
@@ -61,7 +61,11 @@ public sealed partial class FileSearchViewModel(IFileSearchService service) : Ob
         IsSearching = false;
         Query = "";
         OnPropertyChanged(nameof(HasNoMatches));
+        OnPropertyChanged(nameof(HasRoot));
     }
+
+    /// <summary>There is a folder to search on this computer.</summary>
+    public bool HasRoot => _root is not null;
 
     private async Task SearchAfterDelayAsync()
     {
@@ -142,7 +146,7 @@ public sealed partial class FileSearchViewModel(IFileSearchService service) : Ob
         OnPropertyChanged(nameof(HasNoMatches));
     }
 
-    /// <summary>Double-click or Enter on a result: files and matching lines open, folders and headings do not.</summary>
+    /// <summary>Click or Enter on a result: files and matching lines open, folders and headings do not.</summary>
     public void RequestOpen(SearchRowViewModel? row)
     {
         if (row is null || row.IsDirectory) return;

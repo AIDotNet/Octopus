@@ -3,7 +3,7 @@ using Avalonia.Input;
 
 namespace Octopus.App.Explorer.Search;
 
-/// <summary>The results of a name or content search. Double-click or Enter opens the file.</summary>
+/// <summary>The results of a name or content search. A click or Enter opens the file.</summary>
 public partial class SearchResultsView : UserControl
 {
     public SearchResultsView()
@@ -11,7 +11,7 @@ public partial class SearchResultsView : UserControl
         InitializeComponent();
     }
 
-    private void OnDoubleTapped(object? sender, TappedEventArgs e)
+    private void OnTapped(object? sender, TappedEventArgs e)
     {
         if (DataContext is FileSearchViewModel model && List.SelectedItem is SearchRowViewModel row) model.RequestOpen(row);
     }

@@ -20,6 +20,15 @@ internal sealed class ExplorerFixture : IDisposable
 
     public void Git(params string[] args) => GitAt(null, args);
 
+    /// <summary>Runs git and gives back what it printed, trimmed.</summary>
+    public string GitOutput(params string[] args)
+    {
+        var git = FindGit() ?? throw new InvalidOperationException("git is not installed");
+        var result = new ProcessRunner().RunAsync(git, ["-C", Root, .. args]).GetAwaiter().GetResult();
+        if (!result.Succeeded) throw new InvalidOperationException(result.StandardError);
+        return result.StandardOutput.Trim();
+    }
+
     public void GitAt(string? date, params string[] args)
     {
         var git = FindGit() ?? throw new InvalidOperationException("git is not installed");

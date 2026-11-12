@@ -27,11 +27,16 @@ public partial class ExplorerPanelView : UserControl
     public static readonly StyledProperty<string?> ProjectNameProperty =
         AvaloniaProperty.Register<ExplorerPanelView, string?>(nameof(ProjectName));
 
+    /// <summary>The SSH host of the current project; null when its folder is on this computer.</summary>
+    public static readonly StyledProperty<string?> ProjectSshHostProperty =
+        AvaloniaProperty.Register<ExplorerPanelView, string?>(nameof(ProjectSshHost));
+
     /// <summary>Room the top row leaves free at its right end for what the window floats there (the panel switch, the caption buttons).</summary>
     public static readonly StyledProperty<double> TrailingInsetProperty =
         AvaloniaProperty.Register<ExplorerPanelView, double>(nameof(TrailingInset), 44);
 
     private Window? _window;
+    private bool _settingProject;
 
     static ExplorerPanelView()
     {
@@ -105,6 +110,12 @@ public partial class ExplorerPanelView : UserControl
         set => SetValue(ProjectNameProperty, value);
     }
 
+    public string? ProjectSshHost
+    {
+        get => GetValue(ProjectSshHostProperty);
+        set => SetValue(ProjectSshHostProperty, value);
+    }
+
     public double TrailingInset
     {
         get => GetValue(TrailingInsetProperty);
@@ -121,7 +132,31 @@ public partial class ExplorerPanelView : UserControl
 
     private void ApplyTrailingInset() => TopBar.ColumnDefinitions[2].Width = new GridLength(TrailingInset);
 
-    private void OnProjectChanged() => _ = Model.SetProjectAsync(ProjectPath, ProjectName);
+    /// <summary>
+    /// Points the panel at a project. The folder is read again only when the folder or the host changed: a rename keeps
+    /// what is open in the tree.
+    /// </summary>
+    public void SetProject(string? path, string? name, string? sshHost)
+    {
+        var changed = path != ProjectPath || sshHost != ProjectSshHost;
+        _settingProject = true;
+        try
+        {
+            ProjectSshHost = sshHost;
+            ProjectName = name;
+            ProjectPath = path;
+        }
+        finally
+        {
+            _settingProject = false;
+        }
+        if (changed) OnProjectChanged();
+    }
+
+    private void OnProjectChanged()
+    {
+        if (!_settingProject) _ = Model.SetProjectAsync(ProjectPath, ProjectName, ProjectSshHost);
+    }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {

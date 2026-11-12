@@ -34,7 +34,7 @@
         </Grid>
 
         <!-- Search mode and box. -->
-        <StackPanel Grid.Row="1" Margin="10,2,10,6" Spacing="6" DataContext="{Binding Search}" x:DataType="search:FileSearchViewModel">
+        <StackPanel Grid.Row="1" Margin="10,2,10,6" Spacing="6" DataContext="{Binding Search}" x:DataType="search:FileSearchViewModel" IsVisible="{Binding HasRoot}">
             <arc:SegmentedControl HorizontalAlignment="Stretch" SelectedValue="{Binding ModeKey, Mode=TwoWay}"
                                   AutomationProperties.Name="{l:AppLangResource ExplorerSearchMode}">
                 <arc:SegmentedOption Value="name" Label="{l:AppLangResource ExplorerSearchByName}" />
@@ -45,9 +45,17 @@
                              Text="{Binding Query, Mode=TwoWay}" />
         </StackPanel>
 
-        <Panel Grid.Row="2" IsVisible="{Binding !Search.IsActive}">
+        <!-- On an SSH host the folders are read through the host: a failed read is said above the tree. -->
+        <DockPanel Grid.Row="2" IsVisible="{Binding !Search.IsActive}">
+            <TextBlock DockPanel.Dock="Top" Classes="ex-hint" Margin="14,4,14,6" TextWrapping="Wrap"
+                       Text="{Binding RemoteStatusText}" IsVisible="{Binding HasRemoteStatus}" />
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="14,2,14,6" IsVisible="{Binding IsRemoteBusy}">
+                <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center"
+                                Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                <TextBlock Classes="ex-hint" Text="{Binding RemoteBusyText}" VerticalAlignment="Center" />
+            </StackPanel>
             <files:FileTreeView DataContext="{Binding Files}" />
-        </Panel>
+        </DockPanel>
         <search:SearchResultsView Grid.Row="2" DataContext="{Binding Search}" IsVisible="{Binding IsActive}" />
     </Grid>
 </UserControl>

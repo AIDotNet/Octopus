@@ -8,7 +8,7 @@ using TKCode.Arc;
 
 namespace Octopus.App.Explorer.Files;
 
-/// <summary>The file tree: folders open on click, a file opens on double-click or Enter, the context menu acts on the row under the pointer.</summary>
+/// <summary>The file tree: a click opens a folder or a file (Enter too), the context menu acts on the row under the pointer.</summary>
 public partial class FileTreeView : UserControl
 {
     private FileTreeViewModel? _model;
@@ -19,7 +19,7 @@ public partial class FileTreeView : UserControl
         Tree.ChildrenSelector = static node => (node as FileNodeViewModel)?.Children;
         Tree.ItemExpanded += OnItemExpanded;
         Tree.ItemCollapsed += OnItemCollapsed;
-        Tree.DoubleTapped += OnDoubleTapped;
+        Tree.Tapped += OnTapped;
         Tree.AddHandler(KeyDownEvent, OnTreeKeyDown, RoutingStrategies.Tunnel);
         Tree.AddHandler(PointerPressedEvent, OnTreePointerPressed, RoutingStrategies.Tunnel);
     }
@@ -43,6 +43,10 @@ public partial class FileTreeView : UserControl
             new(AppLangResources.Get(AppLangResourceKind.ExplorerReveal), _model.RevealContextCommand, SeparatorBefore: true),
             new(AppLangResources.Get(AppLangResourceKind.ExplorerCopyPath), _model.CopyContextPathCommand),
             new(AppLangResources.Get(AppLangResourceKind.ExplorerCopyRelativePath), _model.CopyContextRelativePathCommand),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerNewFileMenu), _model.NewFileHereCommand, SeparatorBefore: true),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerNewFolderMenu), _model.NewFolderHereCommand),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerRenameMenu), _model.RenameContextCommand, SeparatorBefore: true),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerDeleteMenu), _model.DeleteContextCommand, IsDestructive: true),
         ]);
     }
 
@@ -60,7 +64,7 @@ public partial class FileTreeView : UserControl
 
     private void OnCollapseAllRequested(object? sender, EventArgs e) => Tree.CollapseAll();
 
-    private void OnDoubleTapped(object? sender, TappedEventArgs e)
+    private void OnTapped(object? sender, TappedEventArgs e)
     {
         if (NodeAt(e.Source) is { } node) _model?.RequestOpen(node);
     }

@@ -6,8 +6,10 @@ using Octopus.App.Files;
 using Octopus.App.Explorer.Git;
 using Octopus.App.Explorer.Search;
 using Octopus.App.Localization;
+using Octopus.App.Services;
 using Octopus.FileSystem;
 using Octopus.Git;
+using Octopus.Ssh;
 using Octopus.Storage;
 
 namespace Octopus.App.Explorer;
@@ -18,7 +20,9 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private readonly IFileTreeService _tree;
     private readonly IGitService _git;
     private readonly ISettingsStore _settings;
+    private readonly RemoteFiles _remote;
     private readonly UiContext _ui = new();
+    private SshFileTree? _remoteTree;
     private IDisposable? _watch;
     private IDisposable? _changeWatch;
     private IDisposable? _gitWatch;
@@ -30,8 +34,10 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         GitPanelViewModel gitPanel,
         IFileTreeService tree,
         IGitService git,
-        ISettingsStore settings)
+        ISettingsStore settings,
+        RemoteFiles remote)
     {
+        _remote = remote;
         Files = files;
         Search = search;
         Git = gitPanel;
@@ -55,6 +61,22 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     public GitPanelViewModel Git { get; }
 
     [ObservableProperty] public partial string? ProjectPath { get; private set; }
+
+    /// <summary>The message of the last failed read of an SSH host's folders, or null.</summary>
+    [ObservableProperty] public partial string? RemoteStatus { get; private set; }
+
+    public bool HasRemoteStatus => RemoteStatus is not null;
+
+    /// <summary>The host is being reached or its folders are being read: the panel shows a loading line.</summary>
+    [ObservableProperty] public partial bool IsRemoteBusy { get; private set; }
+
+    /// <summary>What the loading line says: reaching the host, or reading its folders.</summary>
+    public string RemoteBusyText => AppLangResources.Get(_resolving ? AppLangResourceKind.ExplorerRemoteConnecting : AppLangResourceKind.ExplorerRemoteReading);
+
+    private bool _resolving;
+    private bool _treeBusy;
+
+    public string? RemoteStatusText => RemoteStatus is null ? null : AppLangResources.Format(AppLangResourceKind.ExplorerRemoteStatus, RemoteStatus);
     [ObservableProperty] public partial string ProjectName { get; set; } = "";
     [ObservableProperty] public partial bool IsGitRepository { get; private set; }
 
@@ -101,6 +123,12 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     partial void OnIsGitRepositoryChanged(bool value) => NotifyTabs();
 
+    partial void OnRemoteStatusChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasRemoteStatus));
+        OnPropertyChanged(nameof(RemoteStatusText));
+    }
+
     partial void OnTabChanged(ExplorerTab value) => NotifyTabs();
 
     partial void OnChangeCountChanged(int value)
@@ -134,11 +162,20 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         if (tab == ExplorerTab.Git) _ = Git.RefreshAsync();
     }
 
-    /// <summary>Points the panel at a project folder (null: none): loads the tree, finds out about git and starts watching.</summary>
-    public async Task SetProjectAsync(string? path, string? name)
+    /// <summary>
+    /// Points the panel at a project folder (null: none): loads the tree, finds out about git and starts watching. A folder
+    /// on an SSH host (<paramref name="sshHost"/>) is read through the host: there is no git and no search for it here.
+    /// </summary>
+    public async Task SetProjectAsync(string? path, string? name, string? sshHost = null)
     {
         var version = ++_version;
         StopWatching();
+        if (path is not null && sshHost is not null)
+        {
+            await SetRemoteProjectAsync(path, name, sshHost, version);
+            return;
+        }
+        RemoteStatus = null;
 
         var folder = path is null || !Directory.Exists(path) ? null : Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         ProjectName = name ?? (folder is null ? "" : PathText.NameOf(folder));
@@ -199,8 +236,80 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         });
     }
 
+    /// <summary>
+    /// The folder is found on the host first (its absolute path, with "~" expanded there); then the tree reads the host.
+    /// A host that cannot be reached is said in the panel, and the tree stays empty until it can be read.
+    /// </summary>
+    private async Task SetRemoteProjectAsync(string path, string? name, string host, int version)
+    {
+        var tree = _remote.TreeFor(host);
+        ProjectName = name ?? PathText.NameOf(path);
+        IsGitRepository = false;
+        ChangeCount = 0;
+        Git.SetRepository(null);
+        Files.Load(null);
+        Search.SetRoot(null);
+        ProjectPath = path;
+        _remoteTree = tree;
+        tree.StatusChanged += OnRemoteStatus;
+        tree.BusyChanged += OnRemoteBusy;
+        _resolving = true;
+        UpdateBusy();
+
+        string root;
+        try
+        {
+            root = await tree.ResolveAsync(path);
+        }
+        catch (SshCommandException e)
+        {
+            if (version == _version) RemoteStatus = e.Message;
+            return;
+        }
+        finally
+        {
+            if (version == _version) _resolving = false;
+            UpdateBusy();
+        }
+        if (version != _version) return;
+        Files.Load(root, tree);
+        _watch = tree.Watch(root, OnDirectoryChanged);
+        RemoteStatus = tree.Status;
+    }
+
+    private void OnRemoteStatus(object? sender, string? message)
+    {
+        // Called on a background thread by the tree.
+        _ui.Post(() => RemoteStatus = message);
+    }
+
+    private void OnRemoteBusy(object? sender, bool busy)
+    {
+        // Called on a background thread by the tree.
+        _ui.Post(() =>
+        {
+            _treeBusy = busy;
+            UpdateBusy();
+        });
+    }
+
+    private void UpdateBusy()
+    {
+        IsRemoteBusy = _resolving || _treeBusy;
+        OnPropertyChanged(nameof(RemoteBusyText));
+    }
+
     private void StopWatching()
     {
+        if (_remoteTree is not null)
+        {
+            _remoteTree.StatusChanged -= OnRemoteStatus;
+            _remoteTree.BusyChanged -= OnRemoteBusy;
+            _remoteTree = null;
+        }
+        _resolving = false;
+        _treeBusy = false;
+        UpdateBusy();
         _watch?.Dispose();
         _watch = null;
         _changeWatch?.Dispose();

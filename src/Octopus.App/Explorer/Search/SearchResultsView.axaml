@@ -10,7 +10,7 @@
         <TextBlock Classes="ex-hint" Margin="16,8" IsVisible="{Binding IsSearching}" Text="{l:AppLangResource ExplorerSearching}" />
         <TextBlock Classes="ex-hint" Margin="16,8" IsVisible="{Binding HasNoMatches}" Text="{l:AppLangResource ExplorerNoMatches}" />
         <ListBox x:Name="List" Margin="4,0,4,6" Background="Transparent" Padding="0" SelectionMode="Single"
-                 ItemsSource="{Binding Results}" DoubleTapped="OnDoubleTapped" KeyDown="OnKeyDown"
+                 ItemsSource="{Binding Results}" Tapped="OnTapped" KeyDown="OnKeyDown"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.Styles>
                 <!-- The theme draws no ListBox, so the list and its rows are templated here. -->
