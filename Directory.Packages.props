@@ -21,6 +21,8 @@
         <PackageVersion Include="MiniPty" Version="1.5.0" />
         <!-- JavaScript engine for plugins (design/plugins/02). Referenced only by the plugin runtime adapter. -->
         <PackageVersion Include="Jaunt" Version="1.0.3" />
+        <!-- SVG files in the image viewer. 5.1.x is the last line built on SkiaSharp 3.119, the version Avalonia's Skia backend uses. -->
+        <PackageVersion Include="Svg.Skia" Version="5.1.1" />
         <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
         <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />

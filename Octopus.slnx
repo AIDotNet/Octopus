@@ -9,10 +9,15 @@
     <Project Path="src/Octopus.Platform.MacOS/Octopus.Platform.MacOS.csproj" />
     <Project Path="src/Octopus.Platform.Windows/Octopus.Platform.Windows.csproj" />
     <Project Path="src/Octopus.Platform/Octopus.Platform.csproj" />
+    <Project Path="src/Octopus.Plugins.Jaunt/Octopus.Plugins.Jaunt.csproj" />
+    <Project Path="src/Octopus.Plugins/Octopus.Plugins.csproj" />
+    <Project Path="src/Octopus.SignalForwarder/Octopus.SignalForwarder.csproj" />
+    <Project Path="src/Octopus.Ssh/Octopus.Ssh.csproj" />
     <Project Path="src/Octopus.Storage/Octopus.Storage.csproj" />
     <Project Path="src/Octopus.Terminal.Avalonia/Octopus.Terminal.Avalonia.csproj" />
     <Project Path="src/Octopus.Terminal.MiniPty/Octopus.Terminal.MiniPty.csproj" />
     <Project Path="src/Octopus.Terminal/Octopus.Terminal.csproj" />
+    <Project Path="src/Octopus.Updates/Octopus.Updates.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Octopus.Agents.Tests/Octopus.Agents.Tests.csproj" />
@@ -20,7 +25,12 @@
     <Project Path="tests/Octopus.FileSystem.Tests/Octopus.FileSystem.Tests.csproj" />
     <Project Path="tests/Octopus.Git.Tests/Octopus.Git.Tests.csproj" />
     <Project Path="tests/Octopus.Platform.Tests/Octopus.Platform.Tests.csproj" />
+    <Project Path="tests/Octopus.Plugins.Jaunt.Tests/Octopus.Plugins.Jaunt.Tests.csproj" />
+    <Project Path="tests/Octopus.Plugins.Tests/Octopus.Plugins.Tests.csproj" />
+    <Project Path="tests/Octopus.SignalForwarder.Tests/Octopus.SignalForwarder.Tests.csproj" />
+    <Project Path="tests/Octopus.Ssh.Tests/Octopus.Ssh.Tests.csproj" />
     <Project Path="tests/Octopus.Storage.Tests/Octopus.Storage.Tests.csproj" />
     <Project Path="tests/Octopus.Terminal.Tests/Octopus.Terminal.Tests.csproj" />
+    <Project Path="tests/Octopus.Updates.Tests/Octopus.Updates.Tests.csproj" />
   </Folder>
 </Solution>
