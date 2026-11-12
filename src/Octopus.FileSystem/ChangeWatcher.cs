@@ -38,7 +38,12 @@ internal sealed class ChangeWatcher : IDisposable
             };
             _watcher.Created += (_, e) => Add(e.FullPath);
             _watcher.Deleted += (_, e) => Add(e.FullPath);
-            _watcher.Changed += (_, e) => Add(e.FullPath);
+            // Windows reports a folder as changed whenever something inside it is written; for .git itself that is noise
+            // (its creation and deletion still count, through Created/Deleted).
+            _watcher.Changed += (_, e) =>
+            {
+                if (Path.GetFileName(e.FullPath) != ".git") Add(e.FullPath);
+            };
             _watcher.Renamed += (_, e) =>
             {
                 Add(e.OldFullPath);

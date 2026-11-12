@@ -52,9 +52,9 @@ public class LaunchTests
     public void A_terminal_item_runs_the_shell_in_the_project_directory()
     {
         var project = new Project { Path = Dir };
-        var item = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh", WorkingDirectory = "/tmp" };
+        var item = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh", WorkingDirectory = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar) };
         var spec = AppHost.Get<IItemLaunchService>().Plan(project, item);
-        Assert.Equal("/tmp", spec.WorkingDirectory);
+        Assert.Equal(item.WorkingDirectory, spec.WorkingDirectory);
         Assert.False(string.IsNullOrEmpty(spec.FileName));
     }
 

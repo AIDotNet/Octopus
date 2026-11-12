@@ -47,6 +47,7 @@ public sealed class UserCommandTests : IAsyncDisposable
     [Fact]
     public async Task ThePluginCannotWriteOrRead_TheCommand_AndRunsOnlyWhatTheUserSet()
     {
+        if (OperatingSystem.IsWindows()) return; // the command runs through PosixShell and uses printf
         var plugin = await StartAsync();
 
         Assert.Equal("PermissionDenied", (await Call(plugin, "test.cmd.set"))!["code"]!.GetValue<string>());

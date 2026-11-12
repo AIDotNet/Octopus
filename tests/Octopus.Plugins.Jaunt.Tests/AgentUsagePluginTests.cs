@@ -100,6 +100,7 @@ public sealed class AgentUsagePluginTests
     [Fact]
     public async Task Claude_CustomCommand_ReplacesTheStatusLine_AsTheSource()
     {
+        if (OperatingSystem.IsWindows()) return; // the command runs through PosixShell and uses printf
         await using var harness = new Harness { Commands = UserCommandTests.Runner() };
         CopyDirectory(PackageSource(), Path.Combine(harness.BuiltinRoot, Id));
         var manifest = PluginManifestReader.ReadPackage(Path.Combine(harness.BuiltinRoot, Id), PluginSource.Builtin, requireDirectoryName: true).Manifest!;

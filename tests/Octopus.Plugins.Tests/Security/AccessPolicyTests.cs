@@ -457,7 +457,7 @@ public sealed class AccessPolicyTests : IDisposable
     {
         var home = _t.Home;
         var notes = FileScope.FromPattern(FileScopeKind.External, "~/Documents/Notes/**", FileAccessKind.Read, home);
-        Assert.Equal(Path.Combine(home, "Documents", "Notes"), notes.Root);
+        Assert.Equal(Path.GetFullPath(Path.Combine(home, "Documents", "Notes")), Path.GetFullPath(notes.Root));
         Assert.Equal(["**"], notes.Include);
 
         var logs = FileScope.FromPattern(FileScopeKind.External, "/var/log/*.log", FileAccessKind.Read, home);

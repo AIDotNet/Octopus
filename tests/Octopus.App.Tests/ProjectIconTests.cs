@@ -39,14 +39,18 @@ public class ProjectIconTests
 
         Assert.NotNull(name);
         var path = Path.Combine(store.Directory, name!);
-        using var codec = SKCodec.Create(path);
-        Assert.Equal(ProjectIconStore.ThumbnailSize, codec.Info.Width);
-        Assert.Equal(ProjectIconStore.ThumbnailSize, codec.Info.Height);
+        using (var codec = SKCodec.Create(path))
+        {
+            Assert.Equal(ProjectIconStore.ThumbnailSize, codec.Info.Width);
+            Assert.Equal(ProjectIconStore.ThumbnailSize, codec.Info.Height);
+        }
         Assert.True(new FileInfo(path).Length < 64 * 1024);
         // The centre square of a red | blue picture: red on the left of the middle, blue on the right.
-        using var thumbnail = SKBitmap.Decode(path);
-        Assert.True(thumbnail.GetPixel(20, 64).Red > 200);
-        Assert.True(thumbnail.GetPixel(108, 64).Blue > 200);
+        using (var thumbnail = SKBitmap.Decode(path))
+        {
+            Assert.True(thumbnail.GetPixel(20, 64).Red > 200);
+            Assert.True(thumbnail.GetPixel(108, 64).Blue > 200);
+        }
 
         var bitmap = store.Load(name);
         Assert.NotNull(bitmap);

@@ -38,6 +38,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp -R "$WORK/publish/." "$APP/Contents/MacOS/"
 # Static archives are link-time leftovers: not needed at run time, and not signable.
 find "$APP" -name '*.a' -delete
+# Package license/notice files (e.g. Jaunt.THIRD_PARTY_NOTICES.md) land beside the executable; codesign treats any
+# non-Mach-O file in Contents/MacOS as an unsigned subcomponent and refuses to seal the bundle, so keep them in Resources.
+mkdir -p "$APP/Contents/Resources/Notices"
+find "$APP/Contents/MacOS" -maxdepth 1 -type f \( -name '*.md' -o -name '*.txt' \) -exec mv {} "$APP/Contents/Resources/Notices/" \;
 cp "$ROOT/src/Octopus.App/Assets/Icon/octopus.icns" "$APP/Contents/Resources/octopus.icns"
 sed -e "s|@BUNDLE_ID@|$BUNDLE_ID|g" -e "s|@VERSION@|$NUMERIC_VERSION|g" \
   "$ROOT/packaging/macos/Info.plist" > "$APP/Contents/Info.plist"
