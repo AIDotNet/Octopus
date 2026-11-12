@@ -26,9 +26,12 @@ dotnet run --project tests/Octopus.Terminal.Smoke -- --script
 ## CI 与发布
 
 - `.github/workflows/ci.yml`：push 到 main 和 PR 时，在 Linux / macOS / Windows 上构建并跑全部测试。
-- `.github/workflows/release.yml`：推 `v*` 标签（如 `v0.1.0`）后构建 macOS（arm64、x64 的 `.dmg`）、Windows x64（`.zip`）、Linux x64（`.tar.gz`），并发布 GitHub Release。在 Actions 页手动运行是 dry run，只出产物、不发布。
-- macOS 签名与公证用仓库 Secrets：`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_SPECIFIC_PASSWORD`，以及 Developer ID Application 证书 `APPLE_CERTIFICATE`（`.p12` 的 base64）和 `APPLE_CERTIFICATE_PASSWORD`。没有证书时 dmg 只做 ad-hoc 签名、不公证。
-- 本地打包：`tools/package-macos.sh osx-arm64 0.1.0 dist`。
+- `.github/workflows/release.yml`：推 `v*` 标签（如 `v0.1.0`）后构建并发布 GitHub Release。在 Actions 页手动运行是 dry run，只出产物、不发布。
+  - macOS：arm64、x64 的 `.dmg`（拖进任意目录即可）。
+  - Windows：`Octopus-<版本>-win-x64-setup.exe`（Inno Setup，安装向导里可选安装目录，也可切换为所有用户安装），另有免安装的 `.zip`。
+  - Linux：`Octopus-<版本>-linux-x64.run`（运行时询问安装目录，或 `--prefix DIR`；默认 root 装 `/opt/octopus`、普通用户装 `~/.local/share/octopus`；安装目录里有 `uninstall.sh`），另有 `.tar.gz`。
+- macOS 签名与公证用仓库 Secrets：`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_SPECIFIC_PASSWORD`，以及 Developer ID Application 证书 `APPLE_CERTIFICATE`（`.p12` 的 base64）和 `APPLE_CERTIFICATE_PASSWORD`。没有证书时 dmg 只做 ad-hoc 签名、不公证。Windows 安装包目前没有代码签名。
+- 本地打包：`tools/package-macos.sh osx-arm64 0.1.0 dist`；Linux 安装器 `tools/package-linux.sh 0.1.0 <linux-x64 发布目录> dist`。
 
 ## 结构
 

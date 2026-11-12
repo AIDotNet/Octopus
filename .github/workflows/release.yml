@@ -93,18 +93,48 @@ jobs:
         run: |
           V="${VERSION#v}"
           dotnet publish src/Octopus.App -c Release -r win-x64 --self-contained \
-            -p:Version="$V" -p:DebugType=None -p:DebugSymbols=false -o "dist/Octopus-$V-win-x64"
+            -p:Version="$V" -p:DebugType=None -p:DebugSymbols=false -o build/win-x64
 
-      - name: Zip
+      - name: Portable zip
         shell: pwsh
         run: |
           $v = $env:VERSION.TrimStart('v')
-          Compress-Archive -Path "dist/Octopus-$v-win-x64" -DestinationPath "dist/Octopus-$v-win-x64.zip"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build/win-x64 "build/Octopus-$v-win-x64" -Recurse
+          Compress-Archive -Path "build/Octopus-$v-win-x64" -DestinationPath "dist/Octopus-$v-win-x64.zip"
+
+      - name: Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $v = $env:VERSION.TrimStart('v')
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue)?.Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          & $iscc "/DAppVersion=$v" "/DSourceDir=$PWD\build\win-x64" "/DOutputDir=$PWD\dist" packaging/windows/octopus.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc failed with $LASTEXITCODE" }
+
+      - name: Smoke-test the installer (custom directory, then uninstall)
+        shell: pwsh
+        run: |
+          $v = $env:VERSION.TrimStart('v')
+          $dir = Join-Path $env:RUNNER_TEMP 'octopus install dir'
+          $p = Start-Process "dist/Octopus-$v-win-x64-setup.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',"/DIR=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "setup exited with $($p.ExitCode)" }
+          if (-not (Test-Path "$dir\Octopus.exe")) { throw "Octopus.exe was not installed into $dir" }
+          $p = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "uninstaller exited with $($p.ExitCode)" }
+          Start-Sleep -Seconds 2
+          if (Test-Path "$dir\Octopus.exe") { throw "Octopus.exe is still there after uninstall" }
 
       - uses: actions/upload-artifact@v4
         with:
           name: octopus-win-x64
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*-setup.exe
           if-no-files-found: error
 
   linux:
@@ -121,13 +151,32 @@ jobs:
         run: |
           V="${VERSION#v}"
           dotnet publish src/Octopus.App -c Release -r linux-x64 --self-contained \
-            -p:Version="$V" -p:DebugType=None -p:DebugSymbols=false -o "dist/Octopus-$V-linux-x64"
-          tar -C dist -czf "dist/Octopus-$V-linux-x64.tar.gz" "Octopus-$V-linux-x64"
+            -p:Version="$V" -p:DebugType=None -p:DebugSymbols=false -o build/linux-x64
+          mkdir -p dist
+          # Portable archive
+          cp -R build/linux-x64 "build/Octopus-$V-linux-x64"
+          tar -C build -czf "dist/Octopus-$V-linux-x64.tar.gz" "Octopus-$V-linux-x64"
+          # Installer that asks for the install directory
+          tools/package-linux.sh "$V" build/linux-x64 dist
+
+      - name: Smoke-test the installer (custom directory, then uninstall)
+        run: |
+          V="${VERSION#v}"
+          export HOME="$RUNNER_TEMP/home"; mkdir -p "$HOME"
+          DIR="$RUNNER_TEMP/octopus install dir"
+          "dist/Octopus-$V-linux-x64.run" --prefix "$DIR"
+          test -x "$DIR/Octopus"
+          test -L "$HOME/.local/bin/octopus"
+          "$DIR/uninstall.sh"
+          test ! -e "$DIR"
+          test ! -e "$HOME/.local/bin/octopus"
 
       - uses: actions/upload-artifact@v4
         with:
           name: octopus-linux-x64
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.run
           if-no-files-found: error
 
   release:
