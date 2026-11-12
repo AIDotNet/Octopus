@@ -42,6 +42,8 @@ find "$APP" -name '*.a' -delete
 # non-Mach-O file in Contents/MacOS as an unsigned subcomponent and refuses to seal the bundle, so keep them in Resources.
 mkdir -p "$APP/Contents/Resources/Notices"
 find "$APP/Contents/MacOS" -maxdepth 1 -type f \( -name '*.md' -o -name '*.txt' \) -exec mv {} "$APP/Contents/Resources/Notices/" \;
+# The built-in plugin packages are data (JS + manifests), not code: same reason. The app looks for them here (PluginsAppModule).
+if [ -d "$APP/Contents/MacOS/BuiltinPlugins" ]; then mv "$APP/Contents/MacOS/BuiltinPlugins" "$APP/Contents/Resources/BuiltinPlugins"; fi
 cp "$ROOT/src/Octopus.App/Assets/Icon/octopus.icns" "$APP/Contents/Resources/octopus.icns"
 sed -e "s|@BUNDLE_ID@|$BUNDLE_ID|g" -e "s|@VERSION@|$NUMERIC_VERSION|g" \
   "$ROOT/packaging/macos/Info.plist" > "$APP/Contents/Info.plist"

@@ -22,11 +22,22 @@ internal static class PluginsAppModule
     /// <summary>Directories listed here (separated like PATH) load as development plugins (design/plugins/03 §5).</summary>
     public const string DevPluginsVariable = "OCTOPUS_DEV_PLUGINS";
 
+    /// <summary>
+    /// Next to the executable; in a macOS app bundle they sit in Contents/Resources instead, because codesign treats
+    /// everything under Contents/MacOS as code that must be signed (tools/package-macos.sh moves them there).
+    /// </summary>
+    private static string[] BuiltinRoots()
+    {
+        var beside = Path.Combine(AppContext.BaseDirectory, "BuiltinPlugins");
+        var bundle = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "BuiltinPlugins"));
+        return OperatingSystem.IsMacOS() && Directory.Exists(bundle) ? [bundle] : [beside];
+    }
+
     public static void Register(IServiceCollection services)
     {
         services.AddOctopusPlugins(AppVersion(), new PluginCatalogOptions
         {
-            BuiltinRoots = [Path.Combine(AppContext.BaseDirectory, "BuiltinPlugins")],
+            BuiltinRoots = BuiltinRoots(),
             DevDirectories = () => (Environment.GetEnvironmentVariable(DevPluginsVariable) ?? "")
                 .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
         });
