@@ -153,7 +153,8 @@ public class RightPanelTests
         var topBar = panel.GetVisualDescendants().OfType<Grid>().First(g => g.Name == "TopBar");
         var corner = window.GetVisualDescendants().OfType<StackPanel>().First(g => g.Name == "TopRight");
         Assert.Equal(40, topBar.Bounds.Height);
-        Assert.Equal(0, topBar.TranslatePoint(default, window)!.Value.Y);
+        // Windows' 1px window frame may push the content down by one pixel.
+        Assert.InRange(topBar.TranslatePoint(default, window)!.Value.Y, 0, 1);
         // Same height as the corner switch's row, and the switch lies over the reserved end of the top row, not over its tabs.
         Assert.Equal(40, corner.Bounds.Height);
         var tabs = topBar.Children[0];

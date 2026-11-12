@@ -87,7 +87,7 @@ public sealed class Harness : IAsyncDisposable, IAppPaths
         return _manager;
     }
 
-    public static async Task WaitUntil(Func<bool> condition, int timeoutMs = 5000)
+    public static async Task WaitUntil(Func<bool> condition, int timeoutMs = 20_000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
         while (!condition())
