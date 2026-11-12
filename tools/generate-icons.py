@@ -12,6 +12,8 @@ Usage: python3 tools/generate-icons.py   (needs Pillow)
 """
 import io
 import struct
+import subprocess
+import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -60,11 +62,6 @@ def write_ico(path: Path, frames: dict[int, bytes]) -> None:
     path.write_bytes(header + entries + blobs)
 
 
-def write_icns(path: Path, frames: dict[str, bytes]) -> None:
-    body = b"".join(kind.encode("ascii") + struct.pack(">I", 8 + len(data)) + data for kind, data in frames.items())
-    path.write_bytes(b"icns" + struct.pack(">I", 8 + len(body)) + body)
-
-
 def main() -> None:
     master = Image.open(SOURCE).convert("RGB")
     OUT.mkdir(parents=True, exist_ok=True)
@@ -73,11 +70,15 @@ def main() -> None:
     write_ico(OUT / "octopus.ico", ico)
 
     # macOS icons keep a transparent margin (824 of 1024) so the dock does not show them larger than their neighbours.
-    icns_types = {
-        "icp4": 16, "icp5": 32, "icp6": 64, "ic07": 128, "ic08": 256, "ic09": 512, "ic10": 1024,
-        "ic11": 32, "ic12": 64, "ic13": 256, "ic14": 512,
-    }
-    write_icns(OUT / "octopus.icns", {kind: png_bytes(rounded(master, size, inset=100 / 1024)) for kind, size in icns_types.items()})
+    # Built with iconutil: the small legacy types (icp4/5/6) are not read as PNG by macOS and show up as colour noise.
+    with tempfile.TemporaryDirectory() as tmp:
+        iconset = Path(tmp) / "octopus.iconset"
+        iconset.mkdir()
+        for base in (16, 32, 128, 256, 512):
+            for scale in (1, 2):
+                name = f"icon_{base}x{base}{'@2x' if scale == 2 else ''}.png"
+                (iconset / name).write_bytes(png_bytes(rounded(master, base * scale, inset=100 / 1024)))
+        subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(OUT / "octopus.icns")], check=True)
 
     (OUT / "octopus.png").write_bytes(png_bytes(rounded(master, 512)))
     (OUT / "dock.png").write_bytes(png_bytes(rounded(master, 512, inset=100 / 1024)))
