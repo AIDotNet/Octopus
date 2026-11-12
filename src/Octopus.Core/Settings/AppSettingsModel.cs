@@ -12,6 +12,18 @@ public sealed class AppSettingsModel
     public RightPanelSettings RightPanel { get; set; } = new();
     public TerminalSettings Terminal { get; set; } = new();
     public AgentSettings Agents { get; set; } = new();
+    public UpdateSettings Updates { get; set; } = new();
+}
+
+/// <summary>Automatic updates (design/10-自动更新.md §9).</summary>
+public sealed class UpdateSettings
+{
+    /// <summary><c>auto</c> (download, install on quit), <c>notify</c> (tell only) or <c>off</c> (check only when asked).</summary>
+    public string Mode { get; set; } = Octopus.Core.Updates.UpdateSettingValues.Auto;
+    /// <summary><c>stable</c> or <c>preview</c>; null follows the running version (a preview receives previews).</summary>
+    public string? Channel { get; set; }
+    /// <summary>The version the person chose to skip; only a newer one is offered.</summary>
+    public string? SkippedVersion { get; set; }
 }
 
 public sealed class AppearanceSettings
@@ -56,6 +68,8 @@ public sealed class TerminalSettings
     public int ScrollbackLines { get; set; } = 10_000;
     /// <summary>Absolute path of the shell; null detects the user's shell.</summary>
     public string? Shell { get; set; }
+    /// <summary>Terminals and agents that were open come back when the app starts. Off: every start begins without them (files stay).</summary>
+    public bool RestoreItemsOnStartup { get; set; } = true;
     public bool ResumeAgentsOnRestart { get; set; } = true;
     /// <summary>Ask before pasting text with several lines into a program that does not use bracketed paste.</summary>
     public bool ConfirmMultilinePaste { get; set; } = true;

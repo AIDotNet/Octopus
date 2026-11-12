@@ -19,10 +19,22 @@ public sealed class AgentDefinition
     public bool Verified { get; set; }
     public AgentDetect Detect { get; set; } = new();
     public AgentCapabilities Capabilities { get; set; } = new();
+    /// <summary>How Octopus listens to the agent's status line, hooks or events; null when it does not.</summary>
+    public AgentSignals? Signals { get; set; }
+    /// <summary>Probe name to the fixed query Octopus may run with the agent's executable; null when there are none.</summary>
+    public Dictionary<string, AgentProbe>? Probes { get; set; }
 
     /// <summary>True for a definition loaded from the user's agents folder.</summary>
     [JsonIgnore]
     public bool IsCustom { get; set; }
+
+    /// <summary>The plugin that provides this definition (its id); null for a built-in or the user's own.</summary>
+    [JsonIgnore]
+    public string? Origin { get; set; }
+
+    /// <summary>The name of <see cref="Origin"/>, as people read it.</summary>
+    [JsonIgnore]
+    public string? OriginName { get; set; }
 }
 
 public sealed class AgentDetect
