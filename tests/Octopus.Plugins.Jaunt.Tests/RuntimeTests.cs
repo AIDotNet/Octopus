@@ -93,8 +93,6 @@ public sealed class RuntimeTests : IAsyncDisposable
             """, Commands);
         var manager = await _h.StartAsync();
         var host = manager.Find("acme.t")!;
-        // The call fails before the host has handled the fault, so "Running" right after it can still be the old run:
-        // wait for the crash to be recorded as well.
         // A call made while the host is still being restarted is refused; the next one goes through.
         async Task<string?> Alive()
         {
@@ -106,22 +104,29 @@ public sealed class RuntimeTests : IAsyncDisposable
             }
             return answer;
         }
-        // Each crash leaves one "exceeded its" line in the host's log. Counting those (rather than the persisted
-        // crash list, which can still be missing) makes sure the next call does not land while the host restarts,
-        // where it would be refused and not count as a crash.
-        Task RestartedAfter(int crashes) => Harness.WaitUntil(() =>
-            host.Log.Count(e => e.Text.Contains("exceeded its")) >= crashes
-            && host.State == PluginHostState.Running && host.Commands.Contains("acme.t.other"));
+        // Each crash leaves one "exceeded its" line in the host's log. A call that lands while the host is still
+        // restarting is refused and is no crash, so the runaway call is repeated until the log shows the crash.
+        int Crashes() => host.Log.Count(e => e.Text.Contains("exceeded its"));
+        async Task CrashTo(int crashes)
+        {
+            for (var deadline = Environment.TickCount64 + 60_000; Crashes() < crashes; await Task.Delay(100))
+            {
+                if (Environment.TickCount64 > deadline) throw new TimeoutException($"The plugin did not crash {crashes} times.");
+                try { await manager.ExecuteCommandAsync("acme.t.run"); }
+                catch (Exception) { }
+            }
+        }
+        Task Restarted() => Harness.WaitUntil(() => host.State == PluginHostState.Running && host.Commands.Contains("acme.t.other"));
 
-        await Assert.ThrowsAnyAsync<Exception>(() => manager.ExecuteCommandAsync("acme.t.run"));
-        await RestartedAfter(1);
+        await CrashTo(1);
+        await Restarted();
         Assert.Equal("alive", await Alive());
         // Whichever budget a fast machine hits first: work units or time.
         Assert.Contains(host.Log, e => e.Text.Contains("exceeded its"));
 
-        await Assert.ThrowsAnyAsync<Exception>(() => manager.ExecuteCommandAsync("acme.t.run"));
-        await RestartedAfter(2);
-        await Assert.ThrowsAnyAsync<Exception>(() => manager.ExecuteCommandAsync("acme.t.run"));
+        await CrashTo(2);
+        await Restarted();
+        await CrashTo(3);
         await Harness.WaitUntil(() => host.State == PluginHostState.Stopped);
         Assert.Contains("3 crashes", host.LastError);
         Assert.Equal(3, _h.State.Current.Find("acme.t")?.Crashes.Count ?? 3);
