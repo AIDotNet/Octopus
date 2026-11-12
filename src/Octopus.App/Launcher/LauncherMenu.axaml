@@ -33,6 +33,8 @@
                 <TextBlock Classes="body" Text="{l:AppLangResource NoAgentsFound}" />
                 <TextBlock Classes="hint" TextWrapping="Wrap" Text="{l:AppLangResource NoAgentsFoundHint}" />
             </StackPanel>
+            <TextBlock Classes="hint" Margin="10,4" TextWrapping="Wrap" Text="{l:AppLangResource NoAgentsInSshProject}"
+                       IsVisible="{Binding ShowRemoteNote}" />
 
             <ItemsControl ItemsSource="{Binding Agents}">
                 <ItemsControl.ItemsPanel>
@@ -66,6 +68,30 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- Plugin views (design/plugins/06-标签与渲染.md §3). -->
+            <StackPanel IsVisible="{Binding HasViews}" Spacing="1">
+                <Border Height="1" Margin="4,4" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <ItemsControl ItemsSource="{Binding Views}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="1" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LauncherViewEntry">
+                            <Button Classes="row plain" Height="32" Command="{Binding OpenCommand}"
+                                    AutomationProperties.Name="{Binding Title}" ToolTip.Tip="{Binding PluginName}">
+                                <Grid ColumnDefinitions="Auto,*" Margin="9,0">
+                                    <lucide:LucideIcon Kind="{Binding Icon}" Size="16" Margin="0,0,9,0" />
+                                    <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Title}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
             <Border Height="1" Margin="4,4" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
             <Button Classes="row plain" Height="32" Command="{Binding OpenAgentSettingsCommand}"
                     AutomationProperties.Name="{l:AppLangResource AgentSettingsMenu}">
@@ -80,7 +106,10 @@
         <Border x:Name="SubPanel" Grid.Column="1" Width="332" Margin="4,0,0,0" Padding="0"
                 BorderThickness="1,0,0,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                 IsVisible="{Binding Panel, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <vm:AgentLaunchPanel DataContext="{Binding Panel}" />
+            <!-- Scrolls when the window leaves less room than the panel needs, so the popup never outgrows its side. -->
+            <arc:ScrollArea>
+                <vm:AgentLaunchPanel DataContext="{Binding Panel}" />
+            </arc:ScrollArea>
         </Border>
     </Grid>
 </UserControl>

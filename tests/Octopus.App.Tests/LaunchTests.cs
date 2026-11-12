@@ -229,3 +229,67 @@ public class LaunchTests
     private static string AppLangResourceText(Octopus.App.Localization.AppLangResourceKind kind) =>
         Octopus.App.Localization.AppLangResources.Get(kind);
 }
+
+/// <summary>A restored agent whose "continue the last session" fails at once is started fresh instead.</summary>
+public class ResumeFallbackTests
+{
+    [AvaloniaFact]
+    public async Task A_restored_agent_with_nothing_to_continue_starts_fresh_once()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-resume-").FullName;
+        var item = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude Code" };
+        var project = new Project { Path = dir, Name = "p", Items = { item }, ActiveItemId = item.Id };
+        await AppHost.Get<Octopus.Storage.IProjectStore>().SaveAsync(new ProjectsDocument { Projects = { project } });
+        await AppHost.Get<IProjectService>().LoadAsync();
+        Assert.True(AppHost.Get<IItemLaunchService>().Resumes(item));
+
+        var window = new Octopus.App.Shell.MainWindow();
+        window.Show();
+        Frames.Pump();
+        var factory = (FakeTerminalConnectionFactory)AppHost.Get<Octopus.Terminal.ITerminalConnectionFactory>();
+        Assert.True(Frames.Until(() => factory.Started.Count == 1));
+        Assert.Contains("--continue", string.Join(' ', factory.Started[0].Arguments));
+
+        // "No conversation found to continue": the agent exits with an error right away.
+        factory.Connections[0].Exit(1);
+        Assert.True(Frames.Until(() => factory.Started.Count == 2));
+        Assert.DoesNotContain("--continue", string.Join(' ', factory.Started[1].Arguments));
+
+        // The fresh start failing too is not retried: the tab shows the exit.
+        factory.Connections[1].Exit(1);
+        Assert.False(Frames.Until(() => factory.Started.Count == 3, milliseconds: 600));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task With_restore_off_a_start_brings_back_files_but_no_terminals_or_agents()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-restore-").FullName;
+        var project = new Project
+        {
+            Path = dir,
+            Name = "p",
+            DockLayout = "{}",
+            Items =
+            {
+                new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude Code" },
+                new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" },
+                new ProjectItem { Kind = ProjectItemKind.File, Title = "a.txt", FilePath = Path.Combine(dir, "a.txt") },
+            },
+        };
+        var store = AppHost.Get<Octopus.Storage.IProjectStore>();
+        await store.SaveAsync(new ProjectsDocument { Projects = { project } });
+
+        // On (the default): everything comes back.
+        var projects = AppHost.Get<IProjectService>();
+        await projects.LoadAsync();
+        Assert.Equal(3, projects.Projects[0].Items.Count);
+
+        AppHost.Get<Octopus.Storage.ISettingsStore>().Update(s => s.Terminal.RestoreItemsOnStartup = false);
+        await projects.LoadAsync();
+        var item = Assert.Single(projects.Projects[0].Items);
+        Assert.Equal(ProjectItemKind.File, item.Kind);
+        Assert.Null(projects.Projects[0].DockLayout);
+        Assert.Equal(item.Id, projects.Projects[0].ActiveItemId);
+    }
+}

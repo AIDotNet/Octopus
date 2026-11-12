@@ -35,7 +35,7 @@
 
     <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0">
         <StackPanel>
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8" Margin="6,6,10,6">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8" Margin="6,6,10,6">
                 <arc:Button Grid.Column="0"
                             Variant="Ghost"
                             HorizontalAlignment="Stretch"
@@ -62,6 +62,8 @@
                                                FontWeight="Medium"
                                                Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
                                 </Border>
+                                <arc:Badge Size="Small" Tone="Neutral" Content="{Binding OriginBadge}" IsVisible="{Binding HasOriginBadge}"
+                                           VerticalAlignment="Center" />
                             </StackPanel>
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
                                 <TextBlock Classes="mono" Text="{Binding DefaultCommandName}"
@@ -73,19 +75,41 @@
                         </StackPanel>
                     </Grid>
                 </arc:Button>
-                <arc:SegmentedControl AutoScrollToSelectedItem="False" Grid.Column="1"
+                <arc:Button Grid.Column="1"
+                            Variant="Ghost"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding CanEdit}"
+                            Command="{Binding $parent[agents:AgentsPageView].((agents:AgentsSettingsViewModel)DataContext).EditAgentCommand}"
+                            CommandParameter="{Binding Definition}"
+                            AutomationProperties.Name="{l:AppLangResource SettingsEditAgent}"
+                            arc:Tooltip.Tip="{l:AppLangResource SettingsEditAgent}">
+                    <lucide:LucideIcon Kind="Pencil" Size="15" />
+                </arc:Button>
+                <arc:Button Grid.Column="2"
+                            Variant="Ghost"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding CanRemove}"
+                            Command="{Binding $parent[agents:AgentsPageView].((agents:AgentsSettingsViewModel)DataContext).RemoveAgentCommand}"
+                            CommandParameter="{Binding Definition}"
+                            AutomationProperties.Name="{Binding RemoveText}"
+                            arc:Tooltip.Tip="{Binding RemoveText}">
+                    <lucide:LucideIcon Kind="Trash2" Size="15" />
+                </arc:Button>
+                <arc:SegmentedControl AutoScrollToSelectedItem="False" Grid.Column="3"
                                       VerticalAlignment="Center"
                                       SelectedValue="{Binding EnabledKey, Mode=TwoWay}">
                     <arc:SegmentedOption Value="on" Label="{l:AppLangResource SettingsEnabled}" />
                     <arc:SegmentedOption Value="off" Label="{l:AppLangResource SettingsDisabled}" />
                 </arc:SegmentedControl>
-                <arc:Button Grid.Column="2"
+                <arc:Button Grid.Column="4"
                             Variant="Ghost"
                             Size="Small"
                             VerticalAlignment="Center"
                             Content="{Binding DefaultButtonText}"
                             Command="{Binding ToggleDefaultCommand}" />
-                <arc:Button Grid.Column="3"
+                <arc:Button Grid.Column="5"
                             Variant="Ghost"
                             Size="Small"
                             VerticalAlignment="Center"
@@ -95,7 +119,7 @@
                             arc:Tooltip.Tip="{l:AppLangResource SettingsOpenHomepage}">
                     <lucide:LucideIcon Kind="ExternalLink" Size="16" />
                 </arc:Button>
-                <arc:Button Grid.Column="4"
+                <arc:Button Grid.Column="6"
                             Variant="Ghost"
                             Size="Small"
                             VerticalAlignment="Center"

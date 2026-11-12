@@ -44,6 +44,18 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
 
     public AgentDefinition Definition { get; }
 
+    /// <summary>"Custom" or "Modified" when the user has a definition file of this agent; null for a built-in one as shipped.</summary>
+    public string? OriginBadge { get; init; }
+
+    public bool HasOriginBadge => OriginBadge is not null;
+
+    /// <summary>The user's file can be removed: the agent is deleted, or the built-in one restored (<see cref="RemoveText"/> says which).</summary>
+    public bool CanRemove { get; init; }
+
+    public string RemoveText { get; init; } = "";
+
+    public bool CanEdit { get; init; }
+
     /// <summary>Where the agent was found; null when it was not (or the row is built without a scan).</summary>
     public AgentInstallation? Installation { get; }
 

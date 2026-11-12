@@ -26,6 +26,35 @@ public partial class LauncherMenu : UserControl
         }
     }
 
+    /// <summary>
+    /// The tallest the second panel gets (model list, effort, fast switch, prompt, launch row). The side the menu
+    /// opens on is chosen for this height up front, so hovering an agent never makes the popup change sides.
+    /// </summary>
+    public const double ExpandedPanelHeight = 470;
+
+    /// <summary>
+    /// True when the menu opens above its anchor: its bottom edge is the fixed one then, so both levels hang from
+    /// the bottom and the first level stays put while the second panel appears.
+    /// </summary>
+    public bool OpensUpward
+    {
+        get;
+        set
+        {
+            field = value;
+            var alignment = value ? Avalonia.Layout.VerticalAlignment.Bottom : Avalonia.Layout.VerticalAlignment.Top;
+            FirstLevel.VerticalAlignment = alignment;
+            SubPanel.VerticalAlignment = alignment;
+        }
+    }
+
+    /// <summary>Height limit of the second panel: the room on the side the menu opened on.</summary>
+    public double PanelMaxHeight
+    {
+        get => SubPanel.MaxHeight;
+        set => SubPanel.MaxHeight = value;
+    }
+
     private LauncherViewModel? Model => DataContext as LauncherViewModel;
 
     /// <summary>Hovering an agent row opens its panel; hovering a plain row closes it.</summary>

@@ -182,10 +182,19 @@
     </UserControl.DataTemplates>
 
     <StackPanel Spacing="16">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource SettingsAgentsTitle}" />
-            <TextBlock Classes="subtitle" Text="{Binding Subtitle}" />
-        </StackPanel>
+        <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="title" Text="{l:AppLangResource SettingsAgentsTitle}" />
+                <TextBlock Classes="subtitle" Text="{Binding Subtitle}" />
+            </StackPanel>
+            <arc:Button Grid.Column="1" Variant="Secondary" Size="Small" VerticalAlignment="Center"
+                        IsVisible="{Binding CanEditAgents}" Command="{Binding AddAgentCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <lucide:LucideIcon Kind="Plus" Size="14" VerticalAlignment="Center" />
+                    <TextBlock Text="{l:AppLangResource SettingsAddAgent}" VerticalAlignment="Center" />
+                </StackPanel>
+            </arc:Button>
+        </Grid>
 
         <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                 BorderThickness="1"
@@ -253,10 +262,14 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="agents:UninstalledAgentViewModel">
                             <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,8">
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
                                     <common:AgentIcon AgentId="{Binding Id}" AgentName="{Binding Name}" Size="28" VerticalAlignment="Center" Opacity="0.6" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Classes="label" Text="{Binding Name}" FontWeight="Medium" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Classes="label" Text="{Binding Name}" FontWeight="Medium" VerticalAlignment="Center" />
+                                            <arc:Badge Size="Small" Tone="Neutral" Content="{Binding OriginBadge}" IsVisible="{Binding HasOriginBadge}"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
                                         <TextBlock Classes="mono"
                                                    Text="{Binding InstallCommand}"
                                                    TextTrimming="CharacterEllipsis"
@@ -269,6 +282,28 @@
                                                     VerticalAlignment="Center"
                                                     AutomationProperties.Name="{l:AppLangResource SettingsCopyInstallCommand}"
                                                     arc:Tooltip.Tip="{l:AppLangResource SettingsCopyInstallCommand}" />
+                                    <arc:Button Grid.Column="4"
+                                                Variant="Ghost"
+                                                Size="Small"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding CanEdit}"
+                                                Command="{Binding $parent[agents:AgentsPageView].((agents:AgentsSettingsViewModel)DataContext).EditAgentCommand}"
+                                                CommandParameter="{Binding Definition}"
+                                                AutomationProperties.Name="{l:AppLangResource SettingsEditAgent}"
+                                                arc:Tooltip.Tip="{l:AppLangResource SettingsEditAgent}">
+                                        <lucide:LucideIcon Kind="Pencil" Size="15" />
+                                    </arc:Button>
+                                    <arc:Button Grid.Column="5"
+                                                Variant="Ghost"
+                                                Size="Small"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding CanRemove}"
+                                                Command="{Binding $parent[agents:AgentsPageView].((agents:AgentsSettingsViewModel)DataContext).RemoveAgentCommand}"
+                                                CommandParameter="{Binding Definition}"
+                                                AutomationProperties.Name="{Binding RemoveText}"
+                                                arc:Tooltip.Tip="{Binding RemoveText}">
+                                        <lucide:LucideIcon Kind="Trash2" Size="15" />
+                                    </arc:Button>
                                     <arc:Button Grid.Column="3"
                                                 Variant="Ghost"
                                                 Size="Small"

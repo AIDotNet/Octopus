@@ -17,11 +17,13 @@ public sealed partial class LauncherViewModel : ObservableObject
     private readonly IAgentScanner _scanner;
     private readonly IAgentCatalog _catalog;
     private readonly ISettingsStore _settings;
+    private readonly IProjectService _projects;
     private readonly IAgentCommandCompiler _compiler;
     private readonly IModelDiscovery _discovery;
     private readonly IItemOpener _opener;
     private readonly ISettingsNavigator _navigator;
     private readonly Dictionary<string, AgentLaunchViewModel> _panels = [];
+    private readonly Plugins.PluginWorkbench? _plugins;
 
     public LauncherViewModel(
         IAgentScanner scanner,
@@ -31,8 +33,11 @@ public sealed partial class LauncherViewModel : ObservableObject
         IModelDiscovery discovery,
         IItemOpener opener,
         ISettingsNavigator navigator,
-        IAppKeymap keymap)
+        IAppKeymap keymap,
+        IProjectService projects,
+        Plugins.PluginWorkbench? plugins = null)
     {
+        _plugins = plugins;
         _scanner = scanner;
         _catalog = catalog;
         _settings = settings;
@@ -40,11 +45,37 @@ public sealed partial class LauncherViewModel : ObservableObject
         _discovery = discovery;
         _opener = opener;
         _navigator = navigator;
+        _projects = projects;
+        _projects.Changed += (_, e) =>
+        {
+            if (e.Kind == ProjectChangeKind.CurrentProject) UiContext.PostToUi(Refresh);
+        };
         NewTerminalHint = keymap.Hint(AppCommand.NewTerminal);
         _scanner.Changed += (_, _) => UiContext.PostToUi(Refresh);
         _catalog.Changed += (_, _) => UiContext.PostToUi(Refresh);
         _settings.Changed += (_, _) => UiContext.PostToUi(Refresh);
+        if (plugins is not null) plugins.Manager.HostChanged += (_, _) => UiContext.PostToUi(RefreshViews);
         Refresh();
+    }
+
+    /// <summary>Plugin views offered in the menu, under the agents.</summary>
+    public ObservableCollection<LauncherViewEntry> Views { get; } = [];
+    public bool HasViews => Views.Count > 0;
+
+    private void RefreshViews()
+    {
+        Views.Clear();
+        if (_plugins is null) return;
+        foreach (var (host, view) in _plugins.LauncherViews)
+        {
+            var icon = Plugins.Rendering.UiIcons.Parse(view.Icon) ?? TKCode.Arc.Icons.Lucide.LucideIconKind.LayoutGrid;
+            Views.Add(new LauncherViewEntry(view.Id, Plugins.PluginWorkbench.LocalizedTitle(view), Plugins.PluginWorkbench.NameOf(host), icon, entry =>
+            {
+                Close();
+                if (_plugins.FindView(entry.Id) is var (owner, contribution)) _plugins.OpenView(owner, contribution);
+            }));
+        }
+        OnPropertyChanged(nameof(HasViews));
     }
 
     public string NewTerminalHint { get; }
@@ -54,8 +85,11 @@ public sealed partial class LauncherViewModel : ObservableObject
     [ObservableProperty] public partial LauncherAgentViewModel? ExpandedAgent { get; private set; }
     [ObservableProperty] public partial AgentLaunchViewModel? Panel { get; private set; }
 
-    public bool ShowScanning => IsScanning && Agents.Count == 0;
-    public bool ShowNoAgents => !IsScanning && Agents.Count == 0;
+    /// <summary>In a project on an SSH host no agent is offered: agents need this computer's files and programs.</summary>
+    public bool IsRemoteProject => _projects.Current?.SshHost is not null;
+    public bool ShowRemoteNote => IsRemoteProject;
+    public bool ShowScanning => IsScanning && Agents.Count == 0 && !IsRemoteProject;
+    public bool ShowNoAgents => !IsScanning && Agents.Count == 0 && !IsRemoteProject;
 
     /// <summary>Raised when the menu should close (something was launched).</summary>
     public event EventHandler? CloseRequested;
@@ -65,7 +99,8 @@ public sealed partial class LauncherViewModel : ObservableObject
     {
         var agents = _settings.Current.Agents;
         var rows = new List<LauncherAgentViewModel>();
-        foreach (var installation in _scanner.Current.Installations)
+        var installed = IsRemoteProject ? Enumerable.Empty<AgentInstallation>() : _scanner.Current.Installations;
+        foreach (var installation in installed)
         {
             var definition = _catalog.Find(installation.AgentId);
             if (definition is null || !agents.ProfileOf(definition.Id).Enabled || rows.Any(r => r.Id == definition.Id))
@@ -83,10 +118,13 @@ public sealed partial class LauncherViewModel : ObservableObject
             Agents.Add(row);
         }
         IsScanning = _scanner.IsScanning;
+        RefreshViews();
         ClearPanels();
         Expand(Agents.FirstOrDefault(a => a.Id == expandedId));
         OnPropertyChanged(nameof(ShowScanning));
         OnPropertyChanged(nameof(ShowNoAgents));
+        OnPropertyChanged(nameof(IsRemoteProject));
+        OnPropertyChanged(nameof(ShowRemoteNote));
     }
 
     partial void OnIsScanningChanged(bool value)
