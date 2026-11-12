@@ -422,6 +422,35 @@ public class MarkdownViewerTests
         window.Close();
     }
 
+    [AvaloniaFact]
+    public async Task A_tab_with_unsaved_edits_shows_a_dot_before_its_title()
+    {
+        var window = new Octopus.App.Shell.MainWindow();
+        window.Show();
+        var project = AppHost.Get<IProjectService>().AddProject(Directory.CreateTempSubdirectory("octopus-dot-").FullName);
+        var path = Path.Combine(project.Path, "doc.md");
+        File.WriteAllText(path, Plain);
+        var item = AppHost.Get<IItemOpener>().OpenFile(path)!;
+        Frames.Pump();
+        var layout = (DockLayout)AppHost.Get<WorkspaceViewModel>().CurrentLayout!;
+        var pane = layout.Workspace.FindPane(item.Id)!;
+        var tab = (FileTabView)pane.Content!;
+        var model = (FileTabViewModel)tab.DataContext!;
+        await FileTabHarness.WaitUntil(() => model.Viewer is MarkdownViewerModel { IsEditing: true });
+        Assert.Equal("doc.md", pane.Title);
+
+        var md = (MarkdownViewerModel)model.Viewer;
+        md.ReadEditor = () => "# Edited\n";
+        md.EditorChanged();
+        Assert.StartsWith("● ", pane.Title);
+        Assert.EndsWith("doc.md", pane.Title);
+
+        md.ReadEditor = () => md.Fidelity!.Exported;
+        md.EditorChanged();
+        Assert.Equal("doc.md", pane.Title);
+        window.Close();
+    }
+
     // ---- pictures inside the document ----------------------------------------------------------------------------
 
     [Theory]

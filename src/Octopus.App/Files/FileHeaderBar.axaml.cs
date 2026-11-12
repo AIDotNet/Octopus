@@ -29,7 +29,6 @@ public partial class FileHeaderBar : UserControl
     /// <summary>What the reveal button shows in the file manager; the button hides when empty.</summary>
     public string RevealPath { get => GetValue(RevealPathProperty); set => SetValue(RevealPathProperty, value); }
 
-
     /// <summary>Content at the right, before the common buttons: each viewer puts its quiet facts and its own buttons here (wrap, zoom, save, the view switch).</summary>
     public Control? Trailing { get => GetValue(TrailingProperty); set => SetValue(TrailingProperty, value); }
 
@@ -41,7 +40,6 @@ public partial class FileHeaderBar : UserControl
         else if (change.Property == TrailingProperty) TrailingHost.Content = Trailing;
         else if (change.Property == RevealPathProperty) RevealButton.IsVisible = RevealPath.Length > 0;
     }
-
 
     private async void OnCopyClick(object? sender, RoutedEventArgs e)
     {

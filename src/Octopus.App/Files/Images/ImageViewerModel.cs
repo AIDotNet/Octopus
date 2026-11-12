@@ -127,6 +127,7 @@ public sealed partial class ImageViewerModel : FileViewerModel
         var info = ImageProbe.TryRead(bytes);
         if (info is null) return new Decoded(null, null, bytes.Length, AppLangResourceKind.ImageBroken, null);
         if (info.Pixels > MaxPixels) return new Decoded(null, info, bytes.Length, AppLangResourceKind.ImageTooManyPixels, info);
+        if (ImageProbe.LooksTruncated(bytes, info.Format)) return new Decoded(null, info, bytes.Length, AppLangResourceKind.ImageBroken, null);
         try
         {
             using var stream = new MemoryStream(bytes, writable: false);

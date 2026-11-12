@@ -74,6 +74,7 @@ public sealed partial record MarkdownFidelity(IReadOnlyList<MarkdownIssue> Lost,
             if (mapped == MarkdownIssue.SetextHeading && issue.Line <= frontMatterEnd) continue;
             if (!lost.Contains(mapped)) lost.Add(mapped);
         }
+        if (HasBackslashBreak(markdown) && !lost.Contains(MarkdownIssue.HardLineBreak)) lost.Add(MarkdownIssue.HardLineBreak);
         if (HasBlocksNestedInList(markdown) && !lost.Contains(MarkdownIssue.NestedBlocksInList)) lost.Add(MarkdownIssue.NestedBlocksInList);
         if (lost.Count == 0 && !string.Equals(Canonical(markdown), Canonical(exported), StringComparison.Ordinal)) lost.Add(MarkdownIssue.Unrecognized);
         return new MarkdownFidelity(lost, true, exported);
@@ -108,6 +109,23 @@ public sealed partial record MarkdownFidelity(IReadOnlyList<MarkdownIssue> Lost,
             if (line == open || (open == "---" && line == "...")) return i + 1;
         }
         return 0;
+    }
+
+    /// <summary>A line that ends in a backslash and continues on the next line: a hard line break the editor writes back as a stray backslash.</summary>
+    private static bool HasBackslashBreak(string markdown)
+    {
+        var lines = markdown.Split('\n');
+        var inFence = false;
+        for (var i = 0; i < lines.Length - 1; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal)) inFence = !inFence;
+            if (inFence || lines[i + 1].Trim().Length == 0) continue;
+            var slashes = line.Length - line.TrimEnd('\\').Length;
+            if (slashes % 2 == 1) return true;
+        }
+        return false;
     }
 
     [GeneratedRegex(@"^\s*(?:[-*+]|\d+[.)])\s+")]
@@ -148,7 +166,7 @@ public sealed partial record MarkdownFidelity(IReadOnlyList<MarkdownIssue> Lost,
     [GeneratedRegex(@"^([-*_])(\s*\1){2,}$")]
     private static partial Regex Rule();
 
-    [GeneratedRegex(@"^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$")]
+    [GeneratedRegex(@"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$")]
     private static partial Regex TableDelimiter();
 
     [GeneratedRegex(@"\s*\|\s*")]

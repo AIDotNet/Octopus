@@ -12,7 +12,7 @@
                              CopyText="{Binding Path}" RevealPath="{Binding Path}">
             <files:FileHeaderBar.Trailing>
                 <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-                    <TextBlock Classes="headerMeta" Text="{Binding MetaText}" IsVisible="{Binding Info, Converter={x:Static ObjectConverters.IsNotNull}}" Margin="0,0,8,0" />
+                    <TextBlock Classes="headerMeta" Text="{Binding MetaText}" Margin="0,0,8,0" />
                     <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding HasContent}">
                         <arc:Button Classes="icon header" Command="{Binding ZoomOutCommand}"
                                     AutomationProperties.Name="{l:AppLangResource ImageZoomOut}"

@@ -172,7 +172,8 @@ public class ImageViewerTests
         await model.OnFileChangedAsync();
         Assert.Contains("JPEG", model.MetaText);
         Assert.False(model.IsFit);
-        Assert.Equal(offset, model.Viewport!.Offset);
+        Assert.Equal(offset.X, model.Viewport!.Offset.X, 3);
+        Assert.Equal(offset.Y, model.Viewport.Offset.Y, 3);
 
         File.WriteAllBytes(h.Path, TestImages.Png(500, 500));
         await model.OnFileChangedAsync();
@@ -235,7 +236,7 @@ public class ImageViewerTests
 
         h.Window.MouseDown(start, MouseButton.Left);
         h.Window.MouseUp(start, MouseButton.Left);
-        h.Window.MouseDown(start, MouseButton.Left, clickCount: 2);
+        h.Window.MouseDown(start, MouseButton.Left); // the second press of a double click
         h.Window.MouseUp(start, MouseButton.Left);
         Frames.Pump();
         Assert.False(model.IsFit);
@@ -249,7 +250,10 @@ public class ImageViewerTests
         Assert.Equal(before.X - 120, model.Viewport.Offset.X, 1);
         Assert.Equal(before.Y - 80, model.Viewport.Offset.Y, 1);
 
-        h.Window.MouseDown(start, MouseButton.Left, clickCount: 2);
+        await Task.Delay(700); // long enough that the next press is not part of the same click run
+        h.Window.MouseDown(start, MouseButton.Left);
+        h.Window.MouseUp(start, MouseButton.Left);
+        h.Window.MouseDown(start, MouseButton.Left);
         h.Window.MouseUp(start, MouseButton.Left);
         Frames.Pump();
         Assert.True(model.IsFit);

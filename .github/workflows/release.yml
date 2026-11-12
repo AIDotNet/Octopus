@@ -1,0 +1,154 @@
+name: Release
+
+# Push a tag like v0.1.0 to build every platform and publish a GitHub release.
+# "Run workflow" from the Actions tab does a dry run: it builds and uploads artifacts but creates no release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version for the dry run (no leading v)
+        default: 0.0.0-dev
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  # The tag without its leading v, or the dry-run input.
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || inputs.version }}
+
+jobs:
+  macos:
+    name: macOS (${{ matrix.rid }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    env:
+      # Repository secrets. Without APPLE_CERTIFICATE the dmg is only ad-hoc signed (not notarized).
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Import Developer ID certificate
+        if: env.APPLE_CERTIFICATE != ''
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # shellcheck disable=SC2046  # splitting the existing keychain list is intended
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/Developer ID Application/ {print $2; exit}')"
+          [ -n "$IDENTITY" ] || { echo "no Developer ID Application identity in the certificate" >&2; exit 1; }
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "NOTARIZE=1" >> "$GITHUB_ENV"
+
+      - name: Warn when unsigned
+        if: env.APPLE_CERTIFICATE == ''
+        run: |
+          echo "::warning::APPLE_CERTIFICATE is not set, so this dmg is only ad-hoc signed and NOT notarized."
+
+      - name: Package
+        run: tools/package-macos.sh "${{ matrix.rid }}" "${VERSION#v}" dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octopus-${{ matrix.rid }}
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  windows:
+    name: Windows (win-x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish
+        shell: bash
+        run: |
+          V="${VERSION#v}"
+          dotnet publish src/Octopus.App -c Release -r win-x64 --self-contained \
+            -p:Version="$V" -p:DebugType=None -p:DebugSymbols=false -o "dist/Octopus-$V-win-x64"
+
+      - name: Zip
+        shell: pwsh
+        run: |
+          $v = $env:VERSION.TrimStart('v')
+          Compress-Archive -Path "dist/Octopus-$v-win-x64" -DestinationPath "dist/Octopus-$v-win-x64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octopus-win-x64
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish and pack
+        run: |
+          V="${VERSION#v}"
+          dotnet publish src/Octopus.App -c Release -r linux-x64 --self-contained \
+            -p:Version="$V" -p:DebugType=None -p:DebugSymbols=false -o "dist/Octopus-$V-linux-x64"
+          tar -C dist -czf "dist/Octopus-$V-linux-x64.tar.gz" "Octopus-$V-linux-x64"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octopus-linux-x64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    if: github.ref_type == 'tag'
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: octopus-*
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PRERELEASE=()
+          case "$GITHUB_REF_NAME" in *-*) PRERELEASE=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes "${PRERELEASE[@]}"

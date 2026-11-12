@@ -44,6 +44,20 @@ public class FileTabTests
     private static FileTabViewModel Open(string path) =>
         new(new ProjectItem { Kind = ProjectItemKind.File, FilePath = path }, AppHost.Get<IFileTreeService>(), AppHost.Get<ISettingsStore>());
 
+    [AvaloniaFact]
+    public void Every_kind_of_file_has_a_viewer_that_makes_its_model_and_its_view()
+    {
+        var context = new FileViewerContext(FileLocation.Of("/tmp/x", null), null, 13, AppHost.Get<Octopus.App.Services.IDialogService>());
+        foreach (var kind in Enum.GetValues<FileKind>())
+        {
+            var descriptor = FileViewers.For(kind);
+            Assert.Equal(kind, descriptor.Kind);
+            var model = descriptor.CreateModel(context);
+            Assert.NotNull(descriptor.CreateView(model));
+            model.Dispose();
+        }
+    }
+
     private static CodeViewerModel Code(FileTabViewModel model) => Assert.IsType<CodeViewerModel>(model.Viewer);
 
     private static async Task WaitUntil(Func<bool> condition)

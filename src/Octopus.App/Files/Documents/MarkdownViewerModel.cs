@@ -354,7 +354,8 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
         _pendingDisk = null;
         _baseline = markdown;
         FileSize = bytes.Length;
-        Text = markdown.Replace("\r\n", "\n");
+        // What the file now holds, as the preview and the source show it.
+        Text = MarkdownFileText.TryDecode(bytes, out var saved) ? saved.Text : markdown;
         IsDirty = false;
         SetBanner(MarkdownBanner.None, "");
         return true;

@@ -40,6 +40,21 @@ public static class ImageProbe
         return null;
     }
 
+    /// <summary>
+    /// True when the file ends where a PNG or a JPEG would not: no IEND chunk, no end-of-image marker near the end. A decoder
+    /// would show the part it could read (often an empty picture); the viewer calls that damaged instead.
+    /// </summary>
+    public static bool LooksTruncated(ReadOnlySpan<byte> bytes, ImageFormat format)
+    {
+        var tail = bytes[Math.Max(0, bytes.Length - 4096)..];
+        return format switch
+        {
+            ImageFormat.Png => tail.IndexOf("IEND"u8) < 0,
+            ImageFormat.Jpeg => tail.IndexOf(new byte[] { 0xFF, 0xD9 }) < 0,
+            _ => false,
+        };
+    }
+
     /// <summary>The format and size from the header; null when the bytes are not a picture or the header is cut short.</summary>
     public static ImageInfo? TryRead(ReadOnlySpan<byte> b)
     {
