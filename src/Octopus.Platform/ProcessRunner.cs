@@ -13,13 +13,31 @@ public sealed class ProcessRunner : IProcessRunner
     /// <summary>How long to wait for the output pipes to drain after the process was killed.</summary>
     private static readonly TimeSpan DrainGrace = TimeSpan.FromSeconds(2);
 
-    public async Task<ProcessResult> RunAsync(
+    public Task<ProcessResult> RunAsync(
         string fileName,
         IEnumerable<string> arguments,
         IReadOnlyDictionary<string, string>? environment = null,
         string? workingDirectory = null,
         TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        RunCoreAsync(fileName, arguments, environment, workingDirectory, null, timeout, cancellationToken);
+
+    public Task<ProcessResult> RunWithInputAsync(
+        string fileName,
+        IEnumerable<string> arguments,
+        ReadOnlyMemory<byte> input,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default) =>
+        RunCoreAsync(fileName, arguments, null, null, input, timeout, cancellationToken);
+
+    private async Task<ProcessResult> RunCoreAsync(
+        string fileName,
+        IEnumerable<string> arguments,
+        IReadOnlyDictionary<string, string>? environment,
+        string? workingDirectory,
+        ReadOnlyMemory<byte>? input,
+        TimeSpan? timeout,
+        CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo(fileName)
         {
@@ -56,7 +74,8 @@ public sealed class ProcessRunner : IProcessRunner
         // Read both pipes concurrently: a child that fills one pipe while we wait on the other would block forever.
         var stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
         var stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
-        try { process.StandardInput.Close(); } catch (IOException) { }
+        // The input (when there is some) is written while the child runs; without input the pipe is closed at once.
+        var writing = input is { } data ? WriteInputAsync(process, data) : Task.Run(() => CloseInput(process));
 
         using var timeoutSource = new CancellationTokenSource();
         if (timeout is { } limit)
@@ -77,9 +96,35 @@ public sealed class ProcessRunner : IProcessRunner
             timedOut = true;
         }
 
+        try { await writing.WaitAsync(DrainGrace).ConfigureAwait(false); }
+        catch (TimeoutException) { }
+
         var output = await WithGrace(stdout).ConfigureAwait(false);
         var error = await WithGrace(stderr).ConfigureAwait(false);
         return new ProcessResult(timedOut ? -1 : process.ExitCode, output, error, timedOut);
+    }
+
+    private static void CloseInput(Process process)
+    {
+        try { process.StandardInput.Close(); }
+        catch (IOException) { }
+    }
+
+    private static async Task WriteInputAsync(Process process, ReadOnlyMemory<byte> data)
+    {
+        try
+        {
+            await process.StandardInput.BaseStream.WriteAsync(data).ConfigureAwait(false);
+            await process.StandardInput.BaseStream.FlushAsync().ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+            // The child ended before it took all of the input: its exit code says how the run went.
+        }
+        finally
+        {
+            CloseInput(process);
+        }
     }
 
     private static void KillTree(Process process)

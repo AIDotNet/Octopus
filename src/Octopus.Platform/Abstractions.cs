@@ -100,6 +100,18 @@ public interface IProcessRunner
         string? workingDirectory = null,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs the program with <paramref name="input"/> written to its standard input, which is then closed. Runners that
+    /// cannot write to the input do not implement it.
+    /// </summary>
+    Task<ProcessResult> RunWithInputAsync(
+        string fileName,
+        IEnumerable<string> arguments,
+        ReadOnlyMemory<byte> input,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This process runner cannot write to the standard input of a process.");
 }
 
 /// <summary>Hands a file or folder to the operating system.</summary>

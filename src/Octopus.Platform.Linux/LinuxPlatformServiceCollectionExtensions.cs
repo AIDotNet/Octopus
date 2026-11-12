@@ -17,6 +17,9 @@ public static class LinuxPlatformServiceCollectionExtensions
         services.AddSingleton<ITerminalEnvironment>(_ => new LinuxTerminalEnvironment());
         services.AddSingleton<IFileOpener, LinuxFileOpener>();
         services.AddSingleton<IAppIcon, NoAppIcon>();
+        services.AddSingleton<ISecretStore>(sp => new LinuxSecretStore(sp.GetRequiredService<IProcessRunner>(), sp.GetRequiredService<IExecutableLocator>()));
+        services.AddSingleton<ITrashService>(_ => new LinuxTrashService());
+        services.AddSingleton<Updates.IUpdateInstaller>(_ => new LinuxUpdateInstaller());
         return services;
     }
 }
