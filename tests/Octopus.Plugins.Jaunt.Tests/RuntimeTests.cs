@@ -106,8 +106,11 @@ public sealed class RuntimeTests : IAsyncDisposable
             }
             return answer;
         }
+        // Each crash leaves one "exceeded its" line in the host's log. Counting those (rather than the persisted
+        // crash list, which can still be missing) makes sure the next call does not land while the host restarts,
+        // where it would be refused and not count as a crash.
         Task RestartedAfter(int crashes) => Harness.WaitUntil(() =>
-            (_h.State.Current.Find("acme.t")?.Crashes.Count ?? crashes) >= crashes
+            host.Log.Count(e => e.Text.Contains("exceeded its")) >= crashes
             && host.State == PluginHostState.Running && host.Commands.Contains("acme.t.other"));
 
         await Assert.ThrowsAnyAsync<Exception>(() => manager.ExecuteCommandAsync("acme.t.run"));
