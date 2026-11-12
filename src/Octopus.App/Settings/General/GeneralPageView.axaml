@@ -3,6 +3,7 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:general="using:Octopus.App.Settings.General"
+             xmlns:updates="using:Octopus.App.Updates"
              x:Class="Octopus.App.Settings.General.GeneralPageView"
              x:DataType="general:GeneralSettingsViewModel">
     <StackPanel Spacing="16">
@@ -19,10 +20,46 @@
                             ItemsSource="{Binding Languages}"
                             SelectedValue="{Binding Language, Mode=TwoWay}" />
             </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRestoreItems}"
+                             Description="{l:AppLangResource SettingsRestoreItemsHint}">
+                <arc:Switch IsChecked="{Binding RestoreItemsOnStartup, Mode=TwoWay}" />
+            </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsResumeAgents}"
                              Description="{l:AppLangResource SettingsResumeAgentsHint}">
-                <arc:Switch IsChecked="{Binding ResumeAgentsOnRestart, Mode=TwoWay}" />
+                <arc:Switch IsChecked="{Binding ResumeAgentsOnRestart, Mode=TwoWay}" IsEnabled="{Binding RestoreItemsOnStartup}" />
             </arc:SettingsRow>
         </arc:SettingsGroup>
+
+        <!-- Updates (design/10-自动更新.md §9). -->
+        <TextBlock Classes="group" Text="{l:AppLangResource SettingsUpdates}" Margin="0,8,0,0" />
+        <arc:SettingsGroup Appearance="Plain" DataContext="{Binding Updates}" x:DataType="updates:UpdateSettingsViewModel">
+            <arc:SettingsRow Header="{l:AppLangResource SettingsUpdateVersion}" Description="{Binding StatusText}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock x:Name="UpdateVersionText" Classes="mono" VerticalAlignment="Center" Text="{Binding VersionText}" />
+                    <arc:Button x:Name="UpdateRestartButton" Variant="Primary" Size="Small" IsVisible="{Binding IsReady}"
+                                Command="{Binding RestartCommand}" Content="{l:AppLangResource UpdateRestart}" />
+                    <arc:Button x:Name="UpdateCheckButton" Variant="Secondary" Size="Small"
+                                IsEnabled="{Binding IsEnabled}" IsLoading="{Binding IsChecking}"
+                                Command="{Binding CheckCommand}" Content="{l:AppLangResource SettingsUpdateCheck}" />
+                </StackPanel>
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsUpdateMode}"
+                             Description="{l:AppLangResource SettingsUpdateModeHint}">
+                <arc:Select x:Name="UpdateModeSelect" AutoScrollToSelectedItem="False" Size="Small" Width="240"
+                            AutomationProperties.Name="{l:AppLangResource SettingsUpdateMode}"
+                            IsEnabled="{Binding IsEnabled}"
+                            ItemsSource="{Binding Modes}"
+                            SelectedValue="{Binding Mode, Mode=TwoWay}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsUpdateChannel}"
+                             Description="{l:AppLangResource SettingsUpdateChannelHint}">
+                <arc:Select x:Name="UpdateChannelSelect" AutoScrollToSelectedItem="False" Size="Small" Width="240"
+                            AutomationProperties.Name="{l:AppLangResource SettingsUpdateChannel}"
+                            IsEnabled="{Binding IsEnabled}"
+                            ItemsSource="{Binding Channels}"
+                            SelectedValue="{Binding Channel, Mode=TwoWay}" />
+            </arc:SettingsRow>
+        </arc:SettingsGroup>
+        <TextBlock Classes="hint" Text="{Binding Updates.InstallNote}" IsVisible="{Binding Updates.HasInstallNote}" TextWrapping="Wrap" />
     </StackPanel>
 </UserControl>

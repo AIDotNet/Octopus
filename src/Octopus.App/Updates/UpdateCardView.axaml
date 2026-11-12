@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Updates"
+             x:Class="Octopus.App.Updates.UpdateCardView"
+             x:DataType="vm:UpdateCardViewModel"
+             Width="360"
+             IsVisible="{Binding IsOpen}">
+    <!-- The update card at the bottom right (design/10-自动更新.md §10). A tokenised Border, like the terminal's search bar. -->
+    <Border Background="{arc:ArcDesignTokenResource Background}"
+            BorderBrush="{arc:ArcDesignTokenResource Border}"
+            BorderThickness="1"
+            CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
+            BoxShadow="0 8 24 0 #33000000"
+            Padding="14,12,10,12">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="Auto,*,Auto">
+            <!-- What happened, at a glance. -->
+            <Panel Grid.RowSpan="2" Width="18" Margin="0,1,10,0" VerticalAlignment="Top">
+                <lucide:LucideIcon Kind="CircleArrowUp" Size="18" Foreground="{arc:ArcDesignTokenResource Accent}"
+                                   IsVisible="{Binding ShowArrowIcon}" />
+                <lucide:LucideIcon Kind="CircleCheck" Size="18" Foreground="{arc:ArcDesignTokenResource Success}"
+                                   IsVisible="{Binding IsReady}" />
+                <lucide:LucideIcon Kind="CircleAlert" Size="18" Foreground="{arc:ArcDesignTokenResource Warning}"
+                                   IsVisible="{Binding IsFailed}" />
+            </Panel>
+            <TextBlock Grid.Column="1" x:Name="TitleText" Classes="body" FontWeight="SemiBold"
+                       Text="{Binding Title}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <arc:Button Grid.Column="2" Classes="icon" Variant="Ghost" Size="Small" Margin="6,-4,0,0" VerticalAlignment="Top"
+                        Command="{Binding CloseCommand}"
+                        AutomationProperties.Name="{l:AppLangResource UpdateClose}">
+                <lucide:LucideIcon Kind="X" Size="14" />
+            </arc:Button>
+
+            <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,2,4,0" Spacing="2">
+                <TextBlock x:Name="DetailText" Classes="hint" Text="{Binding Detail}" TextWrapping="Wrap"
+                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                <arc:Button x:Name="NotesButton" Variant="Ghost" Size="Small" HorizontalAlignment="Left" Padding="0" Margin="0,2,0,0"
+                            IsVisible="{Binding HasNotes}"
+                            Command="{Binding OpenNotesCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Classes="hint" Foreground="{arc:ArcDesignTokenResource AccentStrong}" Text="{l:AppLangResource UpdateNotes}" />
+                        <lucide:LucideIcon Kind="ArrowUpRight" Size="12" Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                    </StackPanel>
+                </arc:Button>
+            </StackPanel>
+
+            <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,10,4,0" Spacing="4"
+                        IsVisible="{Binding IsDownloading}">
+                <arc:Progress x:Name="Bar"
+                              Minimum="0" Maximum="100" Value="{Binding ProgressValue}"
+                              IsValueVisible="True"
+                              Label="{Binding ProgressText}" />
+                <TextBlock x:Name="SpeedLine" Classes="hint" Text="{Binding SpeedText}" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,12,4,0" Spacing="6"
+                        Orientation="Horizontal" HorizontalAlignment="Right">
+                <arc:Button x:Name="SkipButton" Variant="Ghost" Size="Small" IsVisible="{Binding ShowSkip}"
+                            Command="{Binding SkipCommand}" Content="{l:AppLangResource UpdateSkip}" />
+                <arc:Button x:Name="LaterButton" Variant="Secondary" Size="Small" IsVisible="{Binding ShowLater}"
+                            Command="{Binding LaterCommand}" Content="{l:AppLangResource UpdateLater}" />
+                <arc:Button x:Name="CancelButton" Variant="Secondary" Size="Small" IsVisible="{Binding ShowCancel}"
+                            Command="{Binding CancelCommand}" Content="{l:AppLangResource Cancel}" />
+                <arc:Button x:Name="OpenPageButton" Variant="Secondary" Size="Small" IsVisible="{Binding ShowOpenPage}"
+                            Command="{Binding OpenPageCommand}" Content="{l:AppLangResource UpdateOpenPage}" />
+                <arc:Button x:Name="RetryButton" Variant="Primary" Size="Small" IsVisible="{Binding ShowRetry}"
+                            Command="{Binding RetryCommand}" Content="{l:AppLangResource UpdateRetry}" />
+                <arc:Button x:Name="DownloadButton" Variant="Primary" Size="Small" IsVisible="{Binding ShowDownload}"
+                            Command="{Binding DownloadCommand}" Content="{l:AppLangResource UpdateDownload}" />
+                <arc:Button x:Name="RestartButton" Variant="Primary" Size="Small" IsVisible="{Binding ShowRestart}"
+                            Command="{Binding RestartCommand}" Content="{l:AppLangResource UpdateRestart}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
