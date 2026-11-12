@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Plugin catalog, manifests, packages and (later) the host side of the runtime. No Avalonia, no Jaunt
+         (design/plugins/01-总体设计.md §4). -->
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Core/Octopus.Core.csproj" />
+        <ProjectReference Include="../Octopus.Platform/Octopus.Platform.csproj" />
+        <ProjectReference Include="../Octopus.Storage/Octopus.Storage.csproj" />
+        <ProjectReference Include="../Octopus.Agents/Octopus.Agents.csproj" />
+        <ProjectReference Include="../Octopus.Git/Octopus.Git.csproj" />
+        <ProjectReference Include="../Octopus.FileSystem/Octopus.FileSystem.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Plugins.Tests" />
+        <InternalsVisibleTo Include="Octopus.Plugins.Jaunt" />
+        <InternalsVisibleTo Include="Octopus.Plugins.Jaunt.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The `octopus` module every plugin imports; loaded by the runtime before the plugin's own code. -->
+        <EmbeddedResource Include="Sdk/octopus.js" LogicalName="Octopus.Plugins.Sdk.octopus.js" />
+    </ItemGroup>
+</Project>

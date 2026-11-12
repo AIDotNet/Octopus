@@ -193,6 +193,18 @@ internal static class Program
             sw.Stop();
             sb.AppendLine($"{label}: {sw.Elapsed.TotalMilliseconds:F0} ms total; turns: {string.Join(", ", host.TurnTimes.Select(t => $"{t:F0} ms"))}");
         }
+        using (var host = PluginHost.Start(Scripts.EchoPlugin))
+        {
+            var calls = new List<string>();
+            for (var i = 0; i < 10; i++)
+            {
+                var sw = Stopwatch.StartNew();
+                host.CallThroughHost("echo", json, out _);
+                calls.Add($"{sw.ElapsedMilliseconds}");
+            }
+            GC.Collect();
+            sb.AppendLine($"10 consecutive 1 MB calls on one engine (ms): {string.Join(", ", calls)}; heap after GC {Mb(GC.GetTotalMemory(true))}, TrackedBytes {Mb(host.Engine.GetStatistics().TrackedBytes)}");
+        }
         return sb.ToString().TrimEnd();
     }
 
