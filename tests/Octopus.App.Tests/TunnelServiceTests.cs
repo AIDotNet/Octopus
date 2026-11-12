@@ -526,11 +526,14 @@ public class TunnelServiceTests : IDisposable
         var run = service.RunOf(spec.Id);
         await InState(run, TunnelState.Running);
 
+        // Reconnecting can be over again before a poll sees it on a slow runner, so every change is written down.
+        var seen = new List<(TunnelState State, TunnelFailure Failure)>();
+        run.Changed += (_, _) => { lock (seen) seen.Add((run.Status.State, run.Status.Failure)); };
         first.Say("Connection reset by 10.0.0.5 port 22");
         first.Exit(255);
 
-        await InState(run, TunnelState.Reconnecting);
-        Assert.Equal(TunnelFailure.ConnectionLost, run.Status.Failure);
+        await Eventually(() => { lock (seen) return seen.Contains((TunnelState.Reconnecting, TunnelFailure.ConnectionLost)); },
+            "Reconnecting after the connection was lost");
         var second = await NthStarted(2);
         second.Up();
         await InState(run, TunnelState.Running);

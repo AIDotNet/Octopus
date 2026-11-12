@@ -68,8 +68,9 @@ public class TunnelsPanelTests : IDisposable
     {
         _panel.Dispose();
         _service.Dispose();
+        // Windows refuses to delete a file that is still being released; a leftover temp folder costs nothing.
         try { Directory.Delete(_ledger, recursive: true); }
-        catch (IOException) { }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     private Project Remote(string path = "/srv/app", string host = "prod") => _projects.AddProject(path, null, host);
