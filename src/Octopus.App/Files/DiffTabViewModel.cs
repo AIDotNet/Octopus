@@ -30,7 +30,9 @@ public sealed partial class DiffTabViewModel : ObservableObject, IDisposable
         _git = git;
         _files = files;
         var name = System.IO.Path.GetFileName(request.Path);
-        Title = AppLangResources.Format(request.Staged ? AppLangResourceKind.DiffTitleStaged : AppLangResourceKind.DiffTitleChanges, name);
+        Title = request.Commit is { } commit
+            ? AppLangResources.Format(AppLangResourceKind.DiffTitleCommit, name, commit[..Math.Min(7, commit.Length)])
+            : AppLangResources.Format(request.Staged ? AppLangResourceKind.DiffTitleStaged : AppLangResourceKind.DiffTitleChanges, name);
         MonoFontFamily = string.IsNullOrWhiteSpace(settings.Current.Terminal.FontFamily) ? null : settings.Current.Terminal.FontFamily;
         FontSize = settings.Current.Terminal.FontSize is > 6 and < 60 ? settings.Current.Terminal.FontSize : 13;
         var shown = request.Path.Replace('\\', '/');
@@ -39,8 +41,12 @@ public sealed partial class DiffTabViewModel : ObservableObject, IDisposable
         FileLabel = cut < 0 ? shown : shown[(cut + 1)..];
         Language = FileLanguages.For(name);
 
-        _watches.Add(files.WatchFile(request.FullPath, Reload, Debounce));
-        _ = WatchRepositoryAsync();
+        // What a commit changed never changes: nothing to watch.
+        if (request.Commit is null)
+        {
+            _watches.Add(files.WatchFile(request.FullPath, Reload, Debounce));
+            _ = WatchRepositoryAsync();
+        }
         _ = RefreshAsync();
     }
 
@@ -120,7 +126,9 @@ public sealed partial class DiffTabViewModel : ObservableObject, IDisposable
         GitFileDiff? diff;
         try
         {
-            diff = await _git.GetFileDiffAsync(Request.RepositoryRoot, Request.Path, Request.Staged, Request.OriginalPath);
+            diff = Request.Commit is { } commit
+                ? await _git.GetCommitFileDiffAsync(Request.RepositoryRoot, commit, Request.Path, Request.OriginalPath)
+                : await _git.GetFileDiffAsync(Request.RepositoryRoot, Request.Path, Request.Staged, Request.OriginalPath);
         }
         catch (Exception)
         {

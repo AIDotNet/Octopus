@@ -14,7 +14,7 @@ public static class FileKinds
 
     private static readonly HashSet<string> s_imageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".png", ".apng", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".ico",
+        ".png", ".apng", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".ico", ".svg",
     };
 
     /// <summary>The kind by extension alone; null when the extension says nothing (no extension, or one that is not a picture or Markdown).</summary>

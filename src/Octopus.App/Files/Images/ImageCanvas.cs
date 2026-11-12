@@ -49,12 +49,11 @@ public sealed class ImageCanvas : Control
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_model is not null) _model.ViewChanged -= OnViewChanged;
-        _model = DataContext as ImageViewerModel;
-        if (_model is not null)
+        Unhook();
+        if (DataContext is ImageViewerModel model)
         {
-            _model.ViewChanged += OnViewChanged;
-            if (Bounds.Size != default) _model.SetViewSize(Bounds.Size);
+            Hook(model);
+            if (Bounds.Size != default) model.SetViewSize(Bounds.Size);
         }
         InvalidateVisual();
     }
@@ -62,19 +61,35 @@ public sealed class ImageCanvas : Control
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        if (_model is not null) _model.ViewChanged -= OnViewChanged;
-        _model = null;
+        Unhook();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        if (_model is null && DataContext is ImageViewerModel model)
-        {
-            _model = model;
-            model.ViewChanged += OnViewChanged;
-        }
+        if (_model is null && DataContext is ImageViewerModel model) Hook(model);
+        else _model?.SetOnScreen(true);
     }
+
+    private void Hook(ImageViewerModel model)
+    {
+        _model = model;
+        model.ViewChanged += OnViewChanged;
+        model.FrameChanged += OnFrameChanged;
+        // An animation plays only while this canvas is in a window.
+        model.SetOnScreen(VisualRoot is not null);
+    }
+
+    private void Unhook()
+    {
+        if (_model is null) return;
+        _model.ViewChanged -= OnViewChanged;
+        _model.FrameChanged -= OnFrameChanged;
+        _model.SetOnScreen(false);
+        _model = null;
+    }
+
+    private void OnFrameChanged(object? sender, EventArgs e) => InvalidateVisual();
 
     private void OnViewChanged(object? sender, EventArgs e)
     {

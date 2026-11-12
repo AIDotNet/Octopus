@@ -5,6 +5,7 @@
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:files="using:Octopus.App.Files"
              xmlns:img="using:Octopus.App.Files.Images"
+             xmlns:code="using:Octopus.App.Files.Code"
              x:Class="Octopus.App.Files.Images.ImageViewerView"
              x:DataType="img:ImageViewerModel">
     <Grid Background="{arc:ArcDesignTokenResource Background}" RowDefinitions="Auto,*">
@@ -13,7 +14,15 @@
             <files:FileHeaderBar.Trailing>
                 <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <TextBlock Classes="headerMeta" Text="{Binding MetaText}" Margin="0,0,8,0" />
-                    <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding HasContent}">
+                    <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding ShowZoom}">
+                        <arc:Button Classes="icon header" Command="{Binding TogglePlayCommand}" IsVisible="{Binding IsAnimated}"
+                                    AutomationProperties.Name="{Binding PlayPauseText}"
+                                    arc:Tooltip.Tip="{Binding PlayPauseText}">
+                            <Panel>
+                                <lucide:LucideIcon Kind="Pause" Size="14" IsVisible="{Binding IsPlaying}" />
+                                <lucide:LucideIcon Kind="Play" Size="14" IsVisible="{Binding !IsPlaying}" />
+                            </Panel>
+                        </arc:Button>
                         <arc:Button Classes="icon header" Command="{Binding ZoomOutCommand}"
                                     AutomationProperties.Name="{l:AppLangResource ImageZoomOut}"
                                     arc:Tooltip.Tip="{l:AppLangResource ImageZoomOut}">
@@ -37,16 +46,34 @@
                             <lucide:LucideIcon Kind="Maximize" Size="14" />
                         </arc:Button>
                     </StackPanel>
+                    <!-- An SVG: the picture or its source. -->
+                    <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding ShowModeSwitch}"
+                                AutomationProperties.Name="{l:AppLangResource FileViewMode}">
+                        <arc:Button Classes="icon header" Classes.active="{Binding IsRenderedMode}"
+                                    Command="{Binding SetViewModeCommand}" CommandParameter="rendered"
+                                    AutomationProperties.Name="{l:AppLangResource FileViewRendered}"
+                                    arc:Tooltip.Tip="{l:AppLangResource FileViewRendered}">
+                            <lucide:LucideIcon Kind="Eye" Size="14" />
+                        </arc:Button>
+                        <arc:Button Classes="icon header" Classes.active="{Binding IsSourceMode}"
+                                    Command="{Binding SetViewModeCommand}" CommandParameter="source"
+                                    AutomationProperties.Name="{l:AppLangResource FileViewSource}"
+                                    arc:Tooltip.Tip="{l:AppLangResource FileViewSource}">
+                            <lucide:LucideIcon Kind="CodeXml" Size="14" />
+                        </arc:Button>
+                    </StackPanel>
                 </StackPanel>
             </files:FileHeaderBar.Trailing>
         </files:FileHeaderBar>
 
-        <img:ImageCanvas x:Name="Picture" Grid.Row="1" IsVisible="{Binding HasContent}"
+        <img:ImageCanvas x:Name="Picture" Grid.Row="1" IsVisible="{Binding ShowCanvas}"
                          Ground="{arc:ArcDesignTokenResource SurfaceMuted}"
                          CheckerLight="{arc:ArcDesignTokenResource Background}"
                          CheckerDark="{arc:ArcDesignTokenResource BorderSubtle}"
                          Edge="{arc:ArcDesignTokenResource Border}" />
-        <arc:EmptyState Grid.Row="1" IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
+        <code:CodeSurface Grid.Row="1" IsVisible="{Binding ShowSource}" Text="{Binding SourceText}" Language="xml"
+                          CodeFontSize="{Binding FontSize}" MonoFontFamily="{Binding MonoFontFamily}" />
+        <arc:EmptyState Grid.Row="1" IsVisible="{Binding ShowNotice}" Description="{Binding Notice}"
                         Icon="{x:Static arc:ArcIcons.FileText}"
                         HorizontalAlignment="Center" VerticalAlignment="Center" />
     </Grid>

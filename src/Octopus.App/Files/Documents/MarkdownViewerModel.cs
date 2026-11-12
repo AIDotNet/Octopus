@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Common;
 using Octopus.App.Files.Code;
 using Octopus.App.Localization;
+using Octopus.App.Services;
 
 namespace Octopus.App.Files.Documents;
 
@@ -98,6 +99,16 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     public bool ShowEditor => HasContent && IsEditing && ViewMode == RenderedMode;
     public bool ShowPreview => HasContent && !IsEditing && ViewMode == RenderedMode;
     public bool ShowSource => HasContent && ViewMode == SourceMode;
+
+    public bool IsRenderedMode => ViewMode == RenderedMode;
+    public bool IsSourceMode => ViewMode == SourceMode;
+
+    /// <summary>The bar's two icons: the rendered view or the source.</summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void SetViewMode(string? mode)
+    {
+        if (mode is RenderedMode or SourceMode) ViewMode = mode;
+    }
     public bool ShowUnsaved => IsDirty && IsEditing;
     public bool ShowSave => IsEditing;
     public bool BannerIsLossy => Banner == MarkdownBanner.ReadOnlyLossy;
@@ -120,6 +131,8 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     partial void OnFileSizeChanged(long value) => OnPropertyChanged(nameof(MetaText));
     partial void OnViewModeChanged(string value)
     {
+        OnPropertyChanged(nameof(IsRenderedMode));
+        OnPropertyChanged(nameof(IsSourceMode));
         RefreshSource();
         RaiseShown();
     }
@@ -341,6 +354,17 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
         // The editor may have changed while the person decided.
         markdown = read();
         var bytes = _document.Encode(markdown);
+        // A file of an SSH host: the host gets the text first, so a failure leaves the edits in place here.
+        if (Context.Remote is { } remote)
+        {
+            var sent = await remote.WriteAsync(bytes);
+            if (sent.Outcome == RemoteWriteOutcome.Declined) return false;
+            if (sent.Outcome == RemoteWriteOutcome.Failed)
+            {
+                SetBanner(MarkdownBanner.SaveFailed, AppLangResources.Format(AppLangResourceKind.MdSaveFailed, sent.Error ?? ""));
+                return false;
+            }
+        }
         try
         {
             await Task.Run(() => AtomicFileWriter.WriteAllBytes(Path, bytes));

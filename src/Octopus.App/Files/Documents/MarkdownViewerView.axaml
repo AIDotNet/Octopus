@@ -20,12 +20,21 @@
                         <lucide:LucideIcon Kind="Save" Size="14" />
                     </arc:Button>
                     <!-- Rendered (the editor, or the read-only preview of a file the editor cannot keep intact) or the source. -->
-                    <arc:SegmentedControl IsVisible="{Binding HasContent}" Height="26" VerticalAlignment="Center"
-                                          SelectedValue="{Binding ViewMode, Mode=TwoWay}"
-                                          AutomationProperties.Name="{l:AppLangResource FileViewMode}">
-                        <arc:SegmentedOption Value="rendered" Label="{l:AppLangResource FileViewRendered}" />
-                        <arc:SegmentedOption Value="source" Label="{l:AppLangResource FileViewSource}" />
-                    </arc:SegmentedControl>
+                    <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding HasContent}"
+                                AutomationProperties.Name="{l:AppLangResource FileViewMode}">
+                        <arc:Button Classes="icon header" Classes.active="{Binding IsRenderedMode}"
+                                    Command="{Binding SetViewModeCommand}" CommandParameter="rendered"
+                                    AutomationProperties.Name="{l:AppLangResource FileViewRendered}"
+                                    arc:Tooltip.Tip="{l:AppLangResource FileViewRendered}">
+                            <lucide:LucideIcon Kind="Eye" Size="14" />
+                        </arc:Button>
+                        <arc:Button Classes="icon header" Classes.active="{Binding IsSourceMode}"
+                                    Command="{Binding SetViewModeCommand}" CommandParameter="source"
+                                    AutomationProperties.Name="{l:AppLangResource FileViewSource}"
+                                    arc:Tooltip.Tip="{l:AppLangResource FileViewSource}">
+                            <lucide:LucideIcon Kind="CodeXml" Size="14" />
+                        </arc:Button>
+                    </StackPanel>
                 </StackPanel>
             </files:FileHeaderBar.Trailing>
         </files:FileHeaderBar>

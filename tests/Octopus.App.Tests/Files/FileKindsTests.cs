@@ -15,12 +15,12 @@ public class FileKindsTests
     [InlineData("pic.webp", FileKind.Image)]
     [InlineData("old.bmp", FileKind.Image)]
     [InlineData("favicon.ico", FileKind.Image)]
+    [InlineData("logo.svg", FileKind.Image)]
     public void The_extension_decides_for_markdown_and_pictures(string name, FileKind kind) =>
         Assert.Equal(kind, FileKinds.FromExtension(name));
 
     [Theory]
     [InlineData("Program.cs")]
-    [InlineData("logo.svg")]
     [InlineData("data.json")]
     [InlineData("notes.txt")]
     [InlineData("LICENSE")]

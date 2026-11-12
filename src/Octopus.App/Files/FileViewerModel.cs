@@ -4,7 +4,8 @@ using Octopus.App.Services;
 namespace Octopus.App.Files;
 
 /// <summary>What a viewer is given when it is created.</summary>
-public sealed record FileViewerContext(FileLocation Location, string? MonoFontFamily, double FontSize, IDialogService Dialogs)
+/// <param name="Remote">The file is a copy of one on an SSH host: a save is written to the host first (null: this computer's file).</param>
+public sealed record FileViewerContext(FileLocation Location, string? MonoFontFamily, double FontSize, IDialogService Dialogs, RemoteCopy? Remote = null)
 {
     public string Path => Location.Path;
 }

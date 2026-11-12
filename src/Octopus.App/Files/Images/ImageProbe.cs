@@ -2,7 +2,8 @@ using System.Buffers.Binary;
 
 namespace Octopus.App.Files.Images;
 
-public enum ImageFormat { Png, Jpeg, Gif, WebP, Bmp, Ico }
+/// <summary>The formats the viewer shows. <see cref="Svg"/> is known by its extension only (it is text, with no signature).</summary>
+public enum ImageFormat { Png, Jpeg, Gif, WebP, Bmp, Ico, Svg }
 
 /// <summary>What the header of a picture says, before any pixel is decoded.</summary>
 public sealed record ImageInfo(ImageFormat Format, int Width, int Height)
@@ -24,6 +25,7 @@ public static class ImageProbe
         ImageFormat.WebP => "WebP",
         ImageFormat.Bmp => "BMP",
         ImageFormat.Ico => "ICO",
+        ImageFormat.Svg => "SVG",
         _ => "",
     };
 

@@ -23,15 +23,22 @@ public sealed class FileTabViewModel : ObservableObject, IDisposable
     {
         Path = item.FilePath ?? "";
         FileName = System.IO.Path.GetFileName(Path);
-        var root = projectRoot ?? (AppHost.Services.GetService(typeof(IProjectService)) as IProjectService)?.FindProjectOf(item.Id)?.Path;
-        Location = FileLocation.Of(Path, root);
+        var project = (AppHost.Services.GetService(typeof(IProjectService)) as IProjectService)?.FindProjectOf(item.Id);
+        var root = projectRoot ?? project?.Path;
+        // A copy of a file on an SSH host: the tab names the file where it is there, and the copy is read-only.
+        Location = item.RemotePath is { } remote
+            ? new FileLocation(Path, remote[..Math.Max(remote.LastIndexOf('/'), 1)], remote)
+            : FileLocation.Of(Path, root);
         Kind = Path.Length == 0 ? FileKind.Code : FileKinds.Detect(Path);
         var terminal = settings.Current.Terminal;
         var context = new FileViewerContext(
             Location,
             string.IsNullOrWhiteSpace(terminal.FontFamily) ? null : terminal.FontFamily,
             terminal.FontSize is > 6 and < 60 ? terminal.FontSize : 13,
-            dialogs ?? AppHost.Get<IDialogService>());
+            dialogs ?? AppHost.Get<IDialogService>(),
+            Remote: item.RemotePath is { } remotePath && project?.SshHost is { } host
+                ? new RemoteCopy(AppHost.Get<RemoteFiles>(), host, remotePath, File.Exists(Path) ? File.ReadAllBytes(Path) : [], dialogs ?? AppHost.Get<IDialogService>())
+                : null);
         Viewer = FileViewers.For(Kind).CreateModel(context);
         Viewer.PropertyChanged += (_, e) =>
         {
