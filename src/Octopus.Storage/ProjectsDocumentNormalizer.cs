@@ -20,6 +20,21 @@ internal static class ProjectsDocumentNormalizer
         }
         if (document.ActiveProjectId is not null && !projectIds.Contains(document.ActiveProjectId))
             document.ActiveProjectId = null;
+
+        document.Groups ??= [];
+        var groupIds = new HashSet<string>();
+        document.Groups.RemoveAll(g => g is null || !groupIds.Add(g.Id ?? ""));
+        foreach (var group in document.Groups)
+        {
+            group.Name ??= "";
+        }
+        foreach (var project in document.Projects)
+        {
+            if (project.GroupId is not null && !groupIds.Contains(project.GroupId))
+                project.GroupId = null;
+        }
+        if (document.ExpandedGroupId is not null && !groupIds.Contains(document.ExpandedGroupId))
+            document.ExpandedGroupId = null;
         return document;
     }
 }

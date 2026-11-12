@@ -60,6 +60,18 @@ public class ProjectStoreTests
     }
 
     [Fact]
+    public async Task A_project_on_an_ssh_host_keeps_its_host_and_its_remote_folder()
+    {
+        using var paths = new TempPaths();
+        var document = new ProjectsDocument { Projects = [new Project { Id = "r1", Name = "web", Path = "/srv/my app", SshHost = "prod" }] };
+        await new JsonProjectStore(paths).SaveAsync(document, TestContext.Current.CancellationToken);
+        var loaded = await new JsonProjectStore(paths).LoadAsync(TestContext.Current.CancellationToken);
+        var project = Assert.Single(loaded.Projects);
+        Assert.Equal("prod", project.SshHost);
+        Assert.Equal("/srv/my app", project.Path);
+    }
+
+    [Fact]
     public async Task JsonShape()
     {
         using var paths = new TempPaths();
@@ -141,6 +153,57 @@ public class ProjectStoreTests
         Assert.Null(doc.Projects[1].ActiveItemId);
         Assert.Empty(doc.Projects[2].Items); // i1 already used by p1
         Assert.Null(doc.Projects[2].ActiveItemId);
+    }
+
+    [Fact]
+    public async Task Groups_and_the_open_group_round_trip()
+    {
+        using var paths = new TempPaths();
+        var document = new ProjectsDocument
+        {
+            Projects = [new Project { Id = "p1", Name = "A" }, new Project { Id = "p2", Name = "B", GroupId = "g1" }],
+            Groups = [new ProjectGroup { Id = "g1", Name = "工作", Color = "#0EA5E9" }, new ProjectGroup { Id = "g2", Name = "开源" }],
+            ExpandedGroupId = "g1",
+        };
+        await new JsonProjectStore(paths).SaveAsync(document, TestContext.Current.CancellationToken);
+        var loaded = await new JsonProjectStore(paths).LoadAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "g1", "g2" }, loaded.Groups.Select(g => g.Id));
+        Assert.Equal("工作", loaded.Groups[0].Name);
+        Assert.Equal("#0EA5E9", loaded.Groups[0].Color);
+        Assert.Null(loaded.Projects[0].GroupId);
+        Assert.Equal("g1", loaded.Projects[1].GroupId);
+        Assert.Equal("g1", loaded.ExpandedGroupId);
+    }
+
+    [Fact]
+    public async Task A_file_without_groups_loads_with_every_project_in_none()
+    {
+        using var paths = new TempPaths();
+        Directory.CreateDirectory(paths.DataDirectory);
+        File.WriteAllText(paths.ProjectsFile, """{ "version": 1, "projects": [ { "id": "p1", "name": "A" } ] }""");
+        var doc = await new JsonProjectStore(paths).LoadAsync(TestContext.Current.CancellationToken);
+        Assert.Empty(doc.Groups);
+        Assert.Null(doc.ExpandedGroupId);
+        Assert.Null(Assert.Single(doc.Projects).GroupId);
+    }
+
+    [Fact]
+    public async Task References_to_missing_groups_are_dropped()
+    {
+        using var paths = new TempPaths();
+        Directory.CreateDirectory(paths.DataDirectory);
+        File.WriteAllText(paths.ProjectsFile, """
+        {
+          "expandedGroupId": "ghost",
+          "groups": [ { "id": "g1", "name": "A" }, { "id": "g1", "name": "dup" }, null ],
+          "projects": [ { "id": "p1", "name": "A", "groupId": "g1" }, { "id": "p2", "name": "B", "groupId": "ghost" } ]
+        }
+        """);
+        var doc = await new JsonProjectStore(paths).LoadAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("A", Assert.Single(doc.Groups).Name);
+        Assert.Null(doc.ExpandedGroupId);
+        Assert.Equal("g1", doc.Projects[0].GroupId);
+        Assert.Null(doc.Projects[1].GroupId);
     }
 
     [Fact]

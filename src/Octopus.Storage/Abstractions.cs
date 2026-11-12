@@ -1,3 +1,4 @@
+using Octopus.Core.Plugins;
 using Octopus.Core.Projects;
 using Octopus.Core.Settings;
 
@@ -23,4 +24,20 @@ public interface ISettingsStore
 
     /// <summary>Changes <see cref="Current"/> and writes the file.</summary>
     void Update(Action<AppSettingsModel> mutate);
+}
+
+/// <summary>
+/// Reads and writes plugins.json: installed plugins, whether they are enabled, what they were granted
+/// (design/plugins/03-清单与生命周期.md §6). A damaged file gives an empty document, so nothing stays granted by accident.
+/// </summary>
+public interface IPluginStateStore
+{
+    PluginsDocument Current { get; }
+    /// <summary>Raised after <see cref="Update"/> or <see cref="Load"/> changed <see cref="Current"/>.</summary>
+    event EventHandler? Changed;
+
+    void Load();
+
+    /// <summary>Changes <see cref="Current"/> and writes the file.</summary>
+    void Update(Action<PluginsDocument> mutate);
 }
