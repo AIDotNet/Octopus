@@ -436,7 +436,8 @@ test-results/
 .LSOverride
 
 # Icon must end with two \r
-Icon
+# macOS custom folder icon file (Icon + CR); anchored so Assets/Icon/ is not swallowed
+/Icon
 
 
 # Thumbnails
