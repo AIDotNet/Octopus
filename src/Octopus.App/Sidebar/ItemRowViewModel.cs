@@ -40,12 +40,25 @@ public sealed partial class ItemRowViewModel : ObservableObject
     public bool IsAgent => Item.Kind == ProjectItemKind.Agent;
     public bool IsTerminal => Item.Kind == ProjectItemKind.Terminal;
     public bool IsFile => Item.Kind == ProjectItemKind.File;
+    public bool IsPlugin => Item.Kind == ProjectItemKind.Plugin;
     public bool CanRestart => Item.Kind != ProjectItemKind.File;
     public string? ModelName { get; }
     public bool HasModel => !string.IsNullOrEmpty(ModelName);
 
     [ObservableProperty] public partial bool IsActive { get; set; }
     [ObservableProperty] public partial bool IsRenaming { get; set; }
+    /// <summary>The agent is working on a turn: the row shows a spinner.</summary>
+    [ObservableProperty] public partial bool IsWorking { get; set; }
+    /// <summary>The agent waits for the user, or its turn failed: the row shows a dot.</summary>
+    [ObservableProperty] public partial bool NeedsAttention { get; set; }
+
+    public void RefreshTitle() => OnPropertyChanged(nameof(Title));
+
+    public void Show(Activity.ItemActivity activity)
+    {
+        IsWorking = activity == Activity.ItemActivity.Working;
+        NeedsAttention = activity is Activity.ItemActivity.Waiting or Activity.ItemActivity.Error;
+    }
 
     [RelayCommand] private void Activate() => _activate(this);
     [RelayCommand] private void BeginRename() => IsRenaming = true;

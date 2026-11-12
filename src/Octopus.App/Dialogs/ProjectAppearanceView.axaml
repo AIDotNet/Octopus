@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:common="using:Octopus.App.Common"
+             x:Class="Octopus.App.Dialogs.ProjectAppearanceView"
+             Width="356">
+    <UserControl.Styles>
+        <!-- The ring around the chosen color. -->
+        <Style Selector="Border.ring">
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Padding" Value="2" />
+        </Style>
+        <Style Selector="Border.ring.selected">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        </Style>
+    </UserControl.Styles>
+    <StackPanel Spacing="14">
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <!-- The preview: the square as the rail will show it, larger. -->
+            <Border x:Name="Preview" Width="56" Height="56" ClipToBounds="True"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}">
+                <Panel>
+                    <TextBlock x:Name="PreviewInitial" Foreground="White" FontWeight="Bold"
+                               FontSize="{arc:ArcDesignTokenResource TypeLG}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <lucide:LucideIcon x:Name="PreviewIcon" Size="26" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <!-- Two device-independent pixels per pixel of the 24 x 24 grid. -->
+                    <common:PixelIconView x:Name="PreviewPixel" Width="48" Height="48" Foreground="White"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Image x:Name="PreviewImage" Width="56" Height="56" Stretch="UniformToFill"
+                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+                </Panel>
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                <TextBlock x:Name="ProjectNameText" Classes="body" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ProjectPathText" Classes="hint" TextTrimming="PrefixCharacterEllipsis" />
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{l:AppLangResource ProjectAppearanceColor}" />
+            <WrapPanel x:Name="ColorPanel" ItemSpacing="2" LineSpacing="2" />
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{l:AppLangResource ProjectAppearanceIcon}" />
+            <arc:SearchField x:Name="IconSearch" Size="Small" IsLabelVisible="False"
+                             Label="{l:AppLangResource SearchIcons}" Placeholder="{l:AppLangResource SearchIcons}" />
+            <!-- The line icons, then the categories of the built-in pixel icons. -->
+            <WrapPanel x:Name="CategoryPanel" ItemSpacing="2" LineSpacing="2" />
+            <arc:ScrollArea x:Name="IconScroller" Height="184">
+                <WrapPanel x:Name="IconPanel" ItemSpacing="2" LineSpacing="2" />
+            </arc:ScrollArea>
+            <TextBlock x:Name="NoIconText" Classes="hint" IsVisible="False" Text="{l:AppLangResource NoIconFound}" />
+        </StackPanel>
+
+        <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{l:AppLangResource ProjectAppearancePicture}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <arc:Button x:Name="ChoosePictureButton" Variant="Secondary" Size="Small">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <lucide:LucideIcon Kind="Image" Size="14" />
+                        <TextBlock Text="{l:AppLangResource ProjectAppearanceChoosePicture}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+                <arc:Button x:Name="RemovePictureButton" Variant="Ghost" Size="Small"
+                            Content="{l:AppLangResource ProjectAppearanceRemovePicture}" />
+            </StackPanel>
+            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{l:AppLangResource ProjectAppearancePictureHint}" />
+            <TextBlock x:Name="PictureError" Classes="hint" TextWrapping="Wrap" IsVisible="False"
+                       Foreground="{arc:ArcDesignTokenResource Danger}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

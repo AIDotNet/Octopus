@@ -9,17 +9,21 @@
     <Grid Width="54" RowDefinitions="*,Auto" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
         <arc:ScrollArea OverlayScrollbarMode="Auto" FadeLength="0">
             <StackPanel Spacing="6" Margin="0,10,0,6">
-                <ItemsControl ItemsSource="{Binding Chips}">
+                <!-- Squares of projects in no group, then the group folders (ProjectRailViewModel.Entries). -->
+                <ItemsControl ItemsSource="{Binding Entries}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Spacing="4" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
+                    <ItemsControl.DataTemplates>
                         <DataTemplate x:DataType="vm:ProjectChipViewModel">
                             <vm:ProjectChipView />
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ProjectGroupViewModel">
+                            <vm:ProjectGroupView />
+                        </DataTemplate>
+                    </ItemsControl.DataTemplates>
                 </ItemsControl>
                 <arc:Button Classes="icon" Variant="Ghost" HorizontalAlignment="Center"
                             Command="{Binding NewProjectCommand}"

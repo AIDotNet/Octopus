@@ -16,11 +16,19 @@
                                   Size="18" Margin="0,0,8,0" />
                 <lucide:LucideIcon IsVisible="{Binding IsTerminal}" Kind="SquareTerminal" Size="16" Margin="1,0,9,0" />
                 <lucide:LucideIcon IsVisible="{Binding IsFile}" Kind="FileText" Size="16" Margin="1,0,9,0" />
+                <lucide:LucideIcon IsVisible="{Binding IsPlugin}" Kind="LayoutGrid" Size="16" Margin="1,0,9,0" />
                 <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Title}"
                            TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="2" Classes="hint" VerticalAlignment="Center" Margin="6,0,0,0"
-                           IsVisible="{Binding HasModel}" Text="{Binding ModelName}" MaxWidth="80"
-                           TextTrimming="CharacterEllipsis" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="6,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Classes="hint" VerticalAlignment="Center"
+                               IsVisible="{Binding HasModel}" Text="{Binding ModelName}" MaxWidth="80"
+                               TextTrimming="CharacterEllipsis" />
+                    <!-- Working: Arc's loading ring. Waiting for the user or failed: a dot. -->
+                    <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" IsVisible="{Binding IsWorking}"
+                                    Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                    <Ellipse Width="7" Height="7" VerticalAlignment="Center" IsVisible="{Binding NeedsAttention}"
+                             Fill="{arc:ArcDesignTokenResource AccentStrong}" />
+                </StackPanel>
             </Grid>
         </Button>
         <arc:InlineEdit x:Name="Editor" Variant="Body" Margin="26,0,0,0" VerticalAlignment="Center"

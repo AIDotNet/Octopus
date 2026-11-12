@@ -32,13 +32,13 @@
         </Style>
     </Style>
 
-    <!-- A project square: the project's color fills it. -->
+    <!-- A project square: the project's color fills it; a picture is clipped to its rounded corners. -->
     <Style Selector="Button.chip">
         <Setter Property="Padding" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <ControlTemplate>
-                <Border Background="{TemplateBinding Background}"
+                <Border Background="{TemplateBinding Background}" ClipToBounds="True"
                         CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}">
                     <ContentPresenter Content="{TemplateBinding Content}"
                                       HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />

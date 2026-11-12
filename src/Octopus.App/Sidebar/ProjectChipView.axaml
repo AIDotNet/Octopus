@@ -1,10 +1,19 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:vm="using:Octopus.App.Sidebar"
+             xmlns:common="using:Octopus.App.Common"
              x:Class="Octopus.App.Sidebar.ProjectChipView"
              x:DataType="vm:ProjectChipViewModel">
     <Grid Width="42" Height="42" HorizontalAlignment="Center">
+        <!-- While a dragged square is over this one: the middle makes a group of the two; the edges place it before or after. -->
+        <Border x:Name="IntoMark" IsVisible="False" Background="{arc:ArcDesignTokenResource Accent}" Opacity="0.22"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
+        <Border x:Name="BeforeLine" IsVisible="False" Width="30" Height="2" CornerRadius="1" Margin="0,-3,0,0"
+                VerticalAlignment="Top" Background="{arc:ArcDesignTokenResource Accent}" />
+        <Border x:Name="AfterLine" IsVisible="False" Width="30" Height="2" CornerRadius="1" Margin="0,0,0,-3"
+                VerticalAlignment="Bottom" Background="{arc:ArcDesignTokenResource Accent}" />
         <Border IsVisible="{Binding IsCurrent}" BorderThickness="2"
                 BorderBrush="{arc:ArcDesignTokenResource Accent}"
                 CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
@@ -12,9 +21,27 @@
                 Background="{Binding Background}"
                 arc:Tooltip.Tip="{Binding Tip}" arc:Tooltip.Side="Right"
                 AutomationProperties.Name="{Binding Name}" Opacity="{Binding ChipOpacity}">
-            <TextBlock Text="{Binding Initial}" Foreground="White" FontWeight="Bold"
-                       FontSize="{arc:ArcDesignTokenResource TypeSM}"
-                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Panel>
+                <TextBlock IsVisible="{Binding ShowInitial}" Text="{Binding Initial}" Foreground="White" FontWeight="Bold"
+                           FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <lucide:LucideIcon x:Name="ChipIcon" IsVisible="{Binding ShowIcon}" Size="16" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <!-- A built-in pixel icon, one device-independent pixel per pixel of its 24 x 24 grid. -->
+                <common:PixelIconView IsVisible="{Binding ShowPixel}" Icon="{Binding Pixel}" Width="24" Height="24"
+                                      Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <!-- A 128 px thumbnail drawn at 34 px; the chip's template clips it to the rounded square. -->
+                <Image IsVisible="{Binding HasImage}" Source="{Binding Image}" Width="34" Height="34" Stretch="UniformToFill"
+                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+            </Panel>
         </Button>
+        <!-- An agent of the project is working: a loading ring in the corner (the top right stays free for a count). -->
+        <Border IsVisible="{Binding IsWorking}" IsHitTestVisible="False" Width="16" Height="16" CornerRadius="8"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
+                Background="{arc:ArcDesignTokenResource Background}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+            <arc:ArcSpinner Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Foreground="{arc:ArcDesignTokenResource Accent}" />
+        </Border>
     </Grid>
 </UserControl>

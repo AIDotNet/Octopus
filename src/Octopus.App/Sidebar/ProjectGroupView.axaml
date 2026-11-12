@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Sidebar"
+             x:Class="Octopus.App.Sidebar.ProjectGroupView"
+             x:DataType="vm:ProjectGroupViewModel">
+    <Panel>
+        <!-- The frame's height springs between the folder and the capsule while the two cross-fade (code-behind);
+             at rest it follows its content and only one of them is shown. -->
+        <Border x:Name="Frame" ClipToBounds="True" VerticalAlignment="Top">
+            <Panel>
+                <!-- Closed: a folder square with the colors (or pictures) of the first four projects. -->
+                <Grid x:Name="Folder" Width="42" Height="42" HorizontalAlignment="Center" VerticalAlignment="Top">
+                    <Border x:Name="FolderDropMark" IsVisible="False" Background="{arc:ArcDesignTokenResource Accent}" Opacity="0.22"
+                            CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
+                    <Border IsVisible="{Binding HasCurrent}" BorderThickness="2"
+                            BorderBrush="{arc:ArcDesignTokenResource Accent}"
+                            CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
+                    <Button x:Name="FolderButton" Classes="chip" Width="34" Height="34" Command="{Binding ToggleCommand}"
+                            Background="{Binding FolderBackground}" Opacity="{Binding FolderOpacity}"
+                            arc:Tooltip.Tip="{Binding Tip}" arc:Tooltip.Side="Right"
+                            AutomationProperties.Name="{Binding Name}">
+                        <ItemsControl ItemsSource="{Binding Previews}" Width="24" Height="24">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="2" Columns="2" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GroupPreviewTile">
+                                    <Border Margin="1.5" CornerRadius="3" ClipToBounds="True" Background="{Binding Background}">
+                                        <Image IsVisible="{Binding HasImage}" Source="{Binding Image}" Stretch="UniformToFill"
+                                               RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Button>
+                    <!-- A project in the closed group is working: a loading ring in the corner (the top right stays free for a count). -->
+                    <Border IsVisible="{Binding IsWorking}" IsHitTestVisible="False" Width="16" Height="16" CornerRadius="8"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
+                            Background="{arc:ArcDesignTokenResource Background}"
+                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                        <arc:ArcSpinner Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Foreground="{arc:ArcDesignTokenResource Accent}" />
+                    </Border>
+                </Grid>
+
+                <!-- Open: the projects in a tinted capsule; the folder icon on top closes it. -->
+                <Panel x:Name="Capsule" Width="46" HorizontalAlignment="Center" VerticalAlignment="Top">
+                    <Border CornerRadius="14" Background="{Binding CapsuleBackground}" />
+                    <Border x:Name="CapsuleDropMark" IsVisible="False" CornerRadius="14" BorderThickness="2"
+                            BorderBrush="{arc:ArcDesignTokenResource Accent}" />
+                    <StackPanel Spacing="2" Margin="0,3,0,2">
+                        <Button x:Name="HeaderButton" Classes="row" Width="34" Height="26" HorizontalAlignment="Center"
+                                HorizontalContentAlignment="Center" Command="{Binding ToggleCommand}"
+                                arc:Tooltip.Tip="{Binding Tip}" arc:Tooltip.Side="Right"
+                                AutomationProperties.Name="{Binding Name}">
+                            <lucide:LucideIcon Kind="FolderOpen" Size="17" Foreground="{Binding Tint}" />
+                        </Button>
+                        <ItemsControl ItemsSource="{Binding Chips}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="2" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ProjectChipViewModel">
+                                    <vm:ProjectChipView />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Panel>
+            </Panel>
+        </Border>
+
+        <!-- While another folder is dragged over this one: where it would go. Outside the clipped frame, in the gap. -->
+        <Border x:Name="BeforeLine" IsVisible="False" Width="30" Height="2" CornerRadius="1" Margin="0,-3,0,0"
+                HorizontalAlignment="Center" VerticalAlignment="Top" Background="{arc:ArcDesignTokenResource Accent}" />
+        <Border x:Name="AfterLine" IsVisible="False" Width="30" Height="2" CornerRadius="1" Margin="0,0,0,-3"
+                HorizontalAlignment="Center" VerticalAlignment="Bottom" Background="{arc:ArcDesignTokenResource Accent}" />
+    </Panel>
+</UserControl>
