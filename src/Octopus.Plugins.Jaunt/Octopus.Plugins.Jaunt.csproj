@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The only project that references Jaunt (design/plugins/01-总体设计.md D8): IPluginRuntime on a Jaunt engine. -->
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Jaunt" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Plugins/Octopus.Plugins.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Plugins.Jaunt.Tests" />
+    </ItemGroup>
+</Project>
