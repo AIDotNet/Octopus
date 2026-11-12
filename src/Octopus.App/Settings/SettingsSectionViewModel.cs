@@ -9,6 +9,7 @@ namespace Octopus.App.Settings;
 public sealed partial class SettingsSectionViewModel : ObservableObject
 {
     private readonly AppLangResourceKind _title;
+    private readonly Func<string>? _titleText;
     private readonly Func<object> _createPage;
     private object? _page;
 
@@ -23,12 +24,19 @@ public sealed partial class SettingsSectionViewModel : ObservableObject
         _createPage = createPage;
     }
 
-    /// <summary><c>agents</c>, <c>general</c>, <c>terminal</c>, <c>appearance</c> or <c>shortcuts</c>.</summary>
+    /// <summary>A section whose title is not in the app's string tables (the plugin pages while plugins are a preview).</summary>
+    public SettingsSectionViewModel(string key, LucideIconKind icon, Func<string> title, Func<object> createPage)
+        : this(key, icon, default(AppLangResourceKind), createPage)
+    {
+        _titleText = title;
+    }
+
+    /// <summary><c>agents</c>, <c>general</c>, <c>terminal</c>, <c>ssh</c>, <c>appearance</c>, <c>shortcuts</c> or <c>plugins</c>.</summary>
     public string Key { get; }
 
     public LucideIconKind Icon { get; }
 
-    public string Title => AppLangResources.Get(_title);
+    public string Title => _titleText?.Invoke() ?? AppLangResources.Get(_title);
 
     /// <summary>Opens this section; set by <see cref="SettingsViewModel"/>.</summary>
     public IRelayCommand<SettingsSectionViewModel>? SelectCommand { get; set; }

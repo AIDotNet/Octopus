@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia;
@@ -6,6 +7,10 @@ using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Octopus.App.Common;
 using Octopus.App.Composition;
+using Octopus.App.Localization;
+using TKCode.Arc;
+using TKCode.Arc.Icons.Lucide;
+using TKCode.Arc.Localization;
 
 namespace Octopus.App.Settings;
 
@@ -42,6 +47,8 @@ public partial class SettingsView : UserControl
         var viewModel = (SettingsViewModel)DataContext!;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Show(InitialSection);
+        BuildNavigation(viewModel);
+        ArcLanguage.Changed += OnLanguageChanged;
         ScrollToTop();
         Focus();
     }
@@ -50,6 +57,7 @@ public partial class SettingsView : UserControl
     {
         base.OnUnloaded(e);
         // Writes what is still being typed, then lets go of the pages.
+        ArcLanguage.Changed -= OnLanguageChanged;
         if (DataContext is SettingsViewModel viewModel)
         {
             viewModel.PropertyChanged -= OnViewModelPropertyChanged;
@@ -81,4 +89,34 @@ public partial class SettingsView : UserControl
         UiContext.PostToUi(() => ContentScroll.Offset = default, DispatcherPriority.Loaded);
 
     private void OnBackClick(object? sender, RoutedEventArgs e) => RequestClose();
+
+    /// <summary>
+    /// One sidebar section per navigation group, one page per settings section, from the view model (so the pages
+    /// and the menu cannot disagree). Page titles follow the language through their bindings; group headings are
+    /// plain strings, so a language change builds the sections again.
+    /// </summary>
+    private void BuildNavigation(SettingsViewModel viewModel)
+    {
+        Nav.Sections.Clear();
+        foreach (var (heading, sections) in viewModel.Groups)
+        {
+            var group = new SidebarSection { Header = AppLangResources.Get(heading) };
+            foreach (var section in sections)
+            {
+                var item = new SidebarItem { Key = section.Key, Icon = Lucide.Geometry(section.Icon) };
+                item.Bind(SidebarItem.LabelProperty, new Binding(nameof(SettingsSectionViewModel.Title)) { Source = section });
+                group.Items.Add(item);
+            }
+            Nav.Sections.Add(group);
+        }
+        Nav.SelectedKey = viewModel.SelectedKey;
+    }
+
+    private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e)
+    {
+        if (DataContext is SettingsViewModel viewModel)
+        {
+            UiContext.PostToUi(() => BuildNavigation(viewModel));
+        }
+    }
 }

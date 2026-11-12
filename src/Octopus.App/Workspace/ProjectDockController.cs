@@ -1,3 +1,4 @@
+using Avalonia.Media;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Octopus.App.Files;
@@ -23,6 +24,10 @@ public sealed class ProjectDockController : IDisposable
     /// <summary>The panes of diff tabs: they have no project item, so syncing with the items must leave them alone.</summary>
     private readonly HashSet<string> _diffKeys = [];
     private bool _syncing;
+    private readonly Activity.IItemActivityService? _activity;
+    /// <summary>Turns the loading ring of the tabs whose agent is working; runs only while there is one.</summary>
+    private readonly DispatcherTimer _spin = new() { Interval = TimeSpan.FromMilliseconds(90) };
+    private int _spinFrame;
     private bool _loading;
 
     public ProjectDockController(
@@ -31,8 +36,15 @@ public sealed class ProjectDockController : IDisposable
         ITabContentRegistry registry,
         CloseConfirmation confirmation,
         Func<ProjectItem?> newTerminal,
-        Control emptyContent)
+        Control emptyContent,
+        Activity.IItemActivityService? activity = null)
     {
+        _activity = activity;
+        if (_activity is not null)
+        {
+            _activity.Changed += OnActivityChanged;
+        }
+        _spin.Tick += (_, _) => Spin();
         _project = project;
         _projects = projects;
         _registry = registry;
@@ -197,6 +209,11 @@ public sealed class ProjectDockController : IDisposable
 
     public void Dispose()
     {
+        _spin.Stop();
+        if (_activity is not null)
+        {
+            _activity.Changed -= OnActivityChanged;
+        }
         _projects.Changed -= OnProjectsChanged;
         foreach (var id in _panes.Keys.ToList())
         {
@@ -224,14 +241,7 @@ public sealed class ProjectDockController : IDisposable
         {
             Id = item.Id,
             Title = item.DisplayTitle,
-            Icon = item.Kind switch
-            {
-                ProjectItemKind.Terminal => ArcIcons.Terminal,
-                // DockPane.Icon is drawn by Arc as a 1.75-unit outline: a filled brand logo turns into a blob at 14 px, so
-                // the tab keeps the generic mark (the sidebar row shows the real logo).
-                ProjectItemKind.Agent => ArcIcons.Sparkles,
-                _ => ArcIcons.FileText,
-            },
+            Icon = IconOf(item),
             CanFloat = false,
             Content = _registry.GetOrCreate(_project, item),
         };
@@ -240,9 +250,71 @@ public sealed class ProjectDockController : IDisposable
         return pane;
     }
 
+    private static Geometry IconOf(ProjectItem item) => item.Kind switch
+    {
+        ProjectItemKind.Terminal => ArcIcons.Terminal,
+        // DockPane.Icon is drawn by Arc as a 1.75-unit outline: a filled brand logo turns into a blob at 14 px, so
+        // the tab keeps the generic mark (the sidebar row shows the real logo).
+        ProjectItemKind.Agent => ArcIcons.Sparkles,
+        ProjectItemKind.Plugin => ArcIcons.LayoutGrid,
+        _ => ArcIcons.FileText,
+    };
+
+    /// <summary>
+    /// The loading ring at eight angles. DockPane.Icon is a geometry, not a control, so the tab cannot host Arc's
+    /// spinner: the ring is turned by swapping the icon. Arc scales an icon by its bounds, so every frame must have
+    /// the same ones: the gap is 45° wide and starts on a multiple of 45°, which keeps the circle's four outermost
+    /// points on the ring in every frame.
+    /// </summary>
+    private static readonly Geometry[] s_spinFrames = Enumerable.Range(0, 8).Select(SpinFrame).ToArray();
+
+    private static Geometry SpinFrame(int index)
+    {
+        const double center = 12, radius = 9;
+        static string Point(double degrees)
+        {
+            var radians = degrees * Math.PI / 180;
+            return FormattableString.Invariant($"{center + radius * Math.Cos(radians):0.###} {center + radius * Math.Sin(radians):0.###}");
+        }
+        var gap = index * 45;
+        return Geometry.Parse($"M{Point(gap + 45)} A{radius} {radius} 0 1 1 {Point(gap)}");
+    }
+
+    private bool IsWorking(string itemId) => _activity?.Of(itemId) == Activity.ItemActivity.Working;
+
+    private void OnActivityChanged(object? sender, string itemId)
+    {
+        if (!_panes.TryGetValue(itemId, out var pane) || _project.Items.FirstOrDefault(i => i.Id == itemId) is not { } item)
+        {
+            return;
+        }
+        pane.Icon = IsWorking(itemId) ? s_spinFrames[_spinFrame] : IconOf(item);
+        _spin.IsEnabled = _panes.Keys.Any(IsWorking);
+    }
+
+    private void Spin()
+    {
+        _spinFrame = (_spinFrame + 1) % s_spinFrames.Length;
+        var any = false;
+        foreach (var (id, pane) in _panes)
+        {
+            if (IsWorking(id))
+            {
+                pane.Icon = s_spinFrames[_spinFrame];
+                any = true;
+            }
+        }
+        _spin.IsEnabled = any;
+    }
+
     /// <summary>A file tab with edits that are not saved shows a dot before its title.</summary>
     private static void ShowUnsavedMark(DockPane pane, ProjectItem item)
     {
+        if (pane.Content is Plugins.PluginViewTab view)
+        {
+            view.ChromeChanged += (_, _) => pane.Title = view.IsDirty ? "● " + item.DisplayTitle : item.DisplayTitle;
+            return;
+        }
         if (pane.Content is not Control { DataContext: FileTabViewModel file }) return;
         file.PropertyChanged += (_, e) =>
         {

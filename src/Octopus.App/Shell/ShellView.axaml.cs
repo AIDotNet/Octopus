@@ -73,7 +73,7 @@ public partial class ShellView : UserControl
         {
             SyncRight();
         }
-        if (e.PropertyName is nameof(ShellViewModel.CurrentProjectPath) or nameof(ShellViewModel.CurrentProjectName))
+        if (e.PropertyName is nameof(ShellViewModel.CurrentProjectPath) or nameof(ShellViewModel.CurrentProjectName) or nameof(ShellViewModel.CurrentProjectSshHost))
         {
             ApplyProject();
         }
@@ -266,11 +266,8 @@ public partial class ShellView : UserControl
     /// The right panel follows the current project. Set from here rather than bound: the panel is its own data context.
     /// The name goes first, so the panel never shows the new folder under the old name.
     /// </summary>
-    private void ApplyProject()
-    {
-        RightPanel.ProjectName = _model?.CurrentProjectName;
-        RightPanel.ProjectPath = _model?.CurrentProjectPath;
-    }
+    private void ApplyProject() =>
+        RightPanel.SetProject(_model?.CurrentProjectPath, _model?.CurrentProjectName, _model?.CurrentProjectSshHost);
 
     private void OnRightSplitterDragCompleted(object? sender, Avalonia.Input.VectorEventArgs e)
     {
@@ -291,8 +288,27 @@ public partial class ShellView : UserControl
         var onRight = e.Anchor.TranslatePoint(default, this) is { } point && point.X > Bounds.Width / 2;
         LauncherPopover.Alignment = onRight ? PopoverAlignment.End : PopoverAlignment.Start;
         LauncherMenuView.PanelOnLeft = onRight;
+        PlaceLauncherVertically(e.Anchor);
         LauncherPopover.ShowAt(e.Anchor);
         e.Handled = true;
+    }
+
+    /// <summary>Padding of the popover surface (16 on each side), its gap to the anchor and a margin to the window edge.</summary>
+    private const double LauncherChrome = 48;
+
+    /// <summary>
+    /// Picks the side for the menu at its expanded height, not its current one. Otherwise the popup fits below
+    /// when it opens, stops fitting once an agent's panel appears, and Arc flips it above the anchor under the pointer.
+    /// </summary>
+    private void PlaceLauncherVertically(Control anchor)
+    {
+        var top = anchor.TranslatePoint(default, this)?.Y ?? 0;
+        var above = top;
+        var below = Bounds.Height - top - anchor.Bounds.Height;
+        var upward = below < LauncherMenu.ExpandedPanelHeight + LauncherChrome && above > below;
+        LauncherPopover.Placement = upward ? PopoverPlacement.Top : PopoverPlacement.Bottom;
+        LauncherMenuView.OpensUpward = upward;
+        LauncherMenuView.PanelMaxHeight = Math.Max(160, (upward ? above : below) - LauncherChrome);
     }
 
     private void OnLauncherCloseRequested(object? sender, EventArgs e) => LauncherPopover.Close();

@@ -111,6 +111,11 @@ public class MainWindow : ArcWindow
             // Closing must not be blocked by a failing shutdown step.
         }
         _closing = false;
+        if (!quit)
+        {
+            // "Restart and update" was answered with "keep the app open": a later quit must not relaunch.
+            AppHost.Get<Octopus.Updates.IUpdateService>().RelaunchAfterInstall = false;
+        }
         if (quit)
         {
             _shutDown = true;

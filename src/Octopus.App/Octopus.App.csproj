@@ -23,11 +23,13 @@
         <PackageReference Include="TKCode.Arc.Icons.Lucide" />
         <PackageReference Include="TKCode.Arc.Themes.Corners" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Svg.Skia" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="../Octopus.Core/Octopus.Core.csproj" />
+        <ProjectReference Include="../Octopus.Ssh/Octopus.Ssh.csproj" />
         <ProjectReference Include="../Octopus.Storage/Octopus.Storage.csproj" />
         <ProjectReference Include="../Octopus.Platform/Octopus.Platform.csproj" />
         <ProjectReference Include="../Octopus.Platform.MacOS/Octopus.Platform.MacOS.csproj" />
@@ -39,12 +41,59 @@
         <ProjectReference Include="../Octopus.Terminal/Octopus.Terminal.csproj" />
         <ProjectReference Include="../Octopus.Terminal.MiniPty/Octopus.Terminal.MiniPty.csproj" />
         <ProjectReference Include="../Octopus.Terminal.Avalonia/Octopus.Terminal.Avalonia.csproj" />
+        <ProjectReference Include="../Octopus.Updates/Octopus.Updates.csproj" />
+        <ProjectReference Include="../Octopus.Plugins/Octopus.Plugins.csproj" />
+        <ProjectReference Include="../Octopus.Plugins.Jaunt/Octopus.Plugins.Jaunt.csproj" />
+        <!-- Built with the app, not referenced: the signal forwarder is a separate executable (design/plugins/11 §1.5). -->
+        <ProjectReference Include="../Octopus.SignalForwarder/Octopus.SignalForwarder.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
 
     <ItemGroup>
         <!-- Agent brand logos, normalized to a tiny path JSON (see Assets/AgentLogos/README.md). -->
         <AvaloniaResource Include="Assets/AgentLogos/*.json" />
+        <!-- Pixel icons for the project squares, rasterized to 24 x 24 bitmaps (see Assets/PixelIcons/README.md). -->
+        <AvaloniaResource Include="Assets/PixelIcons/pixel-icons.json" />
         <!-- The window icon and the in-app logo (octopus.ico / .icns are for the exe and an .app bundle, not loaded at run time). -->
         <AvaloniaResource Include="Assets/Icon/*.png" />
     </ItemGroup>
+
+    <ItemGroup>
+        <!-- Built-in plugins ship as plain packages next to the executable (design/plugins/03-清单与生命周期.md §5). -->
+        <None Include="BuiltinPlugins/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+    <!-- Development runs: the forwarder's framework-dependent build goes next to the app. A release publishes the
+         NativeAOT forwarder there instead (see design/plugins/11 §1.5). -->
+    <Target Name="CopySignalForwarder" AfterTargets="Build">
+        <ItemGroup>
+            <SignalForwarderFile Include="$(MSBuildThisFileDirectory)../Octopus.SignalForwarder/bin/$(Configuration)/$(TargetFramework)/octopus-signal*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(SignalForwarderFile)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+    <!-- Development runs on macOS: the bare executable (no .app bundle) would show the generic "exec" icon in Activity
+         Monitor, Force Quit and the app switcher, so it gets the app icon as a custom file icon. Only when the executable
+         changed; never for a publish (the packaged .app has its own icon) or on CI. A failure only leaves the default icon. -->
+    <Target Name="SetDevelopmentAppIcon" AfterTargets="Build"
+            Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$(_IsPublishing)' != 'true' And '$(CI)' != 'true'"
+            Inputs="$(OutDir)$(AssemblyName);$(MSBuildThisFileDirectory)Assets/Icon/octopus.icns"
+            Outputs="$(IntermediateOutputPath)app-icon.stamp">
+        <Exec Condition="Exists('$(OutDir)$(AssemblyName)')"
+              Command="osascript -l JavaScript &quot;$(MSBuildThisFileDirectory)../../tools/macos-set-file-icon.js&quot; &quot;$(MSBuildThisFileDirectory)Assets/Icon/octopus.icns&quot; &quot;$(OutDir)$(AssemblyName)&quot;"
+              IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low" />
+        <Touch Files="$(IntermediateOutputPath)app-icon.stamp" AlwaysCreate="true" />
+    </Target>
+
+    <!-- Releases: every publish for a runtime (the macOS, Windows and Linux packaging all start from one) publishes the
+         forwarder with NativeAOT for the same runtime and puts its executable beside the app, where ItemLaunchService
+         looks for it. Its own publish runs apart, so the app's single-file and self-contained settings do not reach it. -->
+    <Target Name="PublishSignalForwarder" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
+        <PropertyGroup>
+            <SignalForwarderPublishDir>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)signal-forwarder/</SignalForwarderPublishDir>
+            <SignalForwarderExe>octopus-signal</SignalForwarderExe>
+            <SignalForwarderExe Condition="$(RuntimeIdentifier.StartsWith('win'))">octopus-signal.exe</SignalForwarderExe>
+        </PropertyGroup>
+        <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)../Octopus.SignalForwarder/Octopus.SignalForwarder.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) -p:Version=$(Version) -p:DebugType=None -p:DebugSymbols=false -p:StripSymbols=true -o &quot;$(SignalForwarderPublishDir)&quot;" />
+        <Copy SourceFiles="$(SignalForwarderPublishDir)$(SignalForwarderExe)" DestinationFolder="$(PublishDir)" />
+    </Target>
 </Project>

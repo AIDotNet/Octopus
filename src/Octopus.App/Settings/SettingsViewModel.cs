@@ -6,6 +6,7 @@ using Octopus.App.Settings.Agents;
 using Octopus.App.Settings.Appearance;
 using Octopus.App.Settings.General;
 using Octopus.App.Settings.Shortcuts;
+using Octopus.App.Settings.Ssh;
 using Octopus.App.Settings.Terminal;
 using TKCode.Arc.Localization;
 using TKCode.Arc.Icons.Lucide;
@@ -25,11 +26,13 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         [
             new("general", LucideIconKind.SlidersHorizontal, AppLangResourceKind.SettingsNavGeneral, () => ActivatorUtilities.CreateInstance<GeneralSettingsViewModel>(services)),
             new("terminal", LucideIconKind.SquareTerminal, AppLangResourceKind.SettingsNavTerminal, () => ActivatorUtilities.CreateInstance<TerminalSettingsViewModel>(services)),
+            new("ssh", LucideIconKind.Server, AppLangResourceKind.SettingsNavSsh, () => ActivatorUtilities.CreateInstance<SshSettingsViewModel>(services)),
         ];
         Interface =
         [
             new("appearance", LucideIconKind.Palette, AppLangResourceKind.SettingsNavAppearance, () => ActivatorUtilities.CreateInstance<AppearanceSettingsViewModel>(services)),
             new("shortcuts", LucideIconKind.Keyboard, AppLangResourceKind.SettingsNavShortcuts, () => ActivatorUtilities.CreateInstance<ShortcutsViewModel>(services)),
+            new("plugins", LucideIconKind.Puzzle, () => Plugins.PluginText.Get("插件", "Plugins"), () => ActivatorUtilities.CreateInstance<Plugins.Settings.PluginsSettingsViewModel>(services)),
         ];
         foreach (var section in All)
         {
@@ -47,6 +50,24 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public IReadOnlyList<SettingsSectionViewModel> Interface { get; }
 
     public IEnumerable<SettingsSectionViewModel> All => Ai.Concat(General).Concat(Interface);
+
+    /// <summary>The navigation groups in order with their headings: the sections of the settings sidebar.</summary>
+    public IReadOnlyList<(AppLangResourceKind Heading, IReadOnlyList<SettingsSectionViewModel> Sections)> Groups =>
+    [
+        (AppLangResourceKind.SettingsGroupAi, Ai),
+        (AppLangResourceKind.SettingsGroupGeneral, General),
+        (AppLangResourceKind.SettingsGroupInterface, Interface),
+    ];
+
+    /// <summary>The open section's key, for the sidebar's selection; setting it opens that section.</summary>
+    public string SelectedKey
+    {
+        get => Selected.Key;
+        set
+        {
+            if (value != Selected.Key) Show(value);
+        }
+    }
 
     /// <summary>The open page's view model (the view picks the template by its type).</summary>
     public object Page => Selected.Page;
@@ -71,6 +92,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         }
         newValue.IsSelected = true;
         OnPropertyChanged(nameof(Page));
+        OnPropertyChanged(nameof(SelectedKey));
     }
 
     private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e)

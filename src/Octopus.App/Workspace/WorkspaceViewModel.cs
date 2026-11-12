@@ -17,14 +17,17 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
     private readonly IItemOpener _opener;
     private readonly CloseConfirmation _confirmation;
     private readonly Dictionary<string, ProjectDockController> _controllers = [];
+    private readonly Activity.IItemActivityService? _activity;
 
     public WorkspaceViewModel(
         IProjectService projects,
         ITabContentRegistry registry,
         IItemOpener opener,
         CloseConfirmation confirmation,
-        EmptyStateViewModel emptyState)
+        EmptyStateViewModel emptyState,
+        Activity.IItemActivityService? activity = null)
     {
+        _activity = activity;
         _projects = projects;
         _registry = registry;
         _opener = opener;
@@ -79,7 +82,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
     }
 
     private ProjectDockController Create(Project project) =>
-        new(project, _projects, _registry, _confirmation, () => _opener.OpenTerminal(), new EmptyProjectView { DataContext = EmptyState });
+        new(project, _projects, _registry, _confirmation, () => _opener.OpenTerminal(), new EmptyProjectView { DataContext = EmptyState }, _activity);
 
     /// <summary>Asks once when programs still run in some tab; true when the app may quit.</summary>
     public Task<bool> ConfirmQuitAsync() => _confirmation.ConfirmQuitAsync();

@@ -39,12 +39,18 @@ public static class TestApp
     {
         // Tests must never read or change the person's own projects and settings.
         AppHost.Reset();
+        // Plugins and the signal hub start only in the tests about them.
+        Octopus.App.Plugins.PluginStartup.AutoStart = false;
         AppHost.ConfigureOverrides = services =>
         {
             services.Replace(ServiceDescriptor.Singleton<IProjectStore, RecordingProjectStore>());
             services.AddSingleton(p => (RecordingProjectStore)p.GetRequiredService<IProjectStore>());
             services.Replace(ServiceDescriptor.Singleton<ISettingsStore, InMemorySettingsStore>());
             services.Replace(ServiceDescriptor.Singleton<IAppPaths>(_ => new TempAppPaths()));
+            // Tests never touch the real keychain.
+            services.Replace(ServiceDescriptor.Singleton<ISecretStore, MemorySecretStore>());
+            // Plugins' agent data scopes (~/.claude, ~/.codex…) resolve under the temporary folder, never the real home.
+            services.Replace(ServiceDescriptor.Singleton(p => new Octopus.Plugins.Security.UserHome(((TempAppPaths)p.GetRequiredService<IAppPaths>()).Home)));
             // No real process, no scan of the machine, no system dialogs.
             services.Replace(ServiceDescriptor.Singleton<ITerminalConnectionFactory, FakeTerminalConnectionFactory>());
             services.AddSingleton(p => (FakeTerminalConnectionFactory)p.GetRequiredService<ITerminalConnectionFactory>());
@@ -53,6 +59,8 @@ public static class TestApp
             services.AddSingleton(p => (FakeDialogService)p.GetRequiredService<IDialogService>());
             services.Replace(ServiceDescriptor.Singleton<IAppIcon, NoAppIcon>()); // never touch the real Dock
             services.Replace(ServiceDescriptor.Singleton<IPickerService, FakePickerService>());
+            // The updater stays off in every configuration (CI tests a Release build): no request ever leaves a test.
+            services.Replace(ServiceDescriptor.Singleton(new Octopus.Updates.UpdateOptions { CurrentVersion = null, IsDevelopment = true }));
             services.AddSingleton(p => (FakePickerService)p.GetRequiredService<IPickerService>());
         };
         return AppBuilder.Configure<App>()
@@ -65,8 +73,10 @@ public static class TestApp
     private sealed class TempAppPaths : IAppPaths, IDisposable
     {
         private readonly string _root = Directory.CreateTempSubdirectory("octopus-tests-").FullName;
-        public string DataDirectory => _root;
+        public string DataDirectory => Path.Combine(_root, "data");
         public string CacheDirectory => Path.Combine(_root, "cache");
+        /// <summary>A stand-in for the user's home, beside (not inside) the protected data directory.</summary>
+        public string Home => Path.Combine(_root, "home");
 
         public void Dispose()
         {

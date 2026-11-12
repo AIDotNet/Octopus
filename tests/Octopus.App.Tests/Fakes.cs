@@ -20,7 +20,9 @@ public sealed class FakeTerminalConnection(string? foreground = null) : ITermina
 
     public async IAsyncEnumerable<ReadOnlyMemory<byte>> ReadOutputAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
+        // No output; the stream ends when the process does.
+        await Task.WhenAny(Task.Delay(Timeout.Infinite, cancellationToken), _exit.Task).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         yield break;
     }
 
@@ -41,6 +43,9 @@ public sealed class FakeTerminalConnection(string? foreground = null) : ITermina
     }
 
     public ValueTask<string?> GetForegroundProcessNameAsync() => ValueTask.FromResult(foreground);
+
+    /// <summary>The process ends by itself with this exit code.</summary>
+    public void Exit(int code) => _exit.TrySetResult(new TerminalExit(code, null));
 
     public ValueTask DisposeAsync()
     {
@@ -92,6 +97,28 @@ public sealed class FakeDialogService : IDialogService
 
     public Task<NewProjectChoice?> AskNewProjectAsync() => Task.FromResult(NewProject);
 
+    /// <summary>The answer of the project icon dialog; null: dismissed.</summary>
+    public ProjectAppearanceChoice? Appearance { get; set; }
+    public Task<ProjectAppearanceChoice?> AskProjectAppearanceAsync(Octopus.Core.Projects.Project project) => Task.FromResult(Appearance);
+
+    /// <summary>Fills the agent editor as a person would; false cancels. Null cancels too.</summary>
+    public Func<Octopus.App.Settings.Agents.AgentEditorModel, bool>? AgentEditor { get; set; }
+    public Task<Octopus.Core.Agents.AgentDefinition?> AskAgentDefinitionAsync(Octopus.App.Settings.Agents.AgentEditorModel model) =>
+        Task.FromResult(AgentEditor?.Invoke(model) == true ? model.Build() : null);
+
+    public Octopus.Ssh.SshHostDraft? NewSshHost { get; set; }
+
+    public Task<Octopus.Ssh.SshHostDraft?> AskNewSshHostAsync() => Task.FromResult(NewSshHost);
+
+    public string? NameAnswer { get; set; }
+    public string? LastNameLabel { get; private set; }
+
+    public Task<string?> AskNameAsync(string title, string label, string? initial, string confirmText)
+    {
+        LastNameLabel = label;
+        return Task.FromResult(NameAnswer);
+    }
+
     public Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false)
     {
         Asked++;
@@ -107,6 +134,8 @@ public sealed class FakePickerService : IPickerService
     public string? File { get; set; }
     public Task<string?> PickFolderAsync() => Task.FromResult(Folder);
     public Task<string?> PickFileAsync(string? startDirectory) => Task.FromResult(File);
+    public string? Image { get; set; }
+    public Task<string?> PickImageAsync() => Task.FromResult(Image);
 }
 
 /// <summary>A project store that counts its writes: the exit test checks that closing saved.</summary>

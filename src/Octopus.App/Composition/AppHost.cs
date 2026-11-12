@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Octopus.Agents;
+using Octopus.Ssh;
 using Octopus.Storage;
 using Octopus.Terminal;
 using Octopus.Terminal.MiniPty;
@@ -34,6 +35,8 @@ public static class AppHost
         services.AddOctopusStorage();      // projects.json, settings.json
         services.AddOctopusAgents();       // catalog, scanner, command compiler
         services.AddOctopusTerminal();     // launch planner
+        services.AddSingleton<ISshHostCatalog>(_ => new SshHostCatalog(SshHostCatalog.UserHome)); // hosts of ~/.ssh/config
+        services.AddSingleton<Octopus.App.Services.RemoteFiles>(); // folders and copies of files on SSH hosts
         services.AddMiniPtyTerminal();     // pty
         services.AddOctopusApp();          // app services and view models
         ConfigureOverrides?.Invoke(services);

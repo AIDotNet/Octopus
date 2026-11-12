@@ -8,6 +8,8 @@
              xmlns:sidebar="using:Octopus.App.Sidebar"
              xmlns:workspace="using:Octopus.App.Workspace"
              xmlns:chrome="using:Octopus.App.Shell.Chrome"
+             xmlns:plugins="using:Octopus.App.Plugins"
+             xmlns:updates="using:Octopus.App.Updates"
              xmlns:vm="using:Octopus.App.Shell"
              x:Class="Octopus.App.Shell.ShellView"
              x:DataType="vm:ShellViewModel">
@@ -77,6 +79,8 @@
                 <StackPanel x:Name="Toolbar" Orientation="Horizontal" Height="40" Spacing="2"
                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,40,0"
                             IsVisible="{Binding Workspace.HasProject}">
+                    <!-- Plugin indicators (design/plugins/05-界面能力.md §7), e.g. the agents' usage. -->
+                    <plugins:IndicatorStrip Margin="0,0,4,0" />
                     <arc:Button Classes="icon" Variant="Ghost" VerticalAlignment="Center"
                                 Command="{Binding SplitRightCommand}"
                                 AutomationProperties.Name="{l:AppLangResource SplitRight}"
@@ -113,5 +117,9 @@
 
         <!-- The settings page covers the whole window. -->
         <Grid x:Name="Overlay" />
+
+        <!-- A new version: found, downloading, ready (design/10-自动更新.md §10). Over the settings page too. -->
+        <updates:UpdateCardView x:Name="UpdateCard" DataContext="{Binding UpdateCard}"
+                                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,24" />
     </Grid>
 </UserControl>

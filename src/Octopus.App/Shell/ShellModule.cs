@@ -23,9 +23,11 @@ internal static class ShellModule
         services.AddSingleton<ISettingsNavigator>(p => p.GetRequiredService<SettingsNavigator>());
         services.AddSingleton<IWindowAccessor, WindowAccessor>();
         services.AddSingleton<IPickerService, PickerService>();
+        services.AddSingleton<IProjectIconStore, ProjectIconStore>();
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<IProjectService, ProjectService>();
         services.AddSingleton<IItemLaunchService, ItemLaunchService>();
+        services.AddSingleton<Octopus.App.Activity.IItemActivityService, Octopus.App.Activity.ItemActivityService>();
         services.AddSingleton<IItemOpener, ItemOpener>();
         services.AddSingleton<ITabContentRegistry, TabContentRegistry>();
         services.AddSingleton<CloseConfirmation>();

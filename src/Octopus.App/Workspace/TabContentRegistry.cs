@@ -1,5 +1,7 @@
 using Avalonia.Controls;
+using Microsoft.Extensions.DependencyInjection;
 using Octopus.App.Files;
+using Octopus.App.Plugins;
 using Octopus.App.Services;
 using Octopus.App.Terminals;
 using Octopus.Core.Projects;
@@ -17,7 +19,8 @@ public sealed class TabContentRegistry(
     ISettingsStore settings,
     IGitService git,
     IFileTreeService files,
-    IDialogService dialogs) : ITabContentRegistry
+    IDialogService dialogs,
+    IServiceProvider services) : ITabContentRegistry
 {
     private readonly Dictionary<string, Control> _controls = [];
     private readonly Dictionary<string, Task> _releasing = [];
@@ -28,9 +31,13 @@ public sealed class TabContentRegistry(
         {
             return existing;
         }
-        Control control = item.Kind == ProjectItemKind.File
-            ? new FileTabView { DataContext = new FileTabViewModel(item, files, settings, dialogs: dialogs) }
-            : new TerminalTabView { DataContext = new TerminalTabViewModel(project, item, launcher, factory, settings) };
+        Control control = item.Kind switch
+        {
+            ProjectItemKind.File => new FileTabView { DataContext = new FileTabViewModel(item, files, settings, dialogs: dialogs) },
+            // Resolved here, not injected: the plugin workbench needs the item opener, which needs this registry's peers.
+            ProjectItemKind.Plugin => new PluginViewTab(project, item, services.GetRequiredService<PluginWorkbench>(), services.GetRequiredService<IProjectService>()),
+            _ => new TerminalTabView { DataContext = new TerminalTabViewModel(project, item, launcher, factory, settings) },
+        };
         _controls[item.Id] = control;
         return control;
     }

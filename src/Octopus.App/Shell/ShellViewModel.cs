@@ -38,7 +38,8 @@ public sealed partial class ShellViewModel : ObservableObject
         ProjectRailViewModel rail,
         ProjectPanelViewModel panel,
         WorkspaceViewModel workspace,
-        LauncherViewModel launcher)
+        LauncherViewModel launcher,
+        Octopus.App.Updates.UpdateCardViewModel updateCard)
     {
         _settings = settings;
         _keymap = keymap;
@@ -61,6 +62,7 @@ public sealed partial class ShellViewModel : ObservableObject
         Panel = panel;
         Workspace = workspace;
         Launcher = launcher;
+        UpdateCard = updateCard;
         LeftInset = chrome.LeftInset;
         ShowsCaptionButtons = chrome.ShowsCaptionButtons;
         IsSidebarCollapsed = settings.Current.Sidebar.IsCollapsed;
@@ -71,6 +73,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public ProjectPanelViewModel Panel { get; }
     public WorkspaceViewModel Workspace { get; }
     public LauncherViewModel Launcher { get; }
+    /// <summary>The update card at the bottom right (design/10-自动更新.md §10).</summary>
+    public Octopus.App.Updates.UpdateCardViewModel UpdateCard { get; }
 
     /// <summary>Room kept free at the top left for the system's window buttons.</summary>
     public double LeftInset { get; }
@@ -83,6 +87,9 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty] public partial double RightPanelWidth { get; set; }
     /// <summary>Folder and name of the current project, for the right panel; null without a project.</summary>
     [ObservableProperty] public partial string? CurrentProjectPath { get; private set; }
+
+    /// <summary>The SSH host of the current project; null when its folder is on this computer.</summary>
+    [ObservableProperty] public partial string? CurrentProjectSshHost { get; private set; }
     [ObservableProperty] public partial string? CurrentProjectName { get; private set; }
 
     public GridLength RightColumnWidth => IsRightPanelOpen ? new GridLength(RightPanelWidth) : new GridLength(0);
@@ -103,7 +110,12 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     /// <summary>The right panel asked for a file: open it as a tab (an open one is activated).</summary>
-    public void OpenFileFromPanel(string path) => _opener.OpenFile(path);
+    /// <summary>On an SSH host the file is copied here first (read-only); otherwise it is opened where it is.</summary>
+    public void OpenFileFromPanel(string path)
+    {
+        if (CurrentProjectSshHost is not null) _ = _opener.OpenRemoteFileAsync(path);
+        else _opener.OpenFile(path);
+    }
 
     public void OpenDiffFromPanel(Octopus.App.Files.DiffTabRequest request) => _workspaceCommands.OpenDiff(request);
 
@@ -111,6 +123,7 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         CurrentProjectPath = _projects.Current?.Path;
         CurrentProjectName = _projects.Current?.Name;
+        CurrentProjectSshHost = _projects.Current?.SshHost;
     }
 
     /// <summary>
