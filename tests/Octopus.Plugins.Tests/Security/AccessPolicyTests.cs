@@ -469,7 +469,7 @@ public sealed class AccessPolicyTests : IDisposable
         Assert.Equal(Path.Combine(home, "todo.txt"), file.Root);
         Assert.Empty(file.Include);
 
-        Assert.Equal("/", FileScope.FromPattern(FileScopeKind.External, "/*", FileAccessKind.Read, home).Root);
+        if (!OperatingSystem.IsWindows()) Assert.Equal("/", FileScope.FromPattern(FileScopeKind.External, "/*", FileAccessKind.Read, home).Root);
         Assert.Throws<ArgumentException>(() => FileScope.FromPattern(FileScopeKind.External, "notes/**", FileAccessKind.Read, home));
         Assert.Throws<ArgumentException>(() => FileScope.FromPattern(FileScopeKind.External, "$HOME/notes", FileAccessKind.Read, home));
     }

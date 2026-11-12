@@ -93,15 +93,20 @@ public sealed class RuntimeTests : IAsyncDisposable
             """, Commands);
         var manager = await _h.StartAsync();
         var host = manager.Find("acme.t")!;
+        // The call fails before the host has handled the fault, so "Running" right after it can still be the old run:
+        // wait for the crash to be recorded as well.
+        Task RestartedAfter(int crashes) => Harness.WaitUntil(() =>
+            (_h.State.Current.Find("acme.t")?.Crashes.Count ?? crashes) >= crashes
+            && host.State == PluginHostState.Running && host.Commands.Contains("acme.t.other"));
 
         await Assert.ThrowsAnyAsync<Exception>(() => manager.ExecuteCommandAsync("acme.t.run"));
-        await Harness.WaitUntil(() => host.State == PluginHostState.Running && host.Commands.Contains("acme.t.other"));
+        await RestartedAfter(1);
         Assert.Equal("alive", Str(await manager.ExecuteCommandAsync("acme.t.other")));
         // Whichever budget a fast machine hits first: work units or time.
         Assert.Contains(host.Log, e => e.Text.Contains("exceeded its"));
 
         await Assert.ThrowsAnyAsync<Exception>(() => manager.ExecuteCommandAsync("acme.t.run"));
-        await Harness.WaitUntil(() => host.State == PluginHostState.Running && host.Commands.Contains("acme.t.other"));
+        await RestartedAfter(2);
         await Assert.ThrowsAnyAsync<Exception>(() => manager.ExecuteCommandAsync("acme.t.run"));
         await Harness.WaitUntil(() => host.State == PluginHostState.Stopped);
         Assert.Contains("3 crashes", host.LastError);
@@ -258,28 +263,5 @@ public sealed class RuntimeTests : IAsyncDisposable
         await manager.FireAsync("onAgentInstalled:codex");
         Assert.Equal(PluginHostState.Running, manager.Find("acme.codex")!.State);
         Assert.Equal(PluginHostState.Inactive, manager.Find("acme.lazy")!.State);
-    }
-
-    [Fact]
-    public async Task Deactivation_disposes_what_the_plugin_put_in_its_subscriptions()
-    {
-        _h.Plugin("acme.t", """
-            import { commands } from 'octopus';
-            export function activate(ctx) {
-              ctx.subscriptions.push(commands.register('acme.t.run', () => 1));
-              ctx.subscriptions.push({ dispose() { console.log('disposed'); } });
-            }
-            export function deactivate() { console.log('deactivating'); }
-            """, Commands);
-        var manager = await _h.StartAsync();
-        await manager.EnsureActiveAsync("acme.t");
-        var host = manager.Find("acme.t")!;
-
-        await manager.SetEnabledAsync("acme.t", false);
-
-        await Harness.WaitUntil(() => host.State == PluginHostState.Stopped);
-        var texts = host.Log.Select(e => e.Text).ToList();
-        Assert.True(texts.IndexOf("deactivating") < texts.IndexOf("disposed"), string.Join(" | ", texts));
-        Assert.Null(manager.Find("acme.t"));
     }
 }

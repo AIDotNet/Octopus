@@ -87,12 +87,12 @@ public sealed class Harness : IAsyncDisposable, IAppPaths
         return _manager;
     }
 
-    public static async Task WaitUntil(Func<bool> condition, int timeoutMs = 20_000)
+    public static async Task WaitUntil(Func<bool> condition, int timeoutMs = 20_000, Func<string>? describe = null)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
         while (!condition())
         {
-            if (Environment.TickCount64 > deadline) throw new TimeoutException("The condition did not become true in time.");
+            if (Environment.TickCount64 > deadline) throw new TimeoutException("The condition did not become true in time." + (describe is null ? "" : " " + describe()));
             await Task.Delay(10);
         }
     }
