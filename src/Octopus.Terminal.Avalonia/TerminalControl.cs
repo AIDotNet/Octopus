@@ -390,7 +390,7 @@ public sealed class TerminalControl : Decorator
             return;
         }
         _session = session;
-        _router = new TerminalInputRouter(session, () => Keymap, GetClipboardTextAsync, SetClipboardTextAsync, AllowPasteAsync, OpenSearch);
+        _router = new TerminalInputRouter(session, () => Keymap, GetClipboardTextAsync, SaveClipboardImageAsync, SetClipboardTextAsync, AllowPasteAsync, OpenSearch);
         IsRunning = true;
         session.ForceFlush();
     }
@@ -554,6 +554,20 @@ public sealed class TerminalControl : Decorator
     {
         if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return null;
         return await clipboard.TryGetTextAsync();
+    }
+
+    /// <summary>Writes an image on the clipboard to a temporary PNG and returns its path; null when there is none.</summary>
+    private async Task<string?> SaveClipboardImageAsync()
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return null;
+        try
+        {
+            if (!(await clipboard.GetDataFormatsAsync()).Contains(global::Avalonia.Input.DataFormat.Bitmap)) return null;
+            using var bitmap = await clipboard.TryGetBitmapAsync();
+            if (bitmap is null) return null;
+            return ClipboardImages.Save(bitmap);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException) { return null; }
     }
 
     private Task SetClipboardTextAsync(string text) =>

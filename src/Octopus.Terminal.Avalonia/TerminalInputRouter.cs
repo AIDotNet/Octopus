@@ -12,10 +12,12 @@ public sealed class TerminalInputRouter(
     TerminalSession session,
     Func<ITerminalKeymap> keymap,
     Func<Task<string?>> getClipboardText,
+    Func<Task<string?>> saveClipboardImage,
     Func<string, Task> setClipboardText,
     Func<string, bool, Task<bool>> allowPaste,
     Action openSearch) : IDisposable
 {
+    private const KeyMods Relevant = KeyMods.Shift | KeyMods.Ctrl | KeyMods.Alt | KeyMods.Super;
     private const int WheelLinesPerNotch = 3;
     private static readonly TimeSpan MultiClickInterval = TimeSpan.FromMilliseconds(500);
 
@@ -39,6 +41,14 @@ public sealed class TerminalInputRouter(
         }
 
         var modes = session.ReadInputModes();
+        if (input.Action == KeyAction.Press && Translate(input, modes) is { } text)
+        {
+            session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
+            session.Send(text);
+            e.Handled = true;
+            return;
+        }
+
         if (input.Action != KeyAction.Release) session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
         _encoder.Apply(modes);
         Span<byte> buffer = stackalloc byte[128];
@@ -48,6 +58,35 @@ public sealed class TerminalInputRouter(
             session.Send(buffer[..n]);
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// Keys that other terminals turn into the plain bytes shells and agent CLIs understand, where the encoder would
+    /// send a CSI sequence they ignore. Null when the key goes through the encoder.
+    /// </summary>
+    public static string? Translate(in KeyInput input, in InputModes modes)
+    {
+        var mods = input.Mods & Relevant;
+        // Ctrl+J is the line feed. Agent CLIs such as Claude Code read it as "insert a newline" while Enter (0x0D)
+        // submits. Always plain, the program cannot tell it from Enter otherwise.
+        if (input.Key == TerminalKey.J && mods == KeyMods.Ctrl) return "\n";
+
+        // A program that asked for the extended keyboard protocol, or a full-screen one (vim, less), gets the
+        // real key and decides itself.
+        if (modes.KittyFlags != 0 || modes.AlternateScreen) return null;
+        return (input.Key, mods) switch
+        {
+            // Shift+Enter: a newline without submitting, like Ctrl+J.
+            (TerminalKey.Enter, KeyMods.Shift) => "\n",
+            // Command+arrows / Backspace edit the line (readline: start, end, kill to start).
+            (TerminalKey.ArrowLeft, KeyMods.Super) => "\u0001",
+            (TerminalKey.ArrowRight, KeyMods.Super) => "\u0005",
+            (TerminalKey.Backspace, KeyMods.Super) => "\u0015",
+            // Option+arrows move by word (readline: backward-word, forward-word).
+            (TerminalKey.ArrowLeft, KeyMods.Alt) => "\u001bb",
+            (TerminalKey.ArrowRight, KeyMods.Alt) => "\u001bf",
+            _ => null,
+        };
     }
 
     /// <summary>Printable text, including what an input method committed.</summary>
@@ -188,6 +227,9 @@ public sealed class TerminalInputRouter(
     public async Task PasteAsync()
     {
         var text = await getClipboardText().ConfigureAwait(true);
+        // No text: an image on the clipboard is saved to a file and its path pasted, which is what agent CLIs
+        // (Claude Code) and shells can both use; a terminal cannot carry the pixels itself.
+        if (string.IsNullOrEmpty(text)) text = await saveClipboardImage().ConfigureAwait(true);
         if (string.IsNullOrEmpty(text)) return;
         if (_pasting) return;
         _pasting = true;
