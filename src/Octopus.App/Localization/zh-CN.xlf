@@ -15,6 +15,11 @@
     <unit id="NewProjectAdd"><segment><source>Add project</source><target state="translated">添加项目</target></segment></unit>
     <unit id="NewProjectFolderRequired"><segment><source>Choose a folder.</source><target state="translated">请选择一个目录。</target></segment></unit>
     <unit id="NewProjectFolderMissing"><segment><source>This folder does not exist.</source><target state="translated">这个目录不存在。</target></segment></unit>
+    <unit id="NewProjectLocation"><segment><source>Location</source><target state="translated">位置</target></segment></unit>
+    <unit id="NewProjectLocalMachine"><segment><source>This computer</source><target state="translated">本机</target></segment></unit>
+    <unit id="NewProjectRemoteFolder"><segment><source>Folder on the host</source><target state="translated">主机上的文件夹</target></segment></unit>
+    <unit id="NewProjectRemoteFolderPlaceholder"><segment><source>For example ~/code/app</source><target state="translated">例如 ~/code/app</target></segment></unit>
+    <unit id="NewProjectRemoteHint"><segment><source>The folder is checked when a terminal opens in it, not here.</source><target state="translated">打开终端时才会检查这个文件夹，这里不检查。</target></segment></unit>
     <unit id="Appearance"><segment><source>Appearance</source><target state="translated">外观</target></segment></unit>
     <unit id="AppearanceDescription"><segment><source>Light, dark, or follow the system setting. The switch in the top bar changes it too.</source><target state="translated">浅色、深色或跟随系统设置。顶栏中的开关也可以切换。</target></segment></unit>
     <unit id="AppearanceSystem"><segment><source>System</source><target state="translated">跟随系统</target></segment></unit>
@@ -39,6 +44,71 @@
     <unit id="SettingsNavTerminal"><segment><source>Terminal</source><target state="translated">终端</target></segment></unit>
     <unit id="SettingsNavAppearance"><segment><source>Appearance</source><target state="translated">外观</target></segment></unit>
     <unit id="SettingsNavShortcuts"><segment><source>Shortcuts</source><target state="translated">快捷键</target></segment></unit>
+    <unit id="SettingsNavSsh"><segment><source>SSH hosts</source><target state="translated">SSH 主机</target></segment></unit>
+    <unit id="SettingsSshTitle"><segment><source>SSH hosts</source><target state="translated">SSH 主机</target></segment></unit>
+    <unit id="SettingsSshSubtitle"><segment><source>{0} SSH hosts from ~/.ssh/config. Choose one when you add a project.</source><target state="translated">来自 ~/.ssh/config 的 {0} 个 SSH 主机。新建项目时可以选择它们。</target></segment></unit>
+    <unit id="SettingsSshConfigFile"><segment><source>Config file</source><target state="translated">配置文件</target></segment></unit>
+    <unit id="SettingsSshHint"><segment><source>Add or change hosts in this file, save it, then scan again.</source><target state="translated">在这个文件里增加或修改主机，保存后点击重新扫描。</target></segment></unit>
+    <unit id="SettingsSshOpenConfig"><segment><source>Open config file</source><target state="translated">打开配置文件</target></segment></unit>
+    <unit id="SettingsSshNoConfig"><segment><source>There is no ~/.ssh/config yet, so there are no SSH hosts.</source><target state="translated">还没有 ~/.ssh/config，所以没有可用的 SSH 主机。</target></segment></unit>
+    <unit id="SettingsSshNoHosts"><segment><source>The config file has no host to connect to.</source><target state="translated">配置文件里没有可以连接的主机。</target></segment></unit>
+    <unit id="SettingsSshVia"><segment><source>via {0}</source><target state="translated">经由 {0}</target></segment></unit>
+    <unit id="SettingsSshKey"><segment><source>key {0}</source><target state="translated">密钥 {0}</target></segment></unit>
+    <unit id="ExplorerRemoteStatus"><segment><source>The host's files could not be read: {0}</source><target state="translated">无法读取主机上的文件：{0}</target></segment></unit>
+    <unit id="RemoteOpenFailed"><segment><source>The remote file could not be opened</source><target state="translated">无法打开远端文件</target></segment></unit>
+    <unit id="RemoteOpenFailedClose"><segment><source>OK</source><target state="translated">好</target></segment></unit>
+    <unit id="RemoteFileTooLarge"><segment><source>The file is over {0} MB and is not copied to this computer.</source><target state="translated">文件超过 {0} MB，不复制到本机。</target></segment></unit>
+    <unit id="TerminalConnecting"><segment><source>Connecting to {0}…</source><target state="translated">正在连接 {0}…</target></segment></unit>
+    <unit id="TerminalConnectEnded"><segment><source>The connection ended before it was ready (exit code {0}).</source><target state="translated">连接在完成前结束（退出码 {0}）。</target></segment></unit>
+    <unit id="TerminalConnectStepConnect"><segment><source>Open the connection</source><target state="translated">建立连接</target></segment></unit>
+    <unit id="TerminalConnectStepNegotiate"><segment><source>Negotiate encryption</source><target state="translated">协商加密</target></segment></unit>
+    <unit id="TerminalConnectStepHostKey"><segment><source>Check the host key</source><target state="translated">核对主机密钥</target></segment></unit>
+    <unit id="TerminalConnectStepAuth"><segment><source>Verify identity</source><target state="translated">验证身份</target></segment></unit>
+    <unit id="TerminalConnectStepSession"><segment><source>Open the terminal</source><target state="translated">打开终端</target></segment></unit>
+    <unit id="TerminalConnectProtocol"><segment><source>Protocol</source><target state="translated">协议信息</target></segment></unit>
+    <unit id="ExplorerRemoteConnecting"><segment><source>Connecting to the host…</source><target state="translated">正在连接主机…</target></segment></unit>
+    <unit id="ExplorerRemoteReading"><segment><source>Reading…</source><target state="translated">正在读取…</target></segment></unit>
+    <unit id="ExplorerNewFileMenu"><segment><source>New file…</source><target state="translated">新建文件…</target></segment></unit>
+    <unit id="ExplorerNewFolderMenu"><segment><source>New folder…</source><target state="translated">新建文件夹…</target></segment></unit>
+    <unit id="ExplorerRenameMenu"><segment><source>Rename…</source><target state="translated">重命名…</target></segment></unit>
+    <unit id="ExplorerDeleteMenu"><segment><source>Delete…</source><target state="translated">删除…</target></segment></unit>
+    <unit id="ExplorerNewFileTitle"><segment><source>New file</source><target state="translated">新建文件</target></segment></unit>
+    <unit id="ExplorerNewFolderTitle"><segment><source>New folder</source><target state="translated">新建文件夹</target></segment></unit>
+    <unit id="ExplorerRenameTitle"><segment><source>Rename</source><target state="translated">重命名</target></segment></unit>
+    <unit id="ExplorerNameLabel"><segment><source>Name</source><target state="translated">名称</target></segment></unit>
+    <unit id="ExplorerCreateConfirm"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
+    <unit id="ExplorerRenameConfirm"><segment><source>Rename</source><target state="translated">重命名</target></segment></unit>
+    <unit id="ExplorerDeleteTitle"><segment><source>Delete “{0}”?</source><target state="translated">删除“{0}”？</target></segment></unit>
+    <unit id="ExplorerDeleteLocalBody"><segment><source>It goes to the Trash or the Recycle Bin.</source><target state="translated">它会移到废纸篓或回收站。</target></segment></unit>
+    <unit id="ExplorerDeleteRemoteBody"><segment><source>It is deleted on the host for good: a host has no trash.</source><target state="translated">它会从主机上永久删除，主机没有废纸篓。</target></segment></unit>
+    <unit id="ExplorerDeleteFolderSuffix"><segment><source>Everything in the folder goes too.</source><target state="translated">文件夹里的所有内容也会一起删除。</target></segment></unit>
+    <unit id="ExplorerDeleteConfirm"><segment><source>Delete</source><target state="translated">删除</target></segment></unit>
+    <unit id="ExplorerInvalidName"><segment><source>The name cannot be empty or contain / or \\.</source><target state="translated">名称不能为空，也不能含 / 或 \\。</target></segment></unit>
+    <unit id="ExplorerOperationFailed"><segment><source>The change was not made</source><target state="translated">没有完成这次修改</target></segment></unit>
+    <unit id="RemoteChangedTitle"><segment><source>The file has changed on the host</source><target state="translated">主机上的文件已经改变</target></segment></unit>
+    <unit id="RemoteChangedBody"><segment><source>Overwriting replaces what is on the host with your version.</source><target state="translated">覆盖会用你的版本替换主机上的内容。</target></segment></unit>
+    <unit id="RemoteDeletedTitle"><segment><source>The file is gone from the host</source><target state="translated">主机上已没有这个文件</target></segment></unit>
+    <unit id="RemoteDeletedBody"><segment><source>Saving creates it on the host again.</source><target state="translated">保存会在主机上重新创建它。</target></segment></unit>
+    <unit id="RemoteOverwrite"><segment><source>Overwrite the file on the host</source><target state="translated">覆盖主机上的文件</target></segment></unit>
+    <unit id="SettingsSshAdd"><segment><source>Add host</source><target state="translated">新增主机</target></segment></unit>
+    <unit id="SettingsSshAddTitle"><segment><source>Add SSH host</source><target state="translated">新增 SSH 主机</target></segment></unit>
+    <unit id="SettingsSshAddDescription"><segment><source>Writes one Host block to ~/.ssh/config with the fields you fill in; ssh uses its defaults for the rest.</source><target state="translated">写入 ~/.ssh/config 的一个 Host 块，只包含填写了的项；其余由 ssh 使用默认值。</target></segment></unit>
+    <unit id="SettingsSshAddConfirm"><segment><source>Add</source><target state="translated">添加</target></segment></unit>
+    <unit id="SettingsSshFieldAlias"><segment><source>Alias</source><target state="translated">别名</target></segment></unit>
+    <unit id="SettingsSshFieldAliasHint"><segment><source>The name used in ssh and in projects, for example prod-web.</source><target state="translated">项目和 ssh 命令里使用的名字，例如 prod-web。</target></segment></unit>
+    <unit id="SettingsSshFieldHostName"><segment><source>Host name</source><target state="translated">地址</target></segment></unit>
+    <unit id="SettingsSshFieldHostNameHint"><segment><source>IP address or domain name; empty uses the alias.</source><target state="translated">IP 地址或域名；留空时使用别名。</target></segment></unit>
+    <unit id="SettingsSshFieldUser"><segment><source>User</source><target state="translated">用户</target></segment></unit>
+    <unit id="SettingsSshFieldPort"><segment><source>Port</source><target state="translated">端口</target></segment></unit>
+    <unit id="SettingsSshFieldIdentityFile"><segment><source>Identity file</source><target state="translated">密钥文件</target></segment></unit>
+    <unit id="SettingsSshFieldProxyJump"><segment><source>Jump host</source><target state="translated">跳板机</target></segment></unit>
+    <unit id="SettingsSshProblemRequired"><segment><source>Required.</source><target state="translated">必须填写。</target></segment></unit>
+    <unit id="SettingsSshProblemAliasFormat"><segment><source>Start with a letter or digit; then letters, digits, dots, underscores and dashes.</source><target state="translated">以字母或数字开头，之后可以有字母、数字、点、下划线和短横线。</target></segment></unit>
+    <unit id="SettingsSshProblemAliasExists"><segment><source>The file already has a host with this alias.</source><target state="translated">配置文件里已经有这个别名。</target></segment></unit>
+    <unit id="SettingsSshProblemWord"><segment><source>No spaces, quotes, #, = or a leading dash.</source><target state="translated">不能含空格、引号、# 或 =，也不能以 - 开头。</target></segment></unit>
+    <unit id="SettingsSshProblemPort"><segment><source>The port must be a number from 1 to 65535.</source><target state="translated">端口需为 1 到 65535 之间的数字。</target></segment></unit>
+    <unit id="SettingsSshProblemKeyPath"><segment><source>The path cannot have quotes or line breaks.</source><target state="translated">路径里不能有引号或换行。</target></segment></unit>
+    <unit id="SettingsSshWriteFailed"><segment><source>The config file could not be written: {0}</source><target state="translated">无法写入配置文件：{0}</target></segment></unit>
     <unit id="SettingsAgentsTitle"><segment><source>Agents</source><target state="translated">智能体</target></segment></unit>
     <unit id="SettingsAgentsSubtitle"><segment><source>{0} agents found on this machine. What you can configure for each one depends on what it supports.</source><target state="translated">已扫描到 {0} 个已安装的智能体。每个智能体能配置什么，取决于它自己支持什么。</target></segment></unit>
     <unit id="SettingsDefaultPermission"><segment><source>Default permission</source><target state="translated">默认权限</target></segment></unit>
@@ -98,8 +168,10 @@
     <unit id="SettingsEnvSecretNote"><segment><source>Saved as plain text in settings.json</source><target state="translated">以明文保存在 settings.json</target></segment></unit>
     <unit id="SettingsBrowse"><segment><source>Browse…</source><target state="translated">浏览…</target></segment></unit>
     <unit id="SettingsGeneralTitle"><segment><source>General</source><target state="translated">通用</target></segment></unit>
-    <unit id="SettingsGeneralSubtitle"><segment><source>Language and what happens when the app starts again.</source><target state="translated">语言，以及应用再次启动时的行为。</target></segment></unit>
+    <unit id="SettingsGeneralSubtitle"><segment><source>Language, what happens when the app starts again, and updates.</source><target state="translated">语言、应用再次启动时的行为，以及更新。</target></segment></unit>
     <unit id="SettingsLanguageHint"><segment><source>The language of the whole app</source><target state="translated">整个应用使用的语言</target></segment></unit>
+    <unit id="SettingsRestoreItems"><segment><source>Reopen terminals and agents at startup</source><target state="translated">启动时恢复上次的终端和智能体</target></segment></unit>
+    <unit id="SettingsRestoreItemsHint"><segment><source>Off: every start begins without them. Files of a project stay.</source><target state="translated">关闭后每次启动都不带上次的终端和智能体；项目里的文件条目保留。</target></segment></unit>
     <unit id="SettingsResumeAgents"><segment><source>Continue agent sessions after restart</source><target state="translated">重启后继续智能体会话</target></segment></unit>
     <unit id="SettingsResumeAgentsHint"><segment><source>Agents that were open come back with their latest session.</source><target state="translated">上次打开的智能体会接着最近的会话继续。</target></segment></unit>
     <unit id="SettingsTerminalTitle"><segment><source>Terminal</source><target state="translated">终端</target></segment></unit>
@@ -167,6 +239,9 @@
     <unit id="ImageFileTooLarge"><segment><source>This image file is larger than 50 MB, so it is not previewed.</source><target state="translated">图片文件超过 50 MB，不显示预览。</target></segment></unit>
     <unit id="ImageTooManyPixels"><segment><source>This image is {0} × {1} pixels, too large to decode, so it is not previewed.</source><target state="translated">这张图片是 {0} × {1} 像素，太大，不解码预览。</target></segment></unit>
     <unit id="ImageBroken"><segment><source>This image is damaged or in a format that cannot be shown.</source><target state="translated">这张图片已损坏，或格式无法显示。</target></segment></unit>
+    <unit id="ImagePlay"><segment><source>Play</source><target state="translated">播放</target></segment></unit>
+    <unit id="ImagePause"><segment><source>Pause</source><target state="translated">暂停</target></segment></unit>
+    <unit id="ImageFrames"><segment><source>{0} frames</source><target state="translated">{0} 帧</target></segment></unit>
     <unit id="MdUnsaved"><segment><source>Unsaved</source><target state="translated">未保存</target></segment></unit>
     <unit id="MdSave"><segment><source>Save</source><target state="translated">保存</target></segment></unit>
     <unit id="MdReadOnlyTitle"><segment><source>Opened read-only</source><target state="translated">已只读打开</target></segment></unit>
@@ -220,6 +295,7 @@
     <unit id="ScanningAgents"><segment><source>Scanning for agents…</source><target state="translated">正在扫描智能体…</target></segment></unit>
     <unit id="NoAgentsFound"><segment><source>No agents found</source><target state="translated">没有找到智能体</target></segment></unit>
     <unit id="NoAgentsFoundHint"><segment><source>Install an agent such as Claude Code or Codex, then scan again in the agent settings.</source><target state="translated">安装 Claude Code、Codex 等智能体后，在智能体设置里重新扫描。</target></segment></unit>
+    <unit id="NoAgentsInSshProject"><segment><source>Agents don't run in a project on an SSH host yet. Run them in a terminal there instead.</source><target state="translated">智能体暂时不能在 SSH 主机上的项目里运行，请在那里的终端中运行。</target></segment></unit>
     <unit id="DefaultBadge"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
     <unit id="ShowLaunchOptions"><segment><source>Show launch options</source><target state="translated">显示启动选项</target></segment></unit>
     <unit id="AgentSettingsMenu"><segment><source>Agent settings…</source><target state="translated">智能体设置…</target></segment></unit>
@@ -242,6 +318,8 @@
     <unit id="Files"><segment><source>Files</source><target state="translated">文件</target></segment></unit>
     <unit id="GroupEmpty"><segment><source>None yet</source><target state="translated">暂无</target></segment></unit>
     <unit id="NewAgent"><segment><source>Start agent</source><target state="translated">启动智能体</target></segment></unit>
+    <unit id="NewItem"><segment><source>New terminal or agent</source><target state="translated">新建终端或智能体</target></segment></unit>
+    <unit id="ItemList"><segment><source>Terminals and agents</source><target state="translated">终端和智能体</target></segment></unit>
     <unit id="Rename"><segment><source>Rename</source><target state="translated">重命名</target></segment></unit>
     <unit id="Restart"><segment><source>Restart</source><target state="translated">重新启动</target></segment></unit>
     <unit id="MoveToRightGroup"><segment><source>Move to new group on the right</source><target state="translated">移到右侧新分组</target></segment></unit>
@@ -292,6 +370,50 @@
     <unit id="ExplorerClean"><segment><source>The working tree is clean</source><target state="translated">工作区是干净的</target></segment></unit>
     <unit id="ExplorerRecentCommits"><segment><source>Recent commits</source><target state="translated">最近提交</target></segment></unit>
     <unit id="ExplorerNoCommits"><segment><source>No commits yet</source><target state="translated">还没有提交</target></segment></unit>
+    <unit id="ExplorerCommitMessage"><segment><source>Message (⌘Enter to commit)</source><target state="translated">提交信息（⌘Enter 提交）</target></segment></unit>
+    <unit id="ExplorerCommitMessageOther"><segment><source>Message (Ctrl+Enter to commit)</source><target state="translated">提交信息（Ctrl+Enter 提交）</target></segment></unit>
+    <unit id="ExplorerCommit"><segment><source>Commit</source><target state="translated">提交</target></segment></unit>
+    <unit id="ExplorerStageAllAndCommit"><segment><source>Stage all and commit</source><target state="translated">暂存全部并提交</target></segment></unit>
+    <unit id="ExplorerStage"><segment><source>Stage changes</source><target state="translated">暂存更改</target></segment></unit>
+    <unit id="ExplorerUnstage"><segment><source>Unstage changes</source><target state="translated">取消暂存</target></segment></unit>
+    <unit id="ExplorerStageAll"><segment><source>Stage all changes</source><target state="translated">暂存全部更改</target></segment></unit>
+    <unit id="ExplorerUnstageAll"><segment><source>Unstage all changes</source><target state="translated">取消暂存全部更改</target></segment></unit>
+    <unit id="ExplorerGitFailed"><segment><source>Git: {0}</source><target state="translated">Git：{0}</target></segment></unit>
+    <unit id="ExplorerPull"><segment><source>Pull</source><target state="translated">拉取</target></segment></unit>
+    <unit id="ExplorerPush"><segment><source>Push</source><target state="translated">推送</target></segment></unit>
+    <unit id="ExplorerFetch"><segment><source>Fetch</source><target state="translated">获取</target></segment></unit>
+    <unit id="ExplorerMoreGit"><segment><source>More Git actions</source><target state="translated">更多 Git 操作</target></segment></unit>
+    <unit id="ExplorerSwitchBranch"><segment><source>Switch branch</source><target state="translated">切换分支</target></segment></unit>
+    <unit id="ExplorerRemoteBranches"><segment><source>Remote branches</source><target state="translated">远程分支</target></segment></unit>
+    <unit id="ExplorerNewBranch"><segment><source>New branch…</source><target state="translated">新建分支…</target></segment></unit>
+    <unit id="ExplorerNewBranchTitle"><segment><source>New branch</source><target state="translated">新建分支</target></segment></unit>
+    <unit id="ExplorerBranchName"><segment><source>Branch name</source><target state="translated">分支名</target></segment></unit>
+    <unit id="ExplorerCreate"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
+    <unit id="ExplorerDeleteBranch"><segment><source>Delete branch</source><target state="translated">删除分支</target></segment></unit>
+    <unit id="ExplorerDeleteBranchTitle"><segment><source>Delete branch {0}?</source><target state="translated">删除分支 {0}？</target></segment></unit>
+    <unit id="ExplorerDeleteBranchDescription"><segment><source>Commits that are only on this branch will be hard to find afterwards.</source><target state="translated">只在这个分支上的提交，删除后就很难找回。</target></segment></unit>
+    <unit id="ExplorerDeleteBranchUnmerged"><segment><source>Branch {0} is not merged. Delete it anyway?</source><target state="translated">分支 {0} 还没有合并，仍要删除吗？</target></segment></unit>
+    <unit id="ExplorerDelete"><segment><source>Delete</source><target state="translated">删除</target></segment></unit>
+    <unit id="ExplorerStash"><segment><source>Stash all changes</source><target state="translated">储藏全部改动</target></segment></unit>
+    <unit id="ExplorerStashPop"><segment><source>Pop latest stash</source><target state="translated">弹出最近的储藏</target></segment></unit>
+    <unit id="ExplorerAmend"><segment><source>Amend last commit</source><target state="translated">修改上次提交</target></segment></unit>
+    <unit id="ExplorerDiscard"><segment><source>Discard changes</source><target state="translated">放弃更改</target></segment></unit>
+    <unit id="ExplorerDiscardAll"><segment><source>Discard all changes</source><target state="translated">放弃全部更改</target></segment></unit>
+    <unit id="ExplorerDeleteUntracked"><segment><source>Delete file</source><target state="translated">删除文件</target></segment></unit>
+    <unit id="ExplorerDeleteAllUntracked"><segment><source>Delete all untracked files</source><target state="translated">删除全部未跟踪文件</target></segment></unit>
+    <unit id="ExplorerDiscardTitle"><segment><source>Discard changes to {0}?</source><target state="translated">放弃对 {0} 的更改？</target></segment></unit>
+    <unit id="ExplorerDiscardManyTitle"><segment><source>Discard changes to {0} files?</source><target state="translated">放弃 {0} 个文件的更改？</target></segment></unit>
+    <unit id="ExplorerDiscardDescription"><segment><source>The changes in the working tree are lost. This cannot be undone.</source><target state="translated">工作区里的这些修改会丢失，无法撤销。</target></segment></unit>
+    <unit id="ExplorerDeleteUntrackedTitle"><segment><source>Delete {0}?</source><target state="translated">删除 {0}？</target></segment></unit>
+    <unit id="ExplorerDeleteUntrackedManyTitle"><segment><source>Delete {0} untracked files?</source><target state="translated">删除 {0} 个未跟踪的文件？</target></segment></unit>
+    <unit id="ExplorerDeleteUntrackedDescription"><segment><source>These files are not in git; once deleted they cannot be brought back.</source><target state="translated">这些文件不在 git 里，删除后无法恢复。</target></segment></unit>
+    <unit id="ExplorerBusyPull"><segment><source>Pulling…</source><target state="translated">正在拉取…</target></segment></unit>
+    <unit id="ExplorerBusyPush"><segment><source>Pushing…</source><target state="translated">正在推送…</target></segment></unit>
+    <unit id="ExplorerBusyFetch"><segment><source>Fetching…</source><target state="translated">正在获取…</target></segment></unit>
+    <unit id="ExplorerBusyCommit"><segment><source>Committing…</source><target state="translated">正在提交…</target></segment></unit>
+    <unit id="ExplorerBusy"><segment><source>Running git…</source><target state="translated">正在运行 git…</target></segment></unit>
+    <unit id="ExplorerCommitFiles"><segment><source>{0} files</source><target state="translated">{0} 个文件</target></segment></unit>
+    <unit id="DiffTitleCommit"><segment><source>{0} ({1})</source><target state="translated">{0}（{1}）</target></segment></unit>
     <unit id="ExplorerDetached"><segment><source>detached</source><target state="translated">游离 HEAD</target></segment></unit>
     <unit id="ExplorerAgoNow"><segment><source>just now</source><target state="translated">刚刚</target></segment></unit>
     <unit id="ExplorerAgoMinutes"><segment><source>{0} min ago</source><target state="translated">{0} 分钟前</target></segment></unit>
@@ -306,5 +428,147 @@
     <unit id="DiffEmpty"><segment><source>No changes to show. The file may have been changed back.</source><target state="translated">没有可显示的改动，文件可能已改回原样。</target></segment></unit>
     <unit id="DiffTruncated"><segment><source>Showing the first {0} of {1} lines. The rest is not shown.</source><target state="translated">只显示前 {0} 行，共 {1} 行，其余部分不显示。</target></segment></unit>
     <unit id="DiffFailed"><segment><source>The changes could not be read.</source><target state="translated">无法读取改动。</target></segment></unit>
+    <unit id="ChangeProjectIcon"><segment><source>Change icon…</source><target state="translated">更换图标…</target></segment></unit>
+    <unit id="ProjectAppearanceTitle"><segment><source>Project icon</source><target state="translated">项目图标</target></segment></unit>
+    <unit id="ProjectAppearanceDescription"><segment><source>Pick a color and an icon, or use a picture.</source><target state="translated">选择颜色和图标，或者使用一张图片。</target></segment></unit>
+    <unit id="ProjectAppearanceColor"><segment><source>Color</source><target state="translated">颜色</target></segment></unit>
+    <unit id="ProjectAppearanceIcon"><segment><source>Icon</source><target state="translated">图标</target></segment></unit>
+    <unit id="ProjectAppearanceInitial"><segment><source>Initial</source><target state="translated">首字母</target></segment></unit>
+    <unit id="ProjectAppearancePicture"><segment><source>Picture</source><target state="translated">图片</target></segment></unit>
+    <unit id="ProjectAppearanceChoosePicture"><segment><source>Choose picture…</source><target state="translated">选择图片…</target></segment></unit>
+    <unit id="ProjectAppearanceRemovePicture"><segment><source>Remove picture</source><target state="translated">移除图片</target></segment></unit>
+    <unit id="ProjectAppearancePictureHint"><segment><source>Cropped to a square and saved as a 128 × 128 thumbnail. The original file is not kept.</source><target state="translated">图片会裁成正方形并压缩为 128×128 缩略图保存，不保留原文件。</target></segment></unit>
+    <unit id="ProjectAppearancePictureFailed"><segment><source>This file could not be read as an image.</source><target state="translated">无法将这个文件读取为图片。</target></segment></unit>
+    <unit id="ProjectAppearancePictureFilter"><segment><source>Images</source><target state="translated">图片</target></segment></unit>
+    <unit id="Save"><segment><source>Save</source><target state="translated">保存</target></segment></unit>
+    <unit id="UpdateAvailableTitle"><segment><source>Octopus {0} is available</source><target state="translated">发现新版本 {0}</target></segment></unit>
+    <unit id="UpdateDownloadingTitle"><segment><source>Downloading Octopus {0}</source><target state="translated">正在下载 {0}</target></segment></unit>
+    <unit id="UpdateReadyTitle"><segment><source>Octopus {0} is ready</source><target state="translated">{0} 已就绪</target></segment></unit>
+    <unit id="UpdateFailedTitle"><segment><source>The update did not work</source><target state="translated">更新失败</target></segment></unit>
+    <unit id="UpdateReadyDetail"><segment><source>It installs when you quit Octopus.</source><target state="translated">退出 Octopus 时自动安装。</target></segment></unit>
+    <unit id="UpdatePortableDetail"><segment><source>This copy cannot update itself. Get the new version from the download page.</source><target state="translated">当前安装方式不支持自动更新，请到下载页获取新版本。</target></segment></unit>
+    <unit id="UpdateReadOnlyDetail"><segment><source>Octopus cannot write to its install folder. Get the new version from the download page.</source><target state="translated">没有写入安装目录的权限，无法自动更新，请到下载页获取新版本。</target></segment></unit>
+    <unit id="UpdateKindPreview"><segment><source>Preview</source><target state="translated">预览版</target></segment></unit>
+    <unit id="UpdateKindRelease"><segment><source>Release</source><target state="translated">正式版</target></segment></unit>
+    <unit id="UpdatePublished"><segment><source>released {0}</source><target state="translated">{0} 发布</target></segment></unit>
+    <unit id="UpdateNotes"><segment><source>Release notes</source><target state="translated">更新说明</target></segment></unit>
+    <unit id="UpdateSkip"><segment><source>Skip this version</source><target state="translated">跳过此版本</target></segment></unit>
+    <unit id="UpdateLater"><segment><source>Later</source><target state="translated">稍后</target></segment></unit>
+    <unit id="UpdateDownload"><segment><source>Download and update</source><target state="translated">下载并更新</target></segment></unit>
+    <unit id="UpdateRestart"><segment><source>Restart and update</source><target state="translated">立即重启并更新</target></segment></unit>
+    <unit id="UpdateOpenPage"><segment><source>Open download page</source><target state="translated">打开下载页</target></segment></unit>
+    <unit id="UpdateRetry"><segment><source>Try again</source><target state="translated">重试</target></segment></unit>
+    <unit id="UpdateClose"><segment><source>Close</source><target state="translated">关闭</target></segment></unit>
+    <unit id="UpdateProgressSize"><segment><source>{0} of {1} MB</source><target state="translated">{0} / {1} MB</target></segment></unit>
+    <unit id="UpdateRemainingSeconds"><segment><source>about {0} s left</source><target state="translated">剩余约 {0} 秒</target></segment></unit>
+    <unit id="UpdateRemainingMinutes"><segment><source>about {0} min left</source><target state="translated">剩余约 {0} 分钟</target></segment></unit>
+    <unit id="UpdateErrorNetwork"><segment><source>The update server could not be reached.</source><target state="translated">无法连接到更新服务器。</target></segment></unit>
+    <unit id="UpdateErrorRateLimited"><segment><source>GitHub's request limit was reached. Try again later.</source><target state="translated">GitHub 的请求次数已达上限，请稍后再试。</target></segment></unit>
+    <unit id="UpdateErrorIntegrity"><segment><source>The downloaded file did not match the release and was deleted.</source><target state="translated">下载的文件与发布内容不符，已删除。</target></segment></unit>
+    <unit id="UpdateErrorPackage"><segment><source>The update package cannot be used: {0}</source><target state="translated">更新包无法使用：{0}</target></segment></unit>
+    <unit id="UpdateErrorDisk"><segment><source>The update could not be saved: {0}</source><target state="translated">无法保存更新文件：{0}</target></segment></unit>
+    <unit id="UpdateErrorInstall"><segment><source>Installing {0} failed twice: {1}</source><target state="translated">自动安装 {0} 已失败两次：{1}</target></segment></unit>
+    <unit id="UpdateUpdatedTo"><segment><source>Updated to Octopus {0}</source><target state="translated">已更新到 Octopus {0}</target></segment></unit>
+    <unit id="SettingsUpdates"><segment><source>Updates</source><target state="translated">更新</target></segment></unit>
+    <unit id="SettingsUpdateVersion"><segment><source>Version</source><target state="translated">当前版本</target></segment></unit>
+    <unit id="SettingsUpdateVersionPreview"><segment><source>{0} (preview)</source><target state="translated">{0}（预览版）</target></segment></unit>
+    <unit id="SettingsUpdateCheck"><segment><source>Check for updates</source><target state="translated">检查更新</target></segment></unit>
+    <unit id="SettingsUpdateMode"><segment><source>Automatic updates</source><target state="translated">自动更新</target></segment></unit>
+    <unit id="SettingsUpdateModeHint"><segment><source>New versions download in the background and install when you quit Octopus.</source><target state="translated">新版本在后台下载，退出 Octopus 时安装。</target></segment></unit>
+    <unit id="SettingsUpdateModeAuto"><segment><source>Download and install</source><target state="translated">自动下载并安装</target></segment></unit>
+    <unit id="SettingsUpdateModeNotify"><segment><source>Only tell me</source><target state="translated">只提醒</target></segment></unit>
+    <unit id="SettingsUpdateModeOff"><segment><source>Off</source><target state="translated">关闭</target></segment></unit>
+    <unit id="SettingsUpdateChannel"><segment><source>Channel</source><target state="translated">更新通道</target></segment></unit>
+    <unit id="SettingsUpdateChannelHint"><segment><source>Previews get new features first and change more often.</source><target state="translated">预览版更早拿到新功能，更新也更频繁。</target></segment></unit>
+    <unit id="SettingsUpdateChannelFollow"><segment><source>Same as this version ({0})</source><target state="translated">跟随当前版本（{0}）</target></segment></unit>
+    <unit id="SettingsUpdateChannelStable"><segment><source>Releases</source><target state="translated">正式版</target></segment></unit>
+    <unit id="SettingsUpdateChannelPreview"><segment><source>Previews</source><target state="translated">预览版</target></segment></unit>
+    <unit id="SettingsUpdateStatusUpToDate"><segment><source>Up to date · checked {0}</source><target state="translated">已是最新 · {0}检查</target></segment></unit>
+    <unit id="SettingsUpdateStatusNever"><segment><source>Not checked yet</source><target state="translated">尚未检查</target></segment></unit>
+    <unit id="SettingsUpdateStatusChecking"><segment><source>Checking…</source><target state="translated">正在检查…</target></segment></unit>
+    <unit id="SettingsUpdateStatusDownloading"><segment><source>Downloading {0} · {1}</source><target state="translated">正在下载 {0} · {1}</target></segment></unit>
+    <unit id="SettingsUpdateStatusReady"><segment><source>{0} is ready and installs when you quit</source><target state="translated">{0} 已就绪，退出时安装</target></segment></unit>
+    <unit id="SettingsUpdateDisabled"><segment><source>Development builds do not check for updates.</source><target state="translated">开发版不检查更新。</target></segment></unit>
+    <unit id="MoveToGroup"><segment><source>Move to group</source><target state="translated">移到分组</target></segment></unit>
+    <unit id="NoGroup"><segment><source>No group</source><target state="translated">未分组</target></segment></unit>
+    <unit id="NewGroupMenu"><segment><source>New group…</source><target state="translated">新建分组…</target></segment></unit>
+    <unit id="NewGroupTitle"><segment><source>New group</source><target state="translated">新建分组</target></segment></unit>
+    <unit id="NewGroupDefaultName"><segment><source>New group</source><target state="translated">新分组</target></segment></unit>
+    <unit id="GroupNameLabel"><segment><source>Group name</source><target state="translated">分组名称</target></segment></unit>
+    <unit id="CreateGroup"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
+    <unit id="RenameGroup"><segment><source>Rename group…</source><target state="translated">重命名分组…</target></segment></unit>
+    <unit id="RenameGroupTitle"><segment><source>Rename group</source><target state="translated">重命名分组</target></segment></unit>
+    <unit id="GroupColor"><segment><source>Color</source><target state="translated">颜色</target></segment></unit>
+    <unit id="RemoveGroup"><segment><source>Ungroup</source><target state="translated">解散分组</target></segment></unit>
+    <unit id="GroupProjectCountOne"><segment><source>1 project</source><target state="translated">1 个项目</target></segment></unit>
+    <unit id="GroupProjectCount"><segment><source>{0} projects</source><target state="translated">{0} 个项目</target></segment></unit>
+    <unit id="OpenGroup"><segment><source>Click to open</source><target state="translated">点击展开</target></segment></unit>
+    <unit id="CloseGroup"><segment><source>Click to close</source><target state="translated">点击收起</target></segment></unit>
+    <unit id="ColorIndigo"><segment><source>Indigo</source><target state="translated">靛蓝</target></segment></unit>
+    <unit id="ColorSky"><segment><source>Sky</source><target state="translated">天蓝</target></segment></unit>
+    <unit id="ColorEmerald"><segment><source>Green</source><target state="translated">绿色</target></segment></unit>
+    <unit id="ColorAmber"><segment><source>Amber</source><target state="translated">琥珀</target></segment></unit>
+    <unit id="ColorRed"><segment><source>Red</source><target state="translated">红色</target></segment></unit>
+    <unit id="ColorPink"><segment><source>Pink</source><target state="translated">粉色</target></segment></unit>
+    <unit id="ColorViolet"><segment><source>Violet</source><target state="translated">紫色</target></segment></unit>
+    <unit id="ColorTeal"><segment><source>Teal</source><target state="translated">青色</target></segment></unit>
+    <unit id="AgentEditorNeedName"><segment><source>Give the agent a name.</source><target state="translated">请填写智能体名称。</target></segment></unit>
+    <unit id="AgentEditorBadId"><segment><source>The id may only have letters, digits, '-', '_' and '.', and starts with a letter or digit.</source><target state="translated">ID 只能包含字母、数字、“-”、“_”和“.”，并以字母或数字开头。</target></segment></unit>
+    <unit id="AgentEditorIdTaken"><segment><source>An agent with the id {0} already exists.</source><target state="translated">已有 ID 为 {0} 的智能体。</target></segment></unit>
+    <unit id="AgentEditorIdChanged"><segment><source>The id of an existing agent cannot be changed; add a new agent instead.</source><target state="translated">已有智能体的 ID 不能修改，请新增一个智能体。</target></segment></unit>
+    <unit id="AgentEditorNeedExecutable"><segment><source>Name at least one executable to look for.</source><target state="translated">请至少填写一个可执行文件名。</target></segment></unit>
+    <unit id="AgentEditorModelNeedsValue"><segment><source>The model arguments need {value} where the model goes.</source><target state="translated">模型参数里需要用 {value} 表示模型名的位置。</target></segment></unit>
+    <unit id="AgentEditorPromptNeedsValue"><segment><source>The prompt flag needs {value} where the prompt goes.</source><target state="translated">提示词参数里需要用 {value} 表示提示词的位置。</target></segment></unit>
+    <unit id="AgentEditorBadJson"><segment><source>The JSON is not a valid agent definition: {0}</source><target state="translated">JSON 不是有效的智能体定义：{0}</target></segment></unit>
+    <unit id="AgentEditorAddTitle"><segment><source>Add agent</source><target state="translated">新增智能体</target></segment></unit>
+    <unit id="AgentEditorEditTitle"><segment><source>Edit {0}</source><target state="translated">编辑 {0}</target></segment></unit>
+    <unit id="AgentEditorDescription"><segment><source>Octopus looks for the executable on PATH and builds its command line from these arguments.</source><target state="translated">Octopus 会在 PATH 中查找可执行文件，并用这些参数拼出启动命令。</target></segment></unit>
+    <unit id="AgentEditorBuiltInNote"><segment><source>This agent ships with Octopus. Saving writes your own version, which replaces the built-in one until you restore it.</source><target state="translated">这是 Octopus 自带的智能体。保存后会写一份你自己的版本替换内置定义，可以随时恢复。</target></segment></unit>
+    <unit id="AgentEditorForm"><segment><source>Form</source><target state="translated">表单</target></segment></unit>
+    <unit id="AgentEditorJson"><segment><source>JSON</source><target state="translated">JSON</target></segment></unit>
+    <unit id="AgentEditorName"><segment><source>Name</source><target state="translated">名称</target></segment></unit>
+    <unit id="AgentEditorId"><segment><source>Id</source><target state="translated">ID</target></segment></unit>
+    <unit id="AgentEditorExecutables"><segment><source>Executables</source><target state="translated">可执行文件</target></segment></unit>
+    <unit id="AgentEditorExecutablesHint"><segment><source>Names to look for on PATH, in order, separated by spaces.</source><target state="translated">按顺序在 PATH 中查找的程序名，用空格分隔。</target></segment></unit>
+    <unit id="AgentEditorVersionArgs"><segment><source>Version arguments</source><target state="translated">版本参数</target></segment></unit>
+    <unit id="AgentEditorHomepage"><segment><source>Homepage</source><target state="translated">主页</target></segment></unit>
+    <unit id="AgentEditorBaseArgs"><segment><source>Arguments always passed</source><target state="translated">固定参数</target></segment></unit>
+    <unit id="AgentEditorModelArgs"><segment><source>Model arguments</source><target state="translated">模型参数</target></segment></unit>
+    <unit id="AgentEditorModelArgsHint"><segment><source>{value} is the model, e.g. --model {value}. Empty: no model choice.</source><target state="translated">{value} 代表模型名，例如 --model {value}。留空表示不提供模型选择。</target></segment></unit>
+    <unit id="AgentEditorModelOptions"><segment><source>Models</source><target state="translated">模型列表</target></segment></unit>
+    <unit id="AgentEditorModelOptionsHint"><segment><source>One model id per line.</source><target state="translated">每行一个模型 ID。</target></segment></unit>
+    <unit id="AgentEditorAllowCustomModel"><segment><source>Allow other models</source><target state="translated">允许填写其他模型</target></segment></unit>
+    <unit id="AgentEditorPrompt"><segment><source>Initial prompt</source><target state="translated">初始提示词</target></segment></unit>
+    <unit id="AgentEditorPromptPositional"><segment><source>Last argument</source><target state="translated">作为最后一个参数</target></segment></unit>
+    <unit id="AgentEditorPromptFlag"><segment><source>With a flag</source><target state="translated">通过参数传入</target></segment></unit>
+    <unit id="AgentEditorPromptNone"><segment><source>Not supported</source><target state="translated">不支持</target></segment></unit>
+    <unit id="AgentEditorPromptArgs"><segment><source>Prompt arguments</source><target state="translated">提示词参数</target></segment></unit>
+    <unit id="AgentEditorResumeArgs"><segment><source>Continue last session</source><target state="translated">继续上次会话的参数</target></segment></unit>
+    <unit id="AgentEditorExtraArgs"><segment><source>Allow extra arguments</source><target state="translated">允许额外参数</target></segment></unit>
+    <unit id="AgentEditorEnvironment"><segment><source>Environment</source><target state="translated">环境变量</target></segment></unit>
+    <unit id="AgentEditorEnvironmentHint"><segment><source>One NAME=value per line.</source><target state="translated">每行一个 NAME=value。</target></segment></unit>
+    <unit id="AgentEditorJsonHint"><segment><source>The whole definition, including what the form does not show (permission modes, effort, features). See design/05.</source><target state="translated">完整定义，包括表单里没有的部分（权限模式、推理强度、特性等），格式见 design/05。</target></segment></unit>
+    <unit id="SettingsAddAgent"><segment><source>Add agent</source><target state="translated">新增智能体</target></segment></unit>
+    <unit id="SettingsEditAgent"><segment><source>Edit</source><target state="translated">编辑</target></segment></unit>
+    <unit id="SettingsDeleteAgent"><segment><source>Delete agent</source><target state="translated">删除智能体</target></segment></unit>
+    <unit id="SettingsRestoreAgent"><segment><source>Restore built-in</source><target state="translated">恢复内置定义</target></segment></unit>
+    <unit id="SettingsDeleteAgentTitle"><segment><source>Delete {0}?</source><target state="translated">删除 {0}？</target></segment></unit>
+    <unit id="SettingsDeleteAgentDescription"><segment><source>Its definition file is removed; its settings stay in case you add it again.</source><target state="translated">会删除它的定义文件；它的设置会保留，再次添加时仍可使用。</target></segment></unit>
+    <unit id="SettingsRestoreAgentTitle"><segment><source>Restore the built-in {0}?</source><target state="translated">恢复内置的 {0}？</target></segment></unit>
+    <unit id="SettingsRestoreAgentDescription"><segment><source>Your version of its definition is removed and the one that ships with Octopus is used again.</source><target state="translated">会删除你修改过的定义，重新使用 Octopus 自带的版本。</target></segment></unit>
+    <unit id="SettingsCustomAgent"><segment><source>Custom</source><target state="translated">自定义</target></segment></unit>
+    <unit id="SettingsModifiedAgent"><segment><source>Modified</source><target state="translated">已修改</target></segment></unit>
+    <unit id="SettingsPluginAgent"><segment><source>From {0}</source><target state="translated">来自 {0}</target></segment></unit>
+    <unit id="IconCategoryLine"><segment><source>Line</source><target state="translated">线条</target></segment></unit>
+    <unit id="IconCategoryFun"><segment><source>Fun</source><target state="translated">趣味</target></segment></unit>
+    <unit id="IconCategoryNature"><segment><source>Nature</source><target state="translated">自然</target></segment></unit>
+    <unit id="IconCategoryLife"><segment><source>Life</source><target state="translated">生活</target></segment></unit>
+    <unit id="IconCategoryWork"><segment><source>Work</source><target state="translated">办公</target></segment></unit>
+    <unit id="IconCategoryDev"><segment><source>Dev</source><target state="translated">开发</target></segment></unit>
+    <unit id="IconCategoryBrands"><segment><source>Brands</source><target state="translated">品牌</target></segment></unit>
+    <unit id="IconCategoryLetters"><segment><source>Letters</source><target state="translated">字母</target></segment></unit>
+    <unit id="IconCategoryOther"><segment><source>Other</source><target state="translated">其他</target></segment></unit>
+    <unit id="SearchIcons"><segment><source>Search icons (English names)</source><target state="translated">搜索图标（英文名）</target></segment></unit>
+    <unit id="NoIconFound"><segment><source>No icon has that name.</source><target state="translated">没有叫这个名字的图标。</target></segment></unit>
   </file>
 </xliff>
