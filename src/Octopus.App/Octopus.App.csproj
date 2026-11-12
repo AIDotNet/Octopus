@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <AssemblyName>Octopus</AssemblyName>
+        <!-- The exe's own icon: explorer, the taskbar and the task manager. Rebuilt from /icon.png by tools/generate-icons.py. -->
+        <ApplicationIcon>Assets/Icon/octopus.ico</ApplicationIcon>
+        <RootNamespace>Octopus.App</RootNamespace>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+        <!-- The .NET 11 SDK's optimized AOT publish drops Avalonia's compiled XAML ("No precompiled XAML found" at start). -->
+        <UseOptimizedPublish>false</UseOptimizedPublish>
+        <!-- Icons are chosen from data (agent icons, item kinds), so compile all of Lucide in. -->
+        <LucideIconsIncludeAll>true</LucideIconsIncludeAll>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia.Desktop" />
+        <PackageReference Include="Avalonia.Fonts.Inter" />
+        <PackageReference Include="TKCode.Arc" />
+        <PackageReference Include="TKCode.Arc.Blocks" />
+        <PackageReference Include="TKCode.Arc.Dock" />
+        <PackageReference Include="TKCode.Arc.Fonts" />
+        <PackageReference Include="TKCode.Arc.Icons.Lucide" />
+        <PackageReference Include="TKCode.Arc.Themes.Corners" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Core/Octopus.Core.csproj" />
+        <ProjectReference Include="../Octopus.Storage/Octopus.Storage.csproj" />
+        <ProjectReference Include="../Octopus.Platform/Octopus.Platform.csproj" />
+        <ProjectReference Include="../Octopus.Platform.MacOS/Octopus.Platform.MacOS.csproj" />
+        <ProjectReference Include="../Octopus.Platform.Linux/Octopus.Platform.Linux.csproj" />
+        <ProjectReference Include="../Octopus.Platform.Windows/Octopus.Platform.Windows.csproj" />
+        <ProjectReference Include="../Octopus.Agents/Octopus.Agents.csproj" />
+        <ProjectReference Include="../Octopus.FileSystem/Octopus.FileSystem.csproj" />
+        <ProjectReference Include="../Octopus.Git/Octopus.Git.csproj" />
+        <ProjectReference Include="../Octopus.Terminal/Octopus.Terminal.csproj" />
+        <ProjectReference Include="../Octopus.Terminal.MiniPty/Octopus.Terminal.MiniPty.csproj" />
+        <ProjectReference Include="../Octopus.Terminal.Avalonia/Octopus.Terminal.Avalonia.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Agent brand logos, normalized to a tiny path JSON (see Assets/AgentLogos/README.md). -->
+        <AvaloniaResource Include="Assets/AgentLogos/*.json" />
+        <!-- The window icon and the in-app logo (octopus.ico / .icns are for the exe and an .app bundle, not loaded at run time). -->
+        <AvaloniaResource Include="Assets/Icon/*.png" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "copilot",
+  "name": "GitHub Copilot CLI",
+  "icon": "copilot",
+  "homepage": "https://github.com/features/copilot/cli",
+  "verified": false,
+  "detect": {
+    "executables": ["copilot"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @github/copilot" },
+      { "kind": "brew", "command": "brew install copilot-cli" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "dontAsk": { "args": ["--allow-all-tools"] },
+        "full": { "args": ["--yolo"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "flag", "args": ["-i", "{value}"] },
+    "resume": { "continueLatest": ["--continue"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "COPILOT_HOME", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } },
+        { "name": "COPILOT_GITHUB_TOKEN", "label": "GitHub token", "secret": true, "localized": { "zh-CN": { "label": "GitHub 令牌" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

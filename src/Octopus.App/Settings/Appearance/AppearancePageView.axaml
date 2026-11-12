@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:appearance="using:Octopus.App.Settings.Appearance"
+             x:Class="Octopus.App.Settings.Appearance.AppearancePageView"
+             x:DataType="appearance:AppearanceSettingsViewModel">
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsNavAppearance}" />
+            <TextBlock Classes="subtitle" Text="{l:AppLangResource AppearanceDescription}" />
+        </StackPanel>
+        <arc:SettingsGroup Appearance="Plain">
+            <arc:SettingsRow Header="{l:AppLangResource SettingsTheme}">
+                <arc:SegmentedControl AutoScrollToSelectedItem="False" SelectedValue="{Binding Theme, Mode=TwoWay}">
+                    <arc:SegmentedOption Value="system" Label="{l:AppLangResource AppearanceSystem}" />
+                    <arc:SegmentedOption Value="light" Label="{l:AppLangResource AppearanceLight}" />
+                    <arc:SegmentedOption Value="dark" Label="{l:AppLangResource AppearanceDark}" />
+                </arc:SegmentedControl>
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource Accent}">
+                <ItemsControl ItemsSource="{Binding Accents}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="10" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="appearance:AccentChoiceViewModel">
+                            <arc:Button Variant="Ghost"
+                                        Padding="4"
+                                        Width="32"
+                                        Height="32"
+                                        Command="{Binding $parent[ItemsControl].((appearance:AppearanceSettingsViewModel)DataContext).SelectAccentCommand}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding Name}"
+                                        arc:Tooltip.Tip="{Binding Name}">
+                                <Panel>
+                                    <Ellipse Width="22" Height="22" Fill="{Binding Brush}" />
+                                    <Ellipse Width="30"
+                                             Height="30"
+                                             StrokeThickness="2"
+                                             Stroke="{arc:ArcDesignTokenResource Foreground}"
+                                             IsVisible="{Binding IsSelected}" />
+                                </Panel>
+                            </arc:Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </arc:SettingsRow>
+        </arc:SettingsGroup>
+    </StackPanel>
+</UserControl>

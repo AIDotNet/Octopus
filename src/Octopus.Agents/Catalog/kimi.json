@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "id": "kimi",
+  "name": "Kimi Code CLI",
+  "icon": "kimi",
+  "homepage": "https://code.kimi.com",
+  "verified": false,
+  "detect": {
+    "executables": ["kimi"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash" },
+      { "kind": "npm", "command": "npm i -g @moonshot-ai/kimi-code" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "plan": { "args": ["--plan"] },
+        "auto": { "args": ["--yolo"] },
+        "full": { "args": ["--auto"], "danger": true }
+      }
+    },
+    "resume": { "continueLatest": ["-c"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "KIMI_CODE_HOME", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

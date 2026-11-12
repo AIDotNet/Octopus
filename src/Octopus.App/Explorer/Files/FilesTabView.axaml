@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:ex="using:Octopus.App.Explorer"
+             xmlns:files="using:Octopus.App.Explorer.Files"
+             xmlns:search="using:Octopus.App.Explorer.Search"
+             x:Class="Octopus.App.Explorer.Files.FilesTabView"
+             x:DataType="ex:ExplorerPanelViewModel">
+    <Grid RowDefinitions="Auto,Auto,*">
+        <!-- Title row: the project name and the folder actions. -->
+        <Grid ColumnDefinitions="*,Auto" Margin="14,0,8,2" Height="32">
+            <TextBlock Classes="ex-body" FontWeight="SemiBold" VerticalAlignment="Center"
+                       Text="{Binding ProjectName}" TextTrimming="CharacterEllipsis"
+                       arc:Tooltip.Tip="{Binding ProjectPath}" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
+                <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding Files.CollapseAllCommand}"
+                            AutomationProperties.Name="{l:AppLangResource ExplorerCollapseAll}"
+                            arc:Tooltip.Tip="{l:AppLangResource ExplorerCollapseAll}">
+                    <lucide:LucideIcon Kind="ListCollapse" Size="14" />
+                </arc:Button>
+                <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding RefreshCommand}"
+                            AutomationProperties.Name="{l:AppLangResource ExplorerRefresh}"
+                            arc:Tooltip.Tip="{l:AppLangResource ExplorerRefresh}">
+                    <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+                </arc:Button>
+                <arc:Button x:Name="MoreButton" Classes="ex-icon" Variant="Ghost"
+                            AutomationProperties.Name="{l:AppLangResource ExplorerMore}"
+                            arc:Tooltip.Tip="{l:AppLangResource ExplorerMore}">
+                    <lucide:LucideIcon Kind="Ellipsis" Size="14" />
+                </arc:Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Search mode and box. -->
+        <StackPanel Grid.Row="1" Margin="10,2,10,6" Spacing="6" DataContext="{Binding Search}" x:DataType="search:FileSearchViewModel">
+            <arc:SegmentedControl HorizontalAlignment="Stretch" SelectedValue="{Binding ModeKey, Mode=TwoWay}"
+                                  AutomationProperties.Name="{l:AppLangResource ExplorerSearchMode}">
+                <arc:SegmentedOption Value="name" Label="{l:AppLangResource ExplorerSearchByName}" />
+                <arc:SegmentedOption Value="content" Label="{l:AppLangResource ExplorerSearchByContent}" />
+            </arc:SegmentedControl>
+            <arc:SearchField Size="Small" IsLabelVisible="False"
+                             Label="{Binding Placeholder}" Placeholder="{Binding Placeholder}"
+                             Text="{Binding Query, Mode=TwoWay}" />
+        </StackPanel>
+
+        <Panel Grid.Row="2" IsVisible="{Binding !Search.IsActive}">
+            <files:FileTreeView DataContext="{Binding Files}" />
+        </Panel>
+        <search:SearchResultsView Grid.Row="2" DataContext="{Binding Search}" IsVisible="{Binding IsActive}" />
+    </Grid>
+</UserControl>

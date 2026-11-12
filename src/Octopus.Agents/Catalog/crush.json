@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "crush",
+  "name": "Crush",
+  "icon": "crush",
+  "homepage": "https://github.com/charmbracelet/crush",
+  "verified": false,
+  "detect": {
+    "executables": ["crush"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "brew", "command": "brew install charmbracelet/tap/crush" },
+      { "kind": "npm", "command": "npm i -g @charmland/crush" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "full": { "args": ["--yolo"], "danger": true }
+      }
+    },
+    "extraArgs": true
+  }
+}

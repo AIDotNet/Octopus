@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:ex="using:Octopus.App.Explorer"
+             xmlns:files="using:Octopus.App.Explorer.Files"
+             xmlns:git="using:Octopus.App.Explorer.Git"
+             x:Class="Octopus.App.Explorer.ExplorerPanelView"
+             x:DataType="ex:ExplorerPanelViewModel">
+    <UserControl.Styles>
+        <Style Selector="arc|Button.ex-icon">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="IsPressScaleEnabled" Value="False" />
+        </Style>
+
+        <!-- A whole-row target (a change, a commit, a search result): tinted on hover and when selected. -->
+        <Style Selector="Border.ex-row">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.ex-row:pointerover">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+        <Style Selector="Border.ex-row.selected">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Border}" />
+        </Style>
+
+        <Style Selector="TextBlock.ex-body">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        </Style>
+        <Style Selector="TextBlock.ex-caption">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.ex-hint">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Background="{arc:ArcDesignTokenResource SurfaceMuted}" RowDefinitions="Auto,*">
+        <!-- The top row lines up with the window's top row; the right end stays free for the panel switch (and the caption buttons) the window floats there, see TrailingInset. -->
+        <Grid x:Name="TopBar" Height="40" Background="Transparent" ColumnDefinitions="Auto,*,44"
+              PointerPressed="OnTopBarPointerPressed">
+            <!-- Files always; Git is added by the code behind while the folder is in a repository. -->
+            <arc:ToggleGroup x:Name="Tabs" Size="Small" Margin="8,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasProject}"
+                             SelectedValue="{Binding TabKey, Mode=TwoWay}"
+                             Label="{l:AppLangResource ExplorerTabs}">
+                <arc:ToggleGroupOption Value="files" Label="{l:AppLangResource ExplorerTabFiles}">
+                    <lucide:LucideIcon Kind="Files" Size="16" />
+                </arc:ToggleGroupOption>
+            </arc:ToggleGroup>
+        </Grid>
+
+        <!-- No project -->
+        <arc:EmptyState Grid.Row="1" IsVisible="{Binding HasNoProject}" VerticalAlignment="Top" Margin="12,24"
+                        Title="{l:AppLangResource ExplorerNoProject}" Description="{l:AppLangResource ExplorerNoProjectHint}"
+                        Icon="{x:Static arc:ArcIcons.FileText}" />
+
+        <files:FilesTabView Grid.Row="1" IsVisible="{Binding IsFilesTab}" />
+        <Panel Grid.Row="1" IsVisible="{Binding IsGitTab}">
+            <git:GitTabView DataContext="{Binding Git}" />
+        </Panel>
+    </Grid>
+</UserControl>

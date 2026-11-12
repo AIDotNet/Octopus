@@ -1,0 +1,290 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:common="using:Octopus.App.Common"
+             xmlns:agents="using:Octopus.App.Settings.Agents"
+             x:Class="Octopus.App.Settings.Agents.AgentsPageView"
+             x:DataType="agents:AgentsSettingsViewModel">
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="agents:CommandFieldViewModel">
+            <agents:FieldRow Label="{Binding Label}">
+                <arc:Input Text="{Binding Text, Mode=TwoWay}"
+                           Placeholder="{Binding Placeholder}"
+                           Label="{Binding Label}"
+                           IsLabelVisible="False"
+                           Size="Small"
+                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}">
+                    <arc:Input.Suffix>
+                        <arc:Button Variant="Ghost"
+                                    Size="Small"
+                                    Content="{l:AppLangResource SettingsReset}"
+                                    IsVisible="{Binding HasValue}"
+                                    Command="{Binding ResetCommand}" />
+                    </arc:Input.Suffix>
+                </arc:Input>
+            </agents:FieldRow>
+        </DataTemplate>
+
+        <DataTemplate DataType="agents:ChoiceFieldViewModel">
+            <agents:FieldRow Label="{Binding Label}">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" HorizontalAlignment="Stretch">
+                    <arc:Input Grid.Column="0"
+                               Text="{Binding CustomText, Mode=TwoWay}"
+                               Placeholder="{Binding CustomPlaceholder}"
+                               Label="{Binding Label}"
+                               IsLabelVisible="False"
+                               Size="Small"
+                               IsVisible="{Binding IsCustom}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" />
+                    <lucide:LucideIcon Grid.Column="1"
+                                       Kind="ShieldAlert"
+                                       Size="16"
+                                       VerticalAlignment="Center"
+                                       Foreground="{arc:ArcDesignTokenResource Warning}"
+                                       IsVisible="{Binding IsDangerSelected}" />
+                    <arc:Select AutoScrollToSelectedItem="False" Grid.Column="2"
+                                Size="Small"
+                                MinWidth="240"
+                                HorizontalAlignment="Right"
+                                AutomationProperties.Name="{Binding Label}"
+                                ItemsSource="{Binding Options}"
+                                SelectedValue="{Binding SelectedId, Mode=TwoWay}" />
+                </Grid>
+            </agents:FieldRow>
+        </DataTemplate>
+
+        <DataTemplate DataType="agents:ToggleFieldViewModel">
+            <agents:FieldRow Label="{Binding Label}" Description="{Binding Description}">
+                <arc:Switch IsChecked="{Binding IsOn, Mode=TwoWay}" HorizontalAlignment="Right" />
+            </agents:FieldRow>
+        </DataTemplate>
+
+        <DataTemplate DataType="agents:TextFieldViewModel">
+            <agents:FieldRow Label="{Binding Label}" Description="{Binding Description}" TopAligned="{Binding IsMultiLine}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <Panel>
+                        <arc:Textarea Text="{Binding Text, Mode=TwoWay}"
+                                      Placeholder="{Binding Placeholder}"
+                                      Label="{Binding Label}"
+                                      IsLabelVisible="False"
+                                      FrameMinHeight="72"
+                                      IsVisible="{Binding IsMultiLine}" />
+                        <arc:Input Text="{Binding Text, Mode=TwoWay}"
+                                   Placeholder="{Binding Placeholder}"
+                                   Label="{Binding Label}"
+                                   IsLabelVisible="False"
+                                   Size="Small"
+                                   IsVisible="{Binding !IsMultiLine}"
+                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" />
+                    </Panel>
+                    <arc:Button Grid.Column="1"
+                                Variant="Secondary"
+                                Size="Small"
+                                Margin="8,0,0,0"
+                                Content="{l:AppLangResource SettingsBrowse}"
+                                IsVisible="{Binding CanBrowse}"
+                                Command="{Binding BrowseCommand}" />
+                </Grid>
+            </agents:FieldRow>
+        </DataTemplate>
+
+        <DataTemplate DataType="agents:ArgsFieldViewModel">
+            <agents:FieldRow Label="{Binding Label}" Description="{Binding Description}" TopAligned="True">
+                <arc:TagInput Value="{Binding Value, Mode=TwoWay}"
+                              Placeholder="{Binding Placeholder}"
+                              Label="{Binding Label}"
+                              IsLabelVisible="False" />
+            </agents:FieldRow>
+        </DataTemplate>
+
+        <DataTemplate DataType="agents:EnvFieldViewModel">
+            <agents:FieldRow Label="{Binding Label}" TopAligned="True">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="hint"
+                               Text="{l:AppLangResource SettingsEnvEmpty}"
+                               IsVisible="{Binding IsEmpty}"
+                               VerticalAlignment="Center" />
+                    <ItemsControl ItemsSource="{Binding Entries}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="agents:EnvEntryViewModel">
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnDefinitions="200,*,Auto" ColumnSpacing="8">
+                                        <arc:Input Text="{Binding Name, Mode=TwoWay}"
+                                                   Placeholder="{l:AppLangResource SettingsEnvNamePlaceholder}"
+                                                   Label="{l:AppLangResource SettingsEnvNamePlaceholder}"
+                                                   IsLabelVisible="False"
+                                                   Size="Small"
+                                                   arc:Tooltip.Tip="{Binding Hint}"
+                                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" />
+                                        <Panel Grid.Column="1">
+                                            <arc:PasswordField Text="{Binding Value, Mode=TwoWay}"
+                                                               Placeholder="{l:AppLangResource SettingsEnvValuePlaceholder}"
+                                                               Label="{l:AppLangResource SettingsEnvValuePlaceholder}"
+                                                               IsLabelVisible="False"
+                                                               Size="Small"
+                                                               IsVisible="{Binding IsSecret}" />
+                                            <arc:Input Text="{Binding Value, Mode=TwoWay}"
+                                                       Placeholder="{l:AppLangResource SettingsEnvValuePlaceholder}"
+                                                       Label="{l:AppLangResource SettingsEnvValuePlaceholder}"
+                                                       IsLabelVisible="False"
+                                                       Size="Small"
+                                                       IsVisible="{Binding !IsSecret}"
+                                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" />
+                                        </Panel>
+                                        <arc:Button Grid.Column="2"
+                                                    Variant="Ghost"
+                                                    Size="Small"
+                                                    Command="{Binding RemoveCommand}"
+                                                    AutomationProperties.Name="{l:AppLangResource SettingsEnvRemove}"
+                                                    arc:Tooltip.Tip="{l:AppLangResource SettingsEnvRemove}">
+                                            <lucide:LucideIcon Kind="X" Size="16" />
+                                        </arc:Button>
+                                    </Grid>
+                                    <TextBlock Classes="hint"
+                                               Margin="2,0,0,0"
+                                               Text="{l:AppLangResource SettingsEnvSecretNote}"
+                                               IsVisible="{Binding IsSecret}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <arc:DropdownMenu Label="{l:AppLangResource SettingsEnvAddKnown}"
+                                          Alignment="Start"
+                                          ItemsSource="{Binding AvailableKnown}"
+                                          IsVisible="{Binding HasKnown}">
+                            <arc:DropdownMenu.ItemTemplate>
+                                <DataTemplate x:DataType="agents:KnownEnvChoice">
+                                    <arc:MenuEntry Header="{Binding Detail}" Command="{Binding AddCommand}" />
+                                </DataTemplate>
+                            </arc:DropdownMenu.ItemTemplate>
+                        </arc:DropdownMenu>
+                        <arc:Button Variant="Secondary"
+                                    Size="Small"
+                                    IsVisible="{Binding AllowCustom}"
+                                    Command="{Binding AddCustomCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <lucide:LucideIcon Kind="Plus" Size="14" />
+                                <TextBlock Text="{l:AppLangResource SettingsEnvAddCustom}" />
+                            </StackPanel>
+                        </arc:Button>
+                    </StackPanel>
+                </StackPanel>
+            </agents:FieldRow>
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsAgentsTitle}" />
+            <TextBlock Classes="subtitle" Text="{Binding Subtitle}" />
+        </StackPanel>
+
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="14,10">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="12">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsDefaultPermission}" />
+                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsDefaultPermissionHint}" />
+                </StackPanel>
+                <arc:Select AutoScrollToSelectedItem="False" Grid.Column="1"
+                            Size="Small"
+                            MinWidth="200"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="{l:AppLangResource SettingsDefaultPermission}"
+                            ItemsSource="{Binding PermissionOptions}"
+                            SelectedValue="{Binding GlobalPermission, Mode=TwoWay}" />
+                <TextBlock Grid.Column="2"
+                           Classes="hint"
+                           VerticalAlignment="Center"
+                           Text="{Binding LastScanText}" />
+                <arc:Button Grid.Column="3"
+                            Variant="Secondary"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            IsLoading="{Binding IsScanning}"
+                            Content="{Binding RescanText}"
+                            Command="{Binding RescanCommand}" />
+            </Grid>
+        </Border>
+
+        <arc:Alert Tone="Warning"
+                   Title="{l:AppLangResource SettingsFullAccessWarningTitle}"
+                   Content="{l:AppLangResource SettingsFullAccessWarning}"
+                   IsVisible="{Binding ShowFullWarning}" />
+
+        <StackPanel Spacing="6">
+            <TextBlock Classes="group" Margin="2,4,0,0" Text="{l:AppLangResource SettingsInstalled}" />
+            <TextBlock Classes="hint"
+                       Margin="2,0,0,0"
+                       Text="{l:AppLangResource SettingsNoneInstalled}"
+                       IsVisible="{Binding !HasInstalled}" />
+            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    ClipToBounds="True"
+                    IsVisible="{Binding HasInstalled}">
+                <ItemsControl ItemsSource="{Binding Installed}" Margin="0,-1,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="agents:AgentRowViewModel">
+                            <agents:AgentRowView />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+
+        <StackPanel Spacing="6" IsVisible="{Binding HasNotInstalled}">
+            <TextBlock Classes="group" Margin="2,12,0,0" Text="{l:AppLangResource SettingsNotInstalled}" />
+            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    ClipToBounds="True">
+                <ItemsControl ItemsSource="{Binding NotInstalled}" Margin="0,-1,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="agents:UninstalledAgentViewModel">
+                            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,8">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="12">
+                                    <common:AgentIcon AgentId="{Binding Id}" AgentName="{Binding Name}" Size="28" VerticalAlignment="Center" Opacity="0.6" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Classes="label" Text="{Binding Name}" FontWeight="Medium" />
+                                        <TextBlock Classes="mono"
+                                                   Text="{Binding InstallCommand}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   IsVisible="{Binding HasInstallCommand}" />
+                                    </StackPanel>
+                                    <arc:CopyButton Grid.Column="2"
+                                                    IsIconOnly="True"
+                                                    Value="{Binding InstallCommand}"
+                                                    IsVisible="{Binding HasInstallCommand}"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.Name="{l:AppLangResource SettingsCopyInstallCommand}"
+                                                    arc:Tooltip.Tip="{l:AppLangResource SettingsCopyInstallCommand}" />
+                                    <arc:Button Grid.Column="3"
+                                                Variant="Ghost"
+                                                Size="Small"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding HasHomepage}"
+                                                Command="{Binding OpenHomepageCommand}"
+                                                AutomationProperties.Name="{l:AppLangResource SettingsOpenHomepage}"
+                                                arc:Tooltip.Tip="{l:AppLangResource SettingsOpenHomepage}">
+                                        <lucide:LucideIcon Kind="ExternalLink" Size="16" />
+                                    </arc:Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

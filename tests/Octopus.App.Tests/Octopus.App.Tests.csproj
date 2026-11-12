@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Tests that start the app on Avalonia's headless platform: no window opens, so they run anywhere. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="xunit.v3" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+        <PackageReference Include="Avalonia.Headless.XUnit" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Octopus.App/Octopus.App.csproj" />
+    </ItemGroup>
+</Project>

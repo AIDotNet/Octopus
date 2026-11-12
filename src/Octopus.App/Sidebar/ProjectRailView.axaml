@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Sidebar"
+             x:Class="Octopus.App.Sidebar.ProjectRailView"
+             x:DataType="vm:ProjectRailViewModel">
+    <Grid Width="54" RowDefinitions="*,Auto" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+        <arc:ScrollArea OverlayScrollbarMode="Auto" FadeLength="0">
+            <StackPanel Spacing="6" Margin="0,10,0,6">
+                <ItemsControl ItemsSource="{Binding Chips}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="4" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ProjectChipViewModel">
+                            <vm:ProjectChipView />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <arc:Button Classes="icon" Variant="Ghost" HorizontalAlignment="Center"
+                            Command="{Binding NewProjectCommand}"
+                            AutomationProperties.Name="{l:AppLangResource NewProject}"
+                            arc:Tooltip.Tip="{l:AppLangResource NewProject}" arc:Tooltip.Side="Right">
+                    <lucide:LucideIcon Kind="Plus" Size="16" />
+                </arc:Button>
+            </StackPanel>
+        </arc:ScrollArea>
+        <arc:Button Grid.Row="1" Classes="icon" Variant="Ghost" HorizontalAlignment="Center" Margin="0,0,0,10"
+                    Command="{Binding OpenSettingsCommand}"
+                    AutomationProperties.Name="{l:AppLangResource Settings}"
+                    arc:Tooltip.Tip="{l:AppLangResource Settings}" arc:Tooltip.Side="Right">
+            <lucide:LucideIcon Kind="Settings" Size="16" />
+        </arc:Button>
+    </Grid>
+</UserControl>

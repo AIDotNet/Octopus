@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Workspace"
+             x:Class="Octopus.App.Workspace.EmptyProjectView"
+             x:DataType="vm:EmptyStateViewModel">
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+        <TextBlock Classes="body" FontSize="{arc:ArcDesignTokenResource TypeBase}" FontWeight="Medium"
+                   HorizontalAlignment="Center" Text="{l:AppLangResource EmptyProjectTitle}" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+            <arc:Button Variant="Secondary" Size="Small" Command="{Binding NewTerminalCommand}"
+                        Content="{l:AppLangResource NewTerminal}" />
+            <arc:Button x:Name="AgentButton" Variant="Secondary" Size="Small" Click="OnAgentClick"
+                        Content="{l:AppLangResource NewAgent}" />
+            <arc:Button Variant="Secondary" Size="Small" Command="{Binding OpenFileCommand}"
+                        Content="{l:AppLangResource OpenFile}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

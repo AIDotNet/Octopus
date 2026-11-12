@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:search="using:Octopus.App.Explorer.Search"
+             x:Class="Octopus.App.Explorer.Search.SearchResultsView"
+             x:DataType="search:FileSearchViewModel">
+    <Grid>
+        <TextBlock Classes="ex-hint" Margin="16,8" IsVisible="{Binding IsSearching}" Text="{l:AppLangResource ExplorerSearching}" />
+        <TextBlock Classes="ex-hint" Margin="16,8" IsVisible="{Binding HasNoMatches}" Text="{l:AppLangResource ExplorerNoMatches}" />
+        <ListBox x:Name="List" Margin="4,0,4,6" Background="Transparent" Padding="0" SelectionMode="Single"
+                 ItemsSource="{Binding Results}" DoubleTapped="OnDoubleTapped" KeyDown="OnKeyDown"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.Styles>
+                <!-- The theme draws no ListBox, so the list and its rows are templated here. -->
+                <Style Selector="ListBox">
+                    <Setter Property="ItemsPanel">
+                        <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                    </Setter>
+                    <Setter Property="Template">
+                        <ControlTemplate>
+                            <arc:ScrollArea Name="PART_ScrollViewer" FadeLength="0"
+                                            HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                            </arc:ScrollArea>
+                        </ControlTemplate>
+                    </Setter>
+                </Style>
+                <Style Selector="ListBoxItem">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Template">
+                        <ControlTemplate>
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              Background="{TemplateBinding Background}"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                              Padding="{TemplateBinding Padding}" />
+                        </ControlTemplate>
+                    </Setter>
+                </Style>
+                <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                    <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+                </Style>
+                <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+                    <Setter Property="Background" Value="{arc:ArcDesignTokenResource Border}" />
+                </Style>
+            </ListBox.Styles>
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="search:SearchRowViewModel">
+                    <Grid>
+                        <!-- A file or folder found by name: the name whole, the folder after it, its middle segments cut when the row is short. -->
+                        <Grid IsVisible="{Binding IsName}" ColumnDefinitions="Auto,Auto,*" Height="28" Margin="8,0">
+                            <lucide:LucideIcon Kind="{Binding IconKind}" Size="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Classes="ex-body" VerticalAlignment="Center" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Classes="ex-hint" Margin="8,0,0,0" VerticalAlignment="Center"
+                                       Text="{Binding Subtitle}" TextTrimming="PathSegmentEllipsis" />
+                        </Grid>
+                        <!-- The file above its matching lines -->
+                        <Grid IsVisible="{Binding IsHeader}" ColumnDefinitions="Auto,Auto,*" Height="28" Margin="8,6,8,0">
+                            <lucide:LucideIcon Kind="{Binding IconKind}" Size="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Classes="ex-body" FontWeight="Medium" VerticalAlignment="Center" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Classes="ex-hint" Margin="8,0,0,0" VerticalAlignment="Center"
+                                       Text="{Binding Subtitle}" TextTrimming="PathSegmentEllipsis" />
+                        </Grid>
+                        <!-- A matching line -->
+                        <Grid IsVisible="{Binding IsMatch}" ColumnDefinitions="32,*" Height="24" Margin="8,0">
+                            <TextBlock Classes="ex-hint" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"
+                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Text="{Binding LineText}" />
+                            <search:HighlightedTextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                       FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                       SourceText="{Binding Title}" HighlightStart="{Binding HighlightStart}"
+                                       HighlightLength="{Binding HighlightLength}" />
+                        </Grid>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</UserControl>

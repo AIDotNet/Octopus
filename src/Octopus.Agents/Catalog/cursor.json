@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "id": "cursor",
+  "name": "Cursor Agent",
+  "icon": "cursor",
+  "homepage": "https://cursor.com/cli",
+  "verified": true,
+  "detect": {
+    "executables": ["cursor-agent"],
+    "versionArgs": ["--version"],
+    "versionRegex": "^(\\d{4}\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl https://cursor.com/install -fsS | bash" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": [
+        { "id": "auto", "label": "Auto" },
+        { "id": "composer-2.5", "label": "Composer 2.5" },
+        { "id": "claude-opus-5-5", "label": "Claude Opus 5.5" },
+        { "id": "gpt-5.3-codex", "label": "Codex 5.3" }
+      ],
+      "discover": { "args": ["models"], "parser": "idDashLabel" }
+    },
+    "effort": {
+      "label": "Effort",
+      "modelParam": "effort={value}",
+      "options": [
+        { "id": "low", "label": "Low" },
+        { "id": "medium", "label": "Medium" },
+        { "id": "high", "label": "High" },
+        { "id": "xhigh", "label": "Extra high" },
+        { "id": "max", "label": "Max" }
+      ]
+    },
+    "fast": { "modelParam": "fast=true" },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "plan": { "args": ["--plan"] },
+        "auto": { "args": ["--auto-review"] },
+        "full": { "args": ["--yolo"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "resume": { "continueLatest": ["--continue"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "CURSOR_API_KEY", "label": "API key", "secret": true, "localized": { "zh-CN": { "label": "API 密钥" } } },
+        { "name": "CURSOR_API_ENDPOINT", "label": "API endpoint", "localized": { "zh-CN": { "label": "API 端点" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

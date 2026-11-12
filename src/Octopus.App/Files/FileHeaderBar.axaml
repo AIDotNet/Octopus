@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             x:Class="Octopus.App.Files.FileHeaderBar">
+    <!-- The thin bar above a file or a diff: where the file is on the left, quiet facts and the viewer's own buttons (as Trailing) on the right, then copy path and reveal. -->
+    <Border Height="32" Background="{arc:ArcDesignTokenResource Background}"
+            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="*,Auto" Margin="12,0,6,0">
+            <TextBlock x:Name="PathText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                       FontSize="{arc:ArcDesignTokenResource TypeSM}" Foreground="{arc:ArcDesignTokenResource TextMuted}">
+                <Run x:Name="FolderRun" /><Run x:Name="NameRun" Foreground="{arc:ArcDesignTokenResource Foreground}" FontWeight="Medium" />
+            </TextBlock>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center" Margin="12,0,0,0">
+                <ContentPresenter x:Name="TrailingHost" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <arc:Button x:Name="CopyButton" Classes="icon" Variant="Ghost" Click="OnCopyClick"
+                            AutomationProperties.Name="{l:AppLangResource ExplorerCopyPath}"
+                            arc:Tooltip.Tip="{l:AppLangResource ExplorerCopyPath}">
+                    <lucide:LucideIcon Kind="Copy" Size="14" />
+                </arc:Button>
+                <arc:Button x:Name="RevealButton" Classes="icon" Variant="Ghost" Click="OnRevealClick"
+                            AutomationProperties.Name="{l:AppLangResource RevealInFileManager}"
+                            arc:Tooltip.Tip="{l:AppLangResource RevealInFileManager}">
+                    <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                </arc:Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

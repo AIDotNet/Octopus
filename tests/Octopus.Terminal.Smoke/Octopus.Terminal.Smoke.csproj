@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Avalonia.Desktop" />
+        <PackageReference Include="Avalonia.Themes.Fluent" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Octopus.Core/Octopus.Core.csproj" />
+        <ProjectReference Include="../../src/Octopus.Terminal/Octopus.Terminal.csproj" />
+        <ProjectReference Include="../../src/Octopus.Terminal.MiniPty/Octopus.Terminal.MiniPty.csproj" />
+        <ProjectReference Include="../../src/Octopus.Terminal.Avalonia/Octopus.Terminal.Avalonia.csproj" />
+    </ItemGroup>
+</Project>

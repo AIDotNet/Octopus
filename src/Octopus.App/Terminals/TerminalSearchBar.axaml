@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             x:Class="Octopus.App.Terminals.TerminalSearchBar">
+    <!-- Arc has no plain floating surface (Popover is anchored, Card is a grid tile), so the frame is a tokenised Border. -->
+    <Border Background="{arc:ArcDesignTokenResource Background}"
+            BorderBrush="{arc:ArcDesignTokenResource Border}"
+            BorderThickness="1"
+            CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
+            BoxShadow="0 4 16 0 #33000000"
+            Padding="6">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+            <arc:SearchField x:Name="Field"
+                             Size="Small"
+                             Width="210"
+                             Label="{l:AppLangResource TerminalSearchPlaceholder}"
+                             IsLabelVisible="False"
+                             ClearText="{l:AppLangResource TerminalSearchClose}"
+                             Placeholder="{l:AppLangResource TerminalSearchPlaceholder}" />
+            <arc:Badge x:Name="Count" Size="Small" VerticalAlignment="Center" MinWidth="52" IsVisible="False" />
+            <arc:Button x:Name="Previous" Size="Small" Variant="Ghost" Padding="8,0"
+                        AutomationProperties.Name="{l:AppLangResource TerminalSearchPrevious}"
+                        arc:Tooltip.Tip="{l:AppLangResource TerminalSearchPrevious}"
+                        Click="OnPrevious">
+                <lucide:LucideIcon Kind="ChevronUp" Size="16" />
+            </arc:Button>
+            <arc:Button x:Name="Next" Size="Small" Variant="Ghost" Padding="8,0"
+                        AutomationProperties.Name="{l:AppLangResource TerminalSearchNext}"
+                        arc:Tooltip.Tip="{l:AppLangResource TerminalSearchNext}"
+                        Click="OnNext">
+                <lucide:LucideIcon Kind="ChevronDown" Size="16" />
+            </arc:Button>
+            <arc:Button Size="Small" Variant="Ghost" Padding="8,0"
+                        AutomationProperties.Name="{l:AppLangResource TerminalSearchClose}"
+                        arc:Tooltip.Tip="{l:AppLangResource TerminalSearchClose}"
+                        Click="OnClose">
+                <lucide:LucideIcon Kind="X" Size="16" />
+            </arc:Button>
+        </StackPanel>
+    </Border>
+</UserControl>

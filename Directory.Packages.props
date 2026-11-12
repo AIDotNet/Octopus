@@ -1,0 +1,28 @@
+<Project>
+    <!-- Every package version lives here. Arc is built against one exact Avalonia version: keep all Avalonia
+         packages on it, and all TKCode.Arc packages on the same Arc version. -->
+    <PropertyGroup>
+        <AvaloniaVersion>12.1.5</AvaloniaVersion>
+        <ArcVersion>1.1.0-preview.4</ArcVersion>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="TKCode.Arc" Version="$(ArcVersion)" />
+        <PackageVersion Include="TKCode.Arc.Blocks" Version="$(ArcVersion)" />
+        <PackageVersion Include="TKCode.Arc.Dock" Version="$(ArcVersion)" />
+        <PackageVersion Include="TKCode.Arc.Fonts" Version="$(ArcVersion)" />
+        <PackageVersion Include="TKCode.Arc.Icons.Lucide" Version="$(ArcVersion)" />
+        <PackageVersion Include="TKCode.Arc.Themes.Corners" Version="$(ArcVersion)" />
+        <PackageVersion Include="TKCode.Arc.Terminal" Version="$(ArcVersion)" />
+        <PackageVersion Include="MiniPty" Version="1.5.0" />
+        <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+        <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+        <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+        <PackageVersion Include="xunit.v3" Version="3.2.2" />
+        <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    </ItemGroup>
+</Project>

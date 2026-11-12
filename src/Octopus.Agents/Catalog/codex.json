@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "id": "codex",
+  "name": "Codex CLI",
+  "icon": "openai",
+  "homepage": "https://github.com/openai/codex",
+  "verified": true,
+  "detect": {
+    "executables": ["codex"],
+    "versionArgs": ["--version"],
+    "versionRegex": "codex-cli (\\d+\\.\\d+\\.\\d+)",
+    "fingerprint": "codex-cli",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @openai/codex" },
+      { "kind": "brew", "command": "brew install codex" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": [
+        { "id": "gpt-6-luna", "label": "GPT-6 Luna" },
+        { "id": "gpt-5.6-terra", "label": "GPT-5.6 Terra" },
+        { "id": "gpt-5.6-luna", "label": "GPT-5.6 Luna" }
+      ]
+    },
+    "effort": {
+      "label": "Reasoning effort",
+      "args": ["-c", "model_reasoning_effort=\"{value}\""],
+      "options": [
+        { "id": "low", "label": "Low" },
+        { "id": "medium", "label": "Medium" },
+        { "id": "high", "label": "High" },
+        { "id": "xhigh", "label": "Extra high" },
+        { "id": "max", "label": "Max" }
+      ]
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["-a", "on-request", "-s", "workspace-write"] },
+        "plan": { "args": ["-s", "read-only"] },
+        "auto": { "args": ["--approve-for-me"] },
+        "dontAsk": { "args": ["-a", "never", "-s", "workspace-write"] },
+        "full": { "args": ["--dangerously-bypass-approvals-and-sandbox"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "resume": { "continueLatest": ["resume", "--last"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "CODEX_HOME", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } },
+        { "name": "OPENAI_API_KEY", "label": "API key", "secret": true, "localized": { "zh-CN": { "label": "API 密钥" } } }
+      ],
+      "allowCustom": true
+    },
+    "features": [
+      { "id": "codexHome", "type": "directory", "label": "Codex home", "placeholder": "~/.codex", "env": "CODEX_HOME", "localized": { "zh-CN": { "label": "Codex 主目录" } } },
+      { "id": "search", "type": "bool", "label": "Live web search", "args": ["--search"], "localized": { "zh-CN": { "label": "联网搜索" } } },
+      { "id": "profile", "type": "string", "label": "Profile", "args": ["--profile", "{value}"], "localized": { "zh-CN": { "label": "配置档" } } }
+    ]
+  }
+}

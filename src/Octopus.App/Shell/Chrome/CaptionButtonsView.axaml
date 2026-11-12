@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             x:Class="Octopus.App.Shell.Chrome.CaptionButtonsView">
+    <!-- Minimize, maximize and close for platforms whose frame leaves them to the app (Arc's own caption buttons need a newer Arc). -->
+    <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <arc:Button Classes="icon" Variant="Ghost" Click="OnMinimize"
+                    AutomationProperties.Name="{l:AppLangResource MinimizeWindow}"
+                    arc:Tooltip.Tip="{l:AppLangResource MinimizeWindow}" arc:Tooltip.Side="Bottom">
+            <lucide:LucideIcon Kind="Minus" Size="16" />
+        </arc:Button>
+        <arc:Button Classes="icon" Variant="Ghost" Click="OnMaximize"
+                    AutomationProperties.Name="{l:AppLangResource MaximizeWindow}"
+                    arc:Tooltip.Tip="{l:AppLangResource MaximizeWindow}" arc:Tooltip.Side="Bottom">
+            <lucide:LucideIcon Kind="Square" Size="14" />
+        </arc:Button>
+        <arc:Button Classes="icon" Variant="Ghost" Click="OnClose"
+                    AutomationProperties.Name="{l:AppLangResource CloseWindow}"
+                    arc:Tooltip.Tip="{l:AppLangResource CloseWindow}" arc:Tooltip.Side="Bottom">
+            <lucide:LucideIcon Kind="X" Size="16" />
+        </arc:Button>
+    </StackPanel>
+</UserControl>

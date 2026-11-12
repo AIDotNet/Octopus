@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:git="using:Octopus.App.Explorer.Git"
+             x:Class="Octopus.App.Explorer.Git.GitTabView"
+             x:DataType="git:GitPanelViewModel">
+    <Grid RowDefinitions="Auto,*">
+        <!-- Branch and refresh -->
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="14,0,8,2" Height="32">
+            <lucide:LucideIcon Kind="GitBranch" Size="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                               Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+            <TextBlock Grid.Column="1" Classes="ex-body" FontWeight="SemiBold" VerticalAlignment="Center"
+                       Text="{Binding BranchName}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Classes="ex-hint" Margin="8,0,4,0" VerticalAlignment="Center"
+                       IsVisible="{Binding HasAheadBehind}" Text="{Binding AheadBehind}" />
+            <arc:Button Grid.Column="3" Classes="ex-icon" Variant="Ghost" Command="{Binding RefreshNowCommand}"
+                        AutomationProperties.Name="{l:AppLangResource ExplorerRefresh}"
+                        arc:Tooltip.Tip="{l:AppLangResource ExplorerRefresh}">
+                <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+            </arc:Button>
+        </Grid>
+
+        <arc:ScrollArea Grid.Row="1" FadeLength="0">
+            <StackPanel Margin="4,4,4,10" Spacing="2">
+                <TextBlock Classes="ex-hint" Margin="10,4" IsVisible="{Binding IsClean}" Text="{l:AppLangResource ExplorerClean}" />
+
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="git:GitChangeGroupViewModel">
+                            <StackPanel Spacing="0">
+                                <Grid ColumnDefinitions="*,Auto" Margin="10,8,10,2">
+                                    <TextBlock Classes="ex-caption" Text="{Binding Title}" />
+                                    <TextBlock Grid.Column="1" Classes="ex-hint" Text="{Binding Count}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Rows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="git:GitChangeRowViewModel">
+                                            <Border Classes="ex-row" Classes.selected="{Binding IsSelected}" Height="28"
+                                                    PointerPressed="OnChangePressed" DoubleTapped="OnChangeDoubleTapped"
+                                                    arc:Tooltip.Tip="{Binding Change.Path}">
+                                                <Grid ColumnDefinitions="*,Auto,18" Margin="10,0,8,0">
+                                                    <Grid ColumnDefinitions="Auto,*">
+                                                        <TextBlock Classes="ex-body" VerticalAlignment="Center" Text="{Binding Name}"
+                                                                   TextTrimming="CharacterEllipsis" MinWidth="40" />
+                                                    </Grid>
+                                                    <TextBlock Grid.Column="1" Classes="ex-hint" Margin="8,0,6,0" VerticalAlignment="Center"
+                                                               MaxWidth="120" Text="{Binding Directory}" IsVisible="{Binding HasDirectory}"
+                                                               TextTrimming="PathSegmentEllipsis" />
+                                                    <git:GitStatusLetter Grid.Column="2" Kind="{Binding Kind}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Recent commits -->
+                <TextBlock Classes="ex-caption" Margin="10,14,10,4" Text="{l:AppLangResource ExplorerRecentCommits}" />
+                <TextBlock Classes="ex-hint" Margin="10,2" IsVisible="{Binding HasNoCommits}" Text="{l:AppLangResource ExplorerNoCommits}" />
+                <ItemsControl ItemsSource="{Binding Commits}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="git:GitCommitRowViewModel">
+                            <Border Classes="ex-row" Classes.selected="{Binding IsSelected}" PointerPressed="OnCommitPressed"
+                                    arc:Tooltip.Tip="{Binding Subject}">
+                                <Grid ColumnDefinitions="Auto,*" Margin="10,5,8,5">
+                                    <TextBlock Classes="ex-hint" Margin="0,2,10,0" VerticalAlignment="Top"
+                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Text="{Binding ShortHash}" />
+                                    <StackPanel Grid.Column="1" Spacing="1">
+                                        <TextBlock Classes="ex-body" Text="{Binding Subject}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Classes="ex-hint" Text="{Binding Meta}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </arc:ScrollArea>
+    </Grid>
+</UserControl>

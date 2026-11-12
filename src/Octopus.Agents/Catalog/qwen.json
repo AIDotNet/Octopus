@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "qwen",
+  "name": "Qwen Code",
+  "icon": "qwen",
+  "homepage": "https://github.com/QwenLM/qwen-code",
+  "verified": false,
+  "detect": {
+    "executables": ["qwen"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @qwen-code/qwen-code" }
+    ]
+  },
+  "capabilities": {
+    "resume": { "continueLatest": ["--continue"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "OPENAI_API_KEY", "label": "API key", "secret": true, "localized": { "zh-CN": { "label": "API 密钥" } } },
+        { "name": "OPENAI_BASE_URL", "label": "API base URL", "localized": { "zh-CN": { "label": "API 地址" } } },
+        { "name": "OPENAI_MODEL", "label": "Model", "localized": { "zh-CN": { "label": "模型" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

@@ -1,0 +1,86 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:common="using:Octopus.App.Common"
+             xmlns:vm="using:Octopus.App.Launcher"
+             x:Class="Octopus.App.Launcher.LauncherMenu"
+             x:DataType="vm:LauncherViewModel">
+    <Grid ColumnDefinitions="Auto,Auto">
+        <!-- First level -->
+        <StackPanel x:Name="FirstLevel" Grid.Column="0" Width="232" Spacing="1" Margin="2" PointerMoved="OnFirstLevelPointerMoved">
+            <Button Classes="row plain" Height="32" Command="{Binding NewTerminalCommand}"
+                    AutomationProperties.Name="{l:AppLangResource NewTerminal}">
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="9,0">
+                    <lucide:LucideIcon Kind="SquareTerminal" Size="16" Margin="0,0,9,0" />
+                    <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{l:AppLangResource NewTerminal}" />
+                    <TextBlock Grid.Column="2" Classes="hint" VerticalAlignment="Center" Text="{Binding NewTerminalHint}" />
+                </Grid>
+            </Button>
+            <Button Classes="row plain" Height="32" Command="{Binding OpenFileCommand}"
+                    AutomationProperties.Name="{l:AppLangResource OpenFileMenu}">
+                <Grid ColumnDefinitions="Auto,*" Margin="9,0">
+                    <lucide:LucideIcon Kind="FileText" Size="16" Margin="0,0,9,0" />
+                    <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{l:AppLangResource OpenFileMenu}" />
+                </Grid>
+            </Button>
+            <Border Height="1" Margin="4,4" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+
+            <TextBlock Classes="hint" Margin="10,4" Text="{l:AppLangResource ScanningAgents}"
+                       IsVisible="{Binding ShowScanning}" />
+            <StackPanel Margin="10,4" Spacing="2" IsVisible="{Binding ShowNoAgents}">
+                <TextBlock Classes="body" Text="{l:AppLangResource NoAgentsFound}" />
+                <TextBlock Classes="hint" TextWrapping="Wrap" Text="{l:AppLangResource NoAgentsFoundHint}" />
+            </StackPanel>
+
+            <ItemsControl ItemsSource="{Binding Agents}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="1" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LauncherAgentViewModel">
+                        <Button Classes="row" Classes.selected="{Binding IsExpanded}" Height="32"
+                                Command="{Binding LaunchCommand}" AutomationProperties.Name="{Binding Name}">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="9,0,4,0">
+                                <common:AgentIcon AgentId="{Binding Id}" AgentName="{Binding Name}" Size="18" Margin="0,0,9,0" />
+                                <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Name}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <Border Grid.Column="2" IsVisible="{Binding IsDefault}" Margin="6,0"
+                                        VerticalAlignment="Center" Padding="6,1"
+                                        CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                                        Background="{arc:ArcDesignTokenResource AccentSubtle}">
+                                    <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                               Text="{l:AppLangResource DefaultBadge}" />
+                                </Border>
+                                <Button Grid.Column="3" Classes="row" Width="24" Height="24" Command="{Binding ExpandCommand}"
+                                        AutomationProperties.Name="{l:AppLangResource ShowLaunchOptions}">
+                                    <lucide:LucideIcon Kind="ChevronRight" Size="14" HorizontalAlignment="Center" />
+                                </Button>
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Border Height="1" Margin="4,4" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Button Classes="row plain" Height="32" Command="{Binding OpenAgentSettingsCommand}"
+                    AutomationProperties.Name="{l:AppLangResource AgentSettingsMenu}">
+                <Grid ColumnDefinitions="Auto,*" Margin="9,0">
+                    <lucide:LucideIcon Kind="Settings" Size="16" Margin="0,0,9,0" />
+                    <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{l:AppLangResource AgentSettingsMenu}" />
+                </Grid>
+            </Button>
+        </StackPanel>
+
+        <!-- Second level: the options of the agent under the pointer. -->
+        <Border x:Name="SubPanel" Grid.Column="1" Width="332" Margin="4,0,0,0" Padding="0"
+                BorderThickness="1,0,0,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                IsVisible="{Binding Panel, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <vm:AgentLaunchPanel DataContext="{Binding Panel}" />
+        </Border>
+    </Grid>
+</UserControl>

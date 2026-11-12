@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:general="using:Octopus.App.Settings.General"
+             x:Class="Octopus.App.Settings.General.GeneralPageView"
+             x:DataType="general:GeneralSettingsViewModel">
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsGeneralTitle}" />
+            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsGeneralSubtitle}" />
+        </StackPanel>
+        <arc:SettingsGroup Appearance="Plain">
+            <arc:SettingsRow Header="{l:AppLangResource Language}"
+                             Description="{l:AppLangResource SettingsLanguageHint}">
+                <arc:Select AutoScrollToSelectedItem="False" Size="Small"
+                            Width="200"
+                            AutomationProperties.Name="{l:AppLangResource Language}"
+                            ItemsSource="{Binding Languages}"
+                            SelectedValue="{Binding Language, Mode=TwoWay}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsResumeAgents}"
+                             Description="{l:AppLangResource SettingsResumeAgentsHint}">
+                <arc:Switch IsChecked="{Binding ResumeAgentsOnRestart, Mode=TwoWay}" />
+            </arc:SettingsRow>
+        </arc:SettingsGroup>
+    </StackPanel>
+</UserControl>

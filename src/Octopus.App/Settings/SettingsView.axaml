@@ -1,0 +1,131 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:local="using:Octopus.App.Settings"
+             xmlns:agents="using:Octopus.App.Settings.Agents"
+             xmlns:general="using:Octopus.App.Settings.General"
+             xmlns:terminal="using:Octopus.App.Settings.Terminal"
+             xmlns:appearance="using:Octopus.App.Settings.Appearance"
+             xmlns:shortcuts="using:Octopus.App.Settings.Shortcuts"
+             x:Class="Octopus.App.Settings.SettingsView"
+             x:DataType="local:SettingsViewModel"
+             Focusable="True">
+    <UserControl.Resources>
+        <DataTemplate x:Key="NavItem" x:DataType="local:SettingsSectionViewModel">
+            <Border Classes="navitem" Classes.selected="{Binding IsSelected}">
+                <arc:Button Variant="Ghost"
+                            Size="Small"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Command="{Binding SelectCommand}"
+                            CommandParameter="{Binding}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <lucide:LucideIcon Kind="{Binding Icon}" Size="16" />
+                        <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXL}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        </Style>
+        <Style Selector="TextBlock.subtitle">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.group">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.name">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.mono">
+            <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="Border.navitem">
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.navitem.selected">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.DataTemplates>
+        <DataTemplate DataType="agents:AgentsSettingsViewModel">
+            <agents:AgentsPageView />
+        </DataTemplate>
+        <DataTemplate DataType="general:GeneralSettingsViewModel">
+            <general:GeneralPageView />
+        </DataTemplate>
+        <DataTemplate DataType="terminal:TerminalSettingsViewModel">
+            <terminal:TerminalPageView />
+        </DataTemplate>
+        <DataTemplate DataType="appearance:AppearanceSettingsViewModel">
+            <appearance:AppearancePageView />
+        </DataTemplate>
+        <DataTemplate DataType="shortcuts:ShortcutsViewModel">
+            <shortcuts:ShortcutsPageView />
+        </DataTemplate>
+    </UserControl.DataTemplates>
+
+    <Grid ColumnDefinitions="230,*" Background="{arc:ArcDesignTokenResource Background}">
+        <Border Grid.Column="0"
+                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                BorderBrush="{arc:ArcDesignTokenResource Border}"
+                BorderThickness="0,0,1,0">
+            <arc:ScrollArea>
+                <StackPanel Margin="8,10" Spacing="2">
+                    <arc:Button x:Name="BackButton"
+                                Variant="Ghost"
+                                Size="Small"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Click="OnBackClick">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <lucide:LucideIcon Kind="ArrowLeft" Size="16" />
+                            <TextBlock Text="{l:AppLangResource SettingsBackToApp}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </arc:Button>
+
+                    <TextBlock Classes="group" Margin="10,16,0,4" Text="{l:AppLangResource SettingsGroupAi}" />
+                    <ItemsControl ItemsSource="{Binding Ai}" ItemTemplate="{StaticResource NavItem}" />
+                    <TextBlock Classes="group" Margin="10,16,0,4" Text="{l:AppLangResource SettingsGroupGeneral}" />
+                    <ItemsControl ItemsSource="{Binding General}" ItemTemplate="{StaticResource NavItem}" />
+                    <TextBlock Classes="group" Margin="10,16,0,4" Text="{l:AppLangResource SettingsGroupInterface}" />
+                    <ItemsControl ItemsSource="{Binding Interface}" ItemTemplate="{StaticResource NavItem}" />
+                </StackPanel>
+            </arc:ScrollArea>
+        </Border>
+
+        <arc:ScrollArea x:Name="ContentScroll" Grid.Column="1">
+            <Border MaxWidth="820" Margin="34,26,34,60">
+                <ContentControl Content="{Binding Page}" />
+            </Border>
+        </arc:ScrollArea>
+    </Grid>
+</UserControl>

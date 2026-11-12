@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "droid",
+  "name": "Factory Droid",
+  "icon": "droid",
+  "homepage": "https://factory.ai",
+  "verified": false,
+  "detect": {
+    "executables": ["droid"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://app.factory.ai/cli | sh" }
+    ]
+  },
+  "capabilities": {
+    "prompt": { "mode": "positional" },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "FACTORY_API_KEY", "label": "API key", "secret": true, "localized": { "zh-CN": { "label": "API 密钥" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

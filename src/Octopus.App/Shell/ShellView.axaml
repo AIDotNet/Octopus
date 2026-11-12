@@ -1,0 +1,117 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:explorer="using:Octopus.App.Explorer"
+             xmlns:launcher="using:Octopus.App.Launcher"
+             xmlns:sidebar="using:Octopus.App.Sidebar"
+             xmlns:workspace="using:Octopus.App.Workspace"
+             xmlns:chrome="using:Octopus.App.Shell.Chrome"
+             xmlns:vm="using:Octopus.App.Shell"
+             x:Class="Octopus.App.Shell.ShellView"
+             x:DataType="vm:ShellViewModel">
+    <Grid x:Name="Root" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+        <Grid x:Name="Main">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="0" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="0" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left column: the traffic-light row, then the project rail and the project panel. -->
+            <!-- The clip is what the slide animation narrows; the area inside keeps its full width meanwhile (ShellView.axaml.cs). -->
+            <Border x:Name="LeftClip" ClipToBounds="True">
+            <Grid x:Name="LeftArea" RowDefinitions="40,*" HorizontalAlignment="Stretch" ClipToBounds="True">
+                <Grid x:Name="SidebarLead" ColumnDefinitions="Auto,*,Auto" Margin="0,0,6,0">
+                    <Border Width="{Binding LeftInset}" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="13,0,0,0" VerticalAlignment="Center">
+                        <Image Width="20" Height="20" Source="avares://Octopus/Assets/Icon/logo.png"
+                               RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        <TextBlock Classes="body" FontWeight="SemiBold" VerticalAlignment="Center" Text="Octopus" />
+                    </StackPanel>
+                    <arc:Button Grid.Column="2" Classes="icon" Variant="Ghost" VerticalAlignment="Center"
+                                Command="{Binding ToggleSidebarCommand}"
+                                AutomationProperties.Name="{l:AppLangResource ToggleSidebar}"
+                                arc:Tooltip.Tip="{l:AppLangResource ToggleSidebar}" arc:Tooltip.Side="Bottom">
+                        <lucide:LucideIcon Kind="PanelLeftClose" Size="16" />
+                    </arc:Button>
+                </Grid>
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+                    <Border BorderThickness="0,0,1,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}">
+                        <sidebar:ProjectRailView DataContext="{Binding Rail}" />
+                    </Border>
+                    <sidebar:ProjectPanelView Grid.Column="1" DataContext="{Binding Panel}" />
+                </Grid>
+            </Grid>
+            </Border>
+
+            <GridSplitter x:Name="LeftSplitter" Grid.Column="1" Width="4"
+                          Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                          DragCompleted="OnSplitterDragCompleted" />
+
+            <!-- The workspace reaches the window's top edge: its tab strips are the top row. -->
+            <Grid Grid.Column="2" x:Name="WorkspaceArea" ClipToBounds="True">
+                <workspace:WorkspaceView x:Name="WorkspaceHost" DataContext="{Binding Workspace}" />
+
+                <!-- Collapsed sidebar: the traffic-light room, the name and the toggle join the first tab strip. -->
+                <!-- Always laid out (the workspace needs its width while the sidebar slides); shown by code once collapsed. -->
+                <StackPanel x:Name="CollapsedLead" Orientation="Horizontal" Height="40"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Opacity="0" IsHitTestVisible="False">
+                    <Border Width="{Binding LeftInset}" />
+                    <Image Width="20" Height="20" Margin="13,0,0,0" Source="avares://Octopus/Assets/Icon/logo.png"
+                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+                    <TextBlock Classes="body" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,6,0" Text="Octopus" />
+                    <arc:Button Classes="icon" Variant="Ghost" VerticalAlignment="Center" Margin="0,0,8,0"
+                                Command="{Binding ToggleSidebarCommand}"
+                                AutomationProperties.Name="{l:AppLangResource ToggleSidebar}"
+                                arc:Tooltip.Tip="{l:AppLangResource ToggleSidebar}" arc:Tooltip.Side="Bottom">
+                        <lucide:LucideIcon Kind="PanelLeftOpen" Size="16" />
+                    </arc:Button>
+                </StackPanel>
+
+                <!-- Split, over the right end of the top row. The "+" lives in each group's own tab strip (WorkspaceView). -->
+                <StackPanel x:Name="Toolbar" Orientation="Horizontal" Height="40" Spacing="2"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,40,0"
+                            IsVisible="{Binding Workspace.HasProject}">
+                    <arc:Button Classes="icon" Variant="Ghost" VerticalAlignment="Center"
+                                Command="{Binding SplitRightCommand}"
+                                AutomationProperties.Name="{l:AppLangResource SplitRight}"
+                                arc:Tooltip.Tip="{l:AppLangResource SplitRight}" arc:Tooltip.Side="Bottom">
+                        <lucide:LucideIcon Kind="Columns2" Size="16" />
+                    </arc:Button>
+                </StackPanel>
+            </Grid>
+
+            <GridSplitter x:Name="RightSplitter" Grid.Column="3" Width="4" IsVisible="False"
+                          Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                          DragCompleted="OnRightSplitterDragCompleted" />
+            <!-- The panel is its own data context: the shell sets its visibility and project from code (ShellView.axaml.cs). -->
+            <Border x:Name="RightClip" Grid.Column="4" ClipToBounds="True">
+                <explorer:ExplorerPanelView x:Name="RightPanel" IsVisible="False" />
+            </Border>
+        </Grid>
+
+        <!-- Top right corner, always: the right panel switch (and the caption buttons where the platform needs them). -->
+        <StackPanel x:Name="TopRight" Orientation="Horizontal" Height="40" Spacing="2" Margin="0,0,6,0"
+                    HorizontalAlignment="Right" VerticalAlignment="Top">
+            <arc:Button Classes="icon" Variant="Ghost" VerticalAlignment="Center"
+                        Command="{Binding ToggleRightPanelCommand}"
+                        AutomationProperties.Name="{l:AppLangResource ToggleRightPanel}"
+                        arc:Tooltip.Tip="{l:AppLangResource ToggleRightPanel}" arc:Tooltip.Side="Bottom">
+                <lucide:LucideIcon Kind="PanelRight" Size="16" />
+            </arc:Button>
+            <chrome:CaptionButtonsView IsVisible="{Binding ShowsCaptionButtons}" Margin="6,0,0,0" />
+        </StackPanel>
+
+        <arc:Popover x:Name="LauncherPopover" Placement="Bottom" Alignment="Start">
+            <launcher:LauncherMenu x:Name="LauncherMenuView" DataContext="{Binding Launcher}" />
+        </arc:Popover>
+
+        <!-- The settings page covers the whole window. -->
+        <Grid x:Name="Overlay" />
+    </Grid>
+</UserControl>

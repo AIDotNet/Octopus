@@ -1,0 +1,125 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:common="using:Octopus.App.Common"
+             xmlns:agents="using:Octopus.App.Settings.Agents"
+             x:Class="Octopus.App.Settings.Agents.AgentRowView"
+             x:DataType="agents:AgentRowViewModel">
+    <UserControl.Styles>
+        <Style Selector="agents|FieldRow">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid ColumnDefinitions="132,*" ColumnSpacing="10">
+                        <TextBlock x:Name="PART_Label"
+                                   Classes="label"
+                                   Text="{TemplateBinding Label}"
+                                   VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}" />
+                            <TextBlock Classes="hint"
+                                       Text="{TemplateBinding Description}"
+                                       IsVisible="{TemplateBinding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="agents|FieldRow:top /template/ TextBlock#PART_Label">
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="0,9,0,0" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0">
+        <StackPanel>
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8" Margin="6,6,10,6">
+                <arc:Button Grid.Column="0"
+                            Variant="Ghost"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Command="{Binding ToggleExpandedCommand}"
+                            AutomationProperties.Name="{Binding Name}"
+                            arc:Tooltip.Tip="{l:AppLangResource SettingsToggleDetails}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <common:AgentIcon AgentId="{Binding Id}" AgentName="{Binding Name}" Size="28" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Classes="name" Text="{Binding Name}" VerticalAlignment="Center" />
+                                <TextBlock Classes="hint"
+                                           Text="{Binding Version}"
+                                           IsVisible="{Binding HasVersion}"
+                                           VerticalAlignment="Center" />
+                                <Border Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                                        CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                                        Padding="8,1"
+                                        IsVisible="{Binding IsDefault}"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{l:AppLangResource SettingsDefaultBadge}"
+                                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                               FontWeight="Medium"
+                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                </Border>
+                            </StackPanel>
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                                <TextBlock Classes="mono" Text="{Binding DefaultCommandName}"
+                                           IsVisible="{Binding IsCommandOverridden}"
+                                           TextDecorations="Strikethrough"
+                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                <TextBlock Grid.Column="1" Classes="mono" Text="{Binding CommandPreview}" TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </StackPanel>
+                    </Grid>
+                </arc:Button>
+                <arc:SegmentedControl AutoScrollToSelectedItem="False" Grid.Column="1"
+                                      VerticalAlignment="Center"
+                                      SelectedValue="{Binding EnabledKey, Mode=TwoWay}">
+                    <arc:SegmentedOption Value="on" Label="{l:AppLangResource SettingsEnabled}" />
+                    <arc:SegmentedOption Value="off" Label="{l:AppLangResource SettingsDisabled}" />
+                </arc:SegmentedControl>
+                <arc:Button Grid.Column="2"
+                            Variant="Ghost"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            Content="{Binding DefaultButtonText}"
+                            Command="{Binding ToggleDefaultCommand}" />
+                <arc:Button Grid.Column="3"
+                            Variant="Ghost"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding HasHomepage}"
+                            Command="{Binding OpenHomepageCommand}"
+                            AutomationProperties.Name="{l:AppLangResource SettingsOpenHomepage}"
+                            arc:Tooltip.Tip="{l:AppLangResource SettingsOpenHomepage}">
+                    <lucide:LucideIcon Kind="ExternalLink" Size="16" />
+                </arc:Button>
+                <arc:Button Grid.Column="4"
+                            Variant="Ghost"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            Command="{Binding ToggleExpandedCommand}"
+                            AutomationProperties.Name="{l:AppLangResource SettingsToggleDetails}">
+                    <Panel>
+                        <lucide:LucideIcon Kind="ChevronDown" Size="16" IsVisible="{Binding IsExpanded}" />
+                        <lucide:LucideIcon Kind="ChevronRight" Size="16" IsVisible="{Binding !IsExpanded}" />
+                    </Panel>
+                </arc:Button>
+            </Grid>
+
+            <StackPanel Margin="52,2,16,16" Spacing="12" IsVisible="{Binding IsExpanded}">
+                <arc:Alert Tone="Info"
+                           Title="{l:AppLangResource SettingsUnverified}"
+                           IsVisible="{Binding IsUnverified}" />
+                <ItemsControl ItemsSource="{Binding Fields}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="10" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

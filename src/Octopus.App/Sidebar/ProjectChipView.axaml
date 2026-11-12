@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:vm="using:Octopus.App.Sidebar"
+             x:Class="Octopus.App.Sidebar.ProjectChipView"
+             x:DataType="vm:ProjectChipViewModel">
+    <Grid Width="42" Height="42" HorizontalAlignment="Center">
+        <Border IsVisible="{Binding IsCurrent}" BorderThickness="2"
+                BorderBrush="{arc:ArcDesignTokenResource Accent}"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
+        <Button x:Name="ChipButton" Classes="chip" Width="34" Height="34" Command="{Binding SelectCommand}"
+                Background="{Binding Background}"
+                arc:Tooltip.Tip="{Binding Tip}" arc:Tooltip.Side="Right"
+                AutomationProperties.Name="{Binding Name}" Opacity="{Binding ChipOpacity}">
+            <TextBlock Text="{Binding Initial}" Foreground="White" FontWeight="Bold"
+                       FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Button>
+    </Grid>
+</UserControl>

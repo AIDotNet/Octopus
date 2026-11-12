@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "id": "grok",
+  "name": "Grok CLI",
+  "icon": "grok",
+  "homepage": "https://x.ai/cli",
+  "verified": true,
+  "detect": {
+    "executables": ["grok"],
+    "versionArgs": ["--version"],
+    "versionRegex": "grok (\\d+\\.\\d+\\.\\d+)",
+    "fingerprint": "grok",
+    "installHints": []
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": [
+        { "id": "grok-4.7", "label": "Grok 4.7" },
+        { "id": "grok-4.7-build-fast", "label": "Grok 4.7 Build Fast" },
+        { "id": "grok-4.6", "label": "Grok 4.6" },
+        { "id": "grok-4.5", "label": "Grok 4.5" }
+      ]
+    },
+    "effort": {
+      "label": "Reasoning effort",
+      "args": ["--reasoning-effort", "{value}"],
+      "options": [
+        { "id": "low", "label": "Low", "note": "Unconfirmed", "localized": { "zh-CN": { "note": "未确认" } } },
+        { "id": "medium", "label": "Medium", "note": "Unconfirmed", "localized": { "zh-CN": { "note": "未确认" } } },
+        { "id": "high", "label": "High", "note": "Unconfirmed", "localized": { "zh-CN": { "note": "未确认" } } }
+      ]
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["--permission-mode", "acceptEdits"] },
+        "plan": { "args": ["--permission-mode", "plan"] },
+        "auto": { "args": ["--permission-mode", "auto"] },
+        "dontAsk": { "args": ["--permission-mode", "dontAsk"] },
+        "full": { "args": ["--always-approve"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "resume": { "continueLatest": ["--continue"] },
+    "extraArgs": true,
+    "features": [
+      { "id": "agent", "type": "string", "label": "Agent", "args": ["--agent", "{value}"], "localized": { "zh-CN": { "label": "智能体" } } },
+      { "id": "rules", "type": "text", "label": "Extra rules", "args": ["--rules", "{value}"], "localized": { "zh-CN": { "label": "额外规则" } } }
+    ]
+  }
+}

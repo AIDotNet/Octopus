@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:shortcuts="using:Octopus.App.Settings.Shortcuts"
+             x:Class="Octopus.App.Settings.Shortcuts.ShortcutsPageView"
+             x:DataType="shortcuts:ShortcutsViewModel">
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsShortcutsTitle}" />
+            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsShortcutsSubtitle}" />
+        </StackPanel>
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                ClipToBounds="True">
+            <ItemsControl ItemsSource="{Binding Entries}" Margin="0,-1,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="shortcuts:ShortcutEntry">
+                        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="16,10">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Classes="name" FontWeight="Normal" Text="{Binding Title}" VerticalAlignment="Center" />
+                                <ItemsControl Grid.Column="1" ItemsSource="{Binding Combos}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="12" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:Object">
+                                            <ItemsControl ItemsSource="{Binding}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="4" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                                BorderBrush="{arc:ArcDesignTokenResource Border}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                                                MinWidth="28"
+                                                                Padding="8,2">
+                                                            <TextBlock Classes="mono"
+                                                                       Text="{Binding}"
+                                                                       HorizontalAlignment="Center"
+                                                                       Foreground="{arc:ArcDesignTokenResource Foreground}" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+    </StackPanel>
+</UserControl>

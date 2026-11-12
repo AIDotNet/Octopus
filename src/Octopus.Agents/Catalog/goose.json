@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "goose",
+  "name": "Goose",
+  "icon": "goose",
+  "homepage": "https://block.github.io/goose",
+  "verified": false,
+  "detect": {
+    "executables": ["goose"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "brew", "command": "brew install block-goose-cli" }
+    ]
+  },
+  "capabilities": {
+    "baseArgs": ["session"],
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "full": { "args": [], "env": { "GOOSE_MODE": "auto" }, "danger": true }
+      }
+    },
+    "resume": { "continueLatest": ["--resume"] },
+    "extraArgs": true,
+    "features": [
+      { "id": "provider", "type": "string", "label": "Provider", "env": "GOOSE_PROVIDER", "localized": { "zh-CN": { "label": "提供商" } } },
+      { "id": "model", "type": "string", "label": "Model", "env": "GOOSE_MODEL", "localized": { "zh-CN": { "label": "模型" } } }
+    ]
+  }
+}

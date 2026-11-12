@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:vm="using:Octopus.App.Workspace"
+             x:Class="Octopus.App.Workspace.WorkspaceView"
+             x:DataType="vm:WorkspaceViewModel">
+    <Grid Background="{arc:ArcDesignTokenResource Background}">
+        <ContentControl Content="{Binding CurrentLayout}" IsVisible="{Binding HasProject}"
+                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+        <Panel IsVisible="{Binding !HasProject}">
+            <vm:NoProjectView DataContext="{Binding EmptyState}" />
+        </Panel>
+    </Grid>
+</UserControl>

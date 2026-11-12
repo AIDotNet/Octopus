@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Files"
+             x:Class="Octopus.App.Files.DiffTabView"
+             x:DataType="vm:DiffTabViewModel">
+    <Grid Background="{arc:ArcDesignTokenResource Background}" RowDefinitions="Auto,Auto,*">
+        <vm:FileHeaderBar Folder="{Binding FolderText}" FileName="{Binding FileLabel}"
+                          CopyText="{Binding Request.Path}" RevealPath="{Binding Request.FullPath}">
+            <vm:FileHeaderBar.Trailing>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" IsVisible="{Binding HasChangeCounts}">
+                        <arc:Badge Tone="Success" Size="Small" Content="{Binding AddedText}" />
+                        <arc:Badge Tone="Danger" Size="Small" Content="{Binding RemovedText}" />
+                    </StackPanel>
+                    <arc:Button Classes="icon header" Classes.active="{Binding WrapLines}" IsVisible="{Binding HasRows}"
+                                Command="{Binding ToggleWrapCommand}"
+                                AutomationProperties.Name="{l:AppLangResource FileWrapLines}"
+                                arc:Tooltip.Tip="{l:AppLangResource FileWrapLines}">
+                        <lucide:LucideIcon Kind="WrapText" Size="14" />
+                    </arc:Button>
+                </StackPanel>
+            </vm:FileHeaderBar.Trailing>
+        </vm:FileHeaderBar>
+
+        <arc:Alert Grid.Row="1" Margin="12,8,12,4" Tone="Warning" Title="{Binding TruncatedNotice}"
+                   IsVisible="{Binding HasTruncatedNotice}" />
+
+        <!-- The same viewer as a file's, with a second number column, a sign and a tint on the changed rows. -->
+        <arc:ScrollArea x:Name="Scroller" Grid.Row="2" Orientation="Both" FadeLength="0" IsVisible="{Binding HasRows}">
+            <vm:CodeView x:Name="Lines" Text="{Binding CodeText}" Marks="{Binding Marks}" Language="{Binding Language}"
+                         WrapLines="{Binding WrapLines}" FontSize="{Binding FontSize}"
+                         FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                         Background="{arc:ArcDesignTokenResource Background}"
+                         Foreground="{arc:ArcDesignTokenResource Foreground}"
+                         MutedForeground="{arc:ArcDesignTokenResource TextSecondary}"
+                         GutterForeground="{arc:ArcDesignTokenResource TextMuted}"
+                         HoverBrush="{arc:ArcDesignTokenResource SurfaceMuted}"
+                         SelectionBrush="{arc:ArcDesignTokenResource AccentSubtle}"
+                         DividerBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                         AddedBrush="{arc:ArcDesignTokenResource Success}"
+                         RemovedBrush="{arc:ArcDesignTokenResource Danger}"
+                         HunkBrush="{arc:ArcDesignTokenResource Accent}" />
+        </arc:ScrollArea>
+
+        <arc:EmptyState Grid.Row="2" IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
+                        Icon="{x:Static arc:ArcIcons.FileText}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

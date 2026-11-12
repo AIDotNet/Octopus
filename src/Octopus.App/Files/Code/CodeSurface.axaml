@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:files="using:Octopus.App.Files"
+             x:Class="Octopus.App.Files.Code.CodeSurface">
+    <!-- The read-only code view with its scroll area: the body of the code viewer, and the source mode of the Markdown viewer. -->
+    <arc:ScrollArea x:Name="Scroller" Orientation="Both" FadeLength="0">
+        <files:CodeView x:Name="Code"
+                        FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                        Background="{arc:ArcDesignTokenResource Background}"
+                        Foreground="{arc:ArcDesignTokenResource Foreground}"
+                        MutedForeground="{arc:ArcDesignTokenResource TextSecondary}"
+                        GutterForeground="{arc:ArcDesignTokenResource TextMuted}"
+                        HoverBrush="{arc:ArcDesignTokenResource SurfaceMuted}"
+                        SelectionBrush="{arc:ArcDesignTokenResource AccentSubtle}"
+                        DividerBrush="{arc:ArcDesignTokenResource BorderSubtle}" />
+    </arc:ScrollArea>
+</UserControl>

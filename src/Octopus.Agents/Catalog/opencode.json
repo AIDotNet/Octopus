@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "id": "opencode",
+  "name": "OpenCode",
+  "icon": "opencode",
+  "homepage": "https://opencode.ai",
+  "verified": true,
+  "detect": {
+    "executables": ["opencode"],
+    "versionArgs": ["--version"],
+    "versionRegex": "^(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://opencode.ai/install | bash" },
+      { "kind": "npm", "command": "npm i -g opencode-ai" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": [],
+      "discover": { "args": ["models"], "parser": "lines" }
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "plan": { "args": ["--agent", "plan"] },
+        "auto": { "args": ["--auto"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "flag", "args": ["--prompt", "{value}"] },
+    "resume": { "continueLatest": ["--continue"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "OPENCODE_CONFIG", "label": "Config file", "localized": { "zh-CN": { "label": "配置文件" } } },
+        { "name": "OPENCODE_CONFIG_DIR", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } }
+      ],
+      "allowCustom": true
+    },
+    "features": [
+      { "id": "agent", "type": "string", "label": "Primary agent", "args": ["--agent", "{value}"], "localized": { "zh-CN": { "label": "主智能体" } } }
+    ]
+  }
+}

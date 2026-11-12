@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             x:Class="Octopus.App.Workspace.StripAddButton">
+    <arc:Button x:Name="Button" Classes="icon" Variant="Ghost" VerticalAlignment="Center"
+                Click="OnClick"
+                AutomationProperties.Name="{l:AppLangResource NewTab}"
+                arc:Tooltip.Tip="{l:AppLangResource NewTab}" arc:Tooltip.Side="Bottom">
+        <lucide:LucideIcon Kind="Plus" Size="16" />
+    </arc:Button>
+</UserControl>

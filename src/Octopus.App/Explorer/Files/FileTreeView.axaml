@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:files="using:Octopus.App.Explorer.Files"
+             xmlns:git="using:Octopus.App.Explorer.Git"
+             x:Class="Octopus.App.Explorer.Files.FileTreeView"
+             x:DataType="files:FileTreeViewModel">
+    <UserControl.Styles>
+        <Style Selector="TextBlock.node-name.hidden">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+    </UserControl.Styles>
+    <arc:TreeView x:Name="Tree" Margin="4,0,4,6" Background="Transparent" BorderThickness="0" RowHeight="30" ShowIcons="False"
+                  ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
+        <arc:TreeView.ItemTemplate>
+            <DataTemplate x:DataType="files:FileNodeViewModel">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <lucide:LucideIcon Kind="{Binding IconKind}" Size="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="node-name" Classes.hidden="{Binding IsHidden}"
+                               FontSize="{arc:ArcDesignTokenResource TypeSM}" VerticalAlignment="Center"
+                               Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <git:GitStatusLetter Grid.Column="2" Kind="{Binding GitKind}" Margin="8,0,6,0" VerticalAlignment="Center" />
+                    <Ellipse Grid.Column="3" Width="6" Height="6" Margin="8,0,8,0" VerticalAlignment="Center"
+                             IsVisible="{Binding HasChangedDescendant}"
+                             Fill="{arc:ArcDesignTokenResource Warning}" />
+                </Grid>
+            </DataTemplate>
+        </arc:TreeView.ItemTemplate>
+    </arc:TreeView>
+</UserControl>

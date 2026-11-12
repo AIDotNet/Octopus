@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "amp",
+  "name": "Amp",
+  "icon": "amp",
+  "homepage": "https://ampcode.com",
+  "verified": false,
+  "detect": {
+    "executables": ["amp"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @sourcegraph/amp" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "full": { "args": ["--dangerously-allow-all"], "danger": true }
+      }
+    },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "AMP_API_KEY", "label": "API key", "secret": true, "localized": { "zh-CN": { "label": "API 密钥" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

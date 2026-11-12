@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "id": "aider",
+  "name": "Aider",
+  "icon": "aider",
+  "homepage": "https://aider.chat",
+  "verified": false,
+  "detect": {
+    "executables": ["aider"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "pip", "command": "python -m pip install aider-install && aider-install" },
+      { "kind": "uv", "command": "uv tool install aider-chat" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "effort": {
+      "label": "Reasoning effort",
+      "args": ["--reasoning-effort", "{value}"],
+      "options": [
+        { "id": "low" }, { "id": "medium" }, { "id": "high" }
+      ]
+    },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "OPENAI_API_KEY", "label": "OpenAI API key", "secret": true, "localized": { "zh-CN": { "label": "OpenAI API 密钥" } } },
+        { "name": "ANTHROPIC_API_KEY", "label": "Anthropic API key", "secret": true, "localized": { "zh-CN": { "label": "Anthropic API 密钥" } } }
+      ],
+      "allowCustom": true
+    },
+    "features": [
+      { "id": "yesAlways", "type": "bool", "label": "Answer yes to every confirmation", "args": ["--yes-always"], "localized": { "zh-CN": { "label": "自动确认所有提示" } } },
+      { "id": "restoreChat", "type": "bool", "label": "Restore chat history", "args": ["--restore-chat-history"], "localized": { "zh-CN": { "label": "恢复聊天记录" } } }
+    ]
+  }
+}

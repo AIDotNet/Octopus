@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:files="using:Octopus.App.Files"
+             xmlns:img="using:Octopus.App.Files.Images"
+             x:Class="Octopus.App.Files.Images.ImageViewerView"
+             x:DataType="img:ImageViewerModel">
+    <Grid Background="{arc:ArcDesignTokenResource Background}" RowDefinitions="Auto,*">
+        <files:FileHeaderBar Folder="{Binding Location.Folder}" FileName="{Binding Location.Label}"
+                             CopyText="{Binding Path}" RevealPath="{Binding Path}">
+            <files:FileHeaderBar.Trailing>
+                <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Classes="headerMeta" Text="{Binding MetaText}" IsVisible="{Binding Info, Converter={x:Static ObjectConverters.IsNotNull}}" Margin="0,0,8,0" />
+                    <StackPanel Orientation="Horizontal" Spacing="2" IsVisible="{Binding HasContent}">
+                        <arc:Button Classes="icon header" Command="{Binding ZoomOutCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource ImageZoomOut}"
+                                    arc:Tooltip.Tip="{l:AppLangResource ImageZoomOut}">
+                            <lucide:LucideIcon Kind="ZoomOut" Size="14" />
+                        </arc:Button>
+                        <TextBlock Classes="headerMeta" Text="{Binding ZoomText}" Width="40" TextAlignment="Center"
+                                   AutomationProperties.Name="{l:AppLangResource ImageZoomLevel}" />
+                        <arc:Button Classes="icon header" Command="{Binding ZoomInCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource ImageZoomIn}"
+                                    arc:Tooltip.Tip="{l:AppLangResource ImageZoomIn}">
+                            <lucide:LucideIcon Kind="ZoomIn" Size="14" />
+                        </arc:Button>
+                        <arc:Button Classes="icon header" Command="{Binding ActualSizeCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource ImageActualSize}"
+                                    arc:Tooltip.Tip="{l:AppLangResource ImageActualSize}">
+                            <TextBlock Text="1:1" FontSize="{arc:ArcDesignTokenResource TypeXS}" FontWeight="Medium" />
+                        </arc:Button>
+                        <arc:Button Classes="icon header" Classes.active="{Binding IsFit}" Command="{Binding FitCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource ImageFitWindow}"
+                                    arc:Tooltip.Tip="{l:AppLangResource ImageFitWindow}">
+                            <lucide:LucideIcon Kind="Maximize" Size="14" />
+                        </arc:Button>
+                    </StackPanel>
+                </StackPanel>
+            </files:FileHeaderBar.Trailing>
+        </files:FileHeaderBar>
+
+        <img:ImageCanvas x:Name="Picture" Grid.Row="1" IsVisible="{Binding HasContent}"
+                         Ground="{arc:ArcDesignTokenResource SurfaceMuted}"
+                         CheckerLight="{arc:ArcDesignTokenResource Background}"
+                         CheckerDark="{arc:ArcDesignTokenResource BorderSubtle}"
+                         Edge="{arc:ArcDesignTokenResource Border}" />
+        <arc:EmptyState Grid.Row="1" IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
+                        Icon="{x:Static arc:ArcIcons.FileText}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

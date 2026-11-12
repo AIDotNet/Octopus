@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:files="using:Octopus.App.Files"
+             xmlns:code="using:Octopus.App.Files.Code"
+             x:Class="Octopus.App.Files.Code.CodeViewerView"
+             x:DataType="code:CodeViewerModel">
+    <Grid Background="{arc:ArcDesignTokenResource Background}" RowDefinitions="Auto,*">
+        <files:FileHeaderBar Folder="{Binding Location.Folder}" FileName="{Binding Location.Label}"
+                             CopyText="{Binding Path}" RevealPath="{Binding Path}">
+            <files:FileHeaderBar.Trailing>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Classes="headerMeta" Text="{Binding MetaText}" IsVisible="{Binding HasContent}" />
+                    <arc:Button Classes="icon header" Classes.active="{Binding WrapLines}" IsVisible="{Binding HasContent}"
+                                Command="{Binding ToggleWrapCommand}"
+                                AutomationProperties.Name="{l:AppLangResource FileWrapLines}"
+                                arc:Tooltip.Tip="{l:AppLangResource FileWrapLines}">
+                        <lucide:LucideIcon Kind="WrapText" Size="14" />
+                    </arc:Button>
+                </StackPanel>
+            </files:FileHeaderBar.Trailing>
+        </files:FileHeaderBar>
+
+        <code:CodeSurface x:Name="Body" Grid.Row="1" IsVisible="{Binding HasContent}"
+                          Text="{Binding Text}" Language="{Binding Language}" WrapLines="{Binding WrapLines}"
+                          CodeFontSize="{Binding FontSize}" MonoFontFamily="{Binding MonoFontFamily}" />
+        <arc:EmptyState Grid.Row="1" IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
+                        Icon="{x:Static arc:ArcIcons.FileText}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

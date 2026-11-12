@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:common="using:Octopus.App.Common"
+             xmlns:vm="using:Octopus.App.Sidebar"
+             x:Class="Octopus.App.Sidebar.ItemRowView"
+             x:DataType="vm:ItemRowViewModel">
+    <Grid>
+        <Button x:Name="RowButton" Classes="row" Classes.selected="{Binding IsActive}" Height="30"
+                Command="{Binding ActivateCommand}" DoubleTapped="OnDoubleTapped"
+                AutomationProperties.Name="{Binding Title}"
+                IsVisible="{Binding !IsRenaming}">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,0,8,0">
+                <common:AgentIcon IsVisible="{Binding IsAgent}" AgentId="{Binding AgentId}" AgentName="{Binding Title}"
+                                  Size="18" Margin="0,0,8,0" />
+                <lucide:LucideIcon IsVisible="{Binding IsTerminal}" Kind="SquareTerminal" Size="16" Margin="1,0,9,0" />
+                <lucide:LucideIcon IsVisible="{Binding IsFile}" Kind="FileText" Size="16" Margin="1,0,9,0" />
+                <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Title}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Classes="hint" VerticalAlignment="Center" Margin="6,0,0,0"
+                           IsVisible="{Binding HasModel}" Text="{Binding ModelName}" MaxWidth="80"
+                           TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </Button>
+        <arc:InlineEdit x:Name="Editor" Variant="Body" Margin="26,0,0,0" VerticalAlignment="Center"
+                        IsVisible="{Binding IsRenaming}" Value="{Binding Title, Mode=OneWay}"
+                        Label="{Binding Title}" TextCommitted="OnTextCommitted" EditCanceled="OnEditCanceled" />
+    </Grid>
+</UserControl>

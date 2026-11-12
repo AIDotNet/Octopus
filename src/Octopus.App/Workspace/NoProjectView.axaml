@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:vm="using:Octopus.App.Workspace"
+             x:Class="Octopus.App.Workspace.NoProjectView"
+             x:DataType="vm:EmptyStateViewModel">
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="360">
+        <TextBlock Classes="body" FontSize="{arc:ArcDesignTokenResource TypeLG}" FontWeight="Medium"
+                   HorizontalAlignment="Center" Text="{l:AppLangResource WelcomeTitle}" />
+        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeSM}" TextWrapping="Wrap" TextAlignment="Center"
+                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                   Text="{l:AppLangResource WelcomeBody}" />
+        <arc:Button Margin="0,8,0,0" HorizontalAlignment="Center" Content="{l:AppLangResource NewProject}"
+                    Command="{Binding NewProjectCommand}" />
+    </StackPanel>
+</UserControl>

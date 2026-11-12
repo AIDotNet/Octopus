@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "muse",
+  "name": "Muse Code",
+  "icon": "muse",
+  "homepage": "https://muse.meta.com",
+  "verified": true,
+  "detect": {
+    "executables": ["muse"],
+    "versionArgs": ["--version"],
+    "versionRegex": "Muse Code (\\d+\\.\\d+\\.\\d+)",
+    "fingerprint": "Muse",
+    "probeEnv": { "MUSE_NO_AUTO_UPDATE": "1" },
+    "installHints": []
+  },
+  "capabilities": {
+    "baseEnv": { "MUSE_NO_AUTO_UPDATE": "1" },
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "effort": {
+      "label": "Reasoning effort",
+      "args": ["--reasoning-effort", "{value}"],
+      "options": [
+        { "id": "none" }, { "id": "minimal" }, { "id": "low" }, { "id": "medium" },
+        { "id": "high" }, { "id": "xhigh" }, { "id": "max" }, { "id": "ultra" }
+      ]
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "dontAsk": { "args": ["--approval-mode", "never"] },
+        "full": { "args": ["--yolo"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "extraArgs": true
+  }
+}

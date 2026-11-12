@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:files="using:Octopus.App.Files"
+             xmlns:code="using:Octopus.App.Files.Code"
+             xmlns:docs="using:Octopus.App.Files.Documents"
+             x:Class="Octopus.App.Files.Documents.MarkdownViewerView"
+             x:DataType="docs:MarkdownViewerModel">
+    <Grid Background="{arc:ArcDesignTokenResource Background}" RowDefinitions="Auto,Auto,*">
+        <files:FileHeaderBar Folder="{Binding Location.Folder}" FileName="{Binding Location.Label}"
+                             CopyText="{Binding Path}" RevealPath="{Binding Path}">
+            <files:FileHeaderBar.Trailing>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Classes="headerMeta" Text="{Binding MetaText}" IsVisible="{Binding HasContent}" />
+                    <arc:Badge Tone="Warning" Size="Small" Content="{l:AppLangResource MdUnsaved}" IsVisible="{Binding ShowUnsaved}" />
+                    <arc:Button x:Name="SaveButton" Classes="icon header" IsVisible="{Binding ShowSave}" Command="{Binding SaveDocumentCommand}"
+                                AutomationProperties.Name="{l:AppLangResource MdSave}">
+                        <lucide:LucideIcon Kind="Save" Size="14" />
+                    </arc:Button>
+                    <!-- Rendered (the editor, or the read-only preview of a file the editor cannot keep intact) or the source. -->
+                    <arc:SegmentedControl IsVisible="{Binding HasContent}" Height="26" VerticalAlignment="Center"
+                                          SelectedValue="{Binding ViewMode, Mode=TwoWay}"
+                                          AutomationProperties.Name="{l:AppLangResource FileViewMode}">
+                        <arc:SegmentedOption Value="rendered" Label="{l:AppLangResource FileViewRendered}" />
+                        <arc:SegmentedOption Value="source" Label="{l:AppLangResource FileViewSource}" />
+                    </arc:SegmentedControl>
+                </StackPanel>
+            </files:FileHeaderBar.Trailing>
+        </files:FileHeaderBar>
+
+        <!-- One strip at a time under the bar: why the file is read-only, or what to do about a change on disk. -->
+        <Grid Grid.Row="1" Margin="12,8,12,0">
+            <arc:Alert Tone="Warning" Title="{l:AppLangResource MdReadOnlyTitle}" IsVisible="{Binding BannerIsLossy}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{Binding BannerText}" TextWrapping="Wrap" />
+                    <arc:Button Size="Small" Variant="Secondary" HorizontalAlignment="Left" Command="{Binding EditAnywayCommand}"
+                                Content="{l:AppLangResource MdEditAnyway}" />
+                </StackPanel>
+            </arc:Alert>
+            <arc:Alert Tone="Info" Title="{l:AppLangResource MdReadOnlyTitle}" Content="{Binding BannerText}" IsVisible="{Binding BannerIsInfo}" />
+            <arc:Alert Tone="Warning" Title="{l:AppLangResource MdDiskChangedTitle}" IsVisible="{Binding BannerIsDiskChanged}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{l:AppLangResource MdDiskChangedBody}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <arc:Button Size="Small" Variant="Secondary" Command="{Binding ReloadFromDiskCommand}" Content="{l:AppLangResource MdReloadDiscard}" />
+                        <arc:Button Size="Small" Variant="Secondary" Command="{Binding KeepMineCommand}" Content="{l:AppLangResource MdKeepMine}" />
+                    </StackPanel>
+                </StackPanel>
+            </arc:Alert>
+            <arc:Alert Tone="Danger" Title="{l:AppLangResource MdSaveFailedTitle}" Content="{Binding BannerText}" IsVisible="{Binding BannerIsSaveFailed}" />
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <arc:ScrollArea x:Name="EditorScroller" Orientation="Vertical" FadeLength="0" IsVisible="{Binding ShowEditor}">
+                <!-- The editor is made in code for each load: a fresh one has no undo history to step back past the file. -->
+                <Border x:Name="EditorHost" MaxWidth="900" Margin="12,12,24,48" HorizontalAlignment="Stretch" />
+            </arc:ScrollArea>
+            <arc:ScrollArea x:Name="PreviewScroller" Orientation="Vertical" FadeLength="0" IsVisible="{Binding ShowPreview}">
+                <arc:Markdown x:Name="Preview" Margin="24,16,24,32" MaxWidth="820" Text="{Binding Text}" />
+            </arc:ScrollArea>
+            <code:CodeSurface x:Name="Source" IsVisible="{Binding ShowSource}" Text="{Binding SourceText}" Language="md"
+                              CodeFontSize="{Binding FontSize}" MonoFontFamily="{Binding MonoFontFamily}" />
+            <arc:EmptyState IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
+                            Icon="{x:Static arc:ArcIcons.FileText}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Grid>
+    </Grid>
+</UserControl>

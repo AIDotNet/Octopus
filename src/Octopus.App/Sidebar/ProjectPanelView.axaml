@@ -1,0 +1,84 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Sidebar"
+             x:Class="Octopus.App.Sidebar.ProjectPanelView"
+             x:DataType="vm:ProjectPanelViewModel">
+    <Grid Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+        <!-- No project yet -->
+        <StackPanel IsVisible="{Binding HasNoProject}" Margin="16,24" Spacing="10" VerticalAlignment="Top">
+            <TextBlock Classes="body" FontWeight="Medium" Text="{l:AppLangResource NoProjectTitle}" TextWrapping="Wrap" />
+            <TextBlock Classes="hint" Text="{l:AppLangResource NoProjectHint}" TextWrapping="Wrap" />
+            <arc:Button Size="Small" HorizontalAlignment="Left" Content="{l:AppLangResource NewProject}"
+                        Command="{Binding NewProjectCommand}" />
+        </StackPanel>
+
+        <Grid IsVisible="{Binding HasProject}" RowDefinitions="Auto,Auto,Auto,*">
+            <arc:InlineEdit x:Name="NameEdit" Margin="8,10,8,0" HeadingLevel="2" Variant="Body" FontWeight="SemiBold"
+                            Label="{l:AppLangResource ProjectName}"
+                            Value="{Binding ProjectName, Mode=TwoWay}" />
+            <TextBlock Grid.Row="1" Margin="16,0,14,8" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                       FontSize="{arc:ArcDesignTokenResource TypeXS}" Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                       Text="{Binding ProjectPath}" TextTrimming="PathSegmentEllipsis"
+                       arc:Tooltip.Tip="{Binding ProjectPath}" />
+            <arc:SearchField Grid.Row="2" Margin="10,0,10,6" Size="Small" IsLabelVisible="False"
+                             Label="{l:AppLangResource SearchInProject}"
+                             Placeholder="{l:AppLangResource SearchInProject}"
+                             Text="{Binding Filter, Mode=TwoWay}" />
+            <arc:ScrollArea Grid.Row="3">
+                <StackPanel Margin="6,0,6,8" Spacing="2">
+                    <!-- Agents -->
+                    <Grid ColumnDefinitions="*,Auto" Margin="8,6,0,0">
+                        <TextBlock Classes="caption" VerticalAlignment="Center" Text="{l:AppLangResource Agents}" />
+                        <arc:Button x:Name="AddAgentButton" Grid.Column="1" Classes="icon" Variant="Ghost"
+                                    Click="OnAddAgentClick"
+                                    AutomationProperties.Name="{l:AppLangResource NewAgent}"
+                                    arc:Tooltip.Tip="{l:AppLangResource NewAgent}">
+                            <lucide:LucideIcon Kind="Plus" Size="14" />
+                        </arc:Button>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Agents}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ItemRowViewModel"><vm:ItemRowView /></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="hint" Margin="10,2" Text="{l:AppLangResource GroupEmpty}" IsVisible="{Binding NoAgents}" />
+
+                    <!-- Terminals -->
+                    <Grid ColumnDefinitions="*,Auto" Margin="8,8,0,0">
+                        <TextBlock Classes="caption" VerticalAlignment="Center" Text="{l:AppLangResource Terminals}" />
+                        <arc:Button Grid.Column="1" Classes="icon" Variant="Ghost" Command="{Binding NewTerminalCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource NewTerminal}"
+                                    arc:Tooltip.Tip="{l:AppLangResource NewTerminal}">
+                            <lucide:LucideIcon Kind="Plus" Size="14" />
+                        </arc:Button>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Terminals}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ItemRowViewModel"><vm:ItemRowView /></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="hint" Margin="10,2" Text="{l:AppLangResource GroupEmpty}" IsVisible="{Binding NoTerminals}" />
+
+                    <!-- Files -->
+                    <Grid ColumnDefinitions="*,Auto" Margin="8,8,0,0">
+                        <TextBlock Classes="caption" VerticalAlignment="Center" Text="{l:AppLangResource Files}" />
+                        <arc:Button Grid.Column="1" Classes="icon" Variant="Ghost" Command="{Binding NewFileCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource OpenFile}"
+                                    arc:Tooltip.Tip="{l:AppLangResource OpenFile}">
+                            <lucide:LucideIcon Kind="Plus" Size="14" />
+                        </arc:Button>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Files}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ItemRowViewModel"><vm:ItemRowView /></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="hint" Margin="10,2" Text="{l:AppLangResource GroupEmpty}" IsVisible="{Binding NoFiles}" />
+                </StackPanel>
+            </arc:ScrollArea>
+        </Grid>
+    </Grid>
+</UserControl>

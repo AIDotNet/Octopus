@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app's text in zh-CN: each unit's target translates its source; a missing unit fails the build (ARCF021). -->
+<xliff version="2.1" srcLang="en-US" trgLang="zh-CN" xmlns="urn:oasis:names:tc:xliff:document:2.0">
+  <file id="Octopus.App.Localization.AppLangResourceKind">
+    <unit id="Projects"><segment><source>Projects</source><target state="translated">项目</target></segment></unit>
+    <unit id="Settings"><segment><source>Settings</source><target state="translated">设置</target></segment></unit>
+    <unit id="ToggleSidebar"><segment><source>Toggle sidebar</source><target state="translated">切换侧边栏</target></segment></unit>
+    <unit id="NewProject"><segment><source>New project</source><target state="translated">新建项目</target></segment></unit>
+    <unit id="NewProjectDescription"><segment><source>Add a folder on this computer as a project. Terminals and agents of the project start in it.</source><target state="translated">把本机的一个目录添加为项目，项目下的终端和智能体都在这个目录里启动。</target></segment></unit>
+    <unit id="NewProjectFolder"><segment><source>Folder</source><target state="translated">目录</target></segment></unit>
+    <unit id="NewProjectFolderPlaceholder"><segment><source>Type a path or browse</source><target state="translated">输入路径，或点右侧浏览</target></segment></unit>
+    <unit id="NewProjectBrowse"><segment><source>Browse…</source><target state="translated">浏览…</target></segment></unit>
+    <unit id="NewProjectName"><segment><source>Name</source><target state="translated">名称</target></segment></unit>
+    <unit id="NewProjectNameHint"><segment><source>Defaults to the folder's name.</source><target state="translated">默认使用目录名。</target></segment></unit>
+    <unit id="NewProjectAdd"><segment><source>Add project</source><target state="translated">添加项目</target></segment></unit>
+    <unit id="NewProjectFolderRequired"><segment><source>Choose a folder.</source><target state="translated">请选择一个目录。</target></segment></unit>
+    <unit id="NewProjectFolderMissing"><segment><source>This folder does not exist.</source><target state="translated">这个目录不存在。</target></segment></unit>
+    <unit id="Appearance"><segment><source>Appearance</source><target state="translated">外观</target></segment></unit>
+    <unit id="AppearanceDescription"><segment><source>Light, dark, or follow the system setting. The switch in the top bar changes it too.</source><target state="translated">浅色、深色或跟随系统设置。顶栏中的开关也可以切换。</target></segment></unit>
+    <unit id="AppearanceSystem"><segment><source>System</source><target state="translated">跟随系统</target></segment></unit>
+    <unit id="AppearanceLight"><segment><source>Light</source><target state="translated">浅色</target></segment></unit>
+    <unit id="AppearanceDark"><segment><source>Dark</source><target state="translated">深色</target></segment></unit>
+    <unit id="Accent"><segment><source>Accent</source><target state="translated">强调色</target></segment></unit>
+    <unit id="AccentNeutral"><segment><source>Neutral</source><target state="translated">中性</target></segment></unit>
+    <unit id="AccentViolet"><segment><source>Violet</source><target state="translated">紫罗兰</target></segment></unit>
+    <unit id="AccentBlue"><segment><source>Blue</source><target state="translated">蓝色</target></segment></unit>
+    <unit id="AccentGreen"><segment><source>Green</source><target state="translated">绿色</target></segment></unit>
+    <unit id="AccentAmber"><segment><source>Amber</source><target state="translated">琥珀色</target></segment></unit>
+    <unit id="AccentOrange"><segment><source>Orange</source><target state="translated">橙色</target></segment></unit>
+    <unit id="AccentCoral"><segment><source>Coral</source><target state="translated">珊瑚色</target></segment></unit>
+    <unit id="AccentRose"><segment><source>Rose</source><target state="translated">玫瑰色</target></segment></unit>
+    <unit id="Language"><segment><source>Language</source><target state="translated">语言</target></segment></unit>
+    <unit id="SettingsBackToApp"><segment><source>Back to app</source><target state="translated">返回应用</target></segment></unit>
+    <unit id="SettingsGroupAi"><segment><source>AI</source><target state="translated">AI 能力</target></segment></unit>
+    <unit id="SettingsGroupGeneral"><segment><source>General</source><target state="translated">通用</target></segment></unit>
+    <unit id="SettingsGroupInterface"><segment><source>Interface</source><target state="translated">界面</target></segment></unit>
+    <unit id="SettingsNavAgents"><segment><source>Agents</source><target state="translated">智能体</target></segment></unit>
+    <unit id="SettingsNavGeneral"><segment><source>General</source><target state="translated">通用</target></segment></unit>
+    <unit id="SettingsNavTerminal"><segment><source>Terminal</source><target state="translated">终端</target></segment></unit>
+    <unit id="SettingsNavAppearance"><segment><source>Appearance</source><target state="translated">外观</target></segment></unit>
+    <unit id="SettingsNavShortcuts"><segment><source>Shortcuts</source><target state="translated">快捷键</target></segment></unit>
+    <unit id="SettingsAgentsTitle"><segment><source>Agents</source><target state="translated">智能体</target></segment></unit>
+    <unit id="SettingsAgentsSubtitle"><segment><source>{0} agents found on this machine. What you can configure for each one depends on what it supports.</source><target state="translated">已扫描到 {0} 个已安装的智能体。每个智能体能配置什么，取决于它自己支持什么。</target></segment></unit>
+    <unit id="SettingsDefaultPermission"><segment><source>Default permission</source><target state="translated">默认权限</target></segment></unit>
+    <unit id="SettingsDefaultPermissionHint"><segment><source>Used by every agent that has no permission of its own</source><target state="translated">未单独设置权限的智能体都使用它</target></segment></unit>
+    <unit id="SettingsFullAccessWarningTitle"><segment><source>Full access skips every approval</source><target state="translated">完全访问会跳过所有审批</target></segment></unit>
+    <unit id="SettingsFullAccessWarning"><segment><source>Agents on this level run commands and change files without asking and without a sandbox. Use it only in projects you trust.</source><target state="translated">使用该档位的智能体会不经询问、不受沙箱限制地执行命令和修改文件，请只在可信的项目中使用。</target></segment></unit>
+    <unit id="SettingsRescan"><segment><source>Scan again</source><target state="translated">重新扫描</target></segment></unit>
+    <unit id="SettingsScanning"><segment><source>Scanning…</source><target state="translated">扫描中…</target></segment></unit>
+    <unit id="SettingsLastScan"><segment><source>Last scan: {0}</source><target state="translated">上次扫描：{0}</target></segment></unit>
+    <unit id="SettingsNeverScanned"><segment><source>Not scanned yet</source><target state="translated">尚未扫描</target></segment></unit>
+    <unit id="SettingsInstalled"><segment><source>Installed</source><target state="translated">已安装</target></segment></unit>
+    <unit id="SettingsNotInstalled"><segment><source>Not installed</source><target state="translated">未安装</target></segment></unit>
+    <unit id="SettingsNoneInstalled"><segment><source>No agent found on this machine</source><target state="translated">本机没有检测到智能体</target></segment></unit>
+    <unit id="SettingsEnabled"><segment><source>On</source><target state="translated">启用</target></segment></unit>
+    <unit id="SettingsDisabled"><segment><source>Off</source><target state="translated">禁用</target></segment></unit>
+    <unit id="SettingsDefaultBadge"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="SettingsSetDefault"><segment><source>Make default</source><target state="translated">设为默认</target></segment></unit>
+    <unit id="SettingsClearDefault"><segment><source>Clear default</source><target state="translated">取消默认</target></segment></unit>
+    <unit id="SettingsOpenHomepage"><segment><source>Open homepage</source><target state="translated">打开主页</target></segment></unit>
+    <unit id="SettingsToggleDetails"><segment><source>Show or hide settings</source><target state="translated">展开或收起配置</target></segment></unit>
+    <unit id="SettingsCopyInstallCommand"><segment><source>Copy install command</source><target state="translated">复制安装命令</target></segment></unit>
+    <unit id="SettingsUnverified"><segment><source>This agent's options come from its official documentation and have not been tested yet.</source><target state="translated">此智能体的参数来自官方文档，尚未实测</target></segment></unit>
+    <unit id="SettingsFieldCommand"><segment><source>Command</source><target state="translated">命令</target></segment></unit>
+    <unit id="SettingsFieldModel"><segment><source>Model</source><target state="translated">模型</target></segment></unit>
+    <unit id="SettingsFieldEffort"><segment><source>Effort</source><target state="translated">思考强度</target></segment></unit>
+    <unit id="SettingsFieldFast"><segment><source>Fast mode</source><target state="translated">快速模式</target></segment></unit>
+    <unit id="SettingsFieldPermission"><segment><source>Permission</source><target state="translated">权限</target></segment></unit>
+    <unit id="SettingsFieldArgs"><segment><source>Arguments</source><target state="translated">参数</target></segment></unit>
+    <unit id="SettingsFieldEnv"><segment><source>Environment</source><target state="translated">环境</target></segment></unit>
+    <unit id="SettingsReset"><segment><source>Reset</source><target state="translated">重置</target></segment></unit>
+    <unit id="SettingsAgentDefault"><segment><source>Agent default</source><target state="translated">智能体默认</target></segment></unit>
+    <unit id="SettingsOptionDefault"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="SettingsCustomOption"><segment><source>Custom…</source><target state="translated">自定义…</target></segment></unit>
+    <unit id="SettingsCustomModelPlaceholder"><segment><source>Model id</source><target state="translated">模型 ID</target></segment></unit>
+    <unit id="SettingsSameAsAll"><segment><source>Same as all agents · {0}</source><target state="translated">与所有智能体相同 · {0}</target></segment></unit>
+    <unit id="SettingsEffortLow"><segment><source>Low</source><target state="translated">低</target></segment></unit>
+    <unit id="SettingsEffortMedium"><segment><source>Medium</source><target state="translated">中</target></segment></unit>
+    <unit id="SettingsEffortHigh"><segment><source>High</source><target state="translated">高</target></segment></unit>
+    <unit id="SettingsEffortXhigh"><segment><source>Extra high</source><target state="translated">极高</target></segment></unit>
+    <unit id="SettingsEffortMax"><segment><source>Max</source><target state="translated">最大</target></segment></unit>
+    <unit id="SettingsEffortNone"><segment><source>None</source><target state="translated">无</target></segment></unit>
+    <unit id="SettingsEffortMinimal"><segment><source>Minimal</source><target state="translated">极低</target></segment></unit>
+    <unit id="SettingsEffortUltra"><segment><source>Ultra</source><target state="translated">超高</target></segment></unit>
+    <unit id="SettingsPermDefault"><segment><source>Ask by default</source><target state="translated">默认询问</target></segment></unit>
+    <unit id="SettingsPermAcceptEdits"><segment><source>Accept edits</source><target state="translated">自动接受编辑</target></segment></unit>
+    <unit id="SettingsPermPlan"><segment><source>Plan mode</source><target state="translated">计划模式</target></segment></unit>
+    <unit id="SettingsPermAuto"><segment><source>Smart auto-approve</source><target state="translated">智能自动审批</target></segment></unit>
+    <unit id="SettingsPermDontAsk"><segment><source>Don't ask</source><target state="translated">不询问</target></segment></unit>
+    <unit id="SettingsPermFull"><segment><source>Full access</source><target state="translated">完全访问</target></segment></unit>
+    <unit id="SettingsArgsPlaceholder"><segment><source>Type an argument and press Enter</source><target state="translated">输入参数后按回车</target></segment></unit>
+    <unit id="SettingsEnvEmpty"><segment><source>No environment variables</source><target state="translated">没有环境变量</target></segment></unit>
+    <unit id="SettingsEnvAddKnown"><segment><source>Add common variable</source><target state="translated">添加常用变量</target></segment></unit>
+    <unit id="SettingsEnvAddCustom"><segment><source>Add variable</source><target state="translated">添加变量</target></segment></unit>
+    <unit id="SettingsEnvNamePlaceholder"><segment><source>NAME</source><target state="translated">变量名</target></segment></unit>
+    <unit id="SettingsEnvValuePlaceholder"><segment><source>Value</source><target state="translated">值</target></segment></unit>
+    <unit id="SettingsEnvRemove"><segment><source>Remove variable</source><target state="translated">移除变量</target></segment></unit>
+    <unit id="SettingsEnvSecretNote"><segment><source>Saved as plain text in settings.json</source><target state="translated">以明文保存在 settings.json</target></segment></unit>
+    <unit id="SettingsBrowse"><segment><source>Browse…</source><target state="translated">浏览…</target></segment></unit>
+    <unit id="SettingsGeneralTitle"><segment><source>General</source><target state="translated">通用</target></segment></unit>
+    <unit id="SettingsGeneralSubtitle"><segment><source>Language and what happens when the app starts again.</source><target state="translated">语言，以及应用再次启动时的行为。</target></segment></unit>
+    <unit id="SettingsLanguageHint"><segment><source>The language of the whole app</source><target state="translated">整个应用使用的语言</target></segment></unit>
+    <unit id="SettingsResumeAgents"><segment><source>Continue agent sessions after restart</source><target state="translated">重启后继续智能体会话</target></segment></unit>
+    <unit id="SettingsResumeAgentsHint"><segment><source>Agents that were open come back with their latest session.</source><target state="translated">上次打开的智能体会接着最近的会话继续。</target></segment></unit>
+    <unit id="SettingsTerminalTitle"><segment><source>Terminal</source><target state="translated">终端</target></segment></unit>
+    <unit id="SettingsTerminalSubtitle"><segment><source>The shell, the font and how much history a terminal keeps. Changes apply to open terminals at once.</source><target state="translated">终端使用的 shell、字体和保留的历史行数。修改会立即应用到已打开的终端。</target></segment></unit>
+    <unit id="SettingsShell"><segment><source>Shell</source><target state="translated">Shell</target></segment></unit>
+    <unit id="SettingsShellHint"><segment><source>The program a new terminal starts</source><target state="translated">新建终端时启动的程序</target></segment></unit>
+    <unit id="SettingsShellAuto"><segment><source>Auto-detect</source><target state="translated">自动检测</target></segment></unit>
+    <unit id="SettingsShellCustom"><segment><source>Custom path</source><target state="translated">自定义路径</target></segment></unit>
+    <unit id="SettingsShellDetected"><segment><source>Detected: {0}</source><target state="translated">检测到：{0}</target></segment></unit>
+    <unit id="SettingsShellDetecting"><segment><source>Detecting…</source><target state="translated">检测中…</target></segment></unit>
+    <unit id="SettingsShellPathPlaceholder"><segment><source>Absolute path of the shell</source><target state="translated">shell 的绝对路径</target></segment></unit>
+    <unit id="SettingsFont"><segment><source>Font</source><target state="translated">字体</target></segment></unit>
+    <unit id="SettingsFontHint"><segment><source>Leave empty for the default monospace font</source><target state="translated">留空则使用默认等宽字体</target></segment></unit>
+    <unit id="SettingsFontPlaceholder"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="SettingsFontSize"><segment><source>Font size</source><target state="translated">字号</target></segment></unit>
+    <unit id="SettingsFontSizeHint"><segment><source>10 to 24</source><target state="translated">10 到 24</target></segment></unit>
+    <unit id="SettingsScrollback"><segment><source>Scrollback lines</source><target state="translated">回看行数</target></segment></unit>
+    <unit id="SettingsScrollbackHint"><segment><source>How many lines a terminal keeps (100 to 100000)</source><target state="translated">每个终端保留的行数（100 到 100000）</target></segment></unit>
+    <unit id="SettingsTheme"><segment><source>Theme</source><target state="translated">主题</target></segment></unit>
+    <unit id="SettingsShortcutsTitle"><segment><source>Shortcuts</source><target state="translated">快捷键</target></segment></unit>
+    <unit id="SettingsShortcutsSubtitle"><segment><source>Read-only for now. While a terminal has focus these combinations belong to the app and every other key goes to the terminal.</source><target state="translated">目前只读。终端获得焦点时，这些组合键归应用，其余按键交给终端。</target></segment></unit>
+    <unit id="SettingsKeyToggleSidebar"><segment><source>Show or hide the sidebar</source><target state="translated">收起 / 展开侧边栏</target></segment></unit>
+    <unit id="SettingsKeyToggleRightPanel"><segment><source>Show or hide the right panel</source><target state="translated">收起 / 展开右侧面板</target></segment></unit>
+    <unit id="SettingsKeySplitRight"><segment><source>Split to the right</source><target state="translated">向右分屏</target></segment></unit>
+    <unit id="SettingsKeyNewTerminal"><segment><source>New terminal</source><target state="translated">新终端</target></segment></unit>
+    <unit id="SettingsKeyNewDefaultAgent"><segment><source>New terminal with the default agent</source><target state="translated">用默认智能体新建</target></segment></unit>
+    <unit id="SettingsKeyCloseTab"><segment><source>Close the current tab</source><target state="translated">关闭当前标签</target></segment></unit>
+    <unit id="SettingsKeyGotoTab"><segment><source>Go to tab 1 to 9</source><target state="translated">切换到第 1–9 个标签</target></segment></unit>
+    <unit id="SettingsKeyPrevNextTab"><segment><source>Previous or next tab</source><target state="translated">上一个 / 下一个标签</target></segment></unit>
+    <unit id="SettingsKeyOpenSettings"><segment><source>Open settings</source><target state="translated">打开设置</target></segment></unit>
+    <unit id="ChooseProjectFolder"><segment><source>Choose a project folder</source><target state="translated">选择项目文件夹</target></segment></unit>
+    <unit id="OpenFile"><segment><source>Open file</source><target state="translated">打开文件</target></segment></unit>
+    <unit id="Cancel"><segment><source>Cancel</source><target state="translated">取消</target></segment></unit>
+    <unit id="TerminalExited"><segment><source>Process exited ({0}). Press Enter to restart.</source><target state="translated">进程已退出（{0}）。按回车重新启动。</target></segment></unit>
+    <unit id="SettingsPasteConfirm"><segment><source>Confirm before pasting several lines</source><target state="translated">粘贴多行内容前确认</target></segment></unit>
+    <unit id="SettingsPasteConfirmHint"><segment><source>Ask first when the text has more than one line. Programs that use bracketed paste are not asked.</source><target state="translated">文字多于一行时先确认。启用了括号粘贴模式的程序不会询问。</target></segment></unit>
+    <unit id="SettingsKeyFindInTerminal"><segment><source>Find in terminal</source><target state="translated">在终端中查找</target></segment></unit>
+    <unit id="TerminalSearchPlaceholder"><segment><source>Find in terminal</source><target state="translated">在终端中查找</target></segment></unit>
+    <unit id="TerminalSearchPrevious"><segment><source>Previous match</source><target state="translated">上一个匹配</target></segment></unit>
+    <unit id="TerminalSearchNext"><segment><source>Next match</source><target state="translated">下一个匹配</target></segment></unit>
+    <unit id="TerminalSearchClose"><segment><source>Close search</source><target state="translated">关闭搜索</target></segment></unit>
+    <unit id="TerminalSearchNoMatches"><segment><source>No matches</source><target state="translated">无匹配</target></segment></unit>
+    <unit id="TerminalSearchCount"><segment><source>{0} of {1}</source><target state="translated">{0} / {1}</target></segment></unit>
+    <unit id="TerminalPasteTitle"><segment><source>Paste {0} lines?</source><target state="translated">粘贴 {0} 行内容？</target></segment></unit>
+    <unit id="TerminalPasteDescription"><segment><source>The text will be sent to the program as typed, and each line may run on its own.</source><target state="translated">文字会像键入一样发送给程序，每一行都可能被单独执行。</target></segment></unit>
+    <unit id="TerminalPasteConfirm"><segment><source>Paste</source><target state="translated">粘贴</target></segment></unit>
+    <unit id="TerminalPasteMore"><segment><source>… and {0} more lines</source><target state="translated">… 还有 {0} 行</target></segment></unit>
+    <unit id="FileMissing"><segment><source>This file no longer exists.</source><target state="translated">文件已不存在。</target></segment></unit>
+    <unit id="FileTooLarge"><segment><source>This file is larger than 2 MB, so it is not previewed.</source><target state="translated">文件超过 2 MB，不显示预览。</target></segment></unit>
+    <unit id="FileBinary"><segment><source>This looks like a binary file, so it is not previewed.</source><target state="translated">这似乎是二进制文件，不显示预览。</target></segment></unit>
+    <unit id="FileUnreadable"><segment><source>This file could not be read.</source><target state="translated">无法读取这个文件。</target></segment></unit>
+    <unit id="FileViewMode"><segment><source>View</source><target state="translated">查看方式</target></segment></unit>
+    <unit id="FileViewPreview"><segment><source>Preview</source><target state="translated">预览</target></segment></unit>
+    <unit id="FileViewSource"><segment><source>Source</source><target state="translated">源码</target></segment></unit>
+    <unit id="FileWrapLines"><segment><source>Wrap lines</source><target state="translated">自动换行</target></segment></unit>
+    <unit id="FilePlainText"><segment><source>Plain text</source><target state="translated">纯文本</target></segment></unit>
+    <unit id="FileLines"><segment><source>{0} lines</source><target state="translated">{0} 行</target></segment></unit>
+    <unit id="FileViewRendered"><segment><source>Rendered</source><target state="translated">渲染</target></segment></unit>
+    <unit id="ListSeparator"><segment><source>, </source><target state="translated">、</target></segment></unit>
+    <unit id="ImageZoomIn"><segment><source>Zoom in</source><target state="translated">放大</target></segment></unit>
+    <unit id="ImageZoomOut"><segment><source>Zoom out</source><target state="translated">缩小</target></segment></unit>
+    <unit id="ImageZoomLevel"><segment><source>Zoom level</source><target state="translated">缩放比例</target></segment></unit>
+    <unit id="ImageActualSize"><segment><source>Actual size (100%)</source><target state="translated">原始大小（100%）</target></segment></unit>
+    <unit id="ImageFitWindow"><segment><source>Fit to window</source><target state="translated">适应窗口</target></segment></unit>
+    <unit id="ImageFileTooLarge"><segment><source>This image file is larger than 50 MB, so it is not previewed.</source><target state="translated">图片文件超过 50 MB，不显示预览。</target></segment></unit>
+    <unit id="ImageTooManyPixels"><segment><source>This image is {0} × {1} pixels, too large to decode, so it is not previewed.</source><target state="translated">这张图片是 {0} × {1} 像素，太大，不解码预览。</target></segment></unit>
+    <unit id="ImageBroken"><segment><source>This image is damaged or in a format that cannot be shown.</source><target state="translated">这张图片已损坏，或格式无法显示。</target></segment></unit>
+    <unit id="MdUnsaved"><segment><source>Unsaved</source><target state="translated">未保存</target></segment></unit>
+    <unit id="MdSave"><segment><source>Save</source><target state="translated">保存</target></segment></unit>
+    <unit id="MdReadOnlyTitle"><segment><source>Opened read-only</source><target state="translated">已只读打开</target></segment></unit>
+    <unit id="MdReadOnlyLossy"><segment><source>The editor cannot keep everything in this file as it is ({0}). It is shown as a read-only preview so that saving cannot damage it.</source><target state="translated">编辑器无法原样保留这个文件里的内容（{0}），已按只读预览显示，以免保存时改坏文件。</target></segment></unit>
+    <unit id="MdReadOnlyTooLarge"><segment><source>This file is large ({0}), so it is shown read-only to keep the editor responsive.</source><target state="translated">这个文件较大（{0}），为保证流畅，只读显示。</target></segment></unit>
+    <unit id="MdReadOnlyNotUtf8"><segment><source>This file is not valid UTF-8 text, so it is shown read-only and cannot be edited.</source><target state="translated">这个文件不是有效的 UTF-8 文本，只读显示，不能编辑。</target></segment></unit>
+    <unit id="MdEditAnyway"><segment><source>Edit anyway</source><target state="translated">仍然编辑</target></segment></unit>
+    <unit id="MdDiskChangedTitle"><segment><source>The file on disk has changed</source><target state="translated">磁盘上的文件已更改</target></segment></unit>
+    <unit id="MdDiskChangedBody"><segment><source>You have unsaved edits here, so they were not replaced. Reload to take the file from disk, or keep your edits (saving then overwrites the file).</source><target state="translated">这里有未保存的修改，所以没有被替换。可以重新载入磁盘上的文件，或保留你的修改（之后保存会覆盖该文件）。</target></segment></unit>
+    <unit id="MdReloadDiscard"><segment><source>Reload (discard my edits)</source><target state="translated">重新载入（丢弃修改）</target></segment></unit>
+    <unit id="MdKeepMine"><segment><source>Keep my edits</source><target state="translated">保留我的修改</target></segment></unit>
+    <unit id="MdSaveFailedTitle"><segment><source>Could not save</source><target state="translated">无法保存</target></segment></unit>
+    <unit id="MdSaveFailed"><segment><source>{0}</source><target state="translated">{0}</target></segment></unit>
+    <unit id="MdSaveLossTitle"><segment><source>Saving will change this file</source><target state="translated">保存会改写这个文件</target></segment></unit>
+    <unit id="MdSaveLossBody"><segment><source>The editor cannot keep these as they are: {0}. After saving they are rewritten or lost.</source><target state="translated">编辑器无法原样保留这些内容：{0}。保存后它们会被改写或丢失。</target></segment></unit>
+    <unit id="MdSaveReformatTitle"><segment><source>Saving will reformat this file</source><target state="translated">保存会重新排版这个文件</target></segment></unit>
+    <unit id="MdSaveReformatBody"><segment><source>The text stays the same, but the editor writes it back in its own layout: {0}.</source><target state="translated">文字内容不变，但编辑器会按自己的排版写回：{0}。</target></segment></unit>
+    <unit id="MdSaveAnyway"><segment><source>Save anyway</source><target state="translated">仍然保存</target></segment></unit>
+    <unit id="MdOverwriteTitle"><segment><source>Overwrite the changes on disk?</source><target state="translated">覆盖磁盘上的更改？</target></segment></unit>
+    <unit id="MdOverwriteBody"><segment><source>The file was changed on disk while you were editing. Saving replaces it with your version.</source><target state="translated">你编辑期间，磁盘上的文件被改动过。保存会用你的版本替换它。</target></segment></unit>
+    <unit id="MdOverwrite"><segment><source>Overwrite</source><target state="translated">覆盖</target></segment></unit>
+    <unit id="MdIssueFrontMatter"><segment><source>front matter</source><target state="translated">文件头部的 front matter</target></segment></unit>
+    <unit id="MdIssueHtmlBlock"><segment><source>HTML blocks</source><target state="translated">HTML 片段</target></segment></unit>
+    <unit id="MdIssueHardBreak"><segment><source>hard line breaks</source><target state="translated">硬换行</target></segment></unit>
+    <unit id="MdIssueInlineImage"><segment><source>images inside a line of text</source><target state="translated">行内图片</target></segment></unit>
+    <unit id="MdIssueIndentedCode"><segment><source>indented code blocks</source><target state="translated">缩进代码块</target></segment></unit>
+    <unit id="MdIssueTildeFence"><segment><source>~~~ code fences</source><target state="translated">~~~ 代码围栏</target></segment></unit>
+    <unit id="MdIssueSetext"><segment><source>underlined headings</source><target state="translated">下划线式标题</target></segment></unit>
+    <unit id="MdIssueListStart"><segment><source>lists that do not start at 1</source><target state="translated">不从 1 开始的编号列表</target></segment></unit>
+    <unit id="MdIssueNestedBlocks"><segment><source>paragraphs or code inside list items</source><target state="translated">列表项里的段落或代码</target></segment></unit>
+    <unit id="MdIssueUnrecognized"><segment><source>other constructs</source><target state="translated">其他语法</target></segment></unit>
+    <unit id="MdIssueReformat"><segment><source>line wrapping, indentation, list and table markers</source><target state="translated">换行、缩进、列表和表格的标记符号</target></segment></unit>
+    <unit id="AgentDefault"><segment><source>Agent default</source><target state="translated">智能体默认</target></segment></unit>
+    <unit id="UseCustomModel"><segment><source>Use '{0}'</source><target state="translated">使用“{0}”</target></segment></unit>
+    <unit id="EffortDefault"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="EffortLow"><segment><source>Low</source><target state="translated">低</target></segment></unit>
+    <unit id="EffortMedium"><segment><source>Medium</source><target state="translated">中</target></segment></unit>
+    <unit id="EffortHigh"><segment><source>High</source><target state="translated">高</target></segment></unit>
+    <unit id="EffortXHigh"><segment><source>Extra high</source><target state="translated">极高</target></segment></unit>
+    <unit id="EffortMax"><segment><source>Max</source><target state="translated">最大</target></segment></unit>
+    <unit id="EffortLabel"><segment><source>Effort</source><target state="translated">强度</target></segment></unit>
+    <unit id="ReasoningEffortLabel"><segment><source>Reasoning effort</source><target state="translated">推理强度</target></segment></unit>
+    <unit id="PermissionDefault"><segment><source>Default permissions</source><target state="translated">默认权限</target></segment></unit>
+    <unit id="PermissionAcceptEdits"><segment><source>Accept edits</source><target state="translated">接受编辑</target></segment></unit>
+    <unit id="PermissionPlan"><segment><source>Plan mode</source><target state="translated">计划模式</target></segment></unit>
+    <unit id="PermissionAuto"><segment><source>Auto</source><target state="translated">自动</target></segment></unit>
+    <unit id="PermissionDontAsk"><segment><source>Don't ask</source><target state="translated">不再询问</target></segment></unit>
+    <unit id="PermissionFull"><segment><source>Full access</source><target state="translated">完全访问</target></segment></unit>
+    <unit id="NewTerminal"><segment><source>New terminal</source><target state="translated">新终端</target></segment></unit>
+    <unit id="OpenFileMenu"><segment><source>Open file…</source><target state="translated">打开文件…</target></segment></unit>
+    <unit id="ScanningAgents"><segment><source>Scanning for agents…</source><target state="translated">正在扫描智能体…</target></segment></unit>
+    <unit id="NoAgentsFound"><segment><source>No agents found</source><target state="translated">没有找到智能体</target></segment></unit>
+    <unit id="NoAgentsFoundHint"><segment><source>Install an agent such as Claude Code or Codex, then scan again in the agent settings.</source><target state="translated">安装 Claude Code、Codex 等智能体后，在智能体设置里重新扫描。</target></segment></unit>
+    <unit id="DefaultBadge"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="ShowLaunchOptions"><segment><source>Show launch options</source><target state="translated">显示启动选项</target></segment></unit>
+    <unit id="AgentSettingsMenu"><segment><source>Agent settings…</source><target state="translated">智能体设置…</target></segment></unit>
+    <unit id="SearchModels"><segment><source>Search models</source><target state="translated">搜索模型</target></segment></unit>
+    <unit id="FastMode"><segment><source>Fast mode</source><target state="translated">快速模式</target></segment></unit>
+    <unit id="AddPrompt"><segment><source>Add a prompt (optional)</source><target state="translated">添加提示词（可选）</target></segment></unit>
+    <unit id="PermissionPrefix"><segment><source>Permissions:</source><target state="translated">权限：</target></segment></unit>
+    <unit id="LaunchTerminal"><segment><source>Start terminal</source><target state="translated">启动终端</target></segment></unit>
+    <unit id="RenameProject"><segment><source>Rename project</source><target state="translated">重命名项目</target></segment></unit>
+    <unit id="RevealInFileManager"><segment><source>Show in file manager</source><target state="translated">在文件管理器中显示</target></segment></unit>
+    <unit id="RemoveProject"><segment><source>Remove project</source><target state="translated">移除项目</target></segment></unit>
+    <unit id="RemoveProjectTitle"><segment><source>Remove "{0}"?</source><target state="translated">移除“{0}”？</target></segment></unit>
+    <unit id="RemoveProjectBody"><segment><source>The project is removed from Octopus. Its folder and files on disk are not deleted.</source><target state="translated">只会从 Octopus 中移除这个项目，磁盘上的文件夹和文件不会被删除。</target></segment></unit>
+    <unit id="NoProjectTitle"><segment><source>No project yet</source><target state="translated">还没有项目</target></segment></unit>
+    <unit id="NoProjectHint"><segment><source>Add a folder to start working with terminals and agents in it.</source><target state="translated">添加一个文件夹，就可以在其中使用终端和智能体。</target></segment></unit>
+    <unit id="ProjectName"><segment><source>Project name</source><target state="translated">项目名称</target></segment></unit>
+    <unit id="SearchInProject"><segment><source>Search in this project</source><target state="translated">在此项目中搜索</target></segment></unit>
+    <unit id="Agents"><segment><source>Agents</source><target state="translated">智能体</target></segment></unit>
+    <unit id="Terminals"><segment><source>Terminals</source><target state="translated">终端</target></segment></unit>
+    <unit id="Files"><segment><source>Files</source><target state="translated">文件</target></segment></unit>
+    <unit id="GroupEmpty"><segment><source>None yet</source><target state="translated">暂无</target></segment></unit>
+    <unit id="NewAgent"><segment><source>Start agent</source><target state="translated">启动智能体</target></segment></unit>
+    <unit id="Rename"><segment><source>Rename</source><target state="translated">重命名</target></segment></unit>
+    <unit id="Restart"><segment><source>Restart</source><target state="translated">重新启动</target></segment></unit>
+    <unit id="MoveToRightGroup"><segment><source>Move to new group on the right</source><target state="translated">移到右侧新分组</target></segment></unit>
+    <unit id="CloseItem"><segment><source>Close</source><target state="translated">关闭</target></segment></unit>
+    <unit id="CloseRunningTitle"><segment><source>Close this tab?</source><target state="translated">关闭这个标签？</target></segment></unit>
+    <unit id="CloseRunningBody"><segment><source>A program is still running in it. Closing the tab ends it.</source><target state="translated">里面还有程序在运行，关闭标签会结束它。</target></segment></unit>
+    <unit id="QuitRunningTitle"><segment><source>Quit Octopus?</source><target state="translated">退出 Octopus？</target></segment></unit>
+    <unit id="QuitRunningBody"><segment><source>Programs are still running in some tabs. Quitting ends all of them.</source><target state="translated">还有标签里的程序在运行，退出会结束它们。</target></segment></unit>
+    <unit id="QuitApp"><segment><source>Quit</source><target state="translated">退出</target></segment></unit>
+    <unit id="CloseUnsavedTitle"><segment><source>Close without saving?</source><target state="translated">不保存就关闭？</target></segment></unit>
+    <unit id="CloseUnsavedBody"><segment><source>This tab has edits that are not saved. Closing it discards them.</source><target state="translated">这个标签里有未保存的修改，关闭会丢弃它们。</target></segment></unit>
+    <unit id="CloseDiscard"><segment><source>Discard changes</source><target state="translated">放弃修改</target></segment></unit>
+    <unit id="QuitUnsavedTitle"><segment><source>Quit without saving?</source><target state="translated">不保存就退出？</target></segment></unit>
+    <unit id="QuitUnsavedBody"><segment><source>Some files have edits that are not saved. Quitting discards them.</source><target state="translated">有文件含有未保存的修改，退出会丢弃它们。</target></segment></unit>
+    <unit id="EmptyProjectTitle"><segment><source>Start something in this project</source><target state="translated">在此项目中开始</target></segment></unit>
+    <unit id="WelcomeTitle"><segment><source>Welcome to Octopus</source><target state="translated">欢迎使用 Octopus</target></segment></unit>
+    <unit id="WelcomeBody"><segment><source>Add a project folder to run terminals and coding agents side by side.</source><target state="translated">添加一个项目文件夹，就可以并排运行终端和编码智能体。</target></segment></unit>
+    <unit id="NewTab"><segment><source>New tab</source><target state="translated">新建标签</target></segment></unit>
+    <unit id="SplitRight"><segment><source>Split right</source><target state="translated">向右分屏</target></segment></unit>
+    <unit id="MinimizeWindow"><segment><source>Minimize window</source><target state="translated">最小化窗口</target></segment></unit>
+    <unit id="MaximizeWindow"><segment><source>Maximize window</source><target state="translated">最大化窗口</target></segment></unit>
+    <unit id="CloseWindow"><segment><source>Close window</source><target state="translated">关闭窗口</target></segment></unit>
+    <unit id="ToggleRightPanel"><segment><source>Show or hide the right panel</source><target state="translated">显示 / 隐藏右侧面板</target></segment></unit>
+    <unit id="ExplorerTabFiles"><segment><source>Files</source><target state="translated">文件</target></segment></unit>
+    <unit id="ExplorerTabGit"><segment><source>Source control</source><target state="translated">源代码管理</target></segment></unit>
+    <unit id="ExplorerTabs"><segment><source>Panel tabs</source><target state="translated">面板标签</target></segment></unit>
+    <unit id="ExplorerNoProject"><segment><source>No project yet</source><target state="translated">还没有项目</target></segment></unit>
+    <unit id="ExplorerNoProjectHint"><segment><source>Add a project to browse its files here.</source><target state="translated">添加一个项目后，这里会显示它的文件。</target></segment></unit>
+    <unit id="ExplorerCollapseAll"><segment><source>Collapse all</source><target state="translated">全部折叠</target></segment></unit>
+    <unit id="ExplorerRefresh"><segment><source>Refresh</source><target state="translated">刷新</target></segment></unit>
+    <unit id="ExplorerMore"><segment><source>More</source><target state="translated">更多</target></segment></unit>
+    <unit id="ExplorerShowHidden"><segment><source>Show hidden files</source><target state="translated">显示隐藏文件</target></segment></unit>
+    <unit id="ExplorerRevealProject"><segment><source>Show project folder in file manager</source><target state="translated">在文件管理器中显示项目目录</target></segment></unit>
+    <unit id="ExplorerReveal"><segment><source>Show in file manager</source><target state="translated">在文件管理器中显示</target></segment></unit>
+    <unit id="ExplorerOpen"><segment><source>Open</source><target state="translated">打开</target></segment></unit>
+    <unit id="ExplorerCopyPath"><segment><source>Copy path</source><target state="translated">复制路径</target></segment></unit>
+    <unit id="ExplorerCopyRelativePath"><segment><source>Copy relative path</source><target state="translated">复制相对路径</target></segment></unit>
+    <unit id="ExplorerSearchMode"><segment><source>Search mode</source><target state="translated">搜索方式</target></segment></unit>
+    <unit id="ExplorerSearchByName"><segment><source>Name</source><target state="translated">名称</target></segment></unit>
+    <unit id="ExplorerSearchByContent"><segment><source>Content</source><target state="translated">内容</target></segment></unit>
+    <unit id="ExplorerSearchNamePlaceholder"><segment><source>Search file names</source><target state="translated">按文件名搜索</target></segment></unit>
+    <unit id="ExplorerSearchContentPlaceholder"><segment><source>Search file contents</source><target state="translated">按文件内容搜索</target></segment></unit>
+    <unit id="ExplorerNoMatches"><segment><source>No matches</source><target state="translated">没有匹配项</target></segment></unit>
+    <unit id="ExplorerSearching"><segment><source>Searching…</source><target state="translated">搜索中…</target></segment></unit>
+    <unit id="ExplorerStagedChanges"><segment><source>Staged changes</source><target state="translated">已暂存的更改</target></segment></unit>
+    <unit id="ExplorerChanges"><segment><source>Changes</source><target state="translated">更改</target></segment></unit>
+    <unit id="ExplorerUntracked"><segment><source>Untracked</source><target state="translated">未跟踪</target></segment></unit>
+    <unit id="ExplorerClean"><segment><source>The working tree is clean</source><target state="translated">工作区是干净的</target></segment></unit>
+    <unit id="ExplorerRecentCommits"><segment><source>Recent commits</source><target state="translated">最近提交</target></segment></unit>
+    <unit id="ExplorerNoCommits"><segment><source>No commits yet</source><target state="translated">还没有提交</target></segment></unit>
+    <unit id="ExplorerDetached"><segment><source>detached</source><target state="translated">游离 HEAD</target></segment></unit>
+    <unit id="ExplorerAgoNow"><segment><source>just now</source><target state="translated">刚刚</target></segment></unit>
+    <unit id="ExplorerAgoMinutes"><segment><source>{0} min ago</source><target state="translated">{0} 分钟前</target></segment></unit>
+    <unit id="ExplorerAgoHours"><segment><source>{0} h ago</source><target state="translated">{0} 小时前</target></segment></unit>
+    <unit id="ExplorerAgoDays"><segment><source>{0} d ago</source><target state="translated">{0} 天前</target></segment></unit>
+    <unit id="ExplorerAgoMonths"><segment><source>{0} mo ago</source><target state="translated">{0} 个月前</target></segment></unit>
+    <unit id="ExplorerAgoYears"><segment><source>{0} y ago</source><target state="translated">{0} 年前</target></segment></unit>
+    <unit id="DiffTitleStaged"><segment><source>{0} (staged)</source><target state="translated">{0}（已暂存）</target></segment></unit>
+    <unit id="DiffTitleChanges"><segment><source>{0} (changes)</source><target state="translated">{0}（更改）</target></segment></unit>
+    <unit id="DiffBinary"><segment><source>This is a binary file, so its changes are not shown.</source><target state="translated">这是二进制文件，不显示改动内容。</target></segment></unit>
+    <unit id="DiffTooLarge"><segment><source>This change is too large to show.</source><target state="translated">改动太大，不显示。</target></segment></unit>
+    <unit id="DiffEmpty"><segment><source>No changes to show. The file may have been changed back.</source><target state="translated">没有可显示的改动，文件可能已改回原样。</target></segment></unit>
+    <unit id="DiffTruncated"><segment><source>Showing the first {0} of {1} lines. The rest is not shown.</source><target state="translated">只显示前 {0} 行，共 {1} 行，其余部分不显示。</target></segment></unit>
+    <unit id="DiffFailed"><segment><source>The changes could not be read.</source><target state="translated">无法读取改动。</target></segment></unit>
+  </file>
+</xliff>

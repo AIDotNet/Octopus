@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "id": "claude",
+  "name": "Claude Code",
+  "icon": "claude",
+  "homepage": "https://claude.com/claude-code",
+  "verified": true,
+  "detect": {
+    "executables": ["claude"],
+    "versionArgs": ["--version"],
+    "versionRegex": "^(\\d+\\.\\d+\\.\\d+)",
+    "fingerprint": "Claude Code",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @anthropic-ai/claude-code" },
+      { "kind": "native", "command": "curl -fsSL https://claude.ai/install.sh | bash" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": [
+        { "id": "fable", "label": "Claude Fable 5.2", "note": "claude-fable-5-2" },
+        { "id": "opus", "label": "Claude Opus 5.5", "note": "claude-opus-5-5" },
+        { "id": "sonnet", "label": "Claude Sonnet 5.5", "note": "claude-sonnet-5-5" },
+        { "id": "haiku", "label": "Claude Haiku 5.5", "note": "claude-haiku-5-5" }
+      ]
+    },
+    "effort": {
+      "label": "Effort",
+      "args": ["--effort", "{value}"],
+      "options": [
+        { "id": "low", "label": "Low" },
+        { "id": "medium", "label": "Medium" },
+        { "id": "high", "label": "High" },
+        { "id": "xhigh", "label": "Extra high" },
+        { "id": "max", "label": "Max" }
+      ],
+      // `claude --help` lists low/medium/high/xhigh/max but not which model accepts which; narrowing haiku to
+      // low/medium/high is inferred (design/05 example), not verified.
+      "perModel": { "haiku": ["low", "medium", "high"] }
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["--permission-mode", "acceptEdits"] },
+        "plan": { "args": ["--permission-mode", "plan"] },
+        "auto": { "args": ["--permission-mode", "auto"] },
+        "dontAsk": { "args": ["--permission-mode", "dontAsk"] },
+        "full": { "args": ["--dangerously-skip-permissions"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "resume": { "continueLatest": ["--continue"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "CLAUDE_CONFIG_DIR", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } },
+        { "name": "ANTHROPIC_BASE_URL", "label": "API base URL", "localized": { "zh-CN": { "label": "API 地址" } } },
+        { "name": "ANTHROPIC_API_KEY", "label": "API key", "secret": true, "localized": { "zh-CN": { "label": "API 密钥" } } },
+        { "name": "ANTHROPIC_AUTH_TOKEN", "label": "Auth token", "secret": true, "localized": { "zh-CN": { "label": "认证令牌" } } }
+      ],
+      "allowCustom": true
+    },
+    "features": [
+      { "id": "appendSystemPrompt", "type": "text", "label": "Append system prompt", "args": ["--append-system-prompt", "{value}"], "localized": { "zh-CN": { "label": "追加系统提示词" } } },
+      { "id": "mcpConfig", "type": "list", "label": "MCP config files", "args": ["--mcp-config", "{value}"], "localized": { "zh-CN": { "label": "MCP 配置文件" } } },
+      { "id": "strictMcp", "type": "bool", "label": "Use only the given MCP servers", "args": ["--strict-mcp-config"], "localized": { "zh-CN": { "label": "仅使用指定的 MCP 服务器" } } },
+      { "id": "settings", "type": "file", "label": "Extra settings", "args": ["--settings", "{value}"], "localized": { "zh-CN": { "label": "额外 settings 文件" } } }
+    ]
+  }
+}

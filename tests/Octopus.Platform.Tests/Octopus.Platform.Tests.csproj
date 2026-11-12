@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+        <NoWarn>$(NoWarn);CA1416;xUnit1051</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="xunit.v3" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Octopus.Platform/Octopus.Platform.csproj" />
+        <ProjectReference Include="../../src/Octopus.Platform.MacOS/Octopus.Platform.MacOS.csproj" />
+        <ProjectReference Include="../../src/Octopus.Platform.Linux/Octopus.Platform.Linux.csproj" />
+        <ProjectReference Include="../../src/Octopus.Platform.Windows/Octopus.Platform.Windows.csproj" />
+    </ItemGroup>
+</Project>

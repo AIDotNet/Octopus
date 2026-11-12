@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             x:Class="Octopus.App.Dialogs.NewProjectView">
+    <StackPanel Spacing="14">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <arc:Input x:Name="PathInput" Size="Small"
+                       Label="{l:AppLangResource NewProjectFolder}"
+                       Placeholder="{l:AppLangResource NewProjectFolderPlaceholder}" />
+            <arc:Button x:Name="BrowseButton" Grid.Column="1" Variant="Secondary" Size="Small" VerticalAlignment="Top" Margin="0,24,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                    <TextBlock Text="{l:AppLangResource NewProjectBrowse}" VerticalAlignment="Center" />
+                </StackPanel>
+            </arc:Button>
+        </Grid>
+        <arc:Input x:Name="NameInput" Size="Small"
+                   Label="{l:AppLangResource NewProjectName}"
+                   Description="{l:AppLangResource NewProjectNameHint}" />
+    </StackPanel>
+</UserControl>

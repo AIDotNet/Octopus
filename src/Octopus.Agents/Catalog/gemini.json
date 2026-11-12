@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "id": "gemini",
+  "name": "Gemini CLI",
+  "icon": "gemini",
+  "homepage": "https://github.com/google-gemini/gemini-cli",
+  "verified": false,
+  "detect": {
+    "executables": ["gemini"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @google/gemini-cli" },
+      { "kind": "brew", "command": "brew install gemini-cli" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": [
+        { "id": "auto", "label": "Auto" },
+        { "id": "pro", "label": "Pro" },
+        { "id": "flash", "label": "Flash" },
+        { "id": "flash-lite", "label": "Flash Lite" }
+      ]
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["--approval-mode", "auto_edit"] },
+        "plan": { "args": ["--approval-mode", "plan"] },
+        "full": { "args": ["--approval-mode", "yolo"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "flag", "args": ["-i", "{value}"] },
+    "resume": { "continueLatest": ["--resume", "latest"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "GEMINI_API_KEY", "label": "API key", "secret": true, "localized": { "zh-CN": { "label": "API 密钥" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

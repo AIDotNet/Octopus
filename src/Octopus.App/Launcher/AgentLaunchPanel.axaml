@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Launcher"
+             x:Class="Octopus.App.Launcher.AgentLaunchPanel"
+             x:DataType="vm:AgentLaunchViewModel">
+    <StackPanel Spacing="0">
+        <!-- model -->
+        <StackPanel IsVisible="{Binding HasModel}">
+            <arc:SearchField Margin="8,8,8,4" Size="Small" IsLabelVisible="False"
+                             Label="{l:AppLangResource SearchModels}"
+                             Placeholder="{l:AppLangResource SearchModels}"
+                             Text="{Binding ModelQuery, Mode=TwoWay}" x:Name="ModelSearch" />
+            <arc:ScrollArea MaxHeight="176" Margin="4,0,4,4">
+                <ItemsControl ItemsSource="{Binding Models}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="1" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ModelOptionViewModel">
+                            <Button Classes="row" Height="30" Command="{Binding SelectCommand}"
+                                    AutomationProperties.Name="{Binding Label}">
+                                <Grid ColumnDefinitions="*,Auto,20" Margin="9,0,4,0">
+                                    <TextBlock Classes="body" VerticalAlignment="Center" Text="{Binding Label}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center" Margin="8,0,0,0"
+                                               Text="{Binding Note}" TextTrimming="CharacterEllipsis" MaxWidth="120" />
+                                    <lucide:LucideIcon Grid.Column="2" Kind="Check" Size="14" HorizontalAlignment="Right"
+                                                       IsVisible="{Binding IsSelected}" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </arc:ScrollArea>
+        </StackPanel>
+
+        <StackPanel Margin="12,10,12,0" Spacing="10">
+            <!-- effort -->
+            <StackPanel Spacing="5" IsVisible="{Binding HasEffort}">
+                <TextBlock Classes="hint" Text="{Binding EffortCaption}" />
+                <ContentControl x:Name="EffortHost" />
+            </StackPanel>
+            <!-- fast -->
+            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasFast}">
+                <TextBlock Classes="body" VerticalAlignment="Center" Text="{l:AppLangResource FastMode}" />
+                <arc:Switch Grid.Column="1" IsChecked="{Binding Fast, Mode=TwoWay}"
+                            AutomationProperties.Name="{l:AppLangResource FastMode}" />
+            </Grid>
+            <!-- prompt -->
+            <arc:Textarea x:Name="PromptBox" IsVisible="{Binding HasPrompt}" IsLabelVisible="False"
+                          Label="{l:AppLangResource AddPrompt}" Placeholder="{l:AppLangResource AddPrompt}"
+                          FrameMinHeight="66" IsResizable="False" Size="Small"
+                          Text="{Binding Prompt, Mode=TwoWay}" />
+        </StackPanel>
+
+        <Grid ColumnDefinitions="*,Auto" Margin="12,10,12,10">
+            <TextBlock Classes="hint" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                <Run Text="{l:AppLangResource PermissionPrefix}" /><Run Text=" " /><Run Text="{Binding PermissionName}" />
+            </TextBlock>
+            <arc:Button Grid.Column="1" Size="Small" Content="{l:AppLangResource LaunchTerminal}"
+                        Command="{Binding LaunchCommand}" />
+        </Grid>
+    </StackPanel>
+</UserControl>

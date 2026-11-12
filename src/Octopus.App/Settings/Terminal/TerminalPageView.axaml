@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:terminal="using:Octopus.App.Settings.Terminal"
+             x:Class="Octopus.App.Settings.Terminal.TerminalPageView"
+             x:DataType="terminal:TerminalSettingsViewModel">
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsTerminalTitle}" />
+            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsTerminalSubtitle}" />
+        </StackPanel>
+        <arc:SettingsGroup Appearance="Plain" LabelWidth="260" ContentAlignment="Stretch">
+            <arc:SettingsRow Header="{l:AppLangResource SettingsShell}"
+                             Description="{l:AppLangResource SettingsShellHint}">
+                <StackPanel Spacing="8">
+                    <arc:Select AutoScrollToSelectedItem="False" Size="Small"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="{l:AppLangResource SettingsShell}"
+                                ItemsSource="{Binding ShellModes}"
+                                SelectedValue="{Binding ShellMode, Mode=TwoWay}" />
+                    <TextBlock Classes="mono"
+                               Text="{Binding DetectedShellText}"
+                               TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding !IsCustomShell}" />
+                    <arc:Input Text="{Binding ShellPath, Mode=TwoWay}"
+                               Size="Small"
+                               Label="{l:AppLangResource SettingsShell}"
+                               IsLabelVisible="False"
+                               Placeholder="{l:AppLangResource SettingsShellPathPlaceholder}"
+                               IsVisible="{Binding IsCustomShell}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" />
+                </StackPanel>
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsFont}"
+                             Description="{l:AppLangResource SettingsFontHint}">
+                <arc:Input Text="{Binding FontFamily, Mode=TwoWay}"
+                           Size="Small"
+                           Label="{l:AppLangResource SettingsFont}"
+                           IsLabelVisible="False"
+                           Placeholder="{l:AppLangResource SettingsFontPlaceholder}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsFontSize}"
+                             Description="{l:AppLangResource SettingsFontSizeHint}">
+                <arc:NumberField Value="{Binding FontSize, Mode=TwoWay}"
+                                 Minimum="10"
+                                 Maximum="24"
+                                 Step="1"
+                                 Size="Small"
+                                 HorizontalAlignment="Left"
+                                 Width="140"
+                                 Label="{l:AppLangResource SettingsFontSize}"
+                                 IsLabelVisible="False" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsScrollback}"
+                             Description="{l:AppLangResource SettingsScrollbackHint}">
+                <arc:NumberField Value="{Binding ScrollbackLines, Mode=TwoWay}"
+                                 Minimum="100"
+                                 Maximum="100000"
+                                 Step="100"
+                                 UseGrouping="False"
+                                 Size="Small"
+                                 HorizontalAlignment="Left"
+                                 Width="160"
+                                 Label="{l:AppLangResource SettingsScrollback}"
+                                 IsLabelVisible="False" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsPasteConfirm}"
+                             Description="{l:AppLangResource SettingsPasteConfirmHint}">
+                <arc:Switch IsChecked="{Binding ConfirmMultilinePaste, Mode=TwoWay}"
+                            HorizontalAlignment="Right"
+                            AutomationProperties.Name="{l:AppLangResource SettingsPasteConfirm}" />
+            </arc:SettingsRow>
+        </arc:SettingsGroup>
+    </StackPanel>
+</UserControl>
