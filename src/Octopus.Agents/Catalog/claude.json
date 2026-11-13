@@ -97,7 +97,14 @@
       "notification": { "via": "hook", "event": "Notification" },
       "stop": { "via": "hook", "event": "Stop" },
       "stop-failure": { "via": "hook", "event": "StopFailure" },
-      "session-end": { "via": "hook", "event": "SessionEnd" }
+      "session-end": { "via": "hook", "event": "SessionEnd" },
+      // Subagents, for the cards under the session's row. Checked against 2.1.323: PreToolUse names the tool "Agent"
+      // ("Task" before) with tool_input.description, subagent_type and run_in_background; SubagentStart/Stop carry
+      // agent_id and agent_type. What a subagent is doing comes from its own transcript, not from a hook per tool.
+      "subagent-launch": { "via": "hook", "event": "PreToolUse", "matcher": "Agent|Task" },
+      "subagent-start": { "via": "hook", "event": "SubagentStart" },
+      "subagent-stop": { "via": "hook", "event": "SubagentStop" },
+      "subagent-failed": { "via": "hook", "event": "PostToolUseFailure", "matcher": "Agent|Task" }
     },
     "status": {
       "working": ["prompt-submit"],

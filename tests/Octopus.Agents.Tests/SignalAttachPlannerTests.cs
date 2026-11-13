@@ -104,7 +104,16 @@ public sealed class SignalAttachPlannerTests : IDisposable
         Assert.Equal("octopus-signal", manifest.GetProperty("name").GetString());
         var hooks = ReadJson(Path.Combine(directory, "hooks", "hooks.json")).GetProperty("hooks");
         var events = hooks.EnumerateObject().Select(p => p.Name).Order().ToList();
-        Assert.Equal(["Notification", "PermissionRequest", "SessionEnd", "SessionStart", "Stop", "StopFailure", "UserPromptSubmit"], events);
+        Assert.Equal(
+            ["Notification", "PermissionRequest", "PostToolUseFailure", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "StopFailure",
+             "SubagentStart", "SubagentStop", "UserPromptSubmit"],
+            events);
+
+        // The Agent tool only: no forwarder process for every other tool call.
+        var launch = hooks.GetProperty("PreToolUse").EnumerateArray().Single();
+        Assert.Equal("Agent|Task", launch.GetProperty("matcher").GetString());
+        Assert.Equal($"{Forwarder} hook --agent claude --channel subagent-launch", launch.GetProperty("hooks")[0].GetProperty("command").GetString());
+        Assert.Equal("Agent|Task", hooks.GetProperty("PostToolUseFailure")[0].GetProperty("matcher").GetString());
 
         var stop = hooks.GetProperty("Stop")[0].GetProperty("hooks")[0];
         Assert.Equal("command", stop.GetProperty("type").GetString());
