@@ -21,6 +21,9 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     private readonly IAgentCatalog _catalog;
     private readonly IWorkspaceCommands _workspace;
     private readonly Activity.IItemActivityService _activity;
+    private readonly Activity.ISubagentService? _subagents;
+    /// <summary>Per item, outliving the rows: a rebuild (a filter, a new tab) keeps what the user opened.</summary>
+    private readonly Dictionary<string, SubagentListViewModel> _subagentLists = [];
     private bool _updatingName;
     private bool _moving;
 
@@ -29,8 +32,22 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         IItemOpener opener,
         IAgentCatalog catalog,
         IWorkspaceCommands workspace,
-        Activity.IItemActivityService activity)
+        Activity.IItemActivityService activity,
+        Activity.ISubagentService? subagents = null)
     {
+        _subagents = subagents;
+        if (_subagents is not null)
+        {
+            _subagents.Changed += (_, id) => SyncSubagents(id);
+            _subagents.Tick += (_, _) =>
+            {
+                var now = DateTimeOffset.Now;
+                foreach (var list in _subagentLists.Values)
+                {
+                    list.Tick(now);
+                }
+            };
+        }
         _activity = activity;
         _activity.Changed += (_, id) => Items.FirstOrDefault(r => r.Id == id)?.Show(_activity.Of(id));
         _projects = projects;
@@ -164,10 +181,36 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
                     r => _workspace.MoveToNewGroup(r.Id),
                     r => _workspace.CloseItemAsync(r.Id));
                 row.Show(_activity.Of(item.Id));
+                row.Subagents = _subagentLists.GetValueOrDefault(item.Id);
                 Items.Add(row);
             }
         }
         OnPropertyChanged(nameof(NoItems));
+        // Lists of items that are gone (closed, or another project's) go with them; a project switch builds them anew.
+        foreach (var id in _subagentLists.Keys.Where(id => _projects.FindItem(id) is null).ToList())
+        {
+            _subagentLists.Remove(id);
+        }
+    }
+
+    /// <summary>Creates, updates or drops the subagent list of an item, and hands it to the item's row.</summary>
+    private void SyncSubagents(string itemId)
+    {
+        var runs = _subagents!.Of(itemId);
+        if (!_subagentLists.TryGetValue(itemId, out var list))
+        {
+            if (runs.Count == 0)
+            {
+                return;
+            }
+            list = new SubagentListViewModel(() => _projects.ActivateItem(itemId));
+            _subagentLists[itemId] = list;
+        }
+        list.Sync(runs, DateTimeOffset.Now);
+        if (Items.FirstOrDefault(r => r.Id == itemId) is { } row)
+        {
+            row.Subagents = list;
+        }
     }
 
     /// <summary>The model's short name: its label without the agent's own name in front ("Fable 5.2"), or the custom id.</summary>

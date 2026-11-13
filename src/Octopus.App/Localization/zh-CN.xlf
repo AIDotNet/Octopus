@@ -476,6 +476,13 @@
     <unit id="AgentWaitingToast"><segment><source>{0} is waiting for you</source><target state="translated">{0} 在等你回复</target></segment></unit>
     <unit id="AgentWaitingView"><segment><source>View</source><target state="translated">查看</target></segment></unit>
     <unit id="ItemWaitingTip"><segment><source>Waiting for your reply</source><target state="translated">等待你的回复</target></segment></unit>
+    <unit id="SubagentsToggle"><segment><source>Subagents</source><target state="translated">子智能体</target></segment></unit>
+    <unit id="SubagentsFinished"><segment><source>{0} finished</source><target state="translated">{0} 个已完成</target></segment></unit>
+    <unit id="SubagentStarting"><segment><source>Starting…</source><target state="translated">启动中…</target></segment></unit>
+    <unit id="SubagentDone"><segment><source>Done</source><target state="translated">已完成</target></segment></unit>
+    <unit id="SubagentFailed"><segment><source>Failed</source><target state="translated">失败</target></segment></unit>
+    <unit id="SubagentInterrupted"><segment><source>Interrupted</source><target state="translated">已中断</target></segment></unit>
+    <unit id="SubagentToolCount"><segment><source>{0} tools</source><target state="translated">{0} 次</target></segment></unit>
     <unit id="TrayWaiting"><segment><source>Octopus · {0} waiting for you</source><target state="translated">Octopus · {0} 个智能体在等你</target></segment></unit>
     <unit id="TrayShow"><segment><source>Show Octopus</source><target state="translated">显示 Octopus</target></segment></unit>
     <unit id="TrayQuit"><segment><source>Quit Octopus</source><target state="translated">退出 Octopus</target></segment></unit>

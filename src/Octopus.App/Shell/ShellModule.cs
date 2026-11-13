@@ -30,6 +30,7 @@ internal static class ShellModule
         services.AddSingleton<IProjectService, ProjectService>();
         services.AddSingleton<IItemLaunchService, ItemLaunchService>();
         services.AddSingleton<Octopus.App.Activity.IItemActivityService, Octopus.App.Activity.ItemActivityService>();
+        services.AddSingleton<Octopus.App.Activity.ISubagentService, Octopus.App.Activity.SubagentService>();
         services.AddSingleton<IItemOpener, ItemOpener>();
         services.AddSingleton<ITabContentRegistry, TabContentRegistry>();
         services.AddSingleton<CloseConfirmation>();

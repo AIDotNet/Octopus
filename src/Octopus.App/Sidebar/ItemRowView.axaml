@@ -7,6 +7,7 @@
              xmlns:vm="using:Octopus.App.Sidebar"
              x:Class="Octopus.App.Sidebar.ItemRowView"
              x:DataType="vm:ItemRowViewModel">
+    <StackPanel>
     <Grid>
         <Button x:Name="RowButton" Classes="row" Classes.selected="{Binding IsActive}" Height="30"
                 Command="{Binding ActivateCommand}" DoubleTapped="OnDoubleTapped"
@@ -21,6 +22,29 @@
                 <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Title}"
                            TextTrimming="CharacterEllipsis" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="6,0,0,0" VerticalAlignment="Center">
+                    <!-- Subagents: finished/all, and a chevron that opens the cards below. -->
+                    <Button Classes="row" Height="18" VerticalAlignment="Center"
+                            IsVisible="{Binding Subagents.HasAny, FallbackValue=False}"
+                            Command="{Binding Subagents.ToggleExpandedCommand, FallbackValue={x:Null}}"
+                            AutomationProperties.Name="{l:AppLangResource SubagentsToggle}"
+                            arc:Tooltip.Tip="{l:AppLangResource SubagentsToggle}">
+                        <Border Background="{arc:ArcDesignTokenResource BorderSubtle}"
+                                CornerRadius="{arc:ArcDesignTokenResource RadiusPill}" Padding="6,0,3,0">
+                            <StackPanel Orientation="Horizontal" Spacing="1">
+                                <TextBlock Text="{Binding Subagents.CountText, FallbackValue=''}" VerticalAlignment="Center"
+                                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                <Panel VerticalAlignment="Center">
+                                    <lucide:LucideIcon Kind="ChevronDown" Size="12"
+                                                       IsVisible="{Binding Subagents.IsExpanded, FallbackValue=False}"
+                                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                    <lucide:LucideIcon Kind="ChevronRight" Size="12"
+                                                       IsVisible="{Binding !Subagents.IsExpanded, FallbackValue=True}"
+                                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                </Panel>
+                            </StackPanel>
+                        </Border>
+                    </Button>
                     <TextBlock Classes="hint" VerticalAlignment="Center"
                                IsVisible="{Binding HasModel}" Text="{Binding ModelName}" MaxWidth="80"
                                TextTrimming="CharacterEllipsis" />
@@ -39,4 +63,11 @@
                         IsVisible="{Binding IsRenaming}" Value="{Binding Title, Mode=OneWay}"
                         Label="{Binding Title}" TextCommitted="OnTextCommitted" EditCanceled="OnEditCanceled" />
     </Grid>
+    <!-- Null for an item that never started a subagent: then nothing is built here. -->
+    <ContentControl Content="{Binding Subagents}">
+        <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:SubagentListViewModel"><vm:SubagentListView /></DataTemplate>
+        </ContentControl.ContentTemplate>
+    </ContentControl>
+    </StackPanel>
 </UserControl>

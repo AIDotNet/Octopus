@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:vm="using:Octopus.App.Sidebar"
+             x:Class="Octopus.App.Sidebar.SubagentListView"
+             x:DataType="vm:SubagentListViewModel">
+    <UserControl.Resources>
+        <!-- One subagent: status, type and task; then what it is doing (or how it ended), tool calls and time. -->
+        <DataTemplate x:Key="SubagentCard" x:DataType="vm:SubagentCardViewModel">
+            <Button Classes="row" Command="{Binding ActivateCommand}"
+                    Background="{arc:ArcDesignTokenResource Background}"
+                    AutomationProperties.Name="{Binding Title}"
+                    arc:Tooltip.Tip="{Binding Tip}">
+                <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusControl}" Padding="7,5,7,6">
+                    <StackPanel Spacing="1">
+                        <Grid ColumnDefinitions="Auto,Auto,*">
+                            <Panel Width="12" Height="12" Margin="0,0,7,0" VerticalAlignment="Center">
+                                <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                <lucide:LucideIcon Kind="Check" Size="12" IsVisible="{Binding IsDone}"
+                                                   Foreground="{arc:ArcDesignTokenResource Success}" />
+                                <lucide:LucideIcon Kind="X" Size="12" IsVisible="{Binding IsFailed}"
+                                                   Foreground="{arc:ArcDesignTokenResource Danger}" />
+                                <lucide:LucideIcon Kind="Minus" Size="12" IsVisible="{Binding IsInterrupted}"
+                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                            </Panel>
+                            <Border Grid.Column="1" Margin="0,0,6,0" Padding="4,0" MaxWidth="64" VerticalAlignment="Center"
+                                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
+                                    CornerRadius="4">
+                                <TextBlock Text="{Binding Type}" TextTrimming="CharacterEllipsis"
+                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                            </Border>
+                            <TextBlock Grid.Column="2" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                       Foreground="{arc:ArcDesignTokenResource Foreground}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="19,0,0,0">
+                            <TextBlock Text="{Binding Detail}" TextTrimming="CharacterEllipsis"
+                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                       FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                            <TextBlock Grid.Column="1" Margin="6,0,0,0" Text="{Binding ToolsText}"
+                                       FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                            <TextBlock Grid.Column="2" Margin="6,0,0,0" Text="{Binding Elapsed}"
+                                       FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel Margin="18,1,2,4" Spacing="3" IsVisible="{Binding ShowList}">
+        <ItemsControl ItemsSource="{Binding Active}" ItemTemplate="{StaticResource SubagentCard}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><StackPanel Spacing="3" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+        <!-- The finished ones, folded into one line. -->
+        <Button Classes="row" Height="24" IsVisible="{Binding HasFinished}" Command="{Binding ToggleFoldCommand}"
+                AutomationProperties.Name="{Binding FinishedText}">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,0">
+                <lucide:LucideIcon Kind="Check" Size="12" Margin="0,0,7,0" VerticalAlignment="Center"
+                                   Foreground="{arc:ArcDesignTokenResource Success}" />
+                <TextBlock Grid.Column="1" Text="{Binding FinishedText}" VerticalAlignment="Center"
+                           FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                           Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                <Panel Grid.Column="2" VerticalAlignment="Center">
+                    <lucide:LucideIcon Kind="ChevronDown" Size="12" IsVisible="{Binding IsFoldOpen}"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                    <lucide:LucideIcon Kind="ChevronRight" Size="12" IsVisible="{Binding !IsFoldOpen}"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                </Panel>
+            </Grid>
+        </Button>
+        <ItemsControl ItemsSource="{Binding VisibleFinished}" ItemTemplate="{StaticResource SubagentCard}"
+                      Margin="8,0,0,0" Opacity="0.62">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><StackPanel Spacing="3" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

@@ -54,6 +54,8 @@ public sealed partial class ItemRowViewModel : ObservableObject
     /// <summary>The agent's turn failed: a red dot.</summary>
     [ObservableProperty] public partial bool HasError { get; set; }
     public bool NeedsAttention => IsWaiting || HasError;
+    /// <summary>The subagents the session started (Claude Code's Agent tool); null for an item that never had one.</summary>
+    [ObservableProperty] public partial SubagentListViewModel? Subagents { get; set; }
 
     public void RefreshTitle() => OnPropertyChanged(nameof(Title));
 

@@ -101,6 +101,7 @@ public partial class TerminalTabView : UserControl, ITabContent
         if (Model is { } exited)
         {
             AppHost.Get<Activity.IItemActivityService>().ReportExit(exited.Item.Id);
+            AppHost.Get<Activity.ISubagentService>().ReportExit(exited.Item.Id);
         }
         if (Model is not { Resumed: true } model || code is null or 0)
         {
