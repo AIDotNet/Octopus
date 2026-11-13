@@ -20,7 +20,7 @@ public class ScannerTests
         };
 
     private static AgentScanner Make(TempDir dir, IAgentCatalog catalog, FakeLocator locator, FakeRunner runner) =>
-        new(catalog, locator, runner, new FakeLoginEnvironment("/x:/y"), new TestPaths(dir.Path), () => []);
+        new(catalog, locator, runner, new FakeLoginEnvironment($"/x{Path.PathSeparator}/y"), new TestPaths(dir.Path), () => []);
 
     [Fact]
     public async Task First_candidate_broken_second_good()
@@ -40,7 +40,7 @@ public class ScannerTests
         Assert.Same(install, scanner.Find("claude"));
         Assert.Equal("1", runner.Calls[0].Env!["PROBE"]);
         // The login PATH, then the directory of the candidate (a script may start with `env node`).
-        Assert.Equal("/x:/y:/usr/local/bin", runner.Calls[0].Env!["PATH"]);
+        Assert.Equal(string.Join(Path.PathSeparator, "/x", "/y", Path.GetDirectoryName("/usr/local/bin/claude")), runner.Calls[0].Env!["PATH"]);
     }
 
     [Fact]
@@ -117,13 +117,14 @@ public class ScannerTests
         var locator = new PathRecordingLocator(path => seen = path, "/found/x");
         var scanner = new AgentScanner(new FixedCatalog(definition), locator,
             new FakeRunner((_, _, _) => new ProcessResult(0, "x 3.4.5", "", false)),
-            new FakeLoginEnvironment("/x:/y"), new TestPaths(dir.Path), () => ["/x", "/opt/tools"]);
+            new FakeLoginEnvironment($"/x{Path.PathSeparator}/y"), new TestPaths(dir.Path), () => ["/x", "/opt/tools"]);
 
         var install = Assert.Single((await scanner.ScanAsync()).Installations);
 
         Assert.Equal("/found/x", install.Path);
         // "/x" is already on PATH and is not listed twice.
-        Assert.Equal($"/x:/y:/opt/tools:{own}", seen);
+        var ps = Path.PathSeparator;
+        Assert.Equal($"/x{ps}/y{ps}/opt/tools{ps}{own}", seen);
     }
 
     [Fact]

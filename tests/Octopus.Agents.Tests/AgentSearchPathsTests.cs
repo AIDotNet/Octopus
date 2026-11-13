@@ -2,6 +2,9 @@ namespace Octopus.Agents.Tests;
 
 public class AgentSearchPathsTests
 {
+    // The Unix layout is computed on every OS, so expected paths are built with Path.Combine to use the host separator.
+    private static string P(params string[] parts) => Path.Combine(parts);
+
     private static IReadOnlyList<string> Unix(IEnumerable<string> existing, Dictionary<string, string>? env = null, Dictionary<string, string[]>? children = null)
     {
         var set = existing.ToHashSet();
@@ -18,21 +21,21 @@ public class AgentSearchPathsTests
     public void Only_existing_directories_are_listed_once_in_priority_order()
     {
         var result = Unix(
-            ["/home/u/.local/bin", "/home/u/.npm-global/bin", "/usr/local/bin", "/custom/npm/bin"],
+            [P("/home/u", ".local", "bin"), P("/home/u", ".npm-global", "bin"), "/usr/local/bin", P("/custom/npm", "bin")],
             new() { ["npm_config_prefix"] = "/custom/npm", ["NPM_CONFIG_PREFIX"] = "/custom/npm" });
 
-        Assert.Equal(["/custom/npm/bin", "/home/u/.local/bin", "/home/u/.npm-global/bin", "/usr/local/bin"], result);
+        Assert.Equal([P("/custom/npm", "bin"), P("/home/u", ".local", "bin"), P("/home/u", ".npm-global", "bin"), "/usr/local/bin"], result);
     }
 
     [Fact]
     public void Node_version_manager_directories_list_the_newest_version_first()
     {
-        var root = "/home/u/.nvm/versions/node";
+        var root = P("/home/u", ".nvm", "versions", "node");
         var result = Unix(
-            [root + "/v22.9.0/bin", root + "/v22.10.0/bin", root + "/v18.20.4/bin"],
-            children: new() { [root] = [root + "/v18.20.4", root + "/v22.9.0", root + "/v22.10.0"] });
+            [P(root, "v22.9.0", "bin"), P(root, "v22.10.0", "bin"), P(root, "v18.20.4", "bin")],
+            children: new() { [root] = [P(root, "v18.20.4"), P(root, "v22.9.0"), P(root, "v22.10.0")] });
 
-        Assert.Equal([root + "/v22.10.0/bin", root + "/v22.9.0/bin", root + "/v18.20.4/bin"], result);
+        Assert.Equal([P(root, "v22.10.0", "bin"), P(root, "v22.9.0", "bin"), P(root, "v18.20.4", "bin")], result);
     }
 
     [Fact]
@@ -58,11 +61,14 @@ public class AgentSearchPathsTests
 
     [Theory]
     [InlineData("~", "/home/u")]
-    [InlineData("~/.opencode/bin", "/home/u/.opencode/bin")]
     [InlineData("$TOOLS/bin", "/opt/tools/bin")]
     [InlineData("%TOOLS%/bin", "/opt/tools/bin")]
     [InlineData("$MISSING/bin", "$MISSING/bin")]
     [InlineData("/plain/dir", "/plain/dir")]
     public void Directories_of_a_definition_are_expanded(string input, string expected) =>
         Assert.Equal(expected, AgentSearchPaths.Expand(input, "/home/u", n => n == "TOOLS" ? "/opt/tools" : null));
+
+    [Fact]
+    public void A_tilde_directory_is_expanded_to_the_home_directory() =>
+        Assert.Equal(P("/home/u", ".opencode", "bin"), AgentSearchPaths.Expand("~/.opencode/bin", "/home/u", _ => null));
 }

@@ -127,7 +127,10 @@ public static class AgentSearchPaths
         if (text == "~") return home;
         if (text.StartsWith("~/", StringComparison.Ordinal) || text.StartsWith("~\\", StringComparison.Ordinal))
         {
-            text = Path.Combine(home, text[2..]);
+            // Split on both separators so the result uses the host's separator only.
+            var parts = new List<string> { home };
+            parts.AddRange(text[2..].Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries));
+            text = Path.Combine(parts.ToArray());
         }
         var sb = new System.Text.StringBuilder();
         for (var i = 0; i < text.Length; i++)
