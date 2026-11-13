@@ -2,6 +2,24 @@
 
 版本号规则与发布流程见 `.agents/skills/publish-release/SKILL.md`。每个版本的说明会同步到对应的 GitHub Release。
 
+## 1.0.1116 — 2026-11-13
+
+### 新功能
+
+- **终端复制粘贴**：在 Windows 和 Linux 上，选中文字后按 Ctrl+C 即可复制（复制后取消选区，再按一次仍是中断）；右键点击会复制选区，没有选区时粘贴，与 Windows Terminal 一致。Ctrl+Shift+C 照旧，macOS 的 Cmd+C 不变。
+- **点击打开文件路径**：终端输出里真实存在的文件路径（绝对路径、相对启动目录的路径、`~/`、带 `:行:列` 的路径）按住 Ctrl（macOS 为 Cmd）悬停会出现下划线，点击后文件在工作区新标签页打开，文件夹在系统文件管理器中显示。SSH 终端暂不支持。
+- **选择 Shell**：设置 → 终端 的 Shell 下拉列表列出本机已安装的所有 shell（各版本 PowerShell、Windows PowerShell、cmd、Git Bash，以及 macOS / Linux 的 `/etc/shells` 和常见目录里的 shell），不必再手输路径；"自动检测"和"自定义路径"仍保留。
+
+### 改进
+
+- **Windows 默认使用最新的 PowerShell**：优先选已安装的最新 PowerShell 7（也能找到不在 PATH 里的商店版、WinGet 版和 MSI 安装），没有时才用系统自带的 Windows PowerShell，再退到 cmd。
+- **终端标签标题**：shell 把自己的程序名或路径（如 `pwsh.exe`）写进终端标题时不再用作会话名。
+
+### 修复
+
+- **新增 / 编辑智能体对话框**：表单比对话框宽，左右两侧被截断；现在跟随对话框宽度，放不下的字段改为上下排列。
+- **Windows 上智能体识别不到**：识别只用启动 Octopus 时继承的 PATH，之后才安装的 Codex、OpenCode 等识别不到。现在会合并注册表里最新的用户 / 系统 PATH 和常见安装目录（npm、bun、scoop、Volta、WinGet 等），版本探测的超时也从 5 秒放宽到 15 秒。
+
 ## 1.0.1115 — 2026-11-13
 
 ### 性能
