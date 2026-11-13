@@ -168,8 +168,10 @@ public class ImageViewerTests
         model.Pan(new Vector(-300, -100));
         var offset = model.Viewport!.Offset;
 
+        // The file watcher may run its own reload meanwhile, and a reload that read the old bytes can land last: wait for the new picture.
         File.WriteAllBytes(h.Path, TestImages.Jpeg(2000, 1000));
         await model.OnFileChangedAsync();
+        await FileTabHarness.WaitUntil(() => model.MetaText.Contains("JPEG"));
         Assert.Contains("JPEG", model.MetaText);
         Assert.False(model.IsFit);
         Assert.Equal(offset.X, model.Viewport!.Offset.X, 3);
@@ -177,11 +179,13 @@ public class ImageViewerTests
 
         File.WriteAllBytes(h.Path, TestImages.Png(500, 500));
         await model.OnFileChangedAsync();
+        await FileTabHarness.WaitUntil(() => model.MetaText.Contains("500"));
         Assert.Contains("500", model.MetaText);
         Assert.True(model.IsFit);
 
         File.Delete(h.Path);
         await model.OnFileChangedAsync();
+        await FileTabHarness.WaitUntil(() => model.HasNotice);
         Assert.True(model.HasNotice);
         Assert.Null(model.Image);
     }
