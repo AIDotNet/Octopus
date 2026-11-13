@@ -272,7 +272,7 @@ public sealed class SignalAttachPlanner : ISignalAttachPlanner
                 {
                     args.AddRange(["--reply", reply]);
                 }
-                hooks.Add(new GeneratedHook(channel.Event, ForwarderCommand(args)));
+                hooks.Add(new GeneratedHook(channel.Event, ForwarderCommand(args), string.IsNullOrEmpty(channel.Matcher) ? null : channel.Matcher));
             }
             return hooks;
         }

@@ -6,8 +6,8 @@ using System.Text.Json.Nodes;
 
 namespace Octopus.Agents.Signals;
 
-/// <summary>One hook handler to generate: the agent's event name and the command line it runs.</summary>
-internal sealed record GeneratedHook(string Event, string Command);
+/// <summary>One hook handler to generate: the agent's event name, the command line it runs and an optional matcher.</summary>
+internal sealed record GeneratedHook(string Event, string Command, string? Matcher = null);
 
 /// <summary>
 /// The text of everything the planner generates. Pure: no IO, so each format can be checked in tests. None of it
@@ -330,21 +330,29 @@ internal static class SignalAttachContent
     private static void WriteMatcherGroups(Utf8JsonWriter writer, IReadOnlyList<GeneratedHook> hooks, int timeoutSeconds)
     {
         writer.WriteStartObject();
-        foreach (var group in hooks.GroupBy(h => h.Event, StringComparer.Ordinal))
+        foreach (var byEvent in hooks.GroupBy(h => h.Event, StringComparer.Ordinal))
         {
-            writer.WriteStartArray(group.Key);
-            writer.WriteStartObject();
-            writer.WriteStartArray("hooks");
-            foreach (var hook in group)
+            writer.WriteStartArray(byEvent.Key);
+            // One matcher group per matcher; handlers without one share a group that has no "matcher" key.
+            foreach (var group in byEvent.GroupBy(h => h.Matcher ?? "", StringComparer.Ordinal))
             {
                 writer.WriteStartObject();
-                writer.WriteString("type", "command");
-                writer.WriteString("command", hook.Command);
-                writer.WriteNumber("timeout", timeoutSeconds);
+                if (group.Key.Length > 0)
+                {
+                    writer.WriteString("matcher", group.Key);
+                }
+                writer.WriteStartArray("hooks");
+                foreach (var hook in group)
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "command");
+                    writer.WriteString("command", hook.Command);
+                    writer.WriteNumber("timeout", timeoutSeconds);
+                    writer.WriteEndObject();
+                }
+                writer.WriteEndArray();
                 writer.WriteEndObject();
             }
-            writer.WriteEndArray();
-            writer.WriteEndObject();
             writer.WriteEndArray();
         }
         writer.WriteEndObject();

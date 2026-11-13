@@ -73,6 +73,12 @@ public sealed class SignalChannelSpec
     public string? Event { get; set; }
 
     /// <summary>
+    /// Hook channels only: the agent's matcher for the event, e.g. <c>Agent|Task</c> for <c>PreToolUse</c>, so the
+    /// forwarder runs for those tools only. Null runs it for every occurrence of the event.
+    /// </summary>
+    public string? Matcher { get; set; }
+
+    /// <summary>
     /// The slot holds only one command: Octopus resolves the user's own command at launch and the forwarder runs it
     /// after forwarding, so the user's status line or notify program keeps working (design/plugins/11 §1.4).
     /// </summary>
