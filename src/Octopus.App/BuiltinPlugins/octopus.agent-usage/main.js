@@ -26,9 +26,17 @@ let lastUsed = {};          // agentId → ms of the latest activity we heard of
 const opencodeSessions = new Map();
 const claudePlans = new Map(); // account key → "Max 20x"
 const signedOut = new Set();  // Claude accounts whose login is gone: no row waiting for data that cannot come
-const notified = new Map(); // `${agent}:${account}:${window}` → highest threshold notified, or 'reset'
+// `${agent}:${account}:${window}` → { level, at, resetsAt, sent }: the highest threshold handled in this window cycle, when
+// the last note went out, the cycle's reset time, and whether a note was really shown (not just the start-up baseline).
+// Kept in globalState, so a restart does not forget what the user was already told.
+const notices = new Map();
+let store;
+const NOTICES_KEY = 'notices';
+const CYCLE_SLACK = 10 * 60_000; // two readings of one window may disagree on its reset time by a little
 
 export async function activate(ctx) {
+  store = ctx.globalState;
+  await loadNotices();
   const list = await agents.list();
   for (const a of list) {
     if (AGENTS.includes(a.id)) state.set(a.id, { name: a.name, installed: a.installed, snapshots: new Map() });
@@ -383,40 +391,90 @@ function thresholds() {
   return (Array.isArray(list) ? list : ['80', '95']).map(Number).filter(n => n > 0 && n <= 100).sort((a, b) => a - b);
 }
 
+/** The least time between two notes about one window (minutes in the setting; 0 turns the pause off). */
+function noticeGapMs() {
+  const minutes = Number(config.get('octopus.agent-usage.notifyInterval'));
+  return Math.max(0, Number.isFinite(minutes) ? minutes : 30) * 60_000;
+}
+
+async function loadNotices() {
+  let saved;
+  try {
+    saved = await store?.get(NOTICES_KEY);
+  } catch {
+    return;
+  }
+  const now = Date.now();
+  for (const [key, rec] of Object.entries(saved ?? {})) {
+    // A cycle that ended while the app was closed is over: its reset note would only be stale news.
+    if (rec && typeof rec.level === 'number' && (!rec.resetsAt || rec.resetsAt > now)) notices.set(key, rec);
+  }
+}
+
+function saveNotices() {
+  try {
+    Promise.resolve(store?.set(NOTICES_KEY, Object.fromEntries(notices))).catch(() => {});
+  } catch { /* the reminders still work for this run */ }
+}
+
+/**
+ * Notes when a window passes a threshold. A threshold is announced once per window cycle (until the window resets), a
+ * dip and a climb back across it say nothing new, and notes about one window keep a pause between them.
+ */
 function warn(agentId, account, previous, snapshot) {
   const name = state.get(agentId)?.name ?? agentId;
+  const levels = thresholds();
+  const now = Date.now();
+  let changed = false;
   for (const w of snapshot.windows ?? []) {
+    // A reading from before the window's reset describes a window that no longer exists.
+    if (w.reset || (w.resetsAt && w.resetsAt <= now)) continue;
     const key = `${agentId}:${account}:${w.id}`;
-    const crossed = thresholds().filter(n => w.usedPercent >= n).pop();
-    const before = notified.get(key);
-    if (crossed !== undefined && (typeof before !== 'number' || crossed > before)) {
-      notified.set(key, crossed);
-      // The first reading after start only sets the baseline: no note for something that was already true.
-      if (previous) {
-        notify(t(`${name}：${w.label}窗口已用 ${Math.round(w.usedPercent)}%`, `${name}: ${Math.round(w.usedPercent)}% of the ${w.label} window used`),
-          w.resetsAt ? t(`${formatReset(w.resetsAt)}重置`, `Resets ${formatReset(w.resetsAt)}`) : undefined);
-      }
-    } else if (crossed === undefined && typeof before === 'number') {
-      notified.delete(key);
+    let rec = notices.get(key);
+    if (rec) {
+      // A later reset time is a new cycle. Without a reset time, a clear drop below every threshold is.
+      const renewed = w.resetsAt && rec.resetsAt ? w.resetsAt - rec.resetsAt > CYCLE_SLACK : !w.resetsAt && levels.length > 0 && w.usedPercent < levels[0] - 10;
+      if (renewed) { notices.delete(key); rec = undefined; changed = true; }
     }
+    const crossed = levels.filter(n => w.usedPercent >= n).pop();
+    if (crossed === undefined || (rec && rec.level >= crossed)) continue;
+    // The first reading after start only sets the baseline: no note for something that was already true.
+    if (!previous) {
+      notices.set(key, { level: crossed, at: rec?.at ?? 0, resetsAt: w.resetsAt, sent: rec?.sent ?? false });
+      changed = true;
+      continue;
+    }
+    // Too soon after the last note on this window: not recorded, so the next reading after the pause tells it.
+    if (rec?.at && now - rec.at < noticeGapMs()) continue;
+    notices.set(key, { level: crossed, at: now, resetsAt: w.resetsAt, sent: true });
+    changed = true;
+    notify(t(`${name}：${w.label}窗口已用 ${Math.round(w.usedPercent)}%`, `${name}: ${Math.round(w.usedPercent)}% of the ${w.label} window used`),
+      w.resetsAt ? t(`${formatReset(w.resetsAt)}重置`, `Resets ${formatReset(w.resetsAt)}`) : undefined);
   }
+  if (changed) saveNotices();
 }
 
 function checkResets() {
   const now = Date.now();
+  let changed = false;
   for (const [agentId, entry] of state) {
     for (const [account, { snapshot }] of entry.snapshots) {
       for (const w of snapshot.windows ?? []) {
         if (!w.resetsAt || w.resetsAt > now || w.reset) continue;
         w.reset = true;
         const key = `${agentId}:${account}:${w.id}`;
-        if (typeof notified.get(key) === 'number' && config.get('octopus.agent-usage.notifyOnReset') !== false) {
+        const rec = notices.get(key);
+        if (!rec) continue;
+        // Only a window the user was really warned about is worth a "reset" note.
+        if (rec.sent && config.get('octopus.agent-usage.notifyOnReset') !== false) {
           notify(t(`${entry.name}：${w.label}窗口已重置`, `${entry.name}: the ${w.label} window has reset`));
         }
-        notified.delete(key);
+        notices.delete(key);
+        changed = true;
       }
     }
   }
+  if (changed) saveNotices();
 }
 
 async function notify(title, body) {

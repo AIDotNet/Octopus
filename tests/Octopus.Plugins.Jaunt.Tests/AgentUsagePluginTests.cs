@@ -126,6 +126,44 @@ public sealed class AgentUsagePluginTests
         Assert.Equal(71.5, harness.Usage.Get("claude")!.Snapshot["windows"]![0]!["usedPercent"]!.GetValue<double>());
     }
 
+    private static JsonObject StatusLine(int fiveHour, long resets) => new()
+    {
+        ["rate_limits"] = new JsonObject { ["five_hour"] = new JsonObject { ["used_percentage"] = fiveHour, ["resets_at"] = resets } },
+    };
+
+    [Fact]
+    public async Task ThresholdNotes_AreOncePerCycle_AndKeepAPauseBetweenThem()
+    {
+        var (harness, _, agents) = await StartAsync();
+        await using var _ = harness;
+        int Toasts() => harness.Captured.Notifications.Count(n => n.Method == "ui.toast");
+        var resets = DateTimeOffset.UtcNow.AddHours(3).ToUnixTimeSeconds();
+
+        agents.Signal("claude", "statusline", StatusLine(50, resets), account: "a1b2c3d4e5f6");   // baseline
+        await Harness.WaitUntil(() => harness.Usage.Get("claude", "a1b2c3d4e5f6") is not null);
+        agents.Signal("claude", "statusline", StatusLine(82, resets), account: "a1b2c3d4e5f6");   // crosses 80
+        await Harness.WaitUntil(() => Toasts() == 1);
+
+        // Dipping under the threshold and climbing back says nothing new, and neither does the same reading again.
+        agents.Signal("claude", "statusline", StatusLine(70, resets), account: "a1b2c3d4e5f6");
+        agents.Signal("claude", "statusline", StatusLine(83, resets), account: "a1b2c3d4e5f6");
+        agents.Signal("claude", "statusline", StatusLine(83, resets), account: "a1b2c3d4e5f6");
+        // 95 is a new level, but the last note on this window was moments ago.
+        agents.Signal("claude", "statusline", StatusLine(96, resets), account: "a1b2c3d4e5f6");
+        await Task.Delay(500);
+        Assert.Equal(1, Toasts());
+
+        // Without the pause the new level is announced, once.
+        var manifest = PluginManifestReader.ReadPackage(Path.Combine(harness.BuiltinRoot, Id), PluginSource.Builtin, requireDirectoryName: true).Manifest!;
+        harness.Config.Set(manifest, "octopus.agent-usage.notifyInterval", JsonValue.Create(0.0), byUser: true);
+        await Task.Delay(300);
+        agents.Signal("claude", "statusline", StatusLine(96, resets), account: "a1b2c3d4e5f6");
+        await Harness.WaitUntil(() => Toasts() == 2);
+        agents.Signal("claude", "statusline", StatusLine(97, resets), account: "a1b2c3d4e5f6");
+        await Task.Delay(500);
+        Assert.Equal(2, Toasts());
+    }
+
     /// <summary>A snapshot as the plugin reported it last run: one weekly window.</summary>
     private static JsonObject Cached(string? account, double percent, string? plan = null, bool withWindow = true) => new()
     {

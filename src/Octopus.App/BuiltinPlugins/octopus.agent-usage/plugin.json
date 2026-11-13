@@ -99,6 +99,16 @@
           "type": "list", "default": ["80", "95"], "label": "Notify at (%)",
           "localized": { "zh-CN": { "label": "提醒阈值（%）" } }
         },
+        "octopus.agent-usage.notifyInterval": {
+          "type": "number", "default": 30, "label": "Pause between reminders (minutes)",
+          "description": "A threshold is announced once per window cycle. This is the least time between two reminders about the same window; 0 turns the pause off.",
+          "localized": {
+            "zh-CN": {
+              "label": "提醒间隔（分钟）",
+              "description": "每个阈值在一个窗口周期内只提醒一次。这里是同一个窗口两次提醒之间至少隔多久；填 0 不限制。"
+            }
+          }
+        },
         "octopus.agent-usage.notifyOnReset": {
           "type": "bool", "default": true, "label": "Notify when a window resets",
           "localized": { "zh-CN": { "label": "窗口重置时提醒" } }
