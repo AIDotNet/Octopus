@@ -1,4 +1,5 @@
 using System.Reflection;
+using Avalonia.Threading;
 using Xunit;
 using Xunit.Sdk;
 using Xunit.v3;
@@ -12,7 +13,14 @@ namespace Octopus.App.Tests;
 [AttributeUsage(AttributeTargets.Assembly | AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class FreshAppAttribute : BeforeAfterTestAttribute
 {
-    public override void Before(MethodInfo methodUnderTest, IXunitTest test) => TestApp.Fresh();
+    public override void Before(MethodInfo methodUnderTest, IXunitTest test) => OnUiThread(TestApp.Fresh);
 
-    public override void After(MethodInfo methodUnderTest, IXunitTest test) => TestApp.Dispose();
+    public override void After(MethodInfo methodUnderTest, IXunitTest test) => OnUiThread(TestApp.Dispose);
+
+    // Avalonia objects (compositor, theme, stores with UI state) belong to the UI thread; xUnit runs these hooks on its own.
+    private static void OnUiThread(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) action();
+        else Dispatcher.UIThread.Invoke(action);
+    }
 }

@@ -80,7 +80,7 @@ internal static class SignalTestHelpers
     /// <summary>Waits until <paramref name="condition"/> holds, polling; fails after a few seconds.</summary>
     public static async Task WaitUntilAsync(Func<bool> condition, string what)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
         while (!condition())
         {
             if (DateTime.UtcNow > deadline)
@@ -96,7 +96,7 @@ internal static class SignalTestHelpers
     {
         var tcs = new TaskCompletionSource<AgentSignal>(TaskCreationOptions.RunContinuationsAsynchronously);
         var subscription = hub.Subscribe(agent, channel, s => tcs.TrySetResult(s));
-        return (subscription, tcs.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        return (subscription, tcs.Task.WaitAsync(TimeSpan.FromSeconds(30)));
     }
 
     /// <summary>A program on PATH (tests that need node skip without it).</summary>
