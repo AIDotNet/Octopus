@@ -55,6 +55,8 @@ public static class TestApp
             services.Replace(ServiceDescriptor.Singleton<ITerminalConnectionFactory, FakeTerminalConnectionFactory>());
             services.AddSingleton(p => (FakeTerminalConnectionFactory)p.GetRequiredService<ITerminalConnectionFactory>());
             services.Replace(ServiceDescriptor.Singleton<IAgentScanner>(new FakeAgentScanner("claude", "opencode", "codex")));
+            services.Replace(ServiceDescriptor.Singleton<Octopus.Agents.Sessions.IAgentSessionService, FakeAgentSessionService>());
+            services.AddSingleton(p => (FakeAgentSessionService)p.GetRequiredService<Octopus.Agents.Sessions.IAgentSessionService>());
             services.Replace(ServiceDescriptor.Singleton<IDialogService, FakeDialogService>());
             services.AddSingleton(p => (FakeDialogService)p.GetRequiredService<IDialogService>());
             services.Replace(ServiceDescriptor.Singleton<IAppIcon, NoAppIcon>()); // never touch the real Dock

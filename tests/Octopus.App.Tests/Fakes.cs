@@ -1,4 +1,5 @@
 using Octopus.Agents;
+using Octopus.Agents.Sessions;
 using Octopus.App.Services;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
@@ -176,4 +177,40 @@ public sealed class RecordingProjectStore : IProjectStore
         _document = document;
         return Task.CompletedTask;
     }
+}
+
+/// <summary>Sessions without reading any agent's folders: tests never look at the person's own (~/.claude, ~/.codex).</summary>
+public sealed class FakeAgentSessionService : IAgentSessionService
+{
+    public const string Team = "/home/u/.claude";
+    public const string Pro = "/home/u/.rec/claude/accounts/51691/config";
+
+    public Dictionary<string, AgentSessionGroup> Groups { get; } = [];
+    public SessionMigrationResult NextResult { get; set; } = new(SessionMigrationKind.Handoff, Prompt: "# Handoff");
+    public SessionMigrationRequest? LastRequest { get; private set; }
+
+    public bool CanRead(string agentId) => agentId is "claude" or "codex";
+
+    public Task<IReadOnlyList<AgentSessionAccount>> AccountsAsync(AgentDefinition agent, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<AgentSessionAccount>>(agent.Id == "claude"
+            ? [new(Team, "Team", true, []), new(Pro, "Pro", false, [])]
+            : [new("/home/u/.codex", "codex", true, [])]);
+
+    public Task<AgentSessionGroup> ListAsync(AgentDefinition agent, string projectPath, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Groups.GetValueOrDefault(agent.Id) ?? new AgentSessionGroup(agent, CanRead(agent.Id), []));
+
+    public Task<SessionTranscript> ReadAsync(AgentSessionInfo session, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new SessionTranscript(session, []));
+
+    public IReadOnlyList<SessionMigrationKind> MigrationKinds(string sourceAgentId, AgentDefinition target) =>
+        target.Id == sourceAgentId ? [SessionMigrationKind.Native] : target.Id == "codex" ? [SessionMigrationKind.Handoff] : [];
+
+    public Task<SessionMigrationResult> MigrateAsync(AgentSessionInfo session, SessionMigrationKind kind, SessionMigrationRequest request, CancellationToken cancellationToken = default)
+    {
+        LastRequest = request;
+        return Task.FromResult(NextResult);
+    }
+
+    public Dictionary<string, string>? AccountEnvironment(AgentDefinition agent, string accountDirectory, IReadOnlyDictionary<string, string>? inherited) =>
+        accountDirectory == Team ? null : new() { ["CLAUDE_CONFIG_DIR"] = accountDirectory };
 }

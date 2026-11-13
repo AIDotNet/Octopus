@@ -40,13 +40,14 @@ public class ExplorerTabsTests
         view.ProjectPath = plain.Root;
         await WaitUntil(() => view.Model.HasProject && !view.Model.IsGitRepository);
         Frames.Pump();
-        Assert.Single(group.Items);
+        // A folder on this computer always has the sessions tab.
+        Assert.Equal(["files", "sessions"], Values(group));
         Assert.Equal("files", group.SelectedValue);
 
         view.ProjectPath = repo.Root;
         await WaitUntil(() => view.Model.IsGitRepository);
         Frames.Pump();
-        Assert.Equal(2, group.Items.Count);
+        Assert.Equal(["files", "git", "sessions"], Values(group));
 
         // Choosing the Git option shows the Git tab; the model changing tab moves the option.
         group.SelectedValue = "git";
@@ -60,8 +61,10 @@ public class ExplorerTabsTests
         view.ProjectPath = plain.Root;
         await WaitUntil(() => !view.Model.IsGitRepository);
         Frames.Pump();
-        Assert.Single(group.Items);
+        Assert.Equal(["files", "sessions"], Values(group));
         window.Close();
         view.Model.Dispose();
     }
+
+    private static List<string?> Values(ToggleGroup group) => [.. group.Items.OfType<ToggleGroupOption>().Select(o => o.Value as string)];
 }

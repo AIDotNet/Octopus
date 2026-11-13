@@ -1,0 +1,245 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:common="using:Octopus.App.Common"
+             xmlns:s="using:Octopus.App.Explorer.Sessions"
+             x:Class="Octopus.App.Explorer.Sessions.SessionsTabView"
+             x:DataType="s:SessionsPanelViewModel">
+    <UserControl.Styles>
+        <!-- A whole-row button (an agent, a group header): tinted on hover, like Border.ex-row. -->
+        <Style Selector="Button.ses-row">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ses-row:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+        <Style Selector="Button.ses-row:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Border}" />
+        </Style>
+        <Style Selector="Border.ses-quiet">
+            <Setter Property="Opacity" Value="0.6" />
+        </Style>
+        <!-- The hover actions of a session row. -->
+        <Style Selector="Border.ses-session StackPanel.ses-actions">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Border.ses-session:pointerover StackPanel.ses-actions">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="Border.ses-session:pointerover TextBlock.ses-when">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="arc|Button.ses-act">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="IsPressScaleEnabled" Value="False" />
+        </Style>
+        <Style Selector="Border.ses-chip">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.ses-chip TextBlock">
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+            <Setter Property="LineHeight" Value="16" />
+        </Style>
+        <Style Selector="lucide|LucideIcon.ses-chevron">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <!-- ============ Page 1: the agents ============ -->
+        <Grid RowDefinitions="Auto,*" IsVisible="{Binding IsAgentsPage}">
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="14,0,8,2" Height="32">
+                <TextBlock Classes="ex-caption" VerticalAlignment="Center" Text="{l:AppLangResource SessionsAgentsCaption}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Classes="ex-hint" VerticalAlignment="Center" Margin="8,0,4,0" Text="{Binding InstalledCountText}" />
+                <arc:Button Grid.Column="2" Classes="ex-icon" Variant="Ghost" Command="{Binding RefreshCommand}"
+                            AutomationProperties.Name="{l:AppLangResource SessionsRefresh}"
+                            arc:Tooltip.Tip="{l:AppLangResource SessionsRefresh}">
+                    <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+                </arc:Button>
+            </Grid>
+
+            <arc:ScrollArea Grid.Row="1" FadeLength="0" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="6,0,6,12" Spacing="1">
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="10,6" IsVisible="{Binding IsLoading}">
+                        <arc:ArcSpinner Width="12" Height="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                        <TextBlock Classes="ex-hint" Text="{l:AppLangResource SessionsLoading}" />
+                    </StackPanel>
+
+                    <arc:EmptyState IsVisible="{Binding HasNoAgents}" Margin="6,16,6,12"
+                                    Title="{l:AppLangResource SessionsEmptyTitle}" Description="{l:AppLangResource SessionsEmptyHint}"
+                                    Icon="{x:Static arc:ArcIcons.MessageSquare}" />
+
+                    <ItemsControl ItemsSource="{Binding Agents}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="s:SessionAgentRowViewModel">
+                                <Button Classes="ses-row" Command="{Binding OpenCommand}" AutomationProperties.Name="{Binding Name}">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="9,7">
+                                        <common:AgentIcon AgentId="{Binding AgentId}" AgentName="{Binding Name}" Size="22" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Classes="ex-body" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="ex-hint" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Classes="ses-chip" IsVisible="{Binding HasAccountLabels}"
+                                                arc:Tooltip.Tip="{Binding AccountsTip}">
+                                            <TextBlock Text="{Binding AccountCountText}" />
+                                        </Border>
+                                        <lucide:LucideIcon Grid.Column="3" Classes="ses-chevron" Kind="ChevronRight" Size="14" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Installed, without sessions here (or unreadable) -->
+                    <Button Classes="ses-row" Margin="0,6,0,0" IsVisible="{Binding HasQuietAgents}" Command="{Binding ToggleQuietCommand}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6" Margin="8,4">
+                            <Panel VerticalAlignment="Center">
+                                <lucide:LucideIcon Classes="ses-chevron" Kind="ChevronDown" Size="12" IsVisible="{Binding IsQuietExpanded}" />
+                                <lucide:LucideIcon Classes="ses-chevron" Kind="ChevronRight" Size="12" IsVisible="{Binding !IsQuietExpanded}" />
+                            </Panel>
+                            <TextBlock Grid.Column="1" Classes="ex-caption" Text="{l:AppLangResource SessionsQuietGroup}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Classes="ex-hint" Text="{Binding QuietAgents.Count}" />
+                        </Grid>
+                    </Button>
+                    <ItemsControl ItemsSource="{Binding QuietAgents}" IsVisible="{Binding IsQuietExpanded}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="s:SessionAgentRowViewModel">
+                                <Border Classes="ses-quiet" Padding="9,6">
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                        <common:AgentIcon AgentId="{Binding AgentId}" AgentName="{Binding Name}" Size="22" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Classes="ex-body" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="ex-hint" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Not installed -->
+                    <Button Classes="ses-row" IsVisible="{Binding HasNotInstalled}" Command="{Binding ToggleNotInstalledCommand}">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6" Margin="8,4">
+                            <Panel VerticalAlignment="Center">
+                                <lucide:LucideIcon Classes="ses-chevron" Kind="ChevronDown" Size="12" IsVisible="{Binding IsNotInstalledExpanded}" />
+                                <lucide:LucideIcon Classes="ses-chevron" Kind="ChevronRight" Size="12" IsVisible="{Binding !IsNotInstalledExpanded}" />
+                            </Panel>
+                            <TextBlock Grid.Column="1" Classes="ex-caption" Text="{l:AppLangResource SessionsNotInstalledGroup}" />
+                            <TextBlock Grid.Column="2" Classes="ex-hint" Text="{Binding NotInstalledCount}" />
+                        </Grid>
+                    </Button>
+                    <TextBlock Classes="ex-hint" Margin="28,2,10,6" TextWrapping="Wrap" IsVisible="{Binding IsNotInstalledExpanded}"
+                               Text="{l:AppLangResource SessionsNotInstalledHint}" />
+                </StackPanel>
+            </arc:ScrollArea>
+        </Grid>
+
+        <!-- ============ Page 2: one agent's sessions, by account ============ -->
+        <Grid RowDefinitions="Auto,Auto,*" IsVisible="{Binding IsSessionsPage}">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6" Margin="6,0,8,2" Height="34">
+                <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding BackCommand}"
+                            AutomationProperties.Name="{l:AppLangResource SessionsBack}"
+                            arc:Tooltip.Tip="{l:AppLangResource SessionsBack}">
+                    <lucide:LucideIcon Kind="ChevronLeft" Size="16" />
+                </arc:Button>
+                <common:AgentIcon Grid.Column="1" AgentId="{Binding Current.AgentId, FallbackValue={x:Null}}"
+                                  AgentName="{Binding Current.Name, FallbackValue={x:Null}}" Size="18" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Classes="ex-body" FontWeight="SemiBold" VerticalAlignment="Center"
+                           Text="{Binding Current.Name, FallbackValue=''}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="3" Classes="ex-hint" VerticalAlignment="Center" Text="{Binding HeaderSummary}" />
+                <arc:Button Grid.Column="4" Classes="ex-icon" Variant="Ghost" Command="{Binding RefreshCommand}"
+                            AutomationProperties.Name="{l:AppLangResource SessionsRefresh}"
+                            arc:Tooltip.Tip="{l:AppLangResource SessionsRefresh}">
+                    <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+                </arc:Button>
+            </Grid>
+            <arc:SearchField Grid.Row="1" Margin="10,0,10,6" Size="Small" IsLabelVisible="False"
+                             Label="{l:AppLangResource SessionsSearch}" Placeholder="{l:AppLangResource SessionsSearch}"
+                             Text="{Binding Filter, Mode=TwoWay}" />
+
+            <arc:ScrollArea Grid.Row="2" FadeLength="0" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="6,0,6,12">
+                    <TextBlock Classes="ex-hint" Margin="10,8" IsVisible="{Binding IsListEmpty}" Text="{l:AppLangResource SessionsNoMatch}" />
+                    <ItemsControl ItemsSource="{Binding Groups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="s:SessionAccountGroupViewModel">
+                                <StackPanel>
+                                    <!-- The account: its name, its folder, how many sessions -->
+                                    <Button Classes="ses-row" Margin="0,6,0,1" Command="{Binding ToggleCommand}"
+                                            arc:Tooltip.Tip="{Binding Account.Directory}">
+                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6" Margin="8,4">
+                                            <Panel VerticalAlignment="Center">
+                                                <lucide:LucideIcon Classes="ses-chevron" Kind="ChevronDown" Size="12" IsVisible="{Binding IsExpanded}" />
+                                                <lucide:LucideIcon Classes="ses-chevron" Kind="ChevronRight" Size="12" IsVisible="{Binding !IsExpanded}" />
+                                            </Panel>
+                                            <Border Grid.Column="1" Classes="ses-chip">
+                                                <TextBlock Text="{Binding Label}" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                                            </Border>
+                                            <TextBlock Grid.Column="2" Classes="ex-hint mono" VerticalAlignment="Center"
+                                                       Text="{Binding Directory}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="3" Classes="ex-hint" VerticalAlignment="Center" Text="{Binding Count}" />
+                                        </Grid>
+                                    </Button>
+                                    <ItemsControl ItemsSource="{Binding Rows}" IsVisible="{Binding IsExpanded}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="s:SessionRowViewModel">
+                                                <Border Classes="ex-row ses-session" Padding="10,6,6,7" Margin="0,1"
+                                                        Cursor="Arrow" DoubleTapped="OnSessionDoubleTapped"
+                                                        arc:Tooltip.Tip="{Binding Tip}">
+                                                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="6">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <Ellipse Width="7" Height="7" Margin="0,0,6,0" VerticalAlignment="Center" IsVisible="{Binding IsLive}"
+                                                                     Fill="{arc:ArcDesignTokenResource Success}"
+                                                                     arc:Tooltip.Tip="{l:AppLangResource SessionsLiveTip}" />
+                                                            <TextBlock Grid.Column="1" Classes="ex-body" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                                        </Grid>
+                                                        <TextBlock Grid.Column="1" Classes="ex-hint ses-when" VerticalAlignment="Center" Text="{Binding WhenText}" />
+                                                        <StackPanel Grid.Column="1" Grid.RowSpan="2" Classes="ses-actions" Orientation="Horizontal"
+                                                                    Spacing="2" VerticalAlignment="Center">
+                                                            <arc:Button Classes="ses-act" Variant="Secondary" Command="{Binding ContinueCommand}"
+                                                                        AutomationProperties.Name="{Binding ContinueTip}" arc:Tooltip.Tip="{Binding ContinueTip}">
+                                                                <Panel>
+                                                                    <lucide:LucideIcon Kind="Play" Size="12" IsVisible="{Binding !IsLive}" />
+                                                                    <lucide:LucideIcon Kind="SquareTerminal" Size="12" IsVisible="{Binding IsLive}" />
+                                                                </Panel>
+                                                            </arc:Button>
+                                                            <arc:Button Classes="ses-act" Variant="Secondary" Command="{Binding MigrateCommand}"
+                                                                        AutomationProperties.Name="{l:AppLangResource SessionsMigrate}"
+                                                                        arc:Tooltip.Tip="{l:AppLangResource SessionsMigrate}">
+                                                                <lucide:LucideIcon Kind="ArrowLeftRight" Size="12" />
+                                                            </arc:Button>
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Row="1" Classes="ex-hint" Margin="0,1,0,0" Text="{Binding MetaText}" TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </arc:ScrollArea>
+        </Grid>
+    </Panel>
+</UserControl>

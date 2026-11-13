@@ -677,5 +677,47 @@
     <unit id="TunnelsStatusWaiting"><segment><source>Waiting for you to sign in to {0} in a terminal. The tunnel then uses that connection.</source><target state="translated">等你在终端里登录 {0}。登录后隧道会借用这条连接。</target></segment></unit>
     <unit id="TunnelsStatusShared"><segment><source>Using the terminal's connection.</source><target state="translated">借用终端的连接。</target></segment></unit>
     <unit id="TunnelsFailShared"><segment><source>The terminal's connection did not take the forward: {0}</source><target state="translated">终端的连接没有接受这个转发：{0}</target></segment></unit>
+    <unit id="ExplorerTabSessions"><segment><source>Sessions</source><target state="translated">会话</target></segment></unit>
+    <unit id="ExplorerTabChanges"><segment><source>Changes</source><target state="translated">变更</target></segment></unit>
+    <unit id="SessionsAgentsCaption"><segment><source>Agents on this computer</source><target state="translated">本项目识别到的智能体</target></segment></unit>
+    <unit id="SessionsInstalledCount"><segment><source>{0} installed</source><target state="translated">{0} 个已安装</target></segment></unit>
+    <unit id="SessionsAgentSummary"><segment><source>{0} sessions · latest {1}</source><target state="translated">{0} 个会话 · 最近 {1}</target></segment></unit>
+    <unit id="SessionsQuietGroup"><segment><source>Installed, no sessions here</source><target state="translated">已安装，本项目没有会话</target></segment></unit>
+    <unit id="SessionsNone"><segment><source>No sessions</source><target state="translated">没有会话</target></segment></unit>
+    <unit id="SessionsUnsupported"><segment><source>Sessions can't be read yet</source><target state="translated">暂不支持读取会话</target></segment></unit>
+    <unit id="SessionsNotInstalledGroup"><segment><source>Not installed</source><target state="translated">未安装</target></segment></unit>
+    <unit id="SessionsNotInstalledHint"><segment><source>Agents installed in Settings → Agents appear here.</source><target state="translated">在 设置 → 智能体 里安装后会出现在这里。</target></segment></unit>
+    <unit id="SessionsBack"><segment><source>Back to agents</source><target state="translated">返回智能体列表</target></segment></unit>
+    <unit id="SessionsHeaderSummary"><segment><source>{0} sessions · {1} accounts</source><target state="translated">{0} 个会话 · {1} 个帐户</target></segment></unit>
+    <unit id="SessionsSearch"><segment><source>Search sessions</source><target state="translated">搜索会话</target></segment></unit>
+    <unit id="SessionsRefresh"><segment><source>Scan again</source><target state="translated">重新扫描</target></segment></unit>
+    <unit id="SessionsMessages"><segment><source>{0} messages</source><target state="translated">{0} 条</target></segment></unit>
+    <unit id="SessionsContinue"><segment><source>Continue this session</source><target state="translated">继续这个会话</target></segment></unit>
+    <unit id="SessionsSwitchTo"><segment><source>Switch to its tab</source><target state="translated">切换到它的标签页</target></segment></unit>
+    <unit id="SessionsMigrate"><segment><source>Move to another agent</source><target state="translated">迁移到其他智能体</target></segment></unit>
+    <unit id="SessionsLiveTip"><segment><source>Open in a tab</source><target state="translated">已在标签页中打开</target></segment></unit>
+    <unit id="SessionsLoading"><segment><source>Reading sessions…</source><target state="translated">正在读取会话…</target></segment></unit>
+    <unit id="SessionsEmptyTitle"><segment><source>No sessions yet</source><target state="translated">还没有会话</target></segment></unit>
+    <unit id="SessionsEmptyHint"><segment><source>Sessions that agents save for this folder appear here.</source><target state="translated">智能体在这个文件夹里保存的会话会出现在这里。</target></segment></unit>
+    <unit id="SessionsNoMatch"><segment><source>No session matches.</source><target state="translated">没有匹配的会话。</target></segment></unit>
+    <unit id="SessionsDefaultAccount"><segment><source>default</source><target state="translated">默认</target></segment></unit>
+    <unit id="MigrateTitle"><segment><source>Move session</source><target state="translated">迁移会话</target></segment></unit>
+    <unit id="MigrateDescription"><segment><source>The original session is not changed.</source><target state="translated">原会话不会被修改。</target></segment></unit>
+    <unit id="MigrateTarget"><segment><source>Move to</source><target state="translated">迁移到</target></segment></unit>
+    <unit id="MigrateKind"><segment><source>How</source><target state="translated">方式</target></segment></unit>
+    <unit id="MigrateNative"><segment><source>Native session</source><target state="translated">原生会话</target></segment></unit>
+    <unit id="MigrateNativeHint"><segment><source>Written as {0}'s own session and opened there: history and tool calls stay.</source><target state="translated">写成 {0} 自己的会话文件再打开，历史和工具调用都在。</target></segment></unit>
+    <unit id="MigrateNativeMissing"><segment><source>No native conversion from {0} to {1} yet.</source><target state="translated">还没有 {0} → {1} 的原生转换。</target></segment></unit>
+    <unit id="MigrateHandoff"><segment><source>Handoff note</source><target state="translated">交接摘要</target></segment></unit>
+    <unit id="MigrateHandoffHint"><segment><source>Summarised into a note (goal, changed files, last state) that starts a new session.</source><target state="translated">整理成交接说明（目标、改过的文件、最后状态），作为新会话的第一条消息。</target></segment></unit>
+    <unit id="MigrateKindBoth"><segment><source>Native + handoff</source><target state="translated">原生会话 + 交接摘要</target></segment></unit>
+    <unit id="MigrateKindUnavailable"><segment><source>Can't receive</source><target state="translated">无法迁移</target></segment></unit>
+    <unit id="MigrateAccount"><segment><source>Account</source><target state="translated">目标帐户</target></segment></unit>
+    <unit id="MigrateToolOutput"><segment><source>Include tool output</source><target state="translated">带上工具调用的输出</target></segment></unit>
+    <unit id="MigrateRecentOnly"><segment><source>Only the last 20 turns</source><target state="translated">只取最近 20 轮</target></segment></unit>
+    <unit id="MigrateConfirm"><segment><source>Move and open</source><target state="translated">迁移并打开</target></segment></unit>
+    <unit id="MigrateFailed"><segment><source>The session could not be moved</source><target state="translated">迁移失败</target></segment></unit>
+    <unit id="MigrateFailedClose"><segment><source>Close</source><target state="translated">关闭</target></segment></unit>
+    <unit id="SessionsAccountCount"><segment><source>{0} accounts</source><target state="translated">{0} 个帐户</target></segment></unit>
   </file>
 </xliff>

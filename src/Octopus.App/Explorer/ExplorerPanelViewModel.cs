@@ -5,6 +5,7 @@ using Octopus.App.Explorer.Files;
 using Octopus.App.Files;
 using Octopus.App.Explorer.Git;
 using Octopus.App.Explorer.Search;
+using Octopus.App.Explorer.Sessions;
 using Octopus.App.Explorer.Tunnels;
 using Octopus.App.Localization;
 using Octopus.App.Services;
@@ -42,6 +43,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         FileSearchViewModel search,
         GitPanelViewModel gitPanel,
         TunnelsPanelViewModel tunnels,
+        SessionsPanelViewModel sessions,
         IFileTreeService tree,
         IGitService git,
         ISettingsStore settings,
@@ -52,6 +54,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         Search = search;
         Git = gitPanel;
         Tunnels = tunnels;
+        Sessions = sessions;
         _tree = tree;
         _git = git;
         _settings = settings;
@@ -59,6 +62,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         {
             "git" => ExplorerTab.Git,
             "tunnels" => ExplorerTab.Tunnels,
+            "sessions" => ExplorerTab.Sessions,
             _ => ExplorerTab.Files,
         };
 
@@ -80,6 +84,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     public FileSearchViewModel Search { get; }
     public GitPanelViewModel Git { get; }
     public TunnelsPanelViewModel Tunnels { get; }
+    public SessionsPanelViewModel Sessions { get; }
 
     [ObservableProperty] public partial string? ProjectPath { get; private set; }
 
@@ -112,19 +117,26 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     public bool HasProject => ProjectPath is not null;
     public bool HasNoProject => ProjectPath is null;
-    public bool IsFilesTab => HasProject && !IsGitTab && !IsTunnelsTab;
+    public bool IsFilesTab => HasProject && !IsGitTab && !IsTunnelsTab && !IsSessionsTab;
     public bool IsGitTab => HasProject && IsGitRepository && Tab == ExplorerTab.Git;
     public bool IsTunnelsTab => HasProject && IsSshProject && Tab == ExplorerTab.Tunnels;
+    /// <summary>Sessions are read from this computer: a project on an SSH host has none here.</summary>
+    public bool IsSessionsTab => HasProject && !IsSshProject && Tab == ExplorerTab.Sessions;
     public bool HasChanges => ChangeCount > 0;
 
-    /// <summary>The key of the tab showing ("files", "git" or "tunnels"), for the tab switch; setting it chooses that tab.</summary>
+    /// <summary>The numbers next to the tab icons: changed files, running tunnels.</summary>
+    public string ChangeCountText => ChangeCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
+    public string RunningTunnelsText => Tunnels.RunningCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
+
+    /// <summary>The key of the tab showing ("files", "git", "tunnels" or "sessions"), for the tab switch; setting it chooses that tab.</summary>
     public string TabKey
     {
-        get => IsGitTab ? "git" : IsTunnelsTab ? "tunnels" : "files";
+        get => IsGitTab ? "git" : IsTunnelsTab ? "tunnels" : IsSessionsTab ? "sessions" : "files";
         set
         {
             if (value == "git") ShowGit();
             else if (value == "tunnels") ShowTunnels();
+            else if (value == "sessions") ShowSessions();
             else if (value == "files") ShowFiles();
         }
     }
@@ -170,6 +182,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     partial void OnChangeCountChanged(int value)
     {
         OnPropertyChanged(nameof(HasChanges));
+        OnPropertyChanged(nameof(ChangeCountText));
         OnPropertyChanged(nameof(GitTabTooltip));
     }
 
@@ -178,12 +191,15 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         OnPropertyChanged(nameof(IsFilesTab));
         OnPropertyChanged(nameof(IsGitTab));
         OnPropertyChanged(nameof(IsTunnelsTab));
+        OnPropertyChanged(nameof(IsSessionsTab));
         OnPropertyChanged(nameof(TabKey));
+        Sessions.IsActive = _isActive && IsSessionsTab;
     }
 
     private void NotifyTunnelCount()
     {
         OnPropertyChanged(nameof(HasRunningTunnels));
+        OnPropertyChanged(nameof(RunningTunnelsText));
         OnPropertyChanged(nameof(TunnelsTabTooltip));
     }
 
@@ -204,6 +220,13 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         SelectTab(ExplorerTab.Tunnels);
     }
 
+    [RelayCommand]
+    public void ShowSessions()
+    {
+        if (IsSshProject) return;
+        SelectTab(ExplorerTab.Sessions);
+    }
+
     private void SelectTab(ExplorerTab tab)
     {
         if (Tab == tab) return;
@@ -212,6 +235,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         {
             ExplorerTab.Git => "git",
             ExplorerTab.Tunnels => "tunnels",
+            ExplorerTab.Sessions => "sessions",
             _ => "files",
         });
         if (tab == ExplorerTab.Git) _ = Git.RefreshAsync();
@@ -230,6 +254,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         {
             if (_isActive == value) return;
             _isActive = value;
+            Sessions.IsActive = value && IsSessionsTab;
             if (value) _ = ResumeAsync();
             else Pause();
         }
@@ -284,6 +309,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         _gitDirectories = null;
         _gitLookedUp = false;
         IsSshProject = path is not null && sshHost is not null;
+        Sessions.SetProject(sshHost is null && path is not null && Directory.Exists(path) ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) : null);
         if (path is not null && sshHost is not null)
         {
             await SetRemoteProjectAsync(path, name, sshHost, version);
@@ -353,6 +379,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     public void Refresh()
     {
         if (IsGitTab) _ = Git.RefreshAsync();
+        else if (IsSessionsTab) _ = Sessions.RefreshAsync();
         else Files.Reload();
     }
 

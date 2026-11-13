@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Shapes;
+using System.Linq.Expressions;
+using Avalonia.Media;
 using Avalonia.Data;
 using Avalonia.Layout;
 using Octopus.App.Localization;
@@ -59,81 +60,79 @@ public partial class ExplorerPanelView : UserControl
         ApplyTrailingInset();
         Model.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(ExplorerPanelViewModel.IsGitRepository)) SyncGitOption();
+            if (e.PropertyName is nameof(ExplorerPanelViewModel.IsGitRepository) or nameof(ExplorerPanelViewModel.IsSshProject)) SyncOptions();
             else if (e.PropertyName == nameof(ExplorerPanelViewModel.GitTabTooltip) && _gitOption is not null) _gitOption.Title = Model.GitTabTooltip;
-            else if (e.PropertyName == nameof(ExplorerPanelViewModel.IsSshProject)) SyncTunnelsOption();
             else if (e.PropertyName == nameof(ExplorerPanelViewModel.TunnelsTabTooltip) && _tunnelsOption is not null) _tunnelsOption.Title = Model.TunnelsTabTooltip;
         };
-        SyncGitOption();
-        SyncTunnelsOption();
+        _filesOption = TabOption("files", LucideIconKind.Files, AppLangResourceKind.ExplorerTabFiles, m => m.IsFilesTab);
+        SyncOptions();
     }
 
+    private readonly ToggleGroupOption _filesOption;
+    private ToggleGroupOption? _gitOption;
+    private ToggleGroupOption? _sessionsOption;
     private ToggleGroupOption? _tunnelsOption;
 
-    /// <summary>The Tunnels tab exists only while the project is on an SSH host; its dot shows while some tunnel runs.</summary>
-    private void SyncTunnelsOption()
+    /// <summary>
+    /// The tabs in their order: Files; Git while the folder is in a repository (with the number of changed files);
+    /// Sessions for a folder on this computer; Tunnels while the project is on an SSH host (with how many run).
+    /// </summary>
+    private void SyncOptions()
     {
-        if (!Model.IsSshProject)
-        {
-            if (_tunnelsOption is not null) Tabs.Items.Remove(_tunnelsOption);
-            return;
-        }
-        if (_tunnelsOption is null)
-        {
-            var dot = new Ellipse
-            {
-                Width = 7,
-                Height = 7,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, -3, -4, 0),
-                IsHitTestVisible = false,
-                [!Ellipse.IsVisibleProperty] = CompiledBinding.Create((ExplorerPanelViewModel m) => m.HasRunningTunnels, source: Model),
-            };
-            ArcTokens.Bind(dot, Shape.FillProperty, ArcDesignTokenKind.Success);
-            _tunnelsOption = new ToggleGroupOption
-            {
-                Value = "tunnels",
-                Label = AppLangResources.Get(AppLangResourceKind.ExplorerTabTunnels),
-                Title = Model.TunnelsTabTooltip,
-                Content = new Panel { Children = { new LucideIcon { Kind = LucideIconKind.Waypoints, Size = 16 }, dot } },
-            };
-        }
-        if (!Tabs.Items.Contains(_tunnelsOption)) Tabs.Items.Add(_tunnelsOption);
+        _gitOption ??= TabOption("git", LucideIconKind.GitBranch, AppLangResourceKind.ExplorerTabChanges, m => m.IsGitTab,
+            m => m.ChangeCountText, m => m.HasChanges, ArcDesignTokenKind.Accent);
+        _gitOption.Title = Model.GitTabTooltip;
+        _sessionsOption ??= TabOption("sessions", LucideIconKind.History, AppLangResourceKind.ExplorerTabSessions, m => m.IsSessionsTab);
+        _tunnelsOption ??= TabOption("tunnels", LucideIconKind.Waypoints, AppLangResourceKind.ExplorerTabTunnels, m => m.IsTunnelsTab,
+            m => m.RunningTunnelsText, m => m.HasRunningTunnels, ArcDesignTokenKind.Success);
+        _tunnelsOption.Title = Model.TunnelsTabTooltip;
+
+        var wanted = new List<ToggleGroupOption> { _filesOption };
+        if (Model.IsGitRepository) wanted.Add(_gitOption);
+        if (!Model.IsSshProject) wanted.Add(_sessionsOption);
+        else wanted.Add(_tunnelsOption);
+        if (Tabs.Items.Cast<object>().SequenceEqual(wanted)) return;
+        Tabs.Items.Clear();
+        foreach (var option in wanted) Tabs.Items.Add(option);
+        Tabs.SelectedValue = Model.TabKey;
     }
 
-    private ToggleGroupOption? _gitOption;
-
-    /// <summary>The Git tab exists only while the folder is in a repository; its dot shows when files changed.</summary>
-    private void SyncGitOption()
+    /// <summary>
+    /// One tab: its icon, its name while it is the chosen one (the others stay narrow), and a number when there is
+    /// one to show. The full name is the tooltip.
+    /// </summary>
+    private ToggleGroupOption TabOption(
+        string value,
+        LucideIconKind icon,
+        AppLangResourceKind label,
+        Expression<Func<ExplorerPanelViewModel, bool>> isSelected,
+        Expression<Func<ExplorerPanelViewModel, string>>? count = null,
+        Expression<Func<ExplorerPanelViewModel, bool>>? hasCount = null,
+        ArcDesignTokenKind countColor = ArcDesignTokenKind.TextMuted)
     {
-        if (!Model.IsGitRepository)
+        var name = AppLangResources.Get(label);
+        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+        content.Children.Add(new LucideIcon { Kind = icon, Size = 15, VerticalAlignment = VerticalAlignment.Center });
+        content.Children.Add(new TextBlock
         {
-            if (_gitOption is not null) Tabs.Items.Remove(_gitOption);
-            return;
-        }
-        if (_gitOption is null)
+            Text = name,
+            VerticalAlignment = VerticalAlignment.Center,
+            [!TextBlock.IsVisibleProperty] = CompiledBinding.Create(isSelected, source: Model),
+        });
+        if (count is not null && hasCount is not null)
         {
-            var dot = new Ellipse
+            var number = new TextBlock
             {
-                Width = 7,
-                Height = 7,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, -3, -4, 0),
-                IsHitTestVisible = false,
-                [!Ellipse.IsVisibleProperty] = CompiledBinding.Create((ExplorerPanelViewModel m) => m.HasChanges, source: Model),
+                VerticalAlignment = VerticalAlignment.Center,
+                FontWeight = FontWeight.SemiBold,
+                [!TextBlock.TextProperty] = CompiledBinding.Create(count, source: Model),
+                [!TextBlock.IsVisibleProperty] = CompiledBinding.Create(hasCount, source: Model),
             };
-            ArcTokens.Bind(dot, Shape.FillProperty, ArcDesignTokenKind.Accent);
-            _gitOption = new ToggleGroupOption
-            {
-                Value = "git",
-                Label = AppLangResources.Get(AppLangResourceKind.ExplorerTabGit),
-                Title = Model.GitTabTooltip,
-                Content = new Panel { Children = { new LucideIcon { Kind = LucideIconKind.GitBranch, Size = 16 }, dot } },
-            };
+            ArcTokens.Bind(number, TextBlock.FontSizeProperty, ArcDesignTokenKind.TypeXS);
+            ArcTokens.Bind(number, TextBlock.ForegroundProperty, countColor);
+            content.Children.Add(number);
         }
-        if (!Tabs.Items.Contains(_gitOption)) Tabs.Items.Add(_gitOption);
+        return new ToggleGroupOption { Value = value, Label = name, Title = name, Content = content };
     }
 
     /// <summary>Absolute path of the current project's folder; null when there is no project.</summary>

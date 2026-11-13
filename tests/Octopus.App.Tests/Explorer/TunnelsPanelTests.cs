@@ -458,12 +458,13 @@ public class TunnelsPanelTests : IDisposable
             await Eventually(() => view.Model.HasProject, "the local project");
             Frames.Pump();
             Assert.False(view.Model.IsSshProject);
-            Assert.Single(group.Items);
+            // A local folder has files and sessions; a host's has files and tunnels (its sessions are not on this computer).
+            Assert.Equal(["files", "sessions"], group.Items.OfType<ToggleGroupOption>().Select(o => o.Value as string));
 
             view.SetProject("/srv/app", "app", "prod");
             await Eventually(() => view.Model.IsSshProject, "the project on the host");
             Frames.Pump();
-            Assert.Equal(2, group.Items.Count);
+            Assert.Equal(["files", "tunnels"], group.Items.OfType<ToggleGroupOption>().Select(o => o.Value as string));
 
             // Choosing the option shows the tab and keeps the choice; the model changing tab moves the option.
             group.SelectedValue = "tunnels";
@@ -480,7 +481,7 @@ public class TunnelsPanelTests : IDisposable
             view.SetProject(local, "plain", null);
             await Eventually(() => !view.Model.IsSshProject, "the local project again");
             Frames.Pump();
-            Assert.Single(group.Items);
+            Assert.Equal(["files", "sessions"], group.Items.OfType<ToggleGroupOption>().Select(o => o.Value as string));
             Assert.False(view.Model.IsTunnelsTab);
             Assert.True(view.Model.IsFilesTab);
             Assert.Equal("files", view.Model.TabKey);

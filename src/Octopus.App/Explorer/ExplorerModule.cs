@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Octopus.App.Explorer.Files;
 using Octopus.App.Explorer.Git;
 using Octopus.App.Explorer.Search;
+using Octopus.App.Explorer.Sessions;
 using Octopus.App.Explorer.Tunnels;
 using Octopus.App.Services;
 using Octopus.Platform;
@@ -32,6 +33,8 @@ internal static class ExplorerModule
             runner: sp.GetRequiredService<IProcessRunner>(),
             shared: sp.GetRequiredService<ISharedConnection>()));
         services.AddTransient<TunnelsPanelViewModel>();
+        services.AddSingleton<ISessionMigrationDialog, SessionMigrationDialog>();
+        services.AddTransient<SessionsPanelViewModel>();
         services.AddTransient<ExplorerPanelViewModel>();
     }
 }
