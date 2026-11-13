@@ -10,7 +10,7 @@ public sealed class AgentScanner : IAgentScanner
 {
     private const string CacheFileName = "agent-scan.json";
     private const int MaxConcurrency = 6;
-    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(15);
 
     private readonly IAgentCatalog _catalog;
     private readonly IExecutableLocator _locator;
