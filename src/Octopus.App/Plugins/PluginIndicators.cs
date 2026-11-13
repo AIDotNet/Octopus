@@ -195,7 +195,7 @@ public sealed class IndicatorStrip : Panel
             {
                 _popover.Closed -= closed;
                 workbench.Detach(plugin.Id, instanceId, surface);
-                _ = PluginWorkbench.InvokeQuietlyAsync(plugin, "view.close", [JsonValue.Create(instanceId)]);
+                _ = PluginWorkbench.InvokeQuietlyAsync(plugin, "view.close", new JsonArray(JsonValue.Create(instanceId)));
             };
             _popover.Closed += closed;
             _popover.ShowAt(this);

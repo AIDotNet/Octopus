@@ -27,10 +27,12 @@ OUT="$(cd "$OUT" && pwd)"
 NUMERIC_VERSION="${VERSION%%[-+]*}"
 
 echo "==> publish ($RID)"
-# Single-file keeps the ~250 managed .dll files inside the executable. Loose .dlls in Contents/MacOS would each count
-# as unsigned nested code and fail verification / notarization; the native libraries stay beside it as real Mach-O files.
-dotnet publish "$ROOT/src/Octopus.App" -c Release -r "$RID" --self-contained \
-  -p:PublishSingleFile=true -p:Version="$VERSION" -p:DebugType=None -p:DebugSymbols=false -o "$WORK/publish"
+# A Release publish for a runtime is NativeAOT (Octopus.App.csproj): one native executable, no managed .dll files that
+# would count as unsigned nested code in Contents/MacOS; the native libraries stay beside it as real Mach-O files.
+dotnet publish "$ROOT/src/Octopus.App" -c Release -r "$RID" \
+  -p:Version="$VERSION" -p:DebugType=None -p:DebugSymbols=false -o "$WORK/publish"
+# The stripped symbols (Octopus.dSYM) are not shipped.
+rm -rf "$WORK/publish/"*.dSYM
 
 echo "==> assemble Octopus.app"
 APP="$WORK/Octopus.app"

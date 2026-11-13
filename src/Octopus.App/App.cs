@@ -24,7 +24,9 @@ public class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        Styles.Add(new StyleInclude(new Uri("avares://Octopus/")) { Source = new Uri("avares://Octopus/Common/AppStyles.axaml") });
+        // Created through its class, not loaded by URI: the URI lookup finds the compiled XAML by reflection, which a
+        // trimmed (NativeAOT) build does not keep.
+        Styles.Add(new Common.AppStyles());
         AppHost.Get<ThemeService>().Track();
         // The projects are read before the first frame; the agent scan runs in the background (its cached result first).
         // Task.Run: this thread has Avalonia's SynchronizationContext, so awaiting LoadAsync here would post its

@@ -69,7 +69,7 @@
         <arc:Alert Tone="Danger"
                    Margin="16"
                    VerticalAlignment="Top"
-                   IsOpen="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   IsOpen="{Binding Error, Mode=OneWay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    Title="{Binding Error}" />
     </Grid>
 </UserControl>

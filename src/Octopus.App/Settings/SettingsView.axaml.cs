@@ -104,7 +104,7 @@ public partial class SettingsView : UserControl
             foreach (var section in sections)
             {
                 var item = new SidebarItem { Key = section.Key, Icon = Lucide.Geometry(section.Icon) };
-                item.Bind(SidebarItem.LabelProperty, new Binding(nameof(SettingsSectionViewModel.Title)) { Source = section });
+                item.Bind(SidebarItem.LabelProperty, CompiledBinding.Create((SettingsSectionViewModel s) => s.Title, source: section));
                 group.Items.Add(item);
             }
             Nav.Sections.Add(group);

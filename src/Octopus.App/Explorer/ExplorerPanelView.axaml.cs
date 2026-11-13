@@ -88,7 +88,7 @@ public partial class ExplorerPanelView : UserControl
                 VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(0, -3, -4, 0),
                 IsHitTestVisible = false,
-                [!Ellipse.IsVisibleProperty] = new Binding(nameof(ExplorerPanelViewModel.HasRunningTunnels)) { Source = Model },
+                [!Ellipse.IsVisibleProperty] = CompiledBinding.Create((ExplorerPanelViewModel m) => m.HasRunningTunnels, source: Model),
             };
             ArcTokens.Bind(dot, Shape.FillProperty, ArcDesignTokenKind.Success);
             _tunnelsOption = new ToggleGroupOption
@@ -122,7 +122,7 @@ public partial class ExplorerPanelView : UserControl
                 VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(0, -3, -4, 0),
                 IsHitTestVisible = false,
-                [!Ellipse.IsVisibleProperty] = new Binding(nameof(ExplorerPanelViewModel.HasChanges)) { Source = Model },
+                [!Ellipse.IsVisibleProperty] = CompiledBinding.Create((ExplorerPanelViewModel m) => m.HasChanges, source: Model),
             };
             ArcTokens.Bind(dot, Shape.FillProperty, ArcDesignTokenKind.Accent);
             _gitOption = new ToggleGroupOption

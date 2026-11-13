@@ -217,7 +217,7 @@ public sealed class PluginWorkbench
     private sealed class SurfaceSink(PluginWorkbench workbench, PluginHost host, string instanceId) : IUiEventSink
     {
         public void Fire(string handlerId, JsonArray args) =>
-            _ = InvokeQuietlyAsync(host, "view.event", [JsonValue.Create(instanceId), JsonValue.Create(handlerId), args]);
+            _ = InvokeQuietlyAsync(host, "view.event", new JsonArray(JsonValue.Create(instanceId), JsonValue.Create(handlerId), args));
 
         public void ExecuteCommand(string commandId, JsonArray args) => workbench.ExecuteCommand(host, commandId, args);
 

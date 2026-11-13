@@ -76,7 +76,7 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
         _visible = visible;
         if (_open && _plugin is { } plugin)
         {
-            _ = PluginWorkbench.InvokeQuietlyAsync(plugin, "view.visibility", [JsonValue.Create(InstanceId), JsonValue.Create(visible)]);
+            _ = PluginWorkbench.InvokeQuietlyAsync(plugin, "view.visibility", new JsonArray(JsonValue.Create(InstanceId), JsonValue.Create(visible)));
         }
     }
 
@@ -119,7 +119,7 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
                 ["visible"] = _visible,
                 ["size"] = SizeOf(Bounds.Size),
             };
-            var json = await plugin.InvokeAsync("view.open", [JsonValue.Create("view"), JsonValue.Create(view.Id), context], OpenTimeout);
+            var json = await plugin.InvokeAsync("view.open", new JsonArray(JsonValue.Create("view"), JsonValue.Create(view.Id), context), OpenTimeout);
             var result = JsonNode.Parse(json) as JsonObject;
             _open = true;
             Render(result?["tree"]);
@@ -277,12 +277,12 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
         if (_plugin is { } plugin && _open)
         {
             _open = false;
-            var state = await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.getState", [JsonValue.Create(InstanceId)], TimeSpan.FromSeconds(2));
+            var state = await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.getState", new JsonArray(JsonValue.Create(InstanceId)), TimeSpan.FromSeconds(2));
             if (state is not null && state != "null")
             {
                 SaveState(PluginWorkbench.ParseState(state));
             }
-            await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.close", [JsonValue.Create(InstanceId)], TimeSpan.FromSeconds(2));
+            await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.close", new JsonArray(JsonValue.Create(InstanceId)), TimeSpan.FromSeconds(2));
             _workbench.Detach(plugin.Id, InstanceId, this);
         }
     }
@@ -293,9 +293,9 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
         if (_plugin is { } plugin && _open)
         {
             _open = false;
-            var state = await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.getState", [JsonValue.Create(InstanceId)], TimeSpan.FromSeconds(2));
+            var state = await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.getState", new JsonArray(JsonValue.Create(InstanceId)), TimeSpan.FromSeconds(2));
             if (state is not null && state != "null") SaveState(PluginWorkbench.ParseState(state));
-            await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.close", [JsonValue.Create(InstanceId)], TimeSpan.FromSeconds(2));
+            await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.close", new JsonArray(JsonValue.Create(InstanceId)), TimeSpan.FromSeconds(2));
             _workbench.Detach(plugin.Id, InstanceId, this);
         }
         _closed = false;

@@ -13,6 +13,22 @@
         <LucideIconsIncludeAll>true</LucideIconsIncludeAll>
     </PropertyGroup>
 
+    <!-- Releases (every packaging script publishes for a runtime) are NativeAOT: one native executable with only the code
+         it uses (trimmed), no JIT at start. Measured on osx-arm64 against the plain JIT build: about 80% less CPU in the
+         first seconds (1.35 s to 0.28 s) and a quarter less memory (280 MB to 211 MB), at about the same download size.
+         Code that reflects over types (reflection bindings, JsonValue.Create<T> of non-primitives, XAML loaded by URI)
+         does not work there: use compiled bindings, JsonNode overloads and the x:Class of a XAML file instead. -->
+    <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' And '$(Configuration)' == 'Release'">
+        <PublishAot>true</PublishAot>
+        <!-- Symbols go into a separate file next to the executable (.dSYM, .dbg, .pdb); the packaging leaves them out. -->
+        <StripSymbols>true</StripSymbols>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(PublishAot)' == 'true'">
+        <!-- The SVG library looks up unit converters by reflection (TypeDescriptor); kept whole, so trimming never drops one. -->
+        <TrimmerRootAssembly Include="Svg.Custom" />
+        <TrimmerRootAssembly Include="Svg.Model" />
+    </ItemGroup>
+
     <ItemGroup>
         <InternalsVisibleTo Include="Octopus.App.Tests" />
     </ItemGroup>
