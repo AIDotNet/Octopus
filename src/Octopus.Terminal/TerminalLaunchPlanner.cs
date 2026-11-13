@@ -48,11 +48,36 @@ public sealed class TerminalLaunchPlanner(
             built);
     }
 
+    /// <inheritdoc />
+    public LaunchSpec PlanMoshShell(string host, string? remoteDirectory)
+    {
+        // mosh quotes each word of the command for the host, so the script goes as one argument to sh.
+        var built = environment.Build();
+        return new LaunchSpec(
+            FindProgram("mosh", built),
+            ["--", host, "sh", "-c", RemoteShellCommand(remoteDirectory)],
+            ResolveDirectory(null),
+            built);
+    }
+
+    /// <inheritdoc />
+    public LaunchSpec PlanTelnet(string host, int? port)
+    {
+        var built = environment.Build();
+        return new LaunchSpec(
+            FindProgram("telnet", built),
+            port is { } number ? [host, number.ToString(System.Globalization.CultureInfo.InvariantCulture)] : [host],
+            ResolveDirectory(null),
+            built);
+    }
+
     /// <summary>The ssh program: the one on the terminal's PATH when it can be found, otherwise "ssh" for the system to find.</summary>
-    private string FindSsh(IReadOnlyDictionary<string, string> built)
+    private string FindSsh(IReadOnlyDictionary<string, string> built) => FindProgram("ssh", built);
+
+    private string FindProgram(string name, IReadOnlyDictionary<string, string> built)
     {
         var path = built.TryGetValue("PATH", out var value) ? value : null;
-        return locator?.FindAll("ssh", path).FirstOrDefault() ?? "ssh";
+        return locator?.FindAll(name, path).FirstOrDefault() ?? name;
     }
 
     /// <summary>

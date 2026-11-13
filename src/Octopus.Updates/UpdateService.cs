@@ -89,7 +89,8 @@ public sealed class UpdateOptions
     public AppVersion? CurrentVersion { get; init; }
     /// <summary>A debug build: no checks unless a feed was given for testing.</summary>
     public bool IsDevelopment { get; init; }
-    public TimeSpan FirstCheckDelay { get; init; } = TimeSpan.FromSeconds(30);
+    /// <summary>A few seconds after the window is up: the check is one small request, and it is what tells a person who opens the app that there is a new version.</summary>
+    public TimeSpan FirstCheckDelay { get; init; } = TimeSpan.FromSeconds(3);
     public TimeSpan CheckInterval { get; init; } = TimeSpan.FromHours(6);
     /// <summary>After failed automatic checks, then <see cref="CheckInterval"/> again.</summary>
     public IReadOnlyList<TimeSpan> RetryDelays { get; init; } = [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(30)];
@@ -398,6 +399,7 @@ public sealed class UpdateService : IUpdateService, IDisposable
                 Package = package,
                 Prepared = prepared,
                 NotesUrl = offer.NotesUrl,
+                Notes = offer.Notes,
                 PublishedAt = offer.PublishedAt,
                 Approved = approved,
             };
@@ -469,7 +471,7 @@ public sealed class UpdateService : IUpdateService, IDisposable
             DeleteVersionFolders(keep: null, olderThanOrEqual: current);
             return;
         }
-        var offer = new UpdateOffer(version, new UpdateManifest { Version = pending.Version, NotesUrl = pending.NotesUrl, PublishedAt = pending.PublishedAt }, null);
+        var offer = new UpdateOffer(version, new UpdateManifest { Version = pending.Version, NotesUrl = pending.NotesUrl, PublishedAt = pending.PublishedAt }, null) { Notes = pending.Notes };
         if (pending.Launched)
         {
             // The helper ran and this is still the old version.

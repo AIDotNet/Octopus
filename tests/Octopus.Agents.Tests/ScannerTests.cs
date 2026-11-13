@@ -20,7 +20,7 @@ public class ScannerTests
         };
 
     private static AgentScanner Make(TempDir dir, IAgentCatalog catalog, FakeLocator locator, FakeRunner runner) =>
-        new(catalog, locator, runner, new FakeLoginEnvironment("/x:/y"), new TestPaths(dir.Path));
+        new(catalog, locator, runner, new FakeLoginEnvironment("/x:/y"), new TestPaths(dir.Path), () => []);
 
     [Fact]
     public async Task First_candidate_broken_second_good()
@@ -39,7 +39,8 @@ public class ScannerTests
         Assert.Equal("2.1.322", install.Version);
         Assert.Same(install, scanner.Find("claude"));
         Assert.Equal("1", runner.Calls[0].Env!["PROBE"]);
-        Assert.Equal("/x:/y", runner.Calls[0].Env!["PATH"]);
+        // The login PATH, then the directory of the candidate (a script may start with `env node`).
+        Assert.Equal("/x:/y:/usr/local/bin", runner.Calls[0].Env!["PATH"]);
     }
 
     [Fact]
@@ -76,8 +77,10 @@ public class ScannerTests
     {
         using var dir = new TempDir();
         var runner = new FakeRunner((_, _, _) => new ProcessResult(0, "1.2.3", "", false));
+        var binary = Path.Combine(dir.Path, "a");
+        File.WriteAllText(binary, "");
         var catalog = new FixedCatalog(Def("a", ["a"]));
-        var locator = new FakeLocator(new() { ["a"] = ["/bin/a"] });
+        var locator = new FakeLocator(new() { ["a"] = [binary] });
         var scanner = Make(dir, catalog, locator, runner);
         var raised = 0;
         scanner.Changed += (_, _) => Interlocked.Increment(ref raised);
@@ -92,8 +95,79 @@ public class ScannerTests
         var fresh = Make(dir, catalog, locator, runner);
         Assert.Empty(fresh.Current.Installations);
         await fresh.LoadCacheAsync();
-        Assert.Equal("/bin/a", fresh.Find("a")!.Path);
+        Assert.Equal(binary, fresh.Find("a")!.Path);
         Assert.Equal("1.2.3", fresh.Find("a")!.Version);
+
+        // An agent removed since the last run is not shown as installed.
+        File.Delete(binary);
+        var later = Make(dir, catalog, locator, runner);
+        await later.LoadCacheAsync();
+        Assert.Null(later.Find("a"));
+    }
+
+    [Fact]
+    public async Task Search_directories_and_definition_directories_are_searched_after_PATH()
+    {
+        using var dir = new TempDir();
+        var own = Path.Combine(dir.Path, "own");
+        Directory.CreateDirectory(own);
+        var definition = Def("x", ["x"]);
+        definition.Detect.ExtraDirs = [own];
+        string? seen = null;
+        var locator = new PathRecordingLocator(path => seen = path, "/found/x");
+        var scanner = new AgentScanner(new FixedCatalog(definition), locator,
+            new FakeRunner((_, _, _) => new ProcessResult(0, "x 3.4.5", "", false)),
+            new FakeLoginEnvironment("/x:/y"), new TestPaths(dir.Path), () => ["/x", "/opt/tools"]);
+
+        var install = Assert.Single((await scanner.ScanAsync()).Installations);
+
+        Assert.Equal("/found/x", install.Path);
+        // "/x" is already on PATH and is not listed twice.
+        Assert.Equal($"/x:/y:/opt/tools:{own}", seen);
+    }
+
+    [Fact]
+    public async Task Two_names_of_one_program_are_started_once()
+    {
+        if (OperatingSystem.IsWindows()) return; // creating a link needs a privilege there
+        using var dir = new TempDir();
+        var real = Path.Combine(dir.Path, "qodercli");
+        File.WriteAllText(real, "");
+        var alias = Path.Combine(dir.Path, "qoder");
+        File.CreateSymbolicLink(alias, real);
+        var runner = new FakeRunner((_, _, _) => new ProcessResult(1, "", "", false));
+        var scanner = Make(dir, new FixedCatalog(Def("qoder", ["qodercli", "qoder"])),
+            new FakeLocator(new() { ["qodercli"] = [real], ["qoder"] = [alias] }), runner);
+
+        Assert.Empty((await scanner.ScanAsync()).Installations);
+        Assert.Single(runner.Calls);
+    }
+
+    [Theory]
+    [InlineData(null, "anything", true)]
+    [InlineData("vibe", "vibe 3.1.2", true)]
+    [InlineData("vibe", "something else", false)]
+    [InlineData("Claude Code|claude-code", "2.1.0 (claude-code)", true)]
+    [InlineData("Claude Code|claude-code", "2.1.0", false)]
+    public void Fingerprint_accepts_any_alternative_ignoring_case(string? fingerprint, string output, bool expected) =>
+        Assert.Equal(expected, AgentScanner.MatchesFingerprint(fingerprint, output));
+
+    [Fact]
+    public void Colored_output_is_read_without_the_color_codes()
+    {
+        var text = AgentScanner.StripAnsi("\u001b[1mqoder\u001b[0m \u001b[32m1.1.88\u001b[0m\n");
+        Assert.Equal("qoder 1.1.88\n", text);
+        var version = AgentScanner.ExtractVersion(Def("qoder", ["qoder"], regex: null), text);
+        Assert.Equal("1.1.88", version);
+    }
+
+    [Fact]
+    public void A_version_regex_that_does_not_fit_falls_back_to_the_first_version_number()
+    {
+        var definition = Def("a", ["a"], regex: @"^a (\d+)$");
+        Assert.Equal("0.37.1-rc.2", AgentScanner.ExtractVersion(definition, "Auggie v0.37.1-rc.2 (build 9)"));
+        Assert.Null(AgentScanner.ExtractVersion(definition, "no digits here"));
+        Assert.Equal("2.0.0", AgentScanner.ExtractVersion(Def("b", ["b"], regex: "(["), "2.0.0"));
     }
 
     [Fact]

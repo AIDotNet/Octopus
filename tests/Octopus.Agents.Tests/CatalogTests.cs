@@ -7,7 +7,9 @@ public class CatalogTests
 {
     private static readonly string[] ExpectedIds =
         ["claude", "codex", "grok", "opencode", "cursor", "muse", "gemini", "copilot",
-         "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi"];
+         "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi",
+         "cline", "kilo", "auggie", "codebuddy", "qoder", "vibe", "pi", "openhands",
+         "continue", "junie", "letta", "codebuff", "nanocoder", "jules"];
 
     [Fact]
     public void Builtins_load_in_fixed_order_without_errors()
@@ -108,7 +110,7 @@ public class CatalogTests
         Assert.Equal("My Claude", catalog.Definitions[0].Name);
         Assert.True(catalog.Definitions[0].IsCustom);
         Assert.Equal("mine", catalog.Definitions[^1].Id);
-        Assert.Equal(17, catalog.Definitions.Count);
+        Assert.Equal(ExpectedIds.Length + 1, catalog.Definitions.Count);
         Assert.NotNull(catalog.Find("codex"));
     }
 

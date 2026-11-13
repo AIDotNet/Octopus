@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 
 namespace Octopus.Ssh;
 
@@ -7,7 +8,15 @@ namespace Octopus.Ssh;
 /// uses its own defaults for them.
 /// </summary>
 /// <param name="Port">Kept as text, so that what was typed is what is checked.</param>
-public sealed record SshHostDraft(string Alias, string? HostName = null, string? User = null, string? Port = null, string? IdentityFile = null, string? ProxyJump = null)
+/// <param name="Protocol">Telnet hosts have no user, key or jump host: those fields are neither checked nor written for them.</param>
+public sealed record SshHostDraft(
+    string Alias,
+    string? HostName = null,
+    string? User = null,
+    string? Port = null,
+    string? IdentityFile = null,
+    string? ProxyJump = null,
+    SshHostProtocol Protocol = SshHostProtocol.Ssh)
 {
     /// <summary>What is wrong with the draft, field by field; empty when the host can be added.</summary>
     /// <param name="existingAliases">The concrete hosts the file has already; an alias cannot repeat one, in any case.</param>
@@ -29,13 +38,16 @@ public sealed record SshHostDraft(string Alias, string? HostName = null, string?
         }
 
         AddIfNotWord(issues, SshHostField.HostName, HostName);
+        if (Protocol == SshHostProtocol.Telnet)
+        {
+            // A telnet host has no user, key or jump host to check, and none is written (see SshConfigWriter).
+            ValidatePort(issues);
+            return issues;
+        }
         AddIfNotWord(issues, SshHostField.User, User);
         AddIfNotWord(issues, SshHostField.ProxyJump, ProxyJump);
+        ValidatePort(issues);
 
-        if (Blank(Port) is { } port && !(int.TryParse(port, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number is >= 1 and <= 65535))
-        {
-            issues.Add(new SshHostIssue(SshHostField.Port, SshHostProblem.Port));
-        }
         // A key path may hold spaces (ssh reads it quoted), but not quotes or line breaks.
         if (Blank(IdentityFile) is { } key && (key.Contains('"') || key.Any(char.IsControl)))
         {
@@ -44,13 +56,29 @@ public sealed record SshHostDraft(string Alias, string? HostName = null, string?
         return issues;
     }
 
-    /// <summary>A name that can be typed in a command and in a project: letters and digits, then dots, underscores and dashes.</summary>
-    internal static bool IsAlias(string alias) =>
-        char.IsAsciiLetterOrDigit(alias[0]) && alias.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-');
+    /// <summary>
+    /// A name that can be typed in a command and in a project: letters and digits of any language (Chinese included),
+    /// then also dots, underscores and dashes. No spaces: ssh reads them as several hosts.
+    /// </summary>
+    internal static bool IsAlias(string alias)
+    {
+        var runes = alias.EnumerateRunes().ToList();
+        return runes.Count > 0
+            && Rune.IsLetterOrDigit(runes[0])
+            && runes.All(r => Rune.IsLetterOrDigit(r) || r.Value is '.' or '_' or '-');
+    }
 
     /// <summary>A single word as ssh reads it: no spaces, quotes or comment sign, and not an option.</summary>
     internal static bool IsWord(string value) =>
         !value.StartsWith('-') && !value.Any(c => char.IsWhiteSpace(c) || char.IsControl(c) || c is '"' or '\'' or '#' or '=');
+
+    private void ValidatePort(List<SshHostIssue> issues)
+    {
+        if (Blank(Port) is { } port && !(int.TryParse(port, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number is >= 1 and <= 65535))
+        {
+            issues.Add(new SshHostIssue(SshHostField.Port, SshHostProblem.Port));
+        }
+    }
 
     private static void AddIfNotWord(List<SshHostIssue> issues, SshHostField field, string? value)
     {

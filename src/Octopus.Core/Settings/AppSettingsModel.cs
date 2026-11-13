@@ -13,6 +13,15 @@ public sealed class AppSettingsModel
     public TerminalSettings Terminal { get; set; } = new();
     public AgentSettings Agents { get; set; } = new();
     public UpdateSettings Updates { get; set; } = new();
+    public TraySettings Tray { get; set; } = new();
+}
+
+/// <summary>The icon in the notification area (Windows, Linux) or the menu bar (macOS).</summary>
+public sealed class TraySettings
+{
+    public bool Enabled { get; set; } = true;
+    /// <summary>The window's close button hides the window to the tray instead of quitting; Quit in the tray menu (or the app menu) quits.</summary>
+    public bool CloseToTray { get; set; }
 }
 
 /// <summary>Automatic updates (design/10-自动更新.md §9).</summary>

@@ -26,6 +26,22 @@ public static class SshConfigParser
         return reader.Hosts();
     }
 
+    /// <summary>The name of the comment that keeps a host's protocol in its block; ssh ignores the line.</summary>
+    internal const string ProtocolMarker = "octopus: protocol=";
+
+    /// <summary>The protocol a marker comment line (<c># octopus: protocol=mosh</c>) names, or null for any other line.</summary>
+    internal static SshHostProtocol? ProtocolOf(string line)
+    {
+        var text = line.TrimStart('#', ' ', '\t');
+        if (!text.StartsWith(ProtocolMarker, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        return Enum.TryParse<SshHostProtocol>(text[ProtocolMarker.Length..].Trim(), ignoreCase: true, out var protocol) && Enum.IsDefined(protocol)
+            ? protocol
+            : null;
+    }
+
     /// <summary>True for a pattern with <c>*</c> or <c>?</c>: a pattern for many hosts, not a host.</summary>
     internal static bool IsWildcard(string pattern) => pattern.IndexOfAny(['*', '?']) >= 0;
 
@@ -70,6 +86,9 @@ public static class SshConfigParser
     {
         public List<(string Key, string Value)> Options { get; } = [];
 
+        /// <summary>What the block's marker comment says (see <see cref="SshConfigParser.ProtocolOf"/>); null when it has none.</summary>
+        public SshHostProtocol? Protocol { get; set; }
+
         public bool Applies(string host) =>
             Active && Positive.Any(p => Matches(p, host)) && !Negative.Any(n => Matches(n, host));
     }
@@ -110,8 +129,16 @@ public static class SshConfigParser
             foreach (var raw in text.Split('\n'))
             {
                 var line = raw.Trim();
-                if (line.Length == 0 || line[0] == '#')
+                if (line.Length == 0)
                 {
+                    continue;
+                }
+                if (line[0] == '#')
+                {
+                    if (ProtocolOf(line) is { } marked)
+                    {
+                        _current.Protocol = marked;
+                    }
                     continue;
                 }
                 var (keyword, args) = SplitLine(line);
@@ -189,7 +216,8 @@ public static class SshConfigParser
             Value(alias, "user"),
             Port(alias),
             Value(alias, "identityfile"),
-            Value(alias, "proxyjump"));
+            Value(alias, "proxyjump"),
+            _blocks.Where(b => b.Applies(alias)).Select(b => b.Protocol).FirstOrDefault(p => p is not null) ?? SshHostProtocol.Ssh);
 
         /// <summary>The first value of an option among the blocks that apply to <paramref name="host"/>.</summary>
         private string? Value(string host, string key) =>

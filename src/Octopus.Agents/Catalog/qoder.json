@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "qoder",
+  "name": "Qoder CLI",
+  "icon": "qoder",
+  "homepage": "https://qoder.com/cli",
+  "verified": false,
+  "detect": {
+    "executables": ["qodercli", "qoder"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://qoder.com/install | bash" },
+      { "kind": "npm", "command": "npm i -g @qoder-ai/qodercli" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": { "default": {"args": []}, "full": {"args": ["--yolo"], "danger": true} }
+    },
+    "resume": {
+      "continueLatest": ["--continue"]
+    },
+    "extraArgs": true
+  }
+}

@@ -20,6 +20,13 @@ public class SshHostDraftTests
     [InlineData("a:b", SshHostProblem.AliasFormat)]
     [InlineData("web.example-1_a", null)]
     [InlineData("137.184.127.219", null)]
+    [InlineData("生产服务器", null)]
+    [InlineData("测试-01", null)]
+    [InlineData("跳板机.内网", null)]
+    [InlineData("𠮷野家", null)]
+    [InlineData("服务器 一", SshHostProblem.AliasFormat)]
+    [InlineData("服务器：一", SshHostProblem.AliasFormat)]
+    [InlineData("-服务器", SshHostProblem.AliasFormat)]
     public void The_alias_is_required_and_has_a_format(string alias, SshHostProblem? expected) =>
         Assert.Equal(expected, ProblemOf(new SshHostDraft(alias), SshHostField.Alias));
 
@@ -52,4 +59,22 @@ public class SshHostDraftTests
     [InlineData("-1", SshHostProblem.Port)]
     public void The_port_is_a_number_from_1_to_65535(string port, SshHostProblem? expected) =>
         Assert.Equal(expected, ProblemOf(new SshHostDraft("a", Port: port), SshHostField.Port));
+
+    [Fact]
+    public void A_telnet_host_does_not_check_the_fields_it_does_not_use()
+    {
+        var draft = new SshHostDraft("路由器", User: "x y", IdentityFile: "a\"b", ProxyJump: "-o", Protocol: SshHostProtocol.Telnet);
+
+        Assert.Empty(draft.Validate([]));
+        Assert.Equal(SshHostProblem.Port, ProblemOf(draft with { Port = "70000" }, SshHostField.Port));
+    }
+
+    [Fact]
+    public void A_host_gives_back_the_draft_it_was_made_from()
+    {
+        var host = new SshHost("盒子", "10.0.0.5", "root", 2222, "~/.ssh/k", "bastion", SshHostProtocol.Mosh);
+
+        Assert.Equal(new SshHostDraft("盒子", "10.0.0.5", "root", "2222", "~/.ssh/k", "bastion", SshHostProtocol.Mosh), host.ToDraft());
+        Assert.Null(new SshHost("web", "web", null, null, null, null).ToDraft().HostName);
+    }
 }

@@ -36,6 +36,7 @@ public static class AppHost
         services.AddOctopusAgents();       // catalog, scanner, command compiler
         services.AddOctopusTerminal();     // launch planner
         services.AddSingleton<ISshHostCatalog>(_ => new SshHostCatalog(SshHostCatalog.UserHome)); // hosts of ~/.ssh/config
+        services.AddSingleton<ISshHostTester, SshHostTester>(); // the test button of the host form
         services.AddSingleton<Octopus.App.Services.RemoteFiles>(); // folders and copies of files on SSH hosts
         services.AddMiniPtyTerminal();     // pty
         services.AddOctopusApp();          // app services and view models

@@ -162,7 +162,7 @@
                                           IsVisible="{Binding HasKnown}">
                             <arc:DropdownMenu.ItemTemplate>
                                 <DataTemplate x:DataType="agents:KnownEnvChoice">
-                                    <arc:MenuEntry Header="{Binding Detail}" Command="{Binding AddCommand}" />
+                                    <arc:MenuEntry Header="{Binding Detail}" Icon="{x:Static arc:ArcIcons.Plus}" Command="{Binding AddCommand}" />
                                 </DataTemplate>
                             </arc:DropdownMenu.ItemTemplate>
                         </arc:DropdownMenu>
@@ -253,7 +253,7 @@
         </StackPanel>
 
         <StackPanel Spacing="6" IsVisible="{Binding HasNotInstalled}">
-            <TextBlock Classes="group" Margin="2,12,0,0" Text="{l:AppLangResource SettingsNotInstalled}" />
+            <TextBlock Classes="group" Margin="2,12,0,0" Text="{Binding NotInstalledTitle}" />
             <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                     BorderThickness="1"
                     CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"

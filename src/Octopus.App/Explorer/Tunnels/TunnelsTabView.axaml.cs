@@ -19,9 +19,9 @@ public partial class TunnelsTabView : UserControl
         if (DataContext is not TunnelsPanelViewModel panel) return;
 
         var more = new MenuSurface();
-        more.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsNew), Command = panel.AddCommand });
-        more.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsStartAll), Command = panel.StartAllCommand, HasSeparatorBefore = true });
-        more.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsStopAll), Command = panel.StopAllCommand });
+        more.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsNew), Icon = ArcIcons.Plus, Command = panel.AddCommand });
+        more.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsStartAll), Icon = ArcIcons.Play, Command = panel.StartAllCommand, HasSeparatorBefore = true });
+        more.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsStopAll), Icon = ArcIcons.Square, Command = panel.StopAllCommand });
         DropdownMenu.SetMenu(MoreButton, more);
     }
 
@@ -32,19 +32,21 @@ public partial class TunnelsTabView : UserControl
         var menu = new MenuSurface();
         if (row.CanOpen)
         {
-            menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsOpen), Command = row.OpenCommand });
+            menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsOpen), Icon = ArcIcons.ExternalLink, Command = row.OpenCommand });
         }
-        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsCopyAddress), Command = row.CopyAddressCommand });
+        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsCopyAddress), Icon = ArcIcons.Copy, Command = row.CopyAddressCommand });
         menu.Items.Add(new MenuEntry
         {
             Header = AppLangResources.Get(AppLangResourceKind.TunnelsShowLog),
+            Icon = ArcIcons.FileText,
             Command = row.ToggleLogCommand,
             HasSeparatorBefore = true,
         });
-        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsEdit), Command = row.EditCommand });
+        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.TunnelsEdit), Icon = ArcIcons.Pencil, Command = row.EditCommand });
         menu.Items.Add(new MenuEntry
         {
             Header = AppLangResources.Get(AppLangResourceKind.TunnelsDelete),
+            Icon = ArcIcons.Trash2,
             Command = row.DeleteCommand,
             IsDestructive = true,
             HasSeparatorBefore = true,

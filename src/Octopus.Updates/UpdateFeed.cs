@@ -49,6 +49,9 @@ public sealed class GitHubReleasesFeed(HttpClient http, ManifestVerifier verifie
     private const int MaxManifestBytes = 1 << 20;
     /// <summary>How many candidates are tried before giving up: each costs two downloads.</summary>
     private const int MaxCandidates = 5;
+    /// <summary>How many releases' notes are put together, and how long one release's notes may be.</summary>
+    private const int MaxNotesReleases = 10;
+    private const int MaxNotesChars = 20_000;
 
     private string? _etag;
     private List<GitHubRelease>? _cached;
@@ -61,17 +64,33 @@ public sealed class GitHubReleasesFeed(HttpClient http, ManifestVerifier verifie
             .Select(r => (Release: r, Version: AppVersion.TryParse(r.TagName, out var v) ? v : null))
             .Where(c => c.Version is not null && c.Version > floor && (channel == UpdateChannel.Preview || !c.Version.IsPreview))
             .OrderByDescending(c => c.Version)
-            .Take(MaxCandidates);
-        foreach (var (release, version) in candidates)
+            .ToList();
+        foreach (var (release, version) in candidates.Take(MaxCandidates))
         {
             var manifest = await ReadManifestAsync(release, version!, cancellationToken).ConfigureAwait(false);
             if (manifest is not null)
             {
                 manifest.NotesUrl ??= release.HtmlUrl;
-                return new UpdateOffer(version!, manifest, manifest.Assets.GetValueOrDefault(target));
+                // This release and the older ones the person skipped over on the way up.
+                var notes = BuildNotes(candidates.Where(c => c.Version! <= version!).Take(MaxNotesReleases).Select(c => (c.Release, c.Version!)).ToList());
+                return new UpdateOffer(version!, manifest, manifest.Assets.GetValueOrDefault(target)) { Notes = notes };
             }
         }
         return null;
+    }
+
+    /// <summary>The notes of the releases, newest first; a heading per version when there is more than one.</summary>
+    private static string? BuildNotes(List<(GitHubRelease Release, AppVersion Version)> releases)
+    {
+        var parts = new List<string>();
+        foreach (var (release, version) in releases)
+        {
+            var body = release.Body?.Trim();
+            if (string.IsNullOrEmpty(body)) continue;
+            if (body.Length > MaxNotesChars) body = body[..MaxNotesChars].TrimEnd() + "\n\n…";
+            parts.Add(releases.Count > 1 ? $"## {version}\n\n{body}" : body);
+        }
+        return parts.Count == 0 ? null : string.Join("\n\n", parts);
     }
 
     private async Task<List<GitHubRelease>> ListAsync(CancellationToken cancellationToken)

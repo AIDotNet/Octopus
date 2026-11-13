@@ -12,6 +12,7 @@ internal static class SettingsNormalizer
         settings.Terminal ??= new();
         settings.Agents ??= new();
         settings.Updates ??= new();
+        settings.Tray ??= new();
         if (!Octopus.Core.Updates.UpdateSettingValues.IsKnownMode(settings.Updates.Mode))
             settings.Updates.Mode = Octopus.Core.Updates.UpdateSettingValues.Auto;
         if (!Octopus.Core.Updates.UpdateSettingValues.IsKnownChannel(settings.Updates.Channel))

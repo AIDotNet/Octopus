@@ -62,15 +62,36 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="ssh:SshHostRow">
                         <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,10">
-                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
                                 <lucide:LucideIcon Kind="Server"
                                                    Size="16"
                                                    VerticalAlignment="Center"
                                                    Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
                                 <StackPanel Grid.Column="1" Spacing="2">
-                                    <TextBlock Classes="name" Text="{Binding Alias}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="name" Text="{Binding Alias}" />
+                                        <arc:Badge Size="Small" Tone="Neutral" Content="{Binding ProtocolName}" IsVisible="{Binding HasProtocolName}" VerticalAlignment="Center" />
+                                    </StackPanel>
                                     <TextBlock Classes="mono" Text="{Binding Address}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasAddress}" />
                                     <TextBlock Classes="hint" Text="{Binding Details}" IsVisible="{Binding HasDetails}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <arc:Button Variant="Secondary"
+                                                Size="Small"
+                                                IsVisible="{Binding CanEdit}"
+                                                Content="{l:AppLangResource SettingsSshEdit}"
+                                                Command="{Binding $parent[ItemsControl].((ssh:SshSettingsViewModel)DataContext).EditHostCommand}"
+                                                CommandParameter="{Binding}" />
+                                    <arc:Button Variant="Secondary"
+                                                Size="Small"
+                                                IsVisible="{Binding CanEdit}"
+                                                Content="{l:AppLangResource SettingsSshDelete}"
+                                                Command="{Binding $parent[ItemsControl].((ssh:SshSettingsViewModel)DataContext).DeleteHostCommand}"
+                                                CommandParameter="{Binding}" />
+                                    <TextBlock Classes="hint"
+                                               Text="ⓘ"
+                                               IsVisible="{Binding CannotEdit}"
+                                               ToolTip.Tip="{l:AppLangResource SettingsSshNotEditable}" />
                                 </StackPanel>
                             </Grid>
                         </Border>

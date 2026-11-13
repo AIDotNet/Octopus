@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "id": "continue",
+  "name": "Continue CLI",
+  "icon": "continue",
+  "homepage": "https://continue.dev",
+  "verified": false,
+  "detect": {
+    "executables": ["cn"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @continuedev/cli" }]
+  },
+  "capabilities": {
+    "resume": {
+      "continueLatest": ["--resume"]
+    },
+    "extraArgs": true
+  }
+}

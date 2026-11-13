@@ -104,7 +104,7 @@ public sealed class FakeReleases(FakeHttp http, TestKey key)
     private readonly List<string> _releases = [];
 
     /// <param name="signedBy">Another key, to publish a forged manifest.</param>
-    public byte[] Add(string version, string target = "osx-arm64", byte[]? package = null, bool draft = false, TestKey? signedBy = null, bool withManifest = true, string? manifestVersion = null)
+    public byte[] Add(string version, string target = "osx-arm64", byte[]? package = null, bool draft = false, TestKey? signedBy = null, bool withManifest = true, string? manifestVersion = null, string? notes = null)
     {
         package ??= Encoding.UTF8.GetBytes($"package {version} {Guid.NewGuid()}");
         var name = $"Octopus-{version}-{target}.zip";
@@ -130,7 +130,7 @@ public sealed class FakeReleases(FakeHttp http, TestKey key)
                {"name":"{{name}}","browser_download_url":"{{packageUrl}}","size":{{package.Length}}}]
               """
             : "[]";
-        _releases.Insert(0, $$"""{"tag_name":"v{{version}}","draft":{{(draft ? "true" : "false")}},"prerelease":{{(version.Contains('-') ? "true" : "false")}},"html_url":"https://github.test/o/r/releases/tag/v{{version}}","assets":{{assets}}}""");
+        _releases.Insert(0, $$"""{"tag_name":"v{{version}}","draft":{{(draft ? "true" : "false")}},"prerelease":{{(version.Contains('-') ? "true" : "false")}},"html_url":"https://github.test/o/r/releases/tag/v{{version}}","body":{{(notes is null ? "null" : JsonSerializer.Serialize(notes))}},"assets":{{assets}}}""");
         http.Json(ListUrl, "[" + string.Join(",", _releases) + "]");
         return package;
     }

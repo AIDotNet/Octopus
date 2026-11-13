@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "id": "pi",
+  "name": "Pi",
+  "icon": "pi",
+  "homepage": "https://github.com/badlogic/pi-mono",
+  "verified": false,
+  "detect": {
+    "executables": ["pi"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @mariozechner/pi-coding-agent" }]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "effort": {
+      "label": "Thinking",
+      "args": ["--thinking", "{value}"],
+      "options": [{ "id": "off" }, { "id": "minimal" }, { "id": "low" }, { "id": "medium" }, { "id": "high" }, { "id": "xhigh" }]
+    },
+    "prompt": {
+      "mode": "positional"
+    },
+    "resume": {
+      "continueLatest": ["--continue"]
+    },
+    "env": {
+      "known": [{ "name": "PI_CODING_AGENT_DIR", "label": "Config directory", "localized": {"zh-CN": {"label": "配置目录"}} }],
+      "allowCustom": true
+    },
+    "extraArgs": true
+  }
+}

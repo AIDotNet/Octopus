@@ -124,6 +124,15 @@ public sealed class FakeDialogService : IDialogService
 
     public Task<Octopus.Ssh.SshHostDraft?> AskNewSshHostAsync() => Task.FromResult(NewSshHost);
 
+    public Octopus.Ssh.SshHostDraft? EditedSshHost { get; set; }
+    public Octopus.Ssh.SshHost? LastSshHostEdited { get; private set; }
+
+    public Task<Octopus.Ssh.SshHostDraft?> AskEditSshHostAsync(Octopus.Ssh.SshHost host)
+    {
+        LastSshHostEdited = host;
+        return Task.FromResult(EditedSshHost);
+    }
+
     public string? NameAnswer { get; set; }
     public string? LastNameLabel { get; private set; }
 

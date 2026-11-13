@@ -319,4 +319,39 @@ public class ImageViewerTests
         var button = broken.View.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "1:1");
         Assert.False(button.IsEffectivelyVisible);
     }
+
+    [AvaloniaFact]
+    public async Task A_picture_longer_than_the_memory_limit_is_decoded_smaller_but_still_counts_as_its_own_size()
+    {
+        using var h = await OpenImage(TestImages.Jpeg(6000, 1500), "wide.jpg");
+        var model = Image(h);
+        Assert.NotNull(model.Image);
+        // Kept at 4096 on the long side, in proportion...
+        Assert.Equal(new PixelSize(ImageDecoders.MaxStillSide, 1024), model.Image!.PixelSize);
+        // ... while the bar and the zoom talk about the real picture.
+        Assert.Equal(new ImageInfo(ImageFormat.Jpeg, 6000, 1500), model.Info);
+        Assert.Contains("6,000", model.MetaText);
+        model.ActualSizeCommand.Execute(null);
+        Assert.Equal("100%", model.ZoomText);
+        Assert.Equal(6000, model.Viewport!.ImageRect.Width, 1);
+        Assert.Equal(1500, model.Viewport.ImageRect.Height, 1);
+    }
+
+    [AvaloniaFact]
+    public async Task A_tall_picture_is_shrunk_by_its_height()
+    {
+        using var h = await OpenImage(TestImages.Png(1200, 5000), "tall.png");
+        var model = Image(h);
+        Assert.Equal(ImageDecoders.MaxStillSide, model.Image!.PixelSize.Height);
+        Assert.Equal(new ImageInfo(ImageFormat.Png, 1200, 5000), model.Info);
+    }
+
+    [Fact]
+    public void Fit_leaves_a_small_size_alone_and_keeps_the_proportions_of_a_big_one()
+    {
+        Assert.Equal(new PixelSize(4096, 4096), ImageDecoders.Fit(4096, 4096, 4096));
+        Assert.Equal(new PixelSize(4096, 2048), ImageDecoders.Fit(8192, 4096, 4096));
+        Assert.Equal(new PixelSize(1, 4096), ImageDecoders.Fit(1, 40960, 4096));
+        Assert.Equal(new PixelSize(1280, 720), ImageDecoders.Fit(1920, 1080, 1280));
+    }
 }

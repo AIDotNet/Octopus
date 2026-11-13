@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "jules",
+  "name": "Jules Tools",
+  "icon": "jules",
+  "homepage": "https://jules.google",
+  "verified": false,
+  "detect": {
+    "executables": ["jules"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @google/jules" }]
+  },
+  "capabilities": {
+    "extraArgs": true
+  }
+}

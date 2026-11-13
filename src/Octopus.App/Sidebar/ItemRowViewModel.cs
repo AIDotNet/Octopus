@@ -49,15 +49,20 @@ public sealed partial class ItemRowViewModel : ObservableObject
     [ObservableProperty] public partial bool IsRenaming { get; set; }
     /// <summary>The agent is working on a turn: the row shows a spinner.</summary>
     [ObservableProperty] public partial bool IsWorking { get; set; }
-    /// <summary>The agent waits for the user, or its turn failed: the row shows a dot.</summary>
-    [ObservableProperty] public partial bool NeedsAttention { get; set; }
+    /// <summary>The agent stopped to ask the user (a question, a permission request): a yellow dot.</summary>
+    [ObservableProperty] public partial bool IsWaiting { get; set; }
+    /// <summary>The agent's turn failed: a red dot.</summary>
+    [ObservableProperty] public partial bool HasError { get; set; }
+    public bool NeedsAttention => IsWaiting || HasError;
 
     public void RefreshTitle() => OnPropertyChanged(nameof(Title));
 
     public void Show(Activity.ItemActivity activity)
     {
         IsWorking = activity == Activity.ItemActivity.Working;
-        NeedsAttention = activity is Activity.ItemActivity.Waiting or Activity.ItemActivity.Error;
+        IsWaiting = activity == Activity.ItemActivity.Waiting;
+        HasError = activity == Activity.ItemActivity.Error;
+        OnPropertyChanged(nameof(NeedsAttention));
     }
 
     [RelayCommand] private void Activate() => _activate(this);

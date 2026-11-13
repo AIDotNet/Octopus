@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "letta",
+  "name": "Letta Code",
+  "icon": "letta",
+  "homepage": "https://github.com/letta-ai/letta-code",
+  "verified": false,
+  "detect": {
+    "executables": ["letta"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @letta-ai/letta-code" }]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "permission": {
+      "default": "default",
+      "modes": { "default": {"args": []}, "full": {"args": ["--yolo"], "danger": true} }
+    },
+    "resume": {
+      "continueLatest": ["--continue"]
+    },
+    "extraArgs": true
+  }
+}

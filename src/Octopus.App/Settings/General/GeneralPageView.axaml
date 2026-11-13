@@ -28,6 +28,14 @@
                              Description="{l:AppLangResource SettingsResumeAgentsHint}">
                 <arc:Switch IsChecked="{Binding ResumeAgentsOnRestart, Mode=TwoWay}" IsEnabled="{Binding RestoreItemsOnStartup}" />
             </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsTrayShow}"
+                             Description="{l:AppLangResource SettingsTrayShowHint}">
+                <arc:Switch x:Name="TrayEnabledSwitch" IsChecked="{Binding TrayEnabled, Mode=TwoWay}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsTrayClose}"
+                             Description="{l:AppLangResource SettingsTrayCloseHint}">
+                <arc:Switch x:Name="CloseToTraySwitch" IsChecked="{Binding CloseToTray, Mode=TwoWay}" IsEnabled="{Binding TrayEnabled}" />
+            </arc:SettingsRow>
         </arc:SettingsGroup>
 
         <!-- Updates (design/10-自动更新.md §9). -->

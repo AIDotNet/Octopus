@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "cline",
+  "name": "Cline",
+  "icon": "cline",
+  "homepage": "https://cline.bot",
+  "verified": false,
+  "detect": {
+    "executables": ["cline"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g cline" }]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": { "default": {"args": []}, "plan": {"args": ["--plan"]}, "full": {"args": ["--yolo"], "danger": true} }
+    },
+    "env": {
+      "known": [{ "name": "CLINE_DIR", "label": "Config directory", "localized": {"zh-CN": {"label": "配置目录"}} }],
+      "allowCustom": true
+    },
+    "extraArgs": true
+  }
+}

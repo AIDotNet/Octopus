@@ -114,7 +114,11 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     private bool IsWorking(Project project) =>
         _activity is not null && project.Items.Any(i => _activity.Of(i.Id) == ItemActivity.Working);
 
-    /// <summary>Updates the project's loading ring in place, and the one of the folder it is in.</summary>
+    /// <summary>True while any terminal or agent of the project waits for the user.</summary>
+    private bool NeedsInput(Project project) =>
+        _activity is not null && project.Items.Any(i => _activity.Of(i.Id) == ItemActivity.Waiting);
+
+    /// <summary>Updates the project's loading ring and waiting dot in place, and the ones of the folder it is in.</summary>
     private void ShowWork(Project project)
     {
         if (Chips.FirstOrDefault(c => c.Id == project.Id) is not { } chip)
@@ -122,9 +126,11 @@ public sealed partial class ProjectRailViewModel : ObservableObject
             return;
         }
         chip.IsWorking = IsWorking(project);
+        chip.NeedsInput = NeedsInput(project);
         foreach (var group in Entries.OfType<ProjectGroupViewModel>())
         {
             group.IsWorking = group.Chips.Any(c => c.IsWorking);
+            group.NeedsInput = group.Chips.Any(c => c.NeedsInput);
         }
     }
 
@@ -142,6 +148,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
                 choices, MoveToGroup, NewGroupAsync)
             {
                 IsWorking = IsWorking(project),
+                NeedsInput = NeedsInput(project),
             };
             Chips.Add(chip);
             if (project.GroupId is { } groupId && members.TryGetValue(groupId, out var list))
@@ -163,6 +170,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
                 // A group that opened or closed with this change (a new group opens as it is made) plays it.
                 AnimateOnAttach = _built && isExpanded != (group.Id == _shownExpanded),
                 IsWorking = members[group.Id].Any(c => c.IsWorking),
+                NeedsInput = members[group.Id].Any(c => c.NeedsInput),
             });
         }
         _shownExpanded = expanded;

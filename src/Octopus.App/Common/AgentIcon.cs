@@ -43,6 +43,20 @@ public sealed class AgentIcon : Border
         ["goose"] = ("#3F3F46", "G"),
         ["crush"] = ("#E0489B", "C"),
         ["kimi"] = ("#1E293B", "K"),
+        ["cline"] = ("#0F766E", "C"),
+        ["kilo"] = ("#CA8A04", "K"),
+        ["auggie"] = ("#16A34A", "A"),
+        ["codebuddy"] = ("#2563EB", "C"),
+        ["qoder"] = ("#22C55E", "Q"),
+        ["vibe"] = ("#FA5310", "V"),
+        ["pi"] = ("#7C3AED", "π"),
+        ["openhands"] = ("#CA8A04", "H"),
+        ["continue"] = ("#E11D48", "C"),
+        ["junie"] = ("#FE315D", "J"),
+        ["letta"] = ("#4F46E5", "L"),
+        ["codebuff"] = ("#65A30D", "B"),
+        ["nanocoder"] = ("#0891B2", "N"),
+        ["jules"] = ("#9333EA", "J"),
     };
 
     private readonly TextBlock _letter = new()

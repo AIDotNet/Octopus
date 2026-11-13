@@ -89,6 +89,9 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
     /// <summary>A project of the group is working: the closed folder carries the loading ring for it.</summary>
     [ObservableProperty] public partial bool IsWorking { get; set; }
 
+    /// <summary>A project in the group has an agent that asks the user: a yellow dot on the folder.</summary>
+    [ObservableProperty] public partial bool NeedsInput { get; set; }
+
     /// <summary>Dimmed like a project square that is not current.</summary>
     public double FolderOpacity => HasCurrent ? 1 : 0.72;
 

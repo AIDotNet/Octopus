@@ -37,6 +37,33 @@ public sealed class FeedTests : IDisposable
     }
 
     [Fact]
+    public async Task TheOfferCarriesTheNotesOfItsRelease()
+    {
+        _releases.Add("1.0.0", notes: "old");
+        _releases.Add("1.1.0", notes: "### New\n\n- a thing");
+        var offer = await Find("1.0.0");
+        Assert.Equal("### New\n\n- a thing", offer!.Notes);
+    }
+
+    [Fact]
+    public async Task SkippedReleasesAddTheirNotesUnderAVersionHeading()
+    {
+        _releases.Add("1.0.0", notes: "installed");
+        _releases.Add("1.1.0", notes: "middle");
+        _releases.Add("1.2.0", notes: "latest");
+        var offer = await Find("1.0.0");
+        Assert.Equal("## 1.2.0\n\nlatest\n\n## 1.1.0\n\nmiddle", offer!.Notes);
+    }
+
+    [Fact]
+    public async Task ReleasesWithoutNotesGiveNoNotes()
+    {
+        _releases.Add("1.0.0");
+        _releases.Add("1.1.0");
+        Assert.Null((await Find("1.0.0"))!.Notes);
+    }
+
+    [Fact]
     public async Task NothingNewerIsNull()
     {
         _releases.Add("1.0.0");

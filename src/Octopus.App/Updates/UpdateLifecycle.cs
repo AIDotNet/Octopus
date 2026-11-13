@@ -17,6 +17,7 @@ internal static class UpdateLifecycle
         {
             var updates = AppHost.Get<IUpdateService>();
             updates.Start();
+            AppHost.Get<UpdateNotesPresenter>().Start();
             if (updates.JustUpdatedTo is { } version && AppHost.Get<IWindowAccessor>().Window is { } window)
             {
                 var notes = UpdateEndpoints.ReleasePage(version);
@@ -34,6 +35,13 @@ internal static class UpdateLifecycle
         {
             // An updater that cannot start leaves the app as it is.
         }
+    }
+
+    /// <summary>Tells about the notes of a version that was found while the window could not show them.</summary>
+    public static void PresentNotes()
+    {
+        try { AppHost.Get<UpdateNotesPresenter>().PresentIfDue(); }
+        catch (InvalidOperationException) { }
     }
 
     /// <summary>Called as the app ends: a ready update is handed to its installer, which waits for the process to end.</summary>

@@ -33,6 +33,13 @@ public sealed class UpdateAsset
 /// <param name="Asset">The package for this platform; null when the release has none (only its page can be offered).</param>
 public sealed record UpdateOffer(AppVersion Version, UpdateManifest Manifest, UpdateAsset? Asset)
 {
+    /// <summary>
+    /// The release notes as Markdown: the notes of this release and of every older release the person has not installed
+    /// yet (a heading per version when there are several). Null when the releases carry none. They come from the release
+    /// text on GitHub, not from the signed manifest: they are only ever shown, never acted on.
+    /// </summary>
+    public string? Notes { get; init; }
+
     public string? NotesUrl => Manifest.NotesUrl;
     public DateTimeOffset? PublishedAt => Manifest.PublishedAt;
 }
@@ -46,6 +53,8 @@ public sealed class PendingUpdate
     /// <summary>What the installer installs from (the package itself, or the app unpacked from it).</summary>
     public string Prepared { get; set; } = "";
     public string? NotesUrl { get; set; }
+    /// <summary>The release notes (Markdown), kept so a restart in between still has them to show.</summary>
+    public string? Notes { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
     /// <summary>
     /// Downloaded because the person asked ("download and update"); false for a download auto mode started, which is
@@ -71,6 +80,7 @@ public sealed class GitHubRelease
     [JsonPropertyName("draft")] public bool Draft { get; set; }
     [JsonPropertyName("prerelease")] public bool Prerelease { get; set; }
     [JsonPropertyName("html_url")] public string? HtmlUrl { get; set; }
+    [JsonPropertyName("body")] public string? Body { get; set; }
     [JsonPropertyName("assets")] public List<GitHubReleaseAsset> Assets { get; set; } = [];
 }
 

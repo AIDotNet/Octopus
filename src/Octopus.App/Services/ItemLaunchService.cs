@@ -19,7 +19,8 @@ public sealed class ItemLaunchService(
     ISignalHub? signals = null,
     ISignalAttachPlanner? attach = null,
     ILoginEnvironment? login = null,
-    RemoteFiles? remote = null) : IItemLaunchService
+    RemoteFiles? remote = null,
+    Octopus.Ssh.ISshHostCatalog? hosts = null) : IItemLaunchService
 {
     /// <summary>Points at an <c>octopus-signal</c> build when it is not next to the app (development).</summary>
     public const string ForwarderVariable = "OCTOPUS_SIGNAL_FORWARDER";
@@ -35,9 +36,17 @@ public sealed class ItemLaunchService(
         {
             // The terminal shares its connection with the folder listing: a password given here serves both.
             // The debug log is what the terminal shows of the connection while it is made (see SshConnectProgress).
-            return project.SshHost is { } host
-                ? planner.PlanRemoteShell(host, cwd, current.Terminal.Shell, remote is null ? null : [.. remote.TerminalOptions, .. remote.StartConnectLog(item.Id)])
-                : planner.PlanShell(cwd, current.Terminal.Shell);
+            if (project.SshHost is not { } host)
+            {
+                return planner.PlanShell(cwd, current.Terminal.Shell);
+            }
+            var known = hosts?.Current.Hosts.FirstOrDefault(h => h.Alias == host);
+            return known?.Protocol switch
+            {
+                Octopus.Ssh.SshHostProtocol.Mosh => planner.PlanMoshShell(host, cwd),
+                Octopus.Ssh.SshHostProtocol.Telnet => planner.PlanTelnet(known.HostName, known.Port),
+                _ => planner.PlanRemoteShell(host, cwd, current.Terminal.Shell, remote is null ? null : [.. remote.TerminalOptions, .. remote.StartConnectLog(item.Id)]),
+            };
         }
 
         if (project.SshHost is not null)

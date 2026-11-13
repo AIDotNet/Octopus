@@ -71,4 +71,32 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject
             OnPropertyChanged();
         }
     }
+
+    public bool TrayEnabled
+    {
+        get => _settings.Current.Tray.Enabled;
+        set
+        {
+            if (value == TrayEnabled)
+            {
+                return;
+            }
+            _settings.Update(s => s.Tray.Enabled = value);
+            OnPropertyChanged();
+        }
+    }
+
+    public bool CloseToTray
+    {
+        get => _settings.Current.Tray.CloseToTray;
+        set
+        {
+            if (value == CloseToTray)
+            {
+                return;
+            }
+            _settings.Update(s => s.Tray.CloseToTray = value);
+            OnPropertyChanged();
+        }
+    }
 }

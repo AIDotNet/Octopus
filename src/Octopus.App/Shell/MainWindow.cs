@@ -93,6 +93,14 @@ public class MainWindow : ArcWindow
         {
             return;
         }
+        // The close button with "close to tray" on: the window hides and the app goes on. Quitting from the tray menu, the
+        // updater's restart and the system ending the app close the window by code or for another reason, and are not hidden.
+        if (e is { IsProgrammatic: false, CloseReason: WindowCloseReason.WindowClosing } && AppHost.Get<TrayService>().HidesOnClose)
+        {
+            e.Cancel = true;
+            Hide();
+            return;
+        }
         // The first close request only starts the shutdown (it may ask, and ending terminals takes a moment); the window
         // closes for real once everything is saved and ended. Further requests meanwhile change nothing.
         e.Cancel = true;

@@ -111,3 +111,12 @@ internal static class Builtins
     public static AgentDefinition Get(string id) => Catalog.Value.Find(id)!;
     public static AgentCatalog All => Catalog.Value;
 }
+
+internal sealed class PathRecordingLocator(Action<string?> record, params string[] found) : IExecutableLocator
+{
+    public IReadOnlyList<string> FindAll(string name, string? pathVariable)
+    {
+        record(pathVariable);
+        return found;
+    }
+}

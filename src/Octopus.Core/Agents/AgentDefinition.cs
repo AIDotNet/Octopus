@@ -44,8 +44,16 @@ public sealed class AgentDetect
     public List<string> VersionArgs { get; set; } = ["--version"];
     /// <summary>Regex whose first group is the version.</summary>
     public string? VersionRegex { get; set; }
-    /// <summary>The version output must contain this; rules out another program with the same name.</summary>
+    /// <summary>
+    /// The version output must contain this (ignoring case); rules out another program with the same name. Alternatives
+    /// are separated by <c>|</c>: any one of them is enough.
+    /// </summary>
     public string? Fingerprint { get; set; }
+    /// <summary>
+    /// Directories searched after PATH, for an agent whose installer puts it where PATH does not reach (a GUI-launched
+    /// app does not see every shell profile). <c>~</c>, <c>$VAR</c> and <c>%VAR%</c> are expanded.
+    /// </summary>
+    public List<string> ExtraDirs { get; set; } = [];
     public Dictionary<string, string> ProbeEnv { get; set; } = [];
     public List<AgentInstallHint> InstallHints { get; set; } = [];
 }

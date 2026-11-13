@@ -67,6 +67,9 @@ public sealed partial class ProjectChipViewModel(
     /// <summary>An agent (or terminal) of the project is working: the square carries a loading ring. Set in place by the rail.</summary>
     [ObservableProperty] public partial bool IsWorking { get; set; }
 
+    /// <summary>An agent of the project stopped to ask the user: the square carries a yellow dot (it wins over the ring).</summary>
+    [ObservableProperty] public partial bool NeedsInput { get; set; }
+
     public string Tip { get; } = project.Name + "\n" + (project.SshHost is { } host ? host + ":" + project.Path : project.Path);
     public double ChipOpacity => IsCurrent ? 1 : 0.72;
 

@@ -121,4 +121,21 @@ public class TerminalLaunchPlannerTests
 
         Assert.Equal(["-o", "ControlMaster=auto", "-t", "--", "prod-web", TerminalLaunchPlanner.RemoteShellCommand(null)], spec.Arguments);
     }
+
+    [Fact]
+    public void PlanMoshShell_runs_mosh_with_the_script_as_one_argument()
+    {
+        var spec = Planner().PlanMoshShell("盒子", "/srv/app");
+
+        Assert.Equal("mosh", spec.FileName);
+        Assert.Equal(["--", "盒子", "sh", "-c", TerminalLaunchPlanner.RemoteShellCommand("/srv/app")], spec.Arguments);
+    }
+
+    [Fact]
+    public void PlanTelnet_runs_telnet_with_the_host_and_the_port_when_there_is_one()
+    {
+        Assert.Equal(["10.0.0.1", "2323"], Planner().PlanTelnet("10.0.0.1", 2323).Arguments);
+        Assert.Equal(["10.0.0.1"], Planner().PlanTelnet("10.0.0.1", null).Arguments);
+        Assert.Equal("telnet", Planner().PlanTelnet("10.0.0.1", null).FileName);
+    }
 }

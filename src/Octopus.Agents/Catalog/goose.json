@@ -10,7 +10,8 @@
     "versionArgs": ["--version"],
     "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
     "installHints": [
-      { "kind": "brew", "command": "brew install block-goose-cli" }
+      { "kind": "brew", "command": "brew install block-goose-cli" },
+      { "kind": "script", "command": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash" }
     ]
   },
   "capabilities": {

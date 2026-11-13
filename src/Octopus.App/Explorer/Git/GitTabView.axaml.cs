@@ -69,26 +69,27 @@ public partial class GitTabView : UserControl
         var remotes = model.RemoteBranches.ToList();
         if (remotes.Count > 0)
         {
-            var remote = new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerRemoteBranches), HasSeparatorBefore = menu.Items.Count > 0 };
+            var remote = new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerRemoteBranches), Icon = ArcIcons.Cloud, HasSeparatorBefore = menu.Items.Count > 0 };
             foreach (var branch in remotes)
             {
-                remote.Items.Add(new MenuEntry { Header = branch.Name, Command = model.SwitchBranchCommand, CommandParameter = branch });
+                remote.Items.Add(new MenuEntry { Header = branch.Name, Icon = ArcIcons.GitBranch, Command = model.SwitchBranchCommand, CommandParameter = branch });
             }
             menu.Items.Add(remote);
         }
         menu.Items.Add(new MenuEntry
         {
             Header = AppLangResources.Get(AppLangResourceKind.ExplorerNewBranch),
+            Icon = ArcIcons.Plus,
             Command = model.NewBranchCommand,
             HasSeparatorBefore = menu.Items.Count > 0,
         });
         var deletable = model.LocalBranches.Where(b => !b.IsCurrent).ToList();
         if (deletable.Count > 0)
         {
-            var delete = new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerDeleteBranch) };
+            var delete = new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerDeleteBranch), Icon = ArcIcons.Trash2 };
             foreach (var branch in deletable)
             {
-                delete.Items.Add(new MenuEntry { Header = branch.Name, IsDestructive = true, Command = model.DeleteBranchCommand, CommandParameter = branch });
+                delete.Items.Add(new MenuEntry { Header = branch.Name, Icon = ArcIcons.GitBranch, IsDestructive = true, Command = model.DeleteBranchCommand, CommandParameter = branch });
             }
             menu.Items.Add(delete);
         }
@@ -99,13 +100,14 @@ public partial class GitTabView : UserControl
     {
         if (_model is not { } model) return;
         var menu = new MenuSurface();
-        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerFetch), Command = model.FetchCommand });
-        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerPull), Command = model.PullCommand });
-        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerPush), Command = model.PushCommand });
-        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerStash), Command = model.StashCommand, HasSeparatorBefore = true });
+        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerFetch), Icon = ArcIcons.RefreshCw, Command = model.FetchCommand });
+        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerPull), Icon = ArcIcons.Download, Command = model.PullCommand });
+        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerPush), Icon = ArcIcons.Upload, Command = model.PushCommand });
+        menu.Items.Add(new MenuEntry { Header = AppLangResources.Get(AppLangResourceKind.ExplorerStash), Icon = ArcIcons.Archive, Command = model.StashCommand, HasSeparatorBefore = true });
         menu.Items.Add(new MenuEntry
         {
             Header = AppLangResources.Get(AppLangResourceKind.ExplorerStashPop) + (model.StashCount > 0 ? $" ({model.StashCount})" : ""),
+            Icon = ArcIcons.ArrowUpFromLine,
             Command = model.StashPopCommand,
         });
         menu.Items.Add(new MenuEntry

@@ -6,7 +6,7 @@ using TKCode.Arc;
 namespace Octopus.App.Dialogs;
 
 /// <summary>Confirmations as Arc dialogs over the main window.</summary>
-public sealed class DialogService(IWindowAccessor windows, IPickerService pickers, ISshHostCatalog sshHosts, IProjectIconStore? icons = null, ILocalPorts? ports = null) : IDialogService
+public sealed class DialogService(IWindowAccessor windows, IPickerService pickers, ISshHostCatalog sshHosts, IProjectIconStore? icons = null, ILocalPorts? ports = null, ISshHostTester? sshTester = null) : IDialogService
 {
     public async Task<Octopus.Core.Projects.TunnelSpec?> AskTunnelAsync(Octopus.Core.Projects.TunnelSpec? initial, string host)
     {
@@ -112,7 +112,12 @@ public sealed class DialogService(IWindowAccessor windows, IPickerService picker
         }
     }
 
-    public async Task<SshHostDraft?> AskNewSshHostAsync()
+    public Task<SshHostDraft?> AskNewSshHostAsync() => AskSshHostAsync(null);
+
+    public Task<SshHostDraft?> AskEditSshHostAsync(SshHost host) => AskSshHostAsync(host);
+
+    /// <summary>The host form, shown again until what is typed is valid. <paramref name="existing"/> is the host being edited: its alias is its own.</summary>
+    private async Task<SshHostDraft?> AskSshHostAsync(SshHost? existing)
     {
         if (windows.Window is null)
         {
@@ -120,26 +125,31 @@ public sealed class DialogService(IWindowAccessor windows, IPickerService picker
         }
         // The file may have changed since the last look: a host that was added by hand is refused, not written twice.
         sshHosts.Refresh();
-        var aliases = sshHosts.Current.Hosts.Select(h => h.Alias).ToList();
-        SshHostDraft? typed = null;
+        var aliases = sshHosts.Current.Hosts.Select(h => h.Alias)
+            .Where(a => existing is null || !a.Equals(existing.Alias, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var editing = existing is not null;
+        SshHostDraft? typed = existing?.ToDraft();
         IReadOnlyList<SshHostIssue> issues = [];
+        Func<SshHostDraft, CancellationToken, Task<SshTestResult>>? tester = sshTester is null ? null : sshTester.TestAsync;
         while (true)
         {
-            var form = new SshHostFormView(typed);
+            var form = new SshHostFormView(typed, editing, tester);
             form.ShowIssues(issues);
             var result = await Dialog.ShowAsync(
                 windows.Window,
-                AppLangResources.Get(AppLangResourceKind.SettingsSshAddTitle),
+                AppLangResources.Get(editing ? AppLangResourceKind.SettingsSshEditTitle : AppLangResourceKind.SettingsSshAddTitle),
                 form,
-                AppLangResources.Get(AppLangResourceKind.SettingsSshAddDescription),
+                AppLangResources.Get(editing ? AppLangResourceKind.SettingsSshEditDescription : AppLangResourceKind.SettingsSshAddDescription),
                 new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
-                new DialogAction(AppLangResources.Get(AppLangResourceKind.SettingsSshAddConfirm), true, ButtonVariant.Primary));
+                new DialogAction(AppLangResources.Get(editing ? AppLangResourceKind.Save : AppLangResourceKind.SettingsSshAddConfirm), true, ButtonVariant.Primary));
             if (result is not true)
             {
                 return null;
             }
             typed = form.Draft;
-            issues = typed.Validate(aliases);
+            // The alias of an existing host is not typed here: it is kept, even if it has characters a new alias could not.
+            issues = typed.Validate(aliases).Where(i => !(editing && i.Field == SshHostField.Alias)).ToList();
             if (issues.Count == 0)
             {
                 return typed;

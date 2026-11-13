@@ -39,14 +39,14 @@ public partial class FileTreeView : UserControl
 
         MenuFactory.Attach(Tree,
         [
-            new(AppLangResources.Get(AppLangResourceKind.ExplorerOpen), _model.OpenContextCommand),
-            new(AppLangResources.Get(AppLangResourceKind.ExplorerReveal), _model.RevealContextCommand, SeparatorBefore: true),
-            new(AppLangResources.Get(AppLangResourceKind.ExplorerCopyPath), _model.CopyContextPathCommand),
-            new(AppLangResources.Get(AppLangResourceKind.ExplorerCopyRelativePath), _model.CopyContextRelativePathCommand),
-            new(AppLangResources.Get(AppLangResourceKind.ExplorerNewFileMenu), _model.NewFileHereCommand, SeparatorBefore: true),
-            new(AppLangResources.Get(AppLangResourceKind.ExplorerNewFolderMenu), _model.NewFolderHereCommand),
-            new(AppLangResources.Get(AppLangResourceKind.ExplorerRenameMenu), _model.RenameContextCommand, SeparatorBefore: true),
-            new(AppLangResources.Get(AppLangResourceKind.ExplorerDeleteMenu), _model.DeleteContextCommand, IsDestructive: true),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerOpen), _model.OpenContextCommand, Glyph: ArcIcons.FileText),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerReveal), _model.RevealContextCommand, SeparatorBefore: true, Glyph: ArcIcons.FolderOpen),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerCopyPath), _model.CopyContextPathCommand, Glyph: ArcIcons.Copy),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerCopyRelativePath), _model.CopyContextRelativePathCommand, Glyph: ArcIcons.Link),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerNewFileMenu), _model.NewFileHereCommand, SeparatorBefore: true, Glyph: ArcIcons.FilePlus),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerNewFolderMenu), _model.NewFolderHereCommand, Glyph: ArcIcons.Folder),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerRenameMenu), _model.RenameContextCommand, SeparatorBefore: true, Glyph: ArcIcons.Pencil),
+            new(AppLangResources.Get(AppLangResourceKind.ExplorerDeleteMenu), _model.DeleteContextCommand, IsDestructive: true, Glyph: ArcIcons.Trash2),
         ]);
     }
 

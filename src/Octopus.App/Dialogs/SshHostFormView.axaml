@@ -4,6 +4,12 @@
              xmlns:l="using:Octopus.App.Localization"
              x:Class="Octopus.App.Dialogs.SshHostFormView">
     <StackPanel Spacing="14">
+        <StackPanel Spacing="4">
+            <arc:Select x:Name="ProtocolSelect" Size="Small"
+                        Label="{l:AppLangResource SettingsSshFieldProtocol}"
+                        AutoScrollToSelectedItem="False" />
+            <TextBlock x:Name="ProtocolHint" Classes="hint" TextWrapping="Wrap" />
+        </StackPanel>
         <arc:Input x:Name="AliasInput" Size="Small"
                    Label="{l:AppLangResource SettingsSshFieldAlias}"
                    Description="{l:AppLangResource SettingsSshFieldAliasHint}"
@@ -26,5 +32,11 @@
         <arc:Input x:Name="ProxyJumpInput" Size="Small"
                    Label="{l:AppLangResource SettingsSshFieldProxyJump}"
                    Placeholder="bastion" />
+        <!-- Tries what is typed, before it is saved. -->
+        <StackPanel x:Name="TestRow" Spacing="8">
+            <arc:Button x:Name="TestButton" Variant="Secondary" Size="Small" HorizontalAlignment="Left"
+                        Content="{l:AppLangResource SettingsSshTest}" />
+            <arc:Alert x:Name="TestResult" IsVisible="False" />
+        </StackPanel>
     </StackPanel>
 </UserControl>

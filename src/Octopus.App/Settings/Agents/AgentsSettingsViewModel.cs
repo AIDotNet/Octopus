@@ -66,6 +66,8 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
 
     public bool HasNotInstalled => NotInstalled.Count > 0;
 
+    public string NotInstalledTitle => AppLangResources.Format(AppLangResourceKind.SettingsNotInstalledCount, NotInstalled.Count);
+
     public string Subtitle => AppLangResources.Format(AppLangResourceKind.SettingsAgentsSubtitle, Installed.Count);
 
     /// <summary>The unified permission level of agents without their own; the id of one of <see cref="PermissionOptions"/>.</summary>
@@ -231,6 +233,7 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         _installationSignature = Signature();
         OnPropertyChanged(nameof(HasInstalled));
         OnPropertyChanged(nameof(HasNotInstalled));
+        OnPropertyChanged(nameof(NotInstalledTitle));
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(LastScanText));
     }

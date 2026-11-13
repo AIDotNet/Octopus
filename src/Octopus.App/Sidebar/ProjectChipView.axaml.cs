@@ -1,3 +1,4 @@
+using TKCode.Arc;
 using Avalonia.Controls;
 using Octopus.App.Common;
 using Octopus.App.Localization;
@@ -29,11 +30,11 @@ public partial class ProjectChipView : UserControl
         }
         MenuFactory.Attach(ChipButton,
         [
-            new(AppLangResources.Get(AppLangResourceKind.RenameProject), chip.RenameCommand),
-            new(AppLangResources.Get(AppLangResourceKind.ChangeProjectIcon), chip.ChangeIconCommand),
-            new(AppLangResources.Get(AppLangResourceKind.MoveToGroup), null) { Children = GroupMenuOf(chip) },
-            new(AppLangResources.Get(AppLangResourceKind.RevealInFileManager), chip.RevealCommand),
-            new(AppLangResources.Get(AppLangResourceKind.RemoveProject), chip.RemoveCommand, IsDestructive: true, SeparatorBefore: true),
+            new(AppLangResources.Get(AppLangResourceKind.RenameProject), chip.RenameCommand, Glyph: ArcIcons.Pencil),
+            new(AppLangResources.Get(AppLangResourceKind.ChangeProjectIcon), chip.ChangeIconCommand, Glyph: ArcIcons.Image),
+            new(AppLangResources.Get(AppLangResourceKind.MoveToGroup), null, Glyph: ArcIcons.Folder) { Children = GroupMenuOf(chip) },
+            new(AppLangResources.Get(AppLangResourceKind.RevealInFileManager), chip.RevealCommand, Glyph: ArcIcons.FolderOpen),
+            new(AppLangResources.Get(AppLangResourceKind.RemoveProject), chip.RemoveCommand, IsDestructive: true, SeparatorBefore: true, Glyph: ArcIcons.Trash2),
         ]);
     }
 
@@ -46,7 +47,7 @@ public partial class ProjectChipView : UserControl
         };
         entries.AddRange(chip.Groups.Select(g =>
             new MenuFactory.Entry(g.Name, chip.MoveToGroupCommand) { CommandParameter = g.Id, IsChecked = g.Id == chip.GroupId }));
-        entries.Add(new(AppLangResources.Get(AppLangResourceKind.NewGroupMenu), chip.NewGroupCommand, SeparatorBefore: true));
+        entries.Add(new(AppLangResources.Get(AppLangResourceKind.NewGroupMenu), chip.NewGroupCommand, SeparatorBefore: true, Glyph: ArcIcons.Plus));
         return entries;
     }
 }

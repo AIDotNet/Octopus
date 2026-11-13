@@ -39,7 +39,7 @@ public sealed class FakeUpdateService : IUpdateService
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    public static UpdateOffer Offer(string version, bool withPackage = true) => new(
+    public static UpdateOffer Offer(string version, bool withPackage = true, string? notes = null) => new(
         AppVersion.Parse(version),
         new UpdateManifest
         {
@@ -47,7 +47,7 @@ public sealed class FakeUpdateService : IUpdateService
             PublishedAt = new DateTimeOffset(2026, 12, 1, 8, 0, 0, TimeSpan.Zero),
             NotesUrl = $"https://github.com/AIDotNet/Octopus/releases/tag/v{version}",
         },
-        withPackage ? new UpdateAsset { Name = $"Octopus-{version}-osx-arm64.zip", Url = "https://example.invalid/x.zip", Size = 64_000_000, Sha256 = new string('a', 64) } : null);
+        withPackage ? new UpdateAsset { Name = $"Octopus-{version}-osx-arm64.zip", Url = "https://example.invalid/x.zip", Size = 64_000_000, Sha256 = new string('a', 64) } : null) { Notes = notes };
 
     public void Start() => Calls.Add("start");
     public Task CheckAsync(bool manual) { Calls.Add($"check:{manual}"); return Task.CompletedTask; }
@@ -113,6 +113,27 @@ public class UpdateCardTests
         card.DownloadCommand.Execute(null);
         card.SkipCommand.Execute(null);
         Assert.Equal(["download", "skip"], fake.Calls);
+    }
+
+    [AvaloniaFact]
+    public void ReleaseNotesAreAskedForInTheApp()
+    {
+        var fake = UseFake();
+        var card = AppHost.Get<UpdateCardViewModel>();
+        var asked = 0;
+        card.NotesRequested += (_, _) => asked++;
+        fake.Set(s => s with { Status = UpdateStatus.Available, Offer = FakeUpdateService.Offer("1.3.1201", notes: "### New\n\n- a thing") });
+        card.OpenNotesCommand.Execute(null);
+        Assert.Equal(1, asked);
+    }
+
+    [AvaloniaFact]
+    public void TheNotesDialogRendersMarkdown()
+    {
+        var view = new UpdateNotesView("### New\n\n- **a** thing");
+        var markdown = view.FindControl<TKCode.Arc.Markdown>("Notes");
+        Assert.NotNull(markdown);
+        Assert.Equal("### New\n\n- **a** thing", markdown.Text);
     }
 
     [AvaloniaFact]

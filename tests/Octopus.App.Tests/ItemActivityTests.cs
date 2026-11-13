@@ -147,6 +147,41 @@ public class ItemActivityTests
     }
 
     [AvaloniaFact, FreshApp]
+    public void An_agent_that_asks_shows_a_yellow_dot_on_its_row_and_its_project()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-activity-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var agent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude Code" };
+        projects.AddItem(project, agent);
+        var row = AppHost.Get<ShellViewModel>().Panel.Items.Single();
+        var chip = AppHost.Get<Octopus.App.Sidebar.ProjectRailViewModel>().Chips.Single(c => c.Id == project.Id);
+        var hub = AppHost.Get<ISignalHub>();
+        AgentSignal Signal(string channel) => new("claude", channel, agent.Id, "", 0, 0, "{}");
+
+        // A permission request or a question: waiting, yellow; the project's square says so too.
+        hub.Publish(Signal("permission-request"));
+        Frames.Pump();
+        Assert.True(row.IsWaiting);
+        Assert.False(row.HasError);
+        Assert.True(chip.NeedsInput);
+
+        // Answered: the next turn starts, and the dots go.
+        hub.Publish(Signal("prompt-submit"));
+        Frames.Pump();
+        Assert.False(row.IsWaiting);
+        Assert.False(chip.NeedsInput);
+        Assert.True(chip.IsWorking);
+
+        // A failed turn is red, and is not "waiting".
+        hub.Publish(Signal("stop-failure"));
+        Frames.Pump();
+        Assert.True(row.HasError);
+        Assert.False(row.IsWaiting);
+        Assert.False(chip.NeedsInput);
+    }
+
+    [AvaloniaFact, FreshApp]
     public void A_session_the_agent_never_names_is_titled_after_its_prompt_then_its_transcript()
     {
         var dir = Directory.CreateTempSubdirectory("octopus-activity-").FullName;

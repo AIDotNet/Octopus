@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "id": "vibe",
+  "name": "Mistral Vibe",
+  "icon": "vibe",
+  "homepage": "https://github.com/mistralai/mistral-vibe",
+  "verified": false,
+  "detect": {
+    "executables": ["vibe"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "fingerprint": "vibe",
+    "installHints": [
+      { "kind": "script", "command": "curl -LsSf https://mistral.ai/vibe/install.sh | bash" },
+      { "kind": "uv", "command": "uv tool install mistral-vibe" },
+      { "kind": "pip", "command": "pip install mistral-vibe" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["--agent", "accept-edits"] },
+        "plan": { "args": ["--agent", "plan"] },
+        "full": { "args": ["--agent", "auto-approve"], "danger": true }
+      }
+    },
+    "prompt": {
+      "mode": "positional"
+    },
+    "resume": {
+      "continueLatest": ["--continue"]
+    },
+    "env": {
+      "known": [
+        { "name": "VIBE_HOME", "label": "Config directory", "localized": {"zh-CN": {"label": "配置目录"}} },
+        { "name": "MISTRAL_API_KEY", "label": "Mistral API key", "secret": true, "localized": {"zh-CN": {"label": "Mistral API 密钥"}} }
+      ],
+      "allowCustom": true
+    },
+    "extraArgs": true
+  }
+}

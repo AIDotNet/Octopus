@@ -43,5 +43,13 @@
             <arc:ArcSpinner Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Foreground="{arc:ArcDesignTokenResource Accent}" />
         </Border>
+        <!-- An agent of the project waits for the user: a yellow dot, over the ring. -->
+        <Border IsVisible="{Binding NeedsInput}" IsHitTestVisible="False" Width="16" Height="16" CornerRadius="8"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
+                Background="{arc:ArcDesignTokenResource Background}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+            <Ellipse Width="8" Height="8" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Fill="{arc:ArcDesignTokenResource Warning}" />
+        </Border>
     </Grid>
 </UserControl>

@@ -25,8 +25,15 @@ public sealed class ProjectDockController : IDisposable
     private readonly HashSet<string> _diffKeys = [];
     private bool _syncing;
     private readonly Activity.IItemActivityService? _activity;
-    /// <summary>Turns the loading ring of the tabs whose agent is working; runs only while there is one.</summary>
-    private readonly DispatcherTimer _spin = new() { Interval = TimeSpan.FromMilliseconds(90) };
+    /// <summary>
+    /// Turns the loading ring of the tabs whose agent is working; runs only while there is one. It samples faster than the
+    /// ring turns and takes the frame from the clock, not from a tick count: a tick that comes late (an agent printing
+    /// fast keeps the UI thread busy) then skips ahead instead of slowing the ring down, and a tick a little early or late
+    /// no longer makes some frames last twice as long as others. At Render priority, so output being drawn does not starve it.
+    /// </summary>
+    private readonly DispatcherTimer _spin = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(30) };
+    private readonly System.Diagnostics.Stopwatch _spinClock = new();
+    private const int SpinFrameMs = 90;
     private int _spinFrame;
     private bool _loading;
 
@@ -289,22 +296,33 @@ public sealed class ProjectDockController : IDisposable
             return;
         }
         pane.Icon = IsWorking(itemId) ? s_spinFrames[_spinFrame] : IconOf(item);
-        _spin.IsEnabled = _panes.Keys.Any(IsWorking);
+        SetSpinning(_panes.Keys.Any(IsWorking));
+    }
+
+    private void SetSpinning(bool on)
+    {
+        if (on == _spin.IsEnabled) return;
+        if (on) _spinClock.Restart();
+        else _spinClock.Stop();
+        _spin.IsEnabled = on;
     }
 
     private void Spin()
     {
-        _spinFrame = (_spinFrame + 1) % s_spinFrames.Length;
+        var frame = (int)(_spinClock.ElapsedMilliseconds / SpinFrameMs % s_spinFrames.Length);
+        var turned = frame != _spinFrame;
+        _spinFrame = frame;
         var any = false;
         foreach (var (id, pane) in _panes)
         {
             if (IsWorking(id))
             {
-                pane.Icon = s_spinFrames[_spinFrame];
+                // A pane that just started working shows the current frame at once; the others change only when the frame does.
+                if (turned || !ReferenceEquals(pane.Icon, s_spinFrames[frame])) pane.Icon = s_spinFrames[frame];
                 any = true;
             }
         }
-        _spin.IsEnabled = any;
+        SetSpinning(any);
     }
 
     /// <summary>A file tab with edits that are not saved shows a dot before its title.</summary>

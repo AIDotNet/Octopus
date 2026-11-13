@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:common="using:Octopus.App.Common"
              xmlns:vm="using:Octopus.App.Sidebar"
@@ -23,11 +24,14 @@
                     <TextBlock Classes="hint" VerticalAlignment="Center"
                                IsVisible="{Binding HasModel}" Text="{Binding ModelName}" MaxWidth="80"
                                TextTrimming="CharacterEllipsis" />
-                    <!-- Working: Arc's loading ring. Waiting for the user or failed: a dot. -->
+                    <!-- Working: Arc's loading ring. Waiting for the user: a yellow dot. The turn failed: a red dot. -->
                     <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" IsVisible="{Binding IsWorking}"
                                     Foreground="{arc:ArcDesignTokenResource TextMuted}" />
-                    <Ellipse Width="7" Height="7" VerticalAlignment="Center" IsVisible="{Binding NeedsAttention}"
-                             Fill="{arc:ArcDesignTokenResource AccentStrong}" />
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" IsVisible="{Binding IsWaiting}"
+                             Fill="{arc:ArcDesignTokenResource Warning}"
+                             arc:Tooltip.Tip="{l:AppLangResource ItemWaitingTip}" />
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" IsVisible="{Binding HasError}"
+                             Fill="{arc:ArcDesignTokenResource Danger}" />
                 </StackPanel>
             </Grid>
         </Button>

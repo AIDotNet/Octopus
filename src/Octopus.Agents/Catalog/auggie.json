@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "auggie",
+  "name": "Augment Code (Auggie)",
+  "icon": "auggie",
+  "homepage": "https://www.augmentcode.com/product/CLI",
+  "verified": false,
+  "detect": {
+    "executables": ["auggie"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @augmentcode/auggie" }]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "resume": {
+      "continueLatest": ["--continue"]
+    },
+    "extraArgs": true
+  }
+}

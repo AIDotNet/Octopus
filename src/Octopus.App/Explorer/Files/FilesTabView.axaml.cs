@@ -29,6 +29,7 @@ public partial class FilesTabView : UserControl
         more.Items.Add(new MenuEntry
         {
             Header = AppLangResources.Get(AppLangResourceKind.ExplorerRevealProject),
+            Icon = ArcIcons.FolderOpen,
             Command = panel.Files.RevealProjectCommand,
             HasSeparatorBefore = true,
         });

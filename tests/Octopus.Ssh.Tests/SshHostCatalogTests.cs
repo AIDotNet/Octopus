@@ -106,4 +106,55 @@ public class SshHostCatalogTests
         Assert.ThrowsAny<IOException>(() => catalog.Add(new SshHostDraft("box")));
         Assert.Equal("not a folder", File.ReadAllText(Path.Combine(home, ".ssh")));
     }
+
+    private static (SshHostCatalog Catalog, string Config) CatalogWith(string text)
+    {
+        var home = Directory.CreateTempSubdirectory("octopus-ssh-").FullName;
+        var config = Path.Combine(home, ".ssh", "config");
+        Directory.CreateDirectory(Path.GetDirectoryName(config)!);
+        File.WriteAllText(config, text);
+        return (new SshHostCatalog(home), config);
+    }
+
+    [Fact]
+    public void Update_rewrites_the_hosts_block_and_the_scan_shows_it()
+    {
+        var (catalog, config) = CatalogWith("Host 盒子\n  HostName a\n  User x\n\nHost other\n");
+
+        catalog.Update("盒子", new SshHostDraft("盒子", "b.example", Port: "2200", Protocol: SshHostProtocol.Mosh));
+
+        var host = catalog.Current.Hosts.Single(h => h.Alias == "盒子");
+        Assert.Equal(("b.example", null, 2200, SshHostProtocol.Mosh), (host.HostName, host.User, host.Port, host.Protocol));
+        Assert.Contains("Host other", File.ReadAllText(config));
+    }
+
+    [Fact]
+    public void Update_refuses_a_name_that_another_host_has_but_not_the_hosts_own()
+    {
+        var (catalog, _) = CatalogWith("Host a\nHost b\n");
+
+        catalog.Update("a", new SshHostDraft("a", "x.example"));
+        Assert.Throws<ArgumentException>(() => catalog.Update("a", new SshHostDraft("b")));
+    }
+
+    [Fact]
+    public void Remove_deletes_the_block_and_a_host_without_one_throws()
+    {
+        var (catalog, config) = CatalogWith("Host a\n  User x\n\nHost b\n");
+
+        catalog.Remove("a");
+        Assert.Equal(["b"], catalog.Current.Hosts.Select(h => h.Alias));
+        Assert.DoesNotContain("Host a", File.ReadAllText(config));
+        Assert.Throws<InvalidOperationException>(() => catalog.Remove("a"));
+    }
+
+    [Fact]
+    public void Only_hosts_with_a_block_of_their_own_in_the_file_are_editable()
+    {
+        var (catalog, _) = CatalogWith("Host solo\nHost one two\n");
+
+        Assert.True(catalog.Current.Hosts.Single(h => h.Alias == "solo").Editable);
+        Assert.False(catalog.Current.Hosts.Single(h => h.Alias == "one").Editable);
+        Assert.Throws<InvalidOperationException>(() => catalog.Remove("one"));
+    }
 }

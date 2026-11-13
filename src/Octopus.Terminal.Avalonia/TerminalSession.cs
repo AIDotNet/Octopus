@@ -23,6 +23,14 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     private readonly LaunchSpec _spec;
     private readonly ITerminalConnectionFactory _factory;
     private readonly Func<bool> _isVisible;
+    /// <summary>
+    /// What one terminal's scrollback may take. A full-screen program (an agent's TUI redraws the screen all the time)
+    /// fills it long before the line limit, and the pages are never given back: measured on a running app, seven
+    /// terminals at the old 16 MB held 111 MB, nearly all of it untouched and swapped out. 8 MB still keeps a few
+    /// thousand wide, fully styled lines (4 MB kept under two thousand, too little to read back).
+    /// </summary>
+    public const long MaxScrollbackBytes = 8L * 1024 * 1024;
+
     private readonly int _scrollbackLines;
     private readonly ColorScheme _initialScheme;
     private readonly TerminalPalette _initialPalette;
@@ -38,7 +46,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     /// <param name="size">Initial grid.</param>
     /// <param name="palette">Initial default colours.</param>
     /// <param name="scheme">Light or dark.</param>
-    /// <param name="scrollbackLines">Scrollback limit in lines (also capped at 16 MB).</param>
+    /// <param name="scrollbackLines">Scrollback limit in lines (also capped at <see cref="MaxScrollbackBytes"/>).</param>
     /// <param name="isVisible">Whether the view is on screen; frames are only taken then.</param>
     public TerminalSession(LaunchSpec spec, ITerminalConnectionFactory factory, TerminalSize size,
         TerminalPalette palette, ColorScheme scheme, int scrollbackLines, Func<bool> isVisible)
@@ -76,7 +84,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
             _core = TerminalCore.Create(new TerminalCoreOptions(_size)
             {
                 ScrollbackMaxLines = _scrollbackLines,
-                ScrollbackMaxBytes = 16L * 1024 * 1024,
+                ScrollbackMaxBytes = MaxScrollbackBytes,
                 Replies = new TerminalReplyProfile("Octopus", AdvertiseOsc52: false, _initialScheme),
             }, this);
             _core.SetDefaultColors(_initialPalette, _initialScheme);

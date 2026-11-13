@@ -1,5 +1,6 @@
 using System.Windows.Input;
 using Avalonia.Controls;
+using Avalonia.Media;
 using TKCode.Arc;
 
 namespace Octopus.App.Common;
@@ -11,11 +12,11 @@ public static class MenuFactory
     /// One row. A row with <see cref="Children"/> opens them as a submenu (its command is not used); a row with
     /// <see cref="IsChecked"/> set is one choice of a set and shows a check when it is the chosen one.
     /// </summary>
-    public sealed record Entry(string Header, ICommand? Command, bool IsDestructive = false, bool SeparatorBefore = false)
+    public sealed record Entry(string Header, ICommand? Command, bool IsDestructive = false, bool SeparatorBefore = false, Geometry? Glyph = null)
     {
         public object? CommandParameter { get; init; }
         public bool? IsChecked { get; init; }
-        /// <summary>A small control in the icon slot (a color swatch).</summary>
+        /// <summary>A small control in the icon slot (a color swatch); wins over <see cref="Glyph"/>.</summary>
         public Control? Icon { get; init; }
         public IReadOnlyList<Entry>? Children { get; init; }
     }
@@ -55,9 +56,14 @@ public static class MenuFactory
             row.ToggleType = MenuEntryToggleType.Radio;
             row.IsChecked = isChecked;
         }
+        // A row without an icon shows Arc's placeholder (three dots): every row names what it does with a glyph.
         if (entry.Icon is { } icon)
         {
             row.Icon = icon;
+        }
+        else if (entry.Glyph is { } glyph)
+        {
+            row.Icon = glyph;
         }
         return row;
     }

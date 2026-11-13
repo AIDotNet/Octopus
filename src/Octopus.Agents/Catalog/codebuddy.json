@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "id": "codebuddy",
+  "name": "CodeBuddy Code",
+  "icon": "codebuddy",
+  "homepage": "https://cnb.cool/codebuddy/codebuddy-code",
+  "verified": false,
+  "detect": {
+    "executables": ["codebuddy", "cbc"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @tencent-ai/codebuddy-code" }]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["--permission-mode", "acceptEdits"] },
+        "plan": { "args": ["--permission-mode", "plan"] },
+        "full": { "args": ["--dangerously-skip-permissions"], "danger": true }
+      }
+    },
+    "prompt": {
+      "mode": "positional"
+    },
+    "resume": {
+      "continueLatest": ["--continue"]
+    },
+    "extraArgs": true
+  }
+}

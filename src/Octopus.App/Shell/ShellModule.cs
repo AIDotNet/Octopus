@@ -22,6 +22,8 @@ internal static class ShellModule
         services.AddSingleton<SettingsNavigator>();
         services.AddSingleton<ISettingsNavigator>(p => p.GetRequiredService<SettingsNavigator>());
         services.AddSingleton<IWindowAccessor, WindowAccessor>();
+        services.AddSingleton<TrayService>();
+        services.AddSingleton<Activity.AgentAttentionNotifier>();
         services.AddSingleton<IPickerService, PickerService>();
         services.AddSingleton<IProjectIconStore, ProjectIconStore>();
         services.AddSingleton<IDialogService, DialogService>();

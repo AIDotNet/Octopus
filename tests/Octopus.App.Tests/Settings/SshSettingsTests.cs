@@ -101,6 +101,67 @@ public class SshSettingsTests
     }
 
     [AvaloniaFact]
+    public async Task Editing_a_host_rewrites_its_block_and_lists_the_change()
+    {
+        var (home, catalog) = HomeWith("Host 盒子\n  HostName a.example\n  User x\n\nHost other\n");
+        var dialogs = (FakeDialogService)AppHost.Get<IDialogService>();
+        var page = new SshSettingsViewModel(catalog, AppHost.Get<IFileOpener>(), dialogs);
+        dialogs.EditedSshHost = new SshHostDraft("盒子", "b.example", User: "x", Protocol: SshHostProtocol.Mosh);
+        try
+        {
+            await page.EditHostCommand.ExecuteAsync(page.Hosts[0]);
+        }
+        finally
+        {
+            dialogs.EditedSshHost = null;
+        }
+
+        Assert.Equal("盒子", dialogs.LastSshHostEdited!.Alias);
+        Assert.Equal("b.example", page.Hosts[0].Host.HostName);
+        Assert.Equal("Mosh", page.Hosts[0].ProtocolName);
+        Assert.Contains("Host other", File.ReadAllText(Path.Combine(home, ".ssh", "config")));
+        Assert.False(page.HasError);
+        page.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task Deleting_a_host_asks_first_and_removes_only_its_block()
+    {
+        var (home, catalog) = HomeWith("Host one\n  User x\n\nHost two\n");
+        var dialogs = (FakeDialogService)AppHost.Get<IDialogService>();
+        var page = new SshSettingsViewModel(catalog, AppHost.Get<IFileOpener>(), dialogs);
+
+        dialogs.Answer = false;
+        await page.DeleteHostCommand.ExecuteAsync(page.Hosts[0]);
+        Assert.Equal(["one", "two"], page.Hosts.Select(h => h.Alias));
+
+        dialogs.Answer = true;
+        try
+        {
+            await page.DeleteHostCommand.ExecuteAsync(page.Hosts[0]);
+        }
+        finally
+        {
+            dialogs.Answer = false;
+        }
+
+        Assert.Equal(["two"], page.Hosts.Select(h => h.Alias));
+        Assert.DoesNotContain("Host one", File.ReadAllText(Path.Combine(home, ".ssh", "config")));
+        page.Dispose();
+    }
+
+    [AvaloniaFact]
+    public void A_host_without_a_block_of_its_own_is_shown_without_edit_and_delete()
+    {
+        var (_, catalog) = HomeWith("Host solo\nHost one two\n");
+        var page = new SshSettingsViewModel(catalog, AppHost.Get<IFileOpener>(), AppHost.Get<IDialogService>());
+
+        Assert.True(page.Hosts.Single(h => h.Alias == "solo").CanEdit);
+        Assert.False(page.Hosts.Single(h => h.Alias == "one").CanEdit);
+        page.Dispose();
+    }
+
+    [AvaloniaFact]
     public async Task A_dismissed_dialog_adds_nothing()
     {
         var (home, catalog) = HomeWith("Host one\n");

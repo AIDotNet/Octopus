@@ -10,7 +10,8 @@ namespace Octopus.App.Files.Images;
 
 /// <summary>The frames of an animated picture and how long each one shows.</summary>
 /// <param name="Repetitions">How many times the animation plays again after the first time; -1 forever.</param>
-public sealed record ImageAnimation(IReadOnlyList<Bitmap> Frames, IReadOnlyList<TimeSpan> Durations, int Repetitions);
+/// <param name="OriginalSize">The picture's own size when the frames were shrunk to save memory; null when they are at full size.</param>
+public sealed record ImageAnimation(IReadOnlyList<Bitmap> Frames, IReadOnlyList<TimeSpan> Durations, int Repetitions, PixelSize? OriginalSize = null);
 
 /// <summary>
 /// The decoders beyond Avalonia's own still-picture one: SVG drawn to pixels, and every frame of an animated GIF or WebP.
@@ -20,6 +21,16 @@ public static class ImageDecoders
 {
     /// <summary>The longest side an SVG is drawn at: enough to stay sharp when zoomed, bounded so it stays small in memory.</summary>
     public const int MaxSvgPixels = 4096;
+
+    /// <summary>
+    /// The longest side a still picture is kept at in memory. A bigger one is shrunk while it is decoded (a JPEG even
+    /// skips most of the work), so a 100 megapixel photo takes about 64 MB instead of 400 MB. The picture still counts
+    /// as its own size in the zoom and in the size shown; it is only drawn from fewer pixels.
+    /// </summary>
+    public const int MaxStillSide = 4096;
+
+    /// <summary>The longest side of an animation's frames in memory: a frame is held for as long as the animation is open.</summary>
+    public const int MaxAnimationSide = 1280;
 
     /// <summary>All decoded frames of an animation together may take this much; a bigger one shows its first frame only.</summary>
     public const long MaxAnimationBytes = 192L * 1024 * 1024;
@@ -75,6 +86,28 @@ public static class ImageDecoders
         return (ToAvalonia(bitmap), new ImageInfo(ImageFormat.Svg, width, height));
     }
 
+    /// <summary>The size a picture of <paramref name="width"/> x <paramref name="height"/> is kept at: itself, or shrunk to <paramref name="maxSide"/> on its longest side.</summary>
+    public static PixelSize Fit(int width, int height, int maxSide)
+    {
+        var longest = Math.Max(width, height);
+        if (longest <= maxSide) return new PixelSize(width, height);
+        var scale = (double)maxSide / longest;
+        return new PixelSize(Math.Max(1, (int)Math.Round(width * scale)), Math.Max(1, (int)Math.Round(height * scale)));
+    }
+
+    /// <summary>
+    /// A still picture, decoded straight to <see cref="MaxStillSide"/> when it is bigger than that (never decoded at full
+    /// size first), otherwise as it is.
+    /// </summary>
+    public static Bitmap DecodeStill(Stream stream, ImageInfo info)
+    {
+        var target = Fit(info.Width, info.Height, MaxStillSide);
+        if (target.Width == info.Width && target.Height == info.Height) return new Bitmap(stream);
+        return info.Width >= info.Height
+            ? Bitmap.DecodeToWidth(stream, target.Width, BitmapInterpolationMode.HighQuality)
+            : Bitmap.DecodeToHeight(stream, target.Height, BitmapInterpolationMode.HighQuality);
+    }
+
     /// <summary>
     /// Every frame of an animated GIF or WebP, each one composed over the frames it builds on; null for a still picture,
     /// one whose frames would not fit in <see cref="MaxAnimationBytes"/>, or one the decoder cannot read.
@@ -87,8 +120,12 @@ public static class ImageDecoders
         var frames = codec.FrameInfo;
         var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
         if (info.Width <= 0 || info.Height <= 0) return null;
-        // The decoder's frames and the copies handed to Avalonia live together for a moment: count both.
-        if (frames.Length > MaxFrames || (long)frames.Length * info.BytesSize64 * 2 > MaxAnimationBytes) return null;
+        var kept = Fit(info.Width, info.Height, MaxAnimationSide);
+        var shrunk = kept.Width != info.Width || kept.Height != info.Height;
+        // The decoder's frames (some are the basis of later ones, so they stay until the end) and the copies handed to
+        // Avalonia live together for a moment: count both.
+        var keptBytes = (long)kept.Width * kept.Height * 4;
+        if (frames.Length > MaxFrames || (long)frames.Length * (info.BytesSize64 + keptBytes) > MaxAnimationBytes) return null;
 
         var decoded = new SKBitmap?[frames.Length];
         var result = new List<Bitmap>(frames.Length);
@@ -113,14 +150,14 @@ public static class ImageDecoders
                 // A frame cut short shows what was read, as a browser does; anything else is a broken picture.
                 if (status is not (SKCodecResult.Success or SKCodecResult.IncompleteInput)) return Dispose(result);
             }
-            foreach (var bitmap in decoded) result.Add(ToAvalonia(bitmap!));
+            foreach (var bitmap in decoded) result.Add(ToAvalonia(bitmap!, kept));
         }
         finally
         {
             foreach (var bitmap in decoded) bitmap?.Dispose();
         }
         var durations = frames.Select(f => TimeSpan.FromMilliseconds(f.Duration) is var d && d >= MinFrameDuration ? d : DefaultFrameDuration).ToList();
-        return new ImageAnimation(result, durations, codec.RepetitionCount);
+        return new ImageAnimation(result, durations, codec.RepetitionCount, shrunk ? new PixelSize(info.Width, info.Height) : null);
     }
 
     private static ImageAnimation? Dispose(List<Bitmap> bitmaps)
@@ -132,4 +169,13 @@ public static class ImageDecoders
     /// <summary>Copies Skia's pixels into an Avalonia bitmap (Bgra8888, premultiplied: the same layout).</summary>
     private static Bitmap ToAvalonia(SKBitmap bitmap) =>
         new(PixelFormat.Bgra8888, AlphaFormat.Premul, bitmap.GetPixels(), new PixelSize(bitmap.Width, bitmap.Height), new Vector(96, 96), bitmap.RowBytes);
+
+    /// <summary>As <see cref="ToAvalonia(SKBitmap)"/>, shrunk to <paramref name="size"/> first when that is smaller.</summary>
+    private static Bitmap ToAvalonia(SKBitmap bitmap, PixelSize size)
+    {
+        if (size.Width == bitmap.Width && size.Height == bitmap.Height) return ToAvalonia(bitmap);
+        using var scaled = bitmap.Resize(new SKImageInfo(size.Width, size.Height, SKColorType.Bgra8888, SKAlphaType.Premul),
+            new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+        return scaled is null ? ToAvalonia(bitmap) : ToAvalonia(scaled);
+    }
 }

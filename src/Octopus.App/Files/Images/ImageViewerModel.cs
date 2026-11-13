@@ -340,14 +340,18 @@ public sealed partial class ImageViewerModel : FileViewerModel
         if (info.Format is ImageFormat.Gif or ImageFormat.WebP && ImageDecoders.DecodeAnimation(bytes) is { } animation)
         {
             var first = animation.Frames[0];
-            return new Decoded(first, new ImageInfo(info.Format, first.PixelSize.Width, first.PixelSize.Height), bytes.Length, null, null, animation);
+            // Shrunk frames still stand for the picture's own size.
+            var own = animation.OriginalSize ?? first.PixelSize;
+            return new Decoded(first, new ImageInfo(info.Format, own.Width, own.Height), bytes.Length, null, null, animation);
         }
         try
         {
             using var stream = new MemoryStream(bytes, writable: false);
-            var bitmap = new Bitmap(stream);
-            // The decoder is the authority on the size (a header can lie, and a GIF's first frame may be smaller).
-            var actual = new ImageInfo(info.Format, bitmap.PixelSize.Width, bitmap.PixelSize.Height);
+            var bitmap = ImageDecoders.DecodeStill(stream, info);
+            // The decoder is the authority on the size (a header can lie, and a GIF's first frame may be smaller); a
+            // picture decoded smaller than itself (ImageDecoders.MaxStillSide) keeps the size its header gave.
+            var shrunk = ImageDecoders.Fit(info.Width, info.Height, ImageDecoders.MaxStillSide) != new PixelSize(info.Width, info.Height);
+            var actual = shrunk ? info : new ImageInfo(info.Format, bitmap.PixelSize.Width, bitmap.PixelSize.Height);
             return new Decoded(bitmap, actual, bytes.Length, null, null);
         }
         catch (Exception)

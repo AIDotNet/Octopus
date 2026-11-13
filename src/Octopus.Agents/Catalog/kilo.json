@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "kilo",
+  "name": "Kilo Code",
+  "icon": "kilo",
+  "homepage": "https://kilo.ai",
+  "verified": false,
+  "detect": {
+    "executables": ["kilo", "kilocode"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @kilocode/cli" }]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": [],
+      "discover": { "args": ["models"], "parser": "lines" }
+    },
+    "resume": {
+      "continueLatest": ["--continue"]
+    },
+    "extraArgs": true
+  }
+}

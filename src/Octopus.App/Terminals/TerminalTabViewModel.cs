@@ -2,9 +2,9 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Octopus.App.Composition;
 using Octopus.App.Services;
-using Octopus.App.Services;
 using Octopus.Core.Projects;
 using Octopus.Core.Terminals;
+using Octopus.Ssh;
 using Octopus.Storage;
 using Octopus.Terminal;
 
@@ -29,11 +29,17 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IDisposable
         _launcher = launcher;
         Factory = factory;
         _settings = settings;
-        // A terminal on an SSH host shows how its connection is made, from the log ssh writes (see RemoteFiles).
-        Connect = project.SshHost is { } host ? new SshConnectProgress(host, AppHost.Get<RemoteFiles>().ConnectLogPath(item.Id)) : null;
+        // A terminal on an SSH host shows how its connection is made, from the log ssh writes (see RemoteFiles). Only ssh
+        // writes it: a host that connects with mosh or telnet shows its terminal at once.
+        Connect = project.SshHost is { } host && ProtocolOf(host) == SshHostProtocol.Ssh
+            ? new SshConnectProgress(host, AppHost.Get<RemoteFiles>().ConnectLogPath(item.Id))
+            : null;
         ReadSettings();
         _settings.Changed += OnSettingsChanged;
     }
+
+    private static SshHostProtocol ProtocolOf(string alias) =>
+        AppHost.Get<ISshHostCatalog>().Current.Hosts.FirstOrDefault(h => h.Alias == alias)?.Protocol ?? SshHostProtocol.Ssh;
 
     public ProjectItem Item { get; }
 

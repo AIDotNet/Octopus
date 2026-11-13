@@ -110,6 +110,22 @@ public class SettingsPagesTests
     }
 
     [AvaloniaFact]
+    public void Tray_settings_are_saved()
+    {
+        var general = AppHost.Get<GeneralSettingsViewModel>();
+        var settings = AppHost.Get<ISettingsStore>();
+        // Shown by default; the close button keeps quitting until the person asks otherwise.
+        Assert.True(general.TrayEnabled);
+        Assert.False(general.CloseToTray);
+
+        general.CloseToTray = true;
+        general.TrayEnabled = false;
+
+        Assert.True(settings.Current.Tray.CloseToTray);
+        Assert.False(settings.Current.Tray.Enabled);
+    }
+
+    [AvaloniaFact]
     public void General_settings_are_saved()
     {
         var general = AppHost.Get<GeneralSettingsViewModel>();

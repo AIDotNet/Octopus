@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "id": "nanocoder",
+  "name": "Nanocoder",
+  "icon": "nanocoder",
+  "homepage": "https://github.com/Nano-Collective/nanocoder",
+  "verified": false,
+  "detect": {
+    "executables": ["nanocoder"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @nanocollective/nanocoder" }]
+  },
+  "capabilities": {
+    "extraArgs": true
+  }
+}

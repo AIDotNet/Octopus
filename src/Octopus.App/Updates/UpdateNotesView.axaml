@@ -1,0 +1,10 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             x:Class="Octopus.App.Updates.UpdateNotesView"
+             Width="520">
+    <!-- The release notes of a new version, rendered as Markdown. Links in it open through Arc's link policy. -->
+    <arc:ScrollArea Orientation="Vertical" FadeLength="0" MaxHeight="380">
+        <arc:Markdown x:Name="Notes" Margin="0,0,12,0" />
+    </arc:ScrollArea>
+</UserControl>

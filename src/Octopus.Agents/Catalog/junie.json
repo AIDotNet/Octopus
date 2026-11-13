@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "junie",
+  "name": "Junie",
+  "icon": "junie",
+  "homepage": "https://github.com/JetBrains/junie",
+  "verified": false,
+  "detect": {
+    "executables": ["junie"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [{ "kind": "npm", "command": "npm i -g @jetbrains/junie-cli" }]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": { "default": {"args": []}, "full": {"args": ["--brave"], "danger": true} }
+    },
+    "extraArgs": true
+  }
+}

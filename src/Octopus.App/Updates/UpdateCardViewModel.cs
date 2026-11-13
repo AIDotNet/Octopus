@@ -165,14 +165,21 @@ public sealed partial class UpdateCardViewModel : ObservableObject
     [RelayCommand]
     private void Cancel() => _updates.CancelDownload();
 
+    /// <summary>Raised when the notes of the offered release are asked for and it has some: the app shows them in a dialog.</summary>
+    public event EventHandler? NotesRequested;
+
     [RelayCommand]
     private void OpenNotes()
     {
-        if (_updates.Current.Offer?.NotesUrl is { } url) _opener.OpenUrl(url);
+        if (_updates.Current.Offer is { Notes: not null } && NotesRequested is not null) NotesRequested(this, EventArgs.Empty);
+        else OpenPage();
     }
 
     [RelayCommand]
-    private void OpenPage() => OpenNotes();
+    private void OpenPage()
+    {
+        if (_updates.Current.Offer?.NotesUrl is { } url) _opener.OpenUrl(url);
+    }
 
     /// <summary>Quits through the normal path (it asks about running programs); the helper then starts the new version.</summary>
     [RelayCommand]

@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "openhands",
+  "name": "OpenHands CLI",
+  "icon": "openhands",
+  "homepage": "https://docs.openhands.dev/openhands/usage/cli/terminal",
+  "verified": false,
+  "detect": {
+    "executables": ["openhands"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "uv", "command": "uv tool install openhands --python 3.12" },
+      { "kind": "pip", "command": "pip install openhands" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": { "default": {"args": []}, "full": {"args": ["--always-approve"], "danger": true} }
+    },
+    "resume": {
+      "continueLatest": ["--resume", "--last"]
+    },
+    "extraArgs": true
+  }
+}

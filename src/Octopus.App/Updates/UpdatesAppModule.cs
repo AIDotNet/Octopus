@@ -33,6 +33,7 @@ internal static class UpdatesAppModule
         };
         services.AddOctopusUpdates(options, feed, keys);
         services.AddSingleton<UpdateCardViewModel>();
+        services.AddSingleton<UpdateNotesPresenter>();
         services.AddTransient<UpdateSettingsViewModel>();
     }
 }

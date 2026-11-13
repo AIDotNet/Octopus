@@ -9,6 +9,7 @@
     "executables": ["opencode"],
     "versionArgs": ["--version"],
     "versionRegex": "^(\\d+\\.\\d+\\.\\d+)",
+    "extraDirs": ["~/.opencode/bin"],
     "installHints": [
       { "kind": "script", "command": "curl -fsSL https://opencode.ai/install | bash" },
       { "kind": "npm", "command": "npm i -g opencode-ai" }

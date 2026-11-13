@@ -9,6 +9,7 @@
     "executables": ["cursor-agent"],
     "versionArgs": ["--version"],
     "versionRegex": "^(\\d{4}\\.\\d+\\.\\d+)",
+    "extraDirs": ["~/.local/bin"],
     "installHints": [
       { "kind": "script", "command": "curl https://cursor.com/install -fsS | bash" }
     ]

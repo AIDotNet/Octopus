@@ -45,6 +45,8 @@ public class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow();
+            AppHost.Get<Shell.TrayService>().Start(this);
+            AppHost.Get<Activity.AgentAttentionNotifier>().Start();
             // Plugins start once the window exists: views, dialogs and indicators need it.
             Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = Plugins.PluginStartup.StartAsync(), Avalonia.Threading.DispatcherPriority.Background);
             // The updater starts once the window is up: its first check waits a while anyway (design/10-自动更新.md §7).

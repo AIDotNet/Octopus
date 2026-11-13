@@ -1,3 +1,4 @@
+using TKCode.Arc;
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
@@ -153,8 +154,8 @@ public partial class ProjectGroupView : UserControl
 
     private static List<MenuFactory.Entry> MenuOf(ProjectGroupViewModel group) =>
     [
-        new(AppLangResources.Get(AppLangResourceKind.RenameGroup), group.RenameCommand),
-        new(AppLangResources.Get(AppLangResourceKind.GroupColor), null)
+        new(AppLangResources.Get(AppLangResourceKind.RenameGroup), group.RenameCommand, Glyph: ArcIcons.Pencil),
+        new(AppLangResources.Get(AppLangResourceKind.GroupColor), null, Glyph: ArcIcons.Palette)
         {
             Children = ProjectRailViewModel.GroupColors
                 .Select(c => new MenuFactory.Entry(AppLangResources.Get(c.Name), group.SetColorCommand)
@@ -164,7 +165,7 @@ public partial class ProjectGroupView : UserControl
                 })
                 .ToList(),
         },
-        new(AppLangResources.Get(AppLangResourceKind.RemoveGroup), group.RemoveCommand, IsDestructive: true, SeparatorBefore: true),
+        new(AppLangResources.Get(AppLangResourceKind.RemoveGroup), group.RemoveCommand, IsDestructive: true, SeparatorBefore: true, Glyph: ArcIcons.Trash2),
     ];
 
     /// <summary>A small square of the color; the group's own color carries a check (a row with an icon shows no check of its own).</summary>

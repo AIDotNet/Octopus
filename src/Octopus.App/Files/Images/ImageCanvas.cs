@@ -119,7 +119,9 @@ public sealed class ImageCanvas : Control
         target = Snap(target, scaling);
         // Behind the picture: the checkerboard (the picture's own pixels, transparent or not, lie over it).
         context.DrawRectangle(CheckerBrush(), null, target);
-        var interpolation = viewport.Zoom >= 2 ? BitmapInterpolationMode.None : viewport.Zoom >= 1 ? BitmapInterpolationMode.MediumQuality : BitmapInterpolationMode.HighQuality;
+        // Pixels are shown as squares only when they are the picture's own: a picture kept smaller than itself is smoothed.
+        var smaller = _model.Info is { } own && image.PixelSize.Width < own.Width;
+        var interpolation = viewport.Zoom >= 2 && !smaller ? BitmapInterpolationMode.None : viewport.Zoom >= 1 ? BitmapInterpolationMode.MediumQuality : BitmapInterpolationMode.HighQuality;
         using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = interpolation }))
         {
             context.DrawImage(image, new Rect(0, 0, image.PixelSize.Width, image.PixelSize.Height), target);

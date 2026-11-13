@@ -51,4 +51,13 @@ public interface ITerminalLaunchPlanner
     /// connection. Nothing here is checked on the host: a missing folder is reported in the terminal.
     /// </summary>
     LaunchSpec PlanRemoteShell(string host, string? remoteDirectory, string? shellPath = null, IReadOnlyList<string>? sshOptions = null);
+
+    /// <summary>
+    /// Like <see cref="PlanRemoteShell"/> with the mosh program, which starts through ssh (and so reads ~/.ssh/config too)
+    /// and then keeps the session alive over a network that changes or sleeps. Needs <c>mosh</c> here and <c>mosh-server</c> on the host.
+    /// </summary>
+    LaunchSpec PlanMoshShell(string host, string? remoteDirectory);
+
+    /// <summary>The telnet program connected to <paramref name="host"/> and <paramref name="port"/> (null: telnet's own, 23). There is no folder: telnet has no way to start in one.</summary>
+    LaunchSpec PlanTelnet(string host, int? port);
 }

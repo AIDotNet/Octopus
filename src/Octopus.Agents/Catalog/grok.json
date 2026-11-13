@@ -10,7 +10,10 @@
     "versionArgs": ["--version"],
     "versionRegex": "grok (\\d+\\.\\d+\\.\\d+)",
     "fingerprint": "grok",
-    "installHints": []
+    "extraDirs": ["~/.grok/bin"],
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @xai-official/grok" }
+    ]
   },
   "capabilities": {
     "model": {

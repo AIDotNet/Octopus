@@ -29,14 +29,14 @@ public partial class ItemRowView : UserControl
         _model.PropertyChanged += OnModelChanged;
         var entries = new List<MenuFactory.Entry>
         {
-            new(AppLangResources.Get(AppLangResourceKind.Rename), _model.BeginRenameCommand),
+            new(AppLangResources.Get(AppLangResourceKind.Rename), _model.BeginRenameCommand, Glyph: ArcIcons.Pencil),
         };
         if (_model.CanRestart)
         {
-            entries.Add(new(AppLangResources.Get(AppLangResourceKind.Restart), _model.RestartCommand));
+            entries.Add(new(AppLangResources.Get(AppLangResourceKind.Restart), _model.RestartCommand, Glyph: ArcIcons.RotateCw));
         }
-        entries.Add(new(AppLangResources.Get(AppLangResourceKind.MoveToRightGroup), _model.MoveToNewGroupCommand));
-        entries.Add(new(AppLangResources.Get(AppLangResourceKind.CloseItem), _model.CloseCommand, SeparatorBefore: true));
+        entries.Add(new(AppLangResources.Get(AppLangResourceKind.MoveToRightGroup), _model.MoveToNewGroupCommand, Glyph: ArcIcons.PanelRight));
+        entries.Add(new(AppLangResources.Get(AppLangResourceKind.CloseItem), _model.CloseCommand, SeparatorBefore: true, Glyph: ArcIcons.X));
         MenuFactory.Attach(RowButton, entries);
     }
 

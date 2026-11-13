@@ -12,7 +12,9 @@ public sealed class AgentCatalog : IAgentCatalog
     private static readonly string[] BuiltInOrder =
     [
         "claude", "codex", "grok", "opencode", "cursor", "muse", "gemini", "copilot",
-        "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi"
+        "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi",
+        "cline", "kilo", "auggie", "codebuddy", "qoder", "vibe", "pi", "openhands",
+        "continue", "junie", "letta", "codebuff", "nanocoder", "jules"
     ];
 
     private readonly IAppPaths _paths;
