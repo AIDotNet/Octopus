@@ -20,6 +20,7 @@ public partial class TerminalTabView : UserControl, ITabContent
         Terminal.SearchBar = search;
         Terminal.PasteConfirmer = (_, preview) => PasteConfirmation.ShowAsync(this, preview);
         Terminal.LinkActivated += (_, url) => AppHost.Get<IFileOpener>().OpenUrl(url);
+        Terminal.PathActivated += OnPathActivated;
         Terminal.Exited += OnExited;
         // Every run of the process (the first one and each restart) begins the connection's progress.
         Terminal.PropertyChanged += (_, e) =>
@@ -34,6 +35,19 @@ public partial class TerminalTabView : UserControl, ITabContent
                 AppHost.Get<Activity.IItemActivityService>().ReportTitle(model.Item.Id, title);
             }
         };
+    }
+
+    /// <summary>A file goes to a tab of the workspace, a folder to the system's file manager.</summary>
+    private void OnPathActivated(object? sender, TerminalPathActivatedEventArgs e)
+    {
+        if (Directory.Exists(e.Path))
+        {
+            AppHost.Get<IFileOpener>().Reveal(e.Path);
+        }
+        else
+        {
+            AppHost.Get<Services.IItemOpener>().OpenFile(e.Path);
+        }
     }
 
     private TerminalTabViewModel? Model => DataContext as TerminalTabViewModel;
@@ -61,6 +75,8 @@ public partial class TerminalTabView : UserControl, ITabContent
         if (Model is { Started: false } model)
         {
             model.Started = true;
+            // The files of a terminal on an SSH host are not on this computer: its paths are not links.
+            Terminal.PathLinksEnabled = model.Connect is null;
             if (model.TryCreateSpec() is { } spec)
             {
                 _startedAt = Environment.TickCount64;

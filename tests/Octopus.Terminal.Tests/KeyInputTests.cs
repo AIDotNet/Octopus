@@ -103,4 +103,15 @@ public class KeyInputTests
         Assert.Equal("/tmp/a.png", ClipboardImages.Quote("/tmp/a.png"));
         Assert.Equal("'/Users/a b/it'\\''s.png'", ClipboardImages.Quote("/Users/a b/it's.png"));
     }
+
+    [Fact]
+    public void Ctrl_c_is_a_copy_shortcut_on_windows_and_linux_but_not_on_macos()
+    {
+        var ctrlC = new KeyInput(TerminalKey.C, KeyAction.Press, KeyMods.Ctrl);
+        Assert.Equal(TerminalShortcut.Copy, new DefaultTerminalKeymap().Match(ctrlC));
+        Assert.Equal(TerminalShortcut.Copy, new DefaultTerminalKeymap().Match(new KeyInput(TerminalKey.C, KeyAction.Press, KeyMods.Ctrl | KeyMods.Shift)));
+        Assert.Equal(TerminalShortcut.None, new DefaultTerminalKeymap().Match(new KeyInput(TerminalKey.C, KeyAction.Release, KeyMods.Ctrl)));
+        Assert.Equal(TerminalShortcut.None, new DefaultTerminalKeymap().Match(new KeyInput(TerminalKey.C, KeyAction.Press, KeyMods.Ctrl | KeyMods.Alt)));
+        Assert.Equal(TerminalShortcut.None, new MacTerminalKeymap().Match(ctrlC));
+    }
 }

@@ -156,6 +156,18 @@ public sealed class TerminalControl : Decorator
     /// <summary>A link was followed with the link modifier held. The argument is an http or https URL.</summary>
     public event EventHandler<string>? LinkActivated;
 
+    /// <summary>
+    /// A file path was followed with the link modifier held: the full path of an existing file or folder, and the line and
+    /// column printed after it (<c>src/a.cs:12:5</c>) when there were some.
+    /// </summary>
+    public event EventHandler<TerminalPathActivatedEventArgs>? PathActivated;
+
+    /// <summary>
+    /// Whether file paths in the output are links. Relative paths are read against the folder the program started in.
+    /// Off for a terminal whose files are not on this computer.
+    /// </summary>
+    public bool PathLinksEnabled { get; set; } = true;
+
     /// <summary>The window title the program set; null before it set one.</summary>
     public string? Title { get => _title; private set => SetAndRaise(TitleProperty, ref _title, value); }
 
@@ -499,14 +511,44 @@ public sealed class TerminalControl : Decorator
             case TerminalPointerKind.Release when e.Mouse.Button == MouseButton.Left && _pendingLink is { } url:
                 _pendingLink = null;
                 e.Handled = true;
-                if (held && FindLink(e.Cell)?.Url == url && TerminalLinks.IsWebUrl(url)) LinkActivated?.Invoke(this, url);
+                if (held && FindLink(e.Cell) is { } released && released.Url == url)
+                {
+                    if (released.IsPath)
+                    {
+                        if (ResolvePath(released.Url) is { } full) PathActivated?.Invoke(this, new TerminalPathActivatedEventArgs(full, released.Line, released.Column));
+                    }
+                    else if (TerminalLinks.IsWebUrl(url))
+                    {
+                        LinkActivated?.Invoke(this, url);
+                    }
+                }
                 return;
         }
         _router?.HandlePointer(e);
     }
 
     private LinkHit? FindLink(ViewportPoint cell) =>
-        _frame is { } frame ? TerminalLinks.Find(frame, cell.Row, cell.Column) : null;
+        _frame is { } frame ? TerminalLinks.Find(frame, cell.Row, cell.Column, PathLinksEnabled ? PathExists : null) : null;
+
+    private bool PathExists(string path) => ResolvePath(path) is not null;
+
+    /// <summary>The full path of an existing file or folder that <paramref name="path"/> names, or null.</summary>
+    private string? ResolvePath(string path)
+    {
+        try
+        {
+            if (path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
+                path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[2..]);
+            var full = Path.IsPathRooted(path)
+                ? Path.GetFullPath(path)
+                : _spec?.WorkingDirectory is { Length: > 0 } directory ? Path.GetFullPath(Path.Combine(directory, path)) : null;
+            return full is not null && (File.Exists(full) || Directory.Exists(full)) ? full : null;
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     private void SetHover(LinkHit? link)
     {
@@ -581,4 +623,13 @@ public sealed class TerminalControl : Decorator
         static string Normalize(string s) => Path.GetFileNameWithoutExtension(s.Trim()).TrimStart('-').ToLowerInvariant();
         return Normalize(running) == Normalize(shellPath);
     }
+}
+
+/// <summary>A file path followed in the terminal (see <see cref="TerminalControl.PathActivated"/>).</summary>
+/// <param name="path">Full path of an existing file or folder.</param>
+public sealed class TerminalPathActivatedEventArgs(string path, int? line, int? column) : EventArgs
+{
+    public string Path { get; } = path;
+    public int? Line { get; } = line;
+    public int? Column { get; } = column;
 }

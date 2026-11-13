@@ -21,4 +21,10 @@ public interface ITerminalKeymap
 
     /// <summary>The modifier that must be held to follow a link with the mouse (Command on macOS, Ctrl elsewhere).</summary>
     KeyMods LinkModifier { get; }
+
+    /// <summary>
+    /// True where a bare Ctrl+C copies when text is selected (and interrupts the program otherwise), and a right click
+    /// copies the selection or, with nothing selected, pastes: the habits of Windows Terminal and PuTTY.
+    /// </summary>
+    bool CopyWithoutShift => false;
 }

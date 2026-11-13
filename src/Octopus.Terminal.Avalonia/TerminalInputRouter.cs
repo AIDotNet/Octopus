@@ -36,6 +36,8 @@ public sealed class TerminalInputRouter(
         var shortcut = keymap().Match(input);
         if (shortcut != TerminalShortcut.None && RunShortcut(shortcut))
         {
+            // A bare Ctrl+C that copied lets go of the selection: the next one is the interrupt.
+            if (shortcut == TerminalShortcut.Copy && (input.Mods & Relevant) == KeyMods.Ctrl) session.Use(c => c.ClearSelection());
             e.Handled = true;
             return;
         }
@@ -161,6 +163,20 @@ public sealed class TerminalInputRouter(
                 break;
             case TerminalPointerKind.Release when e.Mouse.Button == MouseButton.Left:
                 _dragging = false;
+                break;
+            case TerminalPointerKind.Release when e.Mouse.Button == MouseButton.Right && keymap().CopyWithoutShift:
+                // Selected text is copied and released; with nothing selected the click pastes.
+                var selected = session.Read(c => c.GetSelectionText());
+                if (!string.IsNullOrEmpty(selected))
+                {
+                    _ = setClipboardText(selected);
+                    session.Use(c => c.ClearSelection());
+                }
+                else
+                {
+                    _ = PasteAsync();
+                }
+                e.Handled = true;
                 break;
         }
     }

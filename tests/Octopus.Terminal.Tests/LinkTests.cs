@@ -107,4 +107,52 @@ public class LinkTests
     [InlineData("ftp://example.com", false)]
     [InlineData("not a url", false)]
     public void Checks_the_scheme(string url, bool ok) => Assert.Equal(ok, TerminalLinks.IsWebUrl(url));
+
+    private static LinkHit? PathAt(string line, int column, params string[] existing)
+    {
+        var (count, get) = Screen(line);
+        return TerminalLinks.Find(count, get, 0, column, p => existing.Contains(p));
+    }
+
+    [Fact]
+    public void An_existing_path_is_a_link_with_its_line_and_column()
+    {
+        var hit = PathAt("error in src/App.cs:12:5 here", 12, "src/App.cs");
+        Assert.NotNull(hit);
+        Assert.True(hit!.IsPath);
+        Assert.Equal("src/App.cs", hit.Url);
+        Assert.Equal(12, hit.Line);
+        Assert.Equal(5, hit.Column);
+        Assert.Single(hit.Spans);
+        Assert.Equal(9, hit.Spans[0].StartColumn);
+        Assert.Equal(23, hit.Spans[0].EndColumn);
+    }
+
+    [Theory]
+    [InlineData(@"open D:\PersonalProject\opus-1\a.txt now", @"D:\PersonalProject\opus-1\a.txt")]
+    [InlineData("see (./docs/x.md).", "./docs/x.md")]
+    [InlineData("│ README.md │", "README.md")]
+    [InlineData("~/notes/todo.txt,", "~/notes/todo.txt")]
+    public void Finds_windows_unix_and_bare_file_paths(string line, string path)
+    {
+        var column = line.IndexOf(path[(path.Length / 2)..], StringComparison.Ordinal);
+        Assert.Equal(path, PathAt(line, column, path)?.Url);
+    }
+
+    [Fact]
+    public void A_path_that_does_not_exist_or_ordinary_words_are_not_links()
+    {
+        Assert.Null(PathAt("see src/Missing.cs now", 8));
+        Assert.Null(PathAt("hello world", 2, "hello"));
+        Assert.Null(PathAt("version 0.117.0 is out", 10));
+    }
+
+    [Fact]
+    public void A_web_link_is_still_a_web_link_when_paths_are_checked()
+    {
+        var (count, get) = Screen("go https://example.com/a/b.html now");
+        var hit = TerminalLinks.Find(count, get, 0, 10, _ => true);
+        Assert.False(hit!.IsPath);
+        Assert.Equal("https://example.com/a/b.html", hit.Url);
+    }
 }

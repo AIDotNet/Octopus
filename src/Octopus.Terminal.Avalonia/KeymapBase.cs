@@ -14,7 +14,7 @@ public abstract class KeymapBase : ITerminalKeymap
     public abstract KeyMods LinkModifier { get; }
 
     /// <inheritdoc />
-    public TerminalShortcut Match(in KeyInput key)
+    public virtual TerminalShortcut Match(in KeyInput key)
     {
         if (key.Action == KeyAction.Release || (key.Mods & Relevant) != Modifier) return TerminalShortcut.None;
         return key.Key switch
