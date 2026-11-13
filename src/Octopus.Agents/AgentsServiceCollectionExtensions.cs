@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Octopus.Agents.Probes;
+using Octopus.Agents.Sessions;
 using Octopus.Agents.Signals;
 
 namespace Octopus.Agents;
@@ -26,6 +27,15 @@ public static class AgentsServiceCollectionExtensions
         services.AddSingleton<IAgentAccountDiscovery, AgentAccountDiscovery>();
         services.AddSingleton<ClaudeStatusLineBridge>();
         services.AddSingleton<ClaudeStatusLineWatcher>();
+        // Session management (design/ui/会话管理方案.html): one reader per agent whose files are understood, and the converters.
+        services.AddSingleton<ISessionSource, ClaudeSessionSource>();
+        services.AddSingleton<ISessionSource, CodexSessionSource>();
+        services.AddSingleton<ISessionConverter, ClaudeAccountCopyConverter>(_ => new ClaudeAccountCopyConverter());
+        services.AddSingleton<ISessionConverter, HandoffSessionConverter>(_ => new HandoffSessionConverter());
+        services.AddSingleton<IAgentSessionService>(sp => new AgentSessionService(
+            sp.GetRequiredService<IAgentAccountDiscovery>(),
+            sp.GetServices<ISessionSource>(),
+            sp.GetServices<ISessionConverter>()));
         return services;
     }
 }
