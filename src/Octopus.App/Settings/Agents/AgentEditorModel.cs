@@ -213,7 +213,8 @@ public sealed partial class AgentEditorModel : ObservableObject
             _ => new PromptCapability { Mode = PromptPositional, Separator = d.Capabilities.Prompt?.Separator ?? false },
         };
         var resume = ArgText.Split(ResumeArgs);
-        d.Capabilities.Resume = resume.Count == 0 ? null : new ResumeCapability { ContinueLatest = resume };
+        var byId = d.Capabilities.Resume?.ById;
+        d.Capabilities.Resume = resume.Count == 0 && byId is null ? null : new ResumeCapability { ContinueLatest = resume.Count == 0 ? null : resume, ById = byId };
         d.Capabilities.ExtraArgs = ExtraArgs;
         d.Capabilities.BaseEnv = Environment.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(line => line.Split('=', 2))

@@ -48,7 +48,7 @@
       }
     },
     "prompt": { "mode": "positional" },
-    "resume": { "continueLatest": ["resume", "--last"] },
+    "resume": { "continueLatest": ["resume", "--last"], "byId": ["resume", "{id}"] },
     "extraArgs": true,
     "env": {
       "known": [

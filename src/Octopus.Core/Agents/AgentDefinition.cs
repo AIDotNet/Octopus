@@ -180,6 +180,9 @@ public sealed class ResumeCapability
 {
     /// <summary>Arguments that continue the most recent session in the working directory.</summary>
     public List<string>? ContinueLatest { get; set; }
+
+    /// <summary>Arguments that continue one saved session; <c>{id}</c> stands for its id (session management).</summary>
+    public List<string>? ById { get; set; }
 }
 
 public sealed class EnvCapability

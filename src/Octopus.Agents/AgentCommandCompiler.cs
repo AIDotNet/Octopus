@@ -115,8 +115,14 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
             args.AddRange(profile.ExtraArgs);
         }
 
-        var resume = launch?.Resume == true && caps.Resume?.ContinueLatest is { Count: > 0 };
-        if (resume)
+        // A chosen session is continued by its id, also when a restored tab would otherwise continue the latest.
+        var byId = !string.IsNullOrWhiteSpace(launch?.SessionId) && caps.Resume?.ById is { Count: > 0 };
+        var resume = !byId && launch?.Resume == true && caps.Resume?.ContinueLatest is { Count: > 0 };
+        if (byId)
+        {
+            foreach (var arg in caps.Resume!.ById!) args.Add(arg.Replace("{id}", launch!.SessionId, StringComparison.Ordinal));
+        }
+        else if (resume)
         {
             args.AddRange(caps.Resume!.ContinueLatest!);
         }
@@ -140,6 +146,13 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
         foreach (var (k, v) in profile.Env)
         {
             env[k] = v;
+        }
+        if (launch?.Env is { } own)
+        {
+            foreach (var (k, v) in own)
+            {
+                env[k] = v;
+            }
         }
 
         // Last: an overlay variable the user also sets was already merged with theirs by the planner.

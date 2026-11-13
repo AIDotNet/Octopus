@@ -52,7 +52,7 @@
       }
     },
     "prompt": { "mode": "positional" },
-    "resume": { "continueLatest": ["--continue"] },
+    "resume": { "continueLatest": ["--continue"], "byId": ["--resume", "{id}"] },
     "extraArgs": true,
     "env": {
       "known": [

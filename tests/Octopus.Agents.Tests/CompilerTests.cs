@@ -195,6 +195,27 @@ public class CompilerTests
     }
 
     [Fact]
+    public void A_chosen_session_is_resumed_by_id_with_its_account()
+    {
+        // Also on a restored tab (Resume): the chosen session, not the latest one.
+        var launch = new AgentLaunchOptions
+        {
+            SessionId = "0c3e55f2",
+            Resume = true,
+            Prompt = "ignored",
+            Env = new() { ["CLAUDE_CONFIG_DIR"] = "/home/u/.work-claude" },
+        };
+        var profile = new AgentProfile { Env = { ["CLAUDE_CONFIG_DIR"] = "/home/u/.claude", ["KEEP"] = "1" } };
+        var claude = Compile("claude", profile, launch);
+        Assert.Equal(["--resume", "0c3e55f2"], claude.Arguments);
+        Assert.Equal("/home/u/.work-claude", claude.Environment["CLAUDE_CONFIG_DIR"]);
+        Assert.Equal("1", claude.Environment["KEEP"]);
+        Assert.Equal(["resume", "0c3e55f2"], Compile("codex", launch: launch).Arguments);
+        // An agent that cannot resume by id starts as it would have without one.
+        Assert.Equal(["--continue"], Compile("auggie", launch: launch).Arguments);
+    }
+
+    [Fact]
     public void Features_bool_list_string_and_env()
     {
         var profile = new AgentProfile

@@ -33,6 +33,18 @@ public sealed class AgentLaunchOptions
     /// <summary>Continue the most recent session (used when a tab is restored after a restart).</summary>
     [JsonIgnore]
     public bool Resume { get; set; }
+
+    /// <summary>
+    /// The saved session the tab continues (chosen in the session list, or made by a migration). Kept with the tab, so a
+    /// restored tab continues this one rather than whichever session is the latest.
+    /// </summary>
+    public string? SessionId { get; set; }
+
+    /// <summary>
+    /// Variables for this tab only, over the profile's: the account the session belongs to (<c>CLAUDE_CONFIG_DIR</c>,
+    /// <c>CODEX_HOME</c>). Null when the tab runs with the profile's account.
+    /// </summary>
+    public Dictionary<string, string>? Env { get; set; }
 }
 
 /// <summary>Where an agent was found on this machine.</summary>
