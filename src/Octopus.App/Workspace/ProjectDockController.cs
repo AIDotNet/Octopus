@@ -26,14 +26,16 @@ public sealed class ProjectDockController : IDisposable
     private bool _syncing;
     private readonly Activity.IItemActivityService? _activity;
     /// <summary>
-    /// Turns the loading ring of the tabs whose agent is working; runs only while there is one. It samples faster than the
-    /// ring turns and takes the frame from the clock, not from a tick count: a tick that comes late (an agent printing
-    /// fast keeps the UI thread busy) then skips ahead instead of slowing the ring down, and a tick a little early or late
-    /// no longer makes some frames last twice as long as others. At Render priority, so output being drawn does not starve it.
+    /// Turns the loading ring of the tabs whose agent is working; runs only while there is one. It ticks at display rate
+    /// and takes the angle from the clock, not from a tick count: a tick that comes late (an agent printing fast keeps
+    /// the UI thread busy) then skips ahead instead of slowing the ring down. At Render priority, so output being drawn
+    /// does not starve it.
     /// </summary>
-    private readonly DispatcherTimer _spin = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(30) };
+    private readonly DispatcherTimer _spin = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 60) };
     private readonly System.Diagnostics.Stopwatch _spinClock = new();
-    private const int SpinFrameMs = 90;
+    /// <summary>One turn, as long as Arc's spinner in the sidebar takes, so the two rings turn alike.</summary>
+    private const double SpinTurnMs = 700;
+    private const int SpinFrameCount = 120;
     private int _spinFrame;
     private bool _loading;
 
@@ -268,12 +270,12 @@ public sealed class ProjectDockController : IDisposable
     };
 
     /// <summary>
-    /// The loading ring at eight angles. DockPane.Icon is a geometry, not a control, so the tab cannot host Arc's
-    /// spinner: the ring is turned by swapping the icon. Arc scales an icon by its bounds, so every frame must have
-    /// the same ones: the gap is 45° wide and starts on a multiple of 45°, which keeps the circle's four outermost
-    /// points on the ring in every frame.
+    /// The loading ring at 120 angles, 3° apart: fine enough that a turn reads as smooth, like Arc's spinner in the
+    /// sidebar. DockPane.Icon is a geometry, not a control, so the tab cannot host that spinner: the ring is turned by
+    /// swapping the icon. ArcGlyph draws an icon in a fixed 24-unit box, not by its bounds, so a frame may sit at any
+    /// angle. Like Arc's spinner, the ring is open for a quarter.
     /// </summary>
-    private static readonly Geometry[] s_spinFrames = Enumerable.Range(0, 8).Select(SpinFrame).ToArray();
+    private static readonly Geometry[] s_spinFrames = Enumerable.Range(0, SpinFrameCount).Select(SpinFrame).ToArray();
 
     private static Geometry SpinFrame(int index)
     {
@@ -283,8 +285,8 @@ public sealed class ProjectDockController : IDisposable
             var radians = degrees * Math.PI / 180;
             return FormattableString.Invariant($"{center + radius * Math.Cos(radians):0.###} {center + radius * Math.Sin(radians):0.###}");
         }
-        var gap = index * 45;
-        return Geometry.Parse($"M{Point(gap + 45)} A{radius} {radius} 0 1 1 {Point(gap)}");
+        var gap = index * 360.0 / SpinFrameCount;
+        return Geometry.Parse($"M{Point(gap + 90)} A{radius} {radius} 0 1 1 {Point(gap)}");
     }
 
     private bool IsWorking(string itemId) => _activity?.Of(itemId) == Activity.ItemActivity.Working;
@@ -309,7 +311,7 @@ public sealed class ProjectDockController : IDisposable
 
     private void Spin()
     {
-        var frame = (int)(_spinClock.ElapsedMilliseconds / SpinFrameMs % s_spinFrames.Length);
+        var frame = (int)(_spinClock.Elapsed.TotalMilliseconds % SpinTurnMs / SpinTurnMs * SpinFrameCount);
         var turned = frame != _spinFrame;
         _spinFrame = frame;
         var any = false;
