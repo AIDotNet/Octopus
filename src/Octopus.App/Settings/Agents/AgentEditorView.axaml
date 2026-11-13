@@ -5,7 +5,7 @@
              xmlns:agents="using:Octopus.App.Settings.Agents"
              x:Class="Octopus.App.Settings.Agents.AgentEditorView"
              x:DataType="agents:AgentEditorModel"
-             Width="560">
+             HorizontalAlignment="Stretch">
     <UserControl.Styles>
         <Style Selector="TextBlock.field">
             <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
@@ -61,33 +61,31 @@
                     <arc:Input Classes="mono" Size="Small" Text="{Binding BaseArgs, Mode=TwoWay}"
                                Label="{l:AppLangResource AgentEditorBaseArgs}" IsLabelVisible="False" />
                 </StackPanel>
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                    <StackPanel Spacing="4">
-                        <TextBlock Classes="field" Text="{l:AppLangResource AgentEditorModelArgs}" />
-                        <arc:Input Classes="mono" Size="Small" Text="{Binding ModelArgs, Mode=TwoWay}" Placeholder="--model {value}"
-                                   Label="{l:AppLangResource AgentEditorModelArgs}" IsLabelVisible="False" />
-                        <TextBlock Classes="hint" Text="{l:AppLangResource AgentEditorModelArgsHint}" />
-                        <arc:Checkbox IsChecked="{Binding AllowCustomModel, Mode=TwoWay}" Content="{l:AppLangResource AgentEditorAllowCustomModel}" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="4">
-                        <TextBlock Classes="field" Text="{l:AppLangResource AgentEditorModelOptions}" />
-                        <arc:Textarea Classes="mono" Text="{Binding ModelOptions, Mode=TwoWay}" FrameMinHeight="72" FrameHeight="72"
-                                      Label="{l:AppLangResource AgentEditorModelOptions}" IsLabelVisible="False" />
-                        <TextBlock Classes="hint" Text="{l:AppLangResource AgentEditorModelOptionsHint}" />
-                    </StackPanel>
-                </Grid>
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="field" Text="{l:AppLangResource AgentEditorModelArgs}" />
+                    <arc:Input Classes="mono" Size="Small" Text="{Binding ModelArgs, Mode=TwoWay}" Placeholder="--model {value}"
+                               Label="{l:AppLangResource AgentEditorModelArgs}" IsLabelVisible="False" />
+                    <TextBlock Classes="hint" Text="{l:AppLangResource AgentEditorModelArgsHint}" />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="field" Text="{l:AppLangResource AgentEditorModelOptions}" />
+                    <arc:Textarea Classes="mono" Text="{Binding ModelOptions, Mode=TwoWay}" FrameMinHeight="72" FrameHeight="72"
+                                  Label="{l:AppLangResource AgentEditorModelOptions}" IsLabelVisible="False" />
+                    <TextBlock Classes="hint" Text="{l:AppLangResource AgentEditorModelOptionsHint}" />
+                </StackPanel>
+                <arc:Checkbox IsChecked="{Binding AllowCustomModel, Mode=TwoWay}" Content="{l:AppLangResource AgentEditorAllowCustomModel}" />
                 <StackPanel Spacing="4">
                     <TextBlock Classes="field" Text="{l:AppLangResource AgentEditorPrompt}" />
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <StackPanel Spacing="6">
                         <arc:SegmentedControl HorizontalAlignment="Left" Height="28" SelectedValue="{Binding PromptMode, Mode=TwoWay}">
                             <arc:SegmentedOption Value="positional" Label="{l:AppLangResource AgentEditorPromptPositional}" />
                             <arc:SegmentedOption Value="flag" Label="{l:AppLangResource AgentEditorPromptFlag}" />
                             <arc:SegmentedOption Value="none" Label="{l:AppLangResource AgentEditorPromptNone}" />
                         </arc:SegmentedControl>
-                        <arc:Input Grid.Column="1" Classes="mono" Size="Small" Text="{Binding PromptArgs, Mode=TwoWay}" Placeholder="--prompt {value}"
+                        <arc:Input Classes="mono" Size="Small" Text="{Binding PromptArgs, Mode=TwoWay}" Placeholder="--prompt {value}"
                                    IsVisible="{Binding ShowPromptArgs}"
                                    Label="{l:AppLangResource AgentEditorPromptArgs}" IsLabelVisible="False" />
-                    </Grid>
+                    </StackPanel>
                 </StackPanel>
                 <StackPanel Spacing="4">
                     <TextBlock Classes="field" Text="{l:AppLangResource AgentEditorResumeArgs}" />
@@ -100,15 +98,12 @@
                                   Label="{l:AppLangResource AgentEditorEnvironment}" IsLabelVisible="False" />
                     <TextBlock Classes="hint" Text="{l:AppLangResource AgentEditorEnvironmentHint}" />
                 </StackPanel>
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                    <StackPanel Spacing="4">
-                        <TextBlock Classes="field" Text="{l:AppLangResource AgentEditorHomepage}" />
-                        <arc:Input Size="Small" Text="{Binding Homepage, Mode=TwoWay}" Placeholder="https://"
-                                   Label="{l:AppLangResource AgentEditorHomepage}" IsLabelVisible="False" />
-                    </StackPanel>
-                    <arc:Checkbox Grid.Column="1" VerticalAlignment="Bottom" IsChecked="{Binding ExtraArgs, Mode=TwoWay}"
-                              Content="{l:AppLangResource AgentEditorExtraArgs}" />
-                </Grid>
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="field" Text="{l:AppLangResource AgentEditorHomepage}" />
+                    <arc:Input Size="Small" Text="{Binding Homepage, Mode=TwoWay}" Placeholder="https://"
+                               Label="{l:AppLangResource AgentEditorHomepage}" IsLabelVisible="False" />
+                </StackPanel>
+                <arc:Checkbox IsChecked="{Binding ExtraArgs, Mode=TwoWay}" Content="{l:AppLangResource AgentEditorExtraArgs}" />
             </StackPanel>
         </arc:ScrollArea>
 
