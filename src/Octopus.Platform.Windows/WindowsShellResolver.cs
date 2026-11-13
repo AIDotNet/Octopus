@@ -130,11 +130,11 @@ public sealed class WindowsShellResolver(IExecutableLocator locator) : IShellRes
     private static string? Newest(IEnumerable<string> candidates)
     {
         string? best = null;
-        var bestVersion = new Version(-1, -1);
+        Version? bestVersion = null;
         foreach (var candidate in candidates.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var version = VersionOf(candidate);
-            if (best is null || version > bestVersion)
+            if (best is null || version > bestVersion!)
             {
                 best = candidate;
                 bestVersion = version;
