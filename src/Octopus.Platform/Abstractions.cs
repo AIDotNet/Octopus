@@ -32,6 +32,12 @@ public interface IShellResolver
     /// <summary>Describes a shell the user chose in settings; null when the file does not exist.</summary>
     ShellInfo? Describe(string path);
 
+    /// <summary>
+    /// Every shell found on this machine that a terminal can start, the default one first. For the settings list, so
+    /// the user picks from what is installed instead of typing a path.
+    /// </summary>
+    IReadOnlyList<ShellInfo> GetAvailableShells() => [GetDefaultShell()];
+
     /// <summary>Arguments that start <paramref name="shell"/> as an interactive (and, where it applies, login) shell.</summary>
     IReadOnlyList<string> GetInteractiveArguments(ShellInfo shell);
 

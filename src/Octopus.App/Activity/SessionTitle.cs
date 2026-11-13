@@ -30,7 +30,20 @@ public readonly record struct SessionTitle(string Text, bool Working)
             working = text.AsSpan(0, end).IndexOfAny(SpinMarks) >= 0 || HasBraille(text.AsSpan(0, end));
             text = text[end..].Trim();
         }
-        return new SessionTitle(text, working);
+        return new SessionTitle(IsProgramPath(text) ? "" : text, working);
+    }
+
+    /// <summary>
+    /// Windows shells put their own program in the title ("pwsh.exe", "C:\Program Files\PowerShell\7\pwsh.exe"). That
+    /// says nothing about the session, so it is ignored and the item keeps its own name.
+    /// </summary>
+    private static bool IsProgramPath(string text)
+    {
+        if (!(text.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || text.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+        return text.AsSpan().IndexOfAny('\\', '/') >= 0 || !text.Any(char.IsWhiteSpace);
     }
 
     private static bool IsMark(char c) => IsBraille(c) || RestMarks.Contains(c) || SpinMarks.Contains(c);

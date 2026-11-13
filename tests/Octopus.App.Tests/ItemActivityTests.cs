@@ -26,6 +26,10 @@ public class SessionTitleTests
     [InlineData("⠂", "", true)]
     [InlineData("  ", "", false)]
     [InlineData(null, "", false)]
+    [InlineData("pwsh.exe", "", false)]
+    [InlineData(@"C:\Program Files\PowerShell\7\pwsh.exe", "", false)]
+    [InlineData("Windows PowerShell", "Windows PowerShell", false)]
+    [InlineData("notes for foo.exe", "notes for foo.exe", false)]
     public void The_status_mark_is_split_from_the_name(string? raw, string text, bool working)
     {
         Assert.Equal(new SessionTitle(text, working), SessionTitle.Parse(raw));

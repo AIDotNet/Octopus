@@ -34,6 +34,53 @@ public abstract class UnixShellResolverBase : IShellResolver
         return new ShellInfo(path, name, kind);
     }
 
+    /// <summary>Shells that are worth offering besides what /etc/shells lists.</summary>
+    private static readonly string[] KnownShells = ["zsh", "bash", "fish", "pwsh", "nu", "elvish", "xonsh", "dash", "sh"];
+
+    private static readonly string[] KnownDirectories =
+        ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/home/linuxbrew/.linuxbrew/bin", "/snap/bin"];
+
+    public IReadOnlyList<ShellInfo> GetAvailableShells()
+    {
+        var result = new List<ShellInfo> { GetDefaultShell() };
+        var seen = new HashSet<string>(StringComparer.Ordinal) { Identity(result[0].Path) };
+        void Add(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            path = path.Trim();
+            if (Describe(path) is { } info && seen.Add(Identity(path))) result.Add(info);
+        }
+
+        foreach (var candidate in EnumerateCandidates()) Add(candidate);
+        foreach (var line in ReadEtcShells()) Add(line);
+        foreach (var name in KnownShells)
+            foreach (var directory in KnownDirectories)
+                Add(Path.Combine(directory, name));
+        return result;
+    }
+
+    /// <summary>/bin/sh and /usr/bin/sh are one program: the file the link leads to is what counts.</summary>
+    private static string Identity(string path)
+    {
+        try { return File.ResolveLinkTarget(path, returnFinalTarget: true)?.FullName ?? path; }
+        catch (IOException) { return path; }
+    }
+
+    private static IEnumerable<string> ReadEtcShells()
+    {
+        try
+        {
+            return File.ReadLines("/etc/shells")
+                .Select(l => l.Trim())
+                .Where(l => l.StartsWith('/'))
+                .ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
     public IReadOnlyList<string> GetInteractiveArguments(ShellInfo shell) =>
         shell.Kind == ShellKind.PowerShell ? ["-Login"] : ["-l"];
 

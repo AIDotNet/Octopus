@@ -35,43 +35,91 @@ public sealed partial class TerminalSettingsViewModel : ObservableObject, IDispo
     private IReadOnlyList<SelectOption> _shellModes = [];
 
     private string? _detectedShellPath;
+    private IReadOnlyList<ShellInfo> _availableShells = [];
+    private bool _syncingShellMode;
 
     public TerminalSettingsViewModel(ISettingsStore settings, IShellResolver shells)
     {
         _settings = settings;
         var terminal = settings.Current.Terminal;
+        // A saved path shows as "custom" until the scan below finds it among the installed shells.
         _shellMode = string.IsNullOrWhiteSpace(terminal.Shell) ? AutoShell : CustomShell;
         _shellPath = terminal.Shell ?? "";
         _fontFamily = terminal.FontFamily ?? "";
         _detectedShellText = AppLangResources.Get(AppLangResourceKind.SettingsShellDetecting);
         BuildShellModes();
         ArcLanguage.Changed += OnLanguageChanged;
-        // The first call may block for a few dozen milliseconds (it can ask the login shell), so it runs off the UI thread.
+        // The first call may block for a few dozen milliseconds (it can ask the login shell) and listing the installed
+        // shells reads files, so both run off the UI thread.
         _ = Task.Run(() =>
         {
             string path;
+            IReadOnlyList<ShellInfo> available;
             try
             {
                 path = shells.GetDefaultShell().Path;
+                available = shells.GetAvailableShells();
             }
             catch (Exception)
             {
                 path = "";
+                available = [];
             }
             Dispatcher.UIThread.Post(() =>
             {
                 _detectedShellPath = path;
+                _availableShells = available;
                 DetectedShellText = AppLangResources.Format(AppLangResourceKind.SettingsShellDetected, path);
+                BuildShellModes();
+                SelectSavedShell();
             });
         });
     }
 
-    private void BuildShellModes() =>
-        ShellModes =
-        [
-            new SelectOption(AutoShell, AppLangResources.Get(AppLangResourceKind.SettingsShellAuto)),
-            new SelectOption(CustomShell, AppLangResources.Get(AppLangResourceKind.SettingsShellCustom))
-        ];
+    /// <summary>A saved path that is one of the installed shells is shown as that entry, not as a custom path.</summary>
+    private void SelectSavedShell()
+    {
+        var saved = _settings.Current.Terminal.Shell;
+        if (string.IsNullOrWhiteSpace(saved) || !IsCustomShell)
+        {
+            return;
+        }
+        var match = _availableShells.FirstOrDefault(s => string.Equals(s.Path, saved.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            return;
+        }
+        _syncingShellMode = true;
+        try
+        {
+            ShellMode = match.Path;
+        }
+        finally
+        {
+            _syncingShellMode = false;
+        }
+    }
+
+    private void BuildShellModes()
+    {
+        var options = new List<SelectOption> { new(AutoShell, AppLangResources.Get(AppLangResourceKind.SettingsShellAuto)) };
+        foreach (var shell in _availableShells)
+        {
+            options.Add(new SelectOption(shell.Path, $"{DisplayName(shell)}  ·  {shell.Path}"));
+        }
+        options.Add(new SelectOption(CustomShell, AppLangResources.Get(AppLangResourceKind.SettingsShellCustom)));
+        ShellModes = options;
+    }
+
+    private static string DisplayName(ShellInfo shell) => shell.Name switch
+    {
+        "pwsh" => "PowerShell",
+        "powershell" => "Windows PowerShell",
+        "cmd" => "Command Prompt",
+        "bash" when shell.Path.Contains("Git", StringComparison.OrdinalIgnoreCase) => "Git Bash",
+        "nu" => "Nushell",
+        _ => shell.Name,
+    };
 
     private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.Run(() =>
     {
@@ -89,6 +137,8 @@ public sealed partial class TerminalSettingsViewModel : ObservableObject, IDispo
     }
 
     public bool IsCustomShell => ShellMode == CustomShell;
+
+    public bool IsAutoShell => ShellMode == AutoShell;
 
     public decimal FontSize
     {
@@ -137,14 +187,26 @@ public sealed partial class TerminalSettingsViewModel : ObservableObject, IDispo
     partial void OnShellModeChanged(string value)
     {
         OnPropertyChanged(nameof(IsCustomShell));
+        OnPropertyChanged(nameof(IsAutoShell));
+        if (_syncingShellMode)
+        {
+            return;
+        }
         if (value == AutoShell)
         {
             _shellDebounce.Cancel();
             _settings.Update(s => s.Terminal.Shell = null);
         }
-        else
+        else if (value == CustomShell)
         {
             SaveShell();
+        }
+        else
+        {
+            // One of the installed shells: its path is the setting.
+            _shellDebounce.Cancel();
+            ShellPath = value;
+            _settings.Update(s => s.Terminal.Shell = value);
         }
     }
 

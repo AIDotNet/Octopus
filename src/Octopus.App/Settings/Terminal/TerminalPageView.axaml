@@ -22,7 +22,7 @@
                     <TextBlock Classes="mono"
                                Text="{Binding DetectedShellText}"
                                TextTrimming="CharacterEllipsis"
-                               IsVisible="{Binding !IsCustomShell}" />
+                               IsVisible="{Binding IsAutoShell}" />
                     <arc:Input Text="{Binding ShellPath, Mode=TwoWay}"
                                Size="Small"
                                Label="{l:AppLangResource SettingsShell}"
