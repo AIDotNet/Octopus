@@ -357,6 +357,8 @@ public enum AppLangResourceKind
     QuitUnsavedTitle,
     QuitUnsavedBody,
     EmptyProjectTitle,
+    EmptyProjectBody,
+    StarOnGitHub,
     WelcomeTitle,
     WelcomeBody,
     NewTab,

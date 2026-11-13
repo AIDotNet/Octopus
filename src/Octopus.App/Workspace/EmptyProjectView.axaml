@@ -6,16 +6,47 @@
              xmlns:vm="using:Octopus.App.Workspace"
              x:Class="Octopus.App.Workspace.EmptyProjectView"
              x:DataType="vm:EmptyStateViewModel">
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
-        <TextBlock Classes="body" FontSize="{arc:ArcDesignTokenResource TypeBase}" FontWeight="Medium"
-                   HorizontalAlignment="Center" Text="{l:AppLangResource EmptyProjectTitle}" />
-        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-            <arc:Button Variant="Secondary" Size="Small" Command="{Binding NewTerminalCommand}"
-                        Content="{l:AppLangResource NewTerminal}" />
-            <arc:Button x:Name="AgentButton" Variant="Secondary" Size="Small" Click="OnAgentClick"
-                        Content="{l:AppLangResource NewAgent}" />
-            <arc:Button Variant="Secondary" Size="Small" Command="{Binding OpenFileCommand}"
-                        Content="{l:AppLangResource OpenFile}" />
+    <UserControl.Styles>
+        <!-- The three entries are tiles: an icon over its label. -->
+        <Style Selector="arc|Button.tile">
+            <Setter Property="Width" Value="120" />
+            <Setter Property="Height" Value="84" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24">
+        <Image Width="72" Height="72" HorizontalAlignment="Center"
+               RenderOptions.BitmapInterpolationMode="HighQuality"
+               Source="avares://Octopus/Assets/Icon/octopus.png" />
+        <TextBlock Classes="body" Margin="0,20,0,0" HorizontalAlignment="Center"
+                   FontSize="{arc:ArcDesignTokenResource TypeLG}" FontWeight="SemiBold"
+                   Text="{l:AppLangResource EmptyProjectTitle}" />
+        <TextBlock Margin="0,6,0,0" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                   MaxWidth="380" FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                   Text="{l:AppLangResource EmptyProjectBody}" />
+        <StackPanel Margin="0,24,0,0" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+            <arc:Button Classes="tile" Variant="Secondary" Command="{Binding NewTerminalCommand}">
+                <StackPanel Spacing="8">
+                    <lucide:LucideIcon Kind="SquareTerminal" Size="22" HorizontalAlignment="Center" />
+                    <TextBlock HorizontalAlignment="Center" Text="{l:AppLangResource NewTerminal}" />
+                </StackPanel>
+            </arc:Button>
+            <arc:Button x:Name="AgentButton" Classes="tile" Variant="Secondary" Click="OnAgentClick">
+                <StackPanel Spacing="8">
+                    <lucide:LucideIcon Kind="Bot" Size="22" HorizontalAlignment="Center" />
+                    <TextBlock HorizontalAlignment="Center" Text="{l:AppLangResource NewAgent}" />
+                </StackPanel>
+            </arc:Button>
+            <arc:Button Classes="tile" Variant="Secondary" Command="{Binding OpenFileCommand}">
+                <StackPanel Spacing="8">
+                    <lucide:LucideIcon Kind="FileText" Size="22" HorizontalAlignment="Center" />
+                    <TextBlock HorizontalAlignment="Center" Text="{l:AppLangResource OpenFile}" />
+                </StackPanel>
+            </arc:Button>
         </StackPanel>
+        <vm:StarOnGitHubButton Margin="0,28,0,0" HorizontalAlignment="Center" />
     </StackPanel>
 </UserControl>

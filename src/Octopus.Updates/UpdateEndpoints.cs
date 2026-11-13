@@ -5,9 +5,12 @@ public static class UpdateEndpoints
 {
     public const string ReleasesUrl = GitHubReleasesFeed.DefaultReleasesUrl;
 
+    /// <summary>The project's home on GitHub.</summary>
+    public const string RepositoryUrl = "https://github.com/AIDotNet/Octopus";
+
     /// <summary>The page of one release: its notes and its downloads.</summary>
     public static string ReleasePage(Octopus.Core.Updates.AppVersion version) =>
-        $"https://github.com/AIDotNet/Octopus/releases/tag/v{version}";
+        $"{RepositoryUrl}/releases/tag/v{version}";
 
     /// <summary>
     /// The public keys whose signature on <c>update.json</c> is trusted (SubjectPublicKeyInfo, base64). The private key

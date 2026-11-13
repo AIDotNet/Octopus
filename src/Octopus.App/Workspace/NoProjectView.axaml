@@ -5,13 +5,18 @@
              xmlns:vm="using:Octopus.App.Workspace"
              x:Class="Octopus.App.Workspace.NoProjectView"
              x:DataType="vm:EmptyStateViewModel">
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="360">
-        <TextBlock Classes="body" FontSize="{arc:ArcDesignTokenResource TypeLG}" FontWeight="Medium"
-                   HorizontalAlignment="Center" Text="{l:AppLangResource WelcomeTitle}" />
-        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeSM}" TextWrapping="Wrap" TextAlignment="Center"
-                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" MaxWidth="380">
+        <Image Width="72" Height="72" HorizontalAlignment="Center"
+               RenderOptions.BitmapInterpolationMode="HighQuality"
+               Source="avares://Octopus/Assets/Icon/octopus.png" />
+        <TextBlock Classes="body" Margin="0,20,0,0" HorizontalAlignment="Center"
+                   FontSize="{arc:ArcDesignTokenResource TypeLG}" FontWeight="SemiBold"
+                   Text="{l:AppLangResource WelcomeTitle}" />
+        <TextBlock Margin="0,6,0,0" FontSize="{arc:ArcDesignTokenResource TypeSM}" TextWrapping="Wrap"
+                   TextAlignment="Center" Foreground="{arc:ArcDesignTokenResource TextSecondary}"
                    Text="{l:AppLangResource WelcomeBody}" />
-        <arc:Button Margin="0,8,0,0" HorizontalAlignment="Center" Content="{l:AppLangResource NewProject}"
-                    Command="{Binding NewProjectCommand}" />
+        <arc:Button Margin="0,24,0,0" HorizontalAlignment="Center" Variant="Primary"
+                    Content="{l:AppLangResource NewProject}" Command="{Binding NewProjectCommand}" />
+        <vm:StarOnGitHubButton Margin="0,28,0,0" HorizontalAlignment="Center" />
     </StackPanel>
 </UserControl>

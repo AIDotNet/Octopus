@@ -335,6 +335,8 @@
     <unit id="QuitUnsavedTitle"><segment><source>Quit without saving?</source></segment></unit>
     <unit id="QuitUnsavedBody"><segment><source>Some files have edits that are not saved. Quitting discards them.</source></segment></unit>
     <unit id="EmptyProjectTitle"><segment><source>Start something in this project</source></segment></unit>
+    <unit id="EmptyProjectBody"><segment><source>Open a terminal, start a coding agent, or open a file.</source></segment></unit>
+    <unit id="StarOnGitHub"><segment><source>Star on GitHub</source></segment></unit>
     <unit id="WelcomeTitle"><segment><source>Welcome to Octopus</source></segment></unit>
     <unit id="WelcomeBody"><segment><source>Add a project folder to run terminals and coding agents side by side.</source></segment></unit>
     <unit id="NewTab"><segment><source>New tab</source></segment></unit>

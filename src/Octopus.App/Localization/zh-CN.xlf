@@ -335,6 +335,8 @@
     <unit id="QuitUnsavedTitle"><segment><source>Quit without saving?</source><target state="translated">不保存就退出？</target></segment></unit>
     <unit id="QuitUnsavedBody"><segment><source>Some files have edits that are not saved. Quitting discards them.</source><target state="translated">有文件含有未保存的修改，退出会丢弃它们。</target></segment></unit>
     <unit id="EmptyProjectTitle"><segment><source>Start something in this project</source><target state="translated">在此项目中开始</target></segment></unit>
+    <unit id="EmptyProjectBody"><segment><source>Open a terminal, start a coding agent, or open a file.</source><target state="translated">打开终端、启动编码智能体，或打开一个文件。</target></segment></unit>
+    <unit id="StarOnGitHub"><segment><source>Star on GitHub</source><target state="translated">在 GitHub 上加星</target></segment></unit>
     <unit id="WelcomeTitle"><segment><source>Welcome to Octopus</source><target state="translated">欢迎使用 Octopus</target></segment></unit>
     <unit id="WelcomeBody"><segment><source>Add a project folder to run terminals and coding agents side by side.</source><target state="translated">添加一个项目文件夹，就可以并排运行终端和编码智能体。</target></segment></unit>
     <unit id="NewTab"><segment><source>New tab</source><target state="translated">新建标签</target></segment></unit>
