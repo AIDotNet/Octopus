@@ -158,9 +158,17 @@ public sealed partial class DiffTabViewModel : ObservableObject, IDisposable
             return;
         }
         var digits = diff.Lines.Max(l => Math.Max(l.OldNumber ?? 0, l.NewNumber ?? 0)).ToString().Length;
-        Rows = diff.Lines.Select(l => new DiffRowViewModel(l, digits)).ToArray();
-        Marks = Rows.Select(r => r.ToMark()).ToArray();
-        CodeText = string.Concat(Rows.Select(r => r.Text + "\n"));
+        var rows = diff.Lines.Select(l => new DiffRowViewModel(l, digits)).ToArray();
+        var marks = rows.Select(r => r.ToMark()).ToArray();
+        var text = string.Concat(rows.Select(r => r.Text + "\n"));
+        // Any change under .git reads the diff again, mostly to find it as it was: then the view keeps what it has
+        // instead of laying out and coloring every line again.
+        if (!string.Equals(text, CodeText, StringComparison.Ordinal) || !marks.SequenceEqual(Marks))
+        {
+            Rows = rows;
+            Marks = marks;
+            CodeText = text;
+        }
         Notice = null;
         if (diff.IsTruncated)
         {

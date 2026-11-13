@@ -53,6 +53,8 @@ public class App : Application
             {
                 // No ssh process of a tunnel outlives the app (an installer that starts now may replace the files they run from).
                 AppHost.Get<Octopus.App.Services.ITunnelService>().StopAll();
+                // Settings are written a moment after each change: the last one goes to disk before an installer starts.
+                AppHost.Get<Octopus.Storage.ISettingsStore>().Flush();
                 Updates.UpdateLifecycle.InstallOnExit();
                 AppHost.Reset();
             };
@@ -60,12 +62,17 @@ public class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    private static readonly TimeSpan ScanDelayWithCache = TimeSpan.FromSeconds(4);
+
     private static async Task StartAgentScanAsync()
     {
         try
         {
             var scanner = AppHost.Get<IAgentScanner>();
             await scanner.LoadCacheAsync();
+            // With a cached result the launcher already lists the agents: the rescan (one version run per installed agent,
+            // a Node start each for most CLIs) waits until the window is up instead of competing with the first frames.
+            if (scanner.Current.ScannedAt != default) await Task.Delay(ScanDelayWithCache);
             await scanner.ScanAsync();
         }
         catch

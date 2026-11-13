@@ -33,13 +33,23 @@ internal sealed class NodeState(string type, IUiComponent component)
     public string? AppliedRev { get; set; }
     public bool ValueApplied { get; set; }
     public object? Extra { get; set; }
-    public List<IDisposable> Bindings { get; } = [];
+    /// <summary>Token bindings by target and property; one that the next update asks for again is kept, not rebound.</summary>
+    public Dictionary<(StyledElement Target, AvaloniaProperty Property), TokenBinding> Bindings { get; } = [];
+}
+
+/// <summary>A property bound to a design token, and whether the update in progress asked for it.</summary>
+internal sealed class TokenBinding(ArcDesignTokenKind kind, IDisposable subscription)
+{
+    public ArcDesignTokenKind Kind { get; } = kind;
+    public IDisposable Subscription { get; } = subscription;
+    public bool Used { get; set; } = true;
 }
 
 /// <summary>
 /// Turns plugin interface trees (<c>{t, k, p, c}</c>) into Arc controls (design/plugins/05-界面能力.md §1). A node keeps
 /// its control while its type and key stay the same, so typing, scrolling and focus survive re-renders; only the
-/// properties are applied again. Unknown component types render as a visible placeholder instead of failing.
+/// properties are applied again, and only when they changed. Unknown component types render as a visible placeholder
+/// instead of failing.
 /// </summary>
 public sealed class UiRenderer(IUiEventSink sink)
 {
@@ -70,10 +80,14 @@ public sealed class UiRenderer(IUiEventSink sink)
         var props = node["p"] as JsonObject ?? [];
         Control control;
         NodeState state;
+        var unchanged = false;
         if (existing?.Tag is NodeState old && old.Type == type)
         {
             control = existing;
             state = old;
+            // Same properties as last time: applying them again would only redo work (and rebuild content some
+            // components create on each update). Children are still reconciled; they have their own properties.
+            unchanged = JsonNode.DeepEquals(old.Props, props);
         }
         else
         {
@@ -84,11 +98,9 @@ public sealed class UiRenderer(IUiEventSink sink)
         }
         state.Key = node["k"] is JsonValue k && k.TryGetValue<string>(out var key) ? key : null;
         state.Props = props;
-        foreach (var binding in state.Bindings) binding.Dispose();
-        state.Bindings.Clear();
         try
         {
-            state.Component.Update(control, state, this);
+            if (!unchanged) Update(control, state);
             if (state.Component.HasChildren)
             {
                 state.Children = ReconcileChildren(state.Children, node["c"] as JsonArray);
@@ -102,6 +114,23 @@ public sealed class UiRenderer(IUiEventSink sink)
             return Placeholder($"{type}: {e.Message}");
         }
         return control;
+    }
+
+    /// <summary>Applies the node's properties; token bindings the update does not ask for again are released after it.</summary>
+    private void Update(Control control, NodeState state)
+    {
+        foreach (var binding in state.Bindings.Values) binding.Used = false;
+        state.Component.Update(control, state, this);
+        List<(StyledElement, AvaloniaProperty)>? stale = null;
+        foreach (var (key, binding) in state.Bindings)
+        {
+            if (!binding.Used) (stale ??= []).Add(key);
+        }
+        foreach (var key in stale ?? [])
+        {
+            state.Bindings.Remove(key, out var binding);
+            binding!.Subscription.Dispose();
+        }
     }
 
     /// <summary>Keyed children keep their control by key; unkeyed ones by position among the unkeyed.</summary>
@@ -172,8 +201,20 @@ public sealed class UiRenderer(IUiEventSink sink)
         return false;
     }
 
-    internal static void BindToken(NodeState state, StyledElement target, AvaloniaProperty property, ArcDesignTokenKind kind) =>
-        state.Bindings.Add(ArcTokens.Bind(target, property, kind, BindingPriority.LocalValue));
+    /// <summary>Binds a property to a token for this update; the binding of the last update is kept when it is the same token.</summary>
+    internal static void BindToken(NodeState state, StyledElement target, AvaloniaProperty property, ArcDesignTokenKind kind)
+    {
+        if (state.Bindings.TryGetValue((target, property), out var existing))
+        {
+            if (existing.Kind == kind)
+            {
+                existing.Used = true;
+                return;
+            }
+            existing.Subscription.Dispose();
+        }
+        state.Bindings[(target, property)] = new TokenBinding(kind, ArcTokens.Bind(target, property, kind, BindingPriority.LocalValue));
+    }
 
     internal static Control Placeholder(string message)
     {

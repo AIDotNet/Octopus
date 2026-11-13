@@ -130,25 +130,22 @@ internal sealed class Flex(Orientation orientation, double defaultGap = 0) : IUi
         }
         var grid = border.Child as Grid ?? new Grid();
         border.Child = grid;
-        grid.RowDefinitions.Clear();
-        grid.ColumnDefinitions.Clear();
         grid.RowSpacing = orientation == Orientation.Vertical ? gap : 0;
         grid.ColumnSpacing = orientation == Orientation.Horizontal ? gap : 0;
+        var lengths = new List<GridLength>(children.Count);
         for (var i = 0; i < children.Count; i++)
         {
             var child = children[i];
             var grow = child.Tag is NodeState s ? Num(s.Props, "grow") ?? 0 : 0;
-            var length = grow > 0 ? new GridLength(grow, GridUnitType.Star) : GridLength.Auto;
+            lengths.Add(grow > 0 ? new GridLength(grow, GridUnitType.Star) : GridLength.Auto);
             if (orientation == Orientation.Vertical)
             {
-                grid.RowDefinitions.Add(new RowDefinition(length));
                 Grid.SetRow(child, i);
                 Grid.SetColumn(child, 0);
                 if (Str(p, "align") is { } align) child.HorizontalAlignment = UiLayout.Horizontal(align);
             }
             else
             {
-                grid.ColumnDefinitions.Add(new ColumnDefinition(length));
                 Grid.SetColumn(child, i);
                 Grid.SetRow(child, 0);
                 child.VerticalAlignment = UiLayout.Vertical(Str(p, "align") ?? "center");
@@ -159,11 +156,11 @@ internal sealed class Flex(Orientation orientation, double defaultGap = 0) : IUi
             // "between": a star column between every pair pushes them apart; start/center/end align the whole row.
             if (justify == "between" && children.Count > 1)
             {
-                grid.ColumnDefinitions.Clear();
+                lengths.Clear();
                 for (var i = 0; i < children.Count; i++)
                 {
-                    grid.ColumnDefinitions.Add(new ColumnDefinition(i == children.Count - 1 ? GridLength.Auto : GridLength.Auto));
-                    if (i < children.Count - 1) grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+                    lengths.Add(GridLength.Auto);
+                    if (i < children.Count - 1) lengths.Add(GridLength.Star);
                     Grid.SetColumn(children[i], i * 2);
                 }
             }
@@ -172,7 +169,25 @@ internal sealed class Flex(Orientation orientation, double defaultGap = 0) : IUi
                 grid.HorizontalAlignment = UiLayout.Horizontal(justify);
             }
         }
+        SetRows(grid, orientation == Orientation.Vertical ? lengths : []);
+        SetColumns(grid, orientation == Orientation.Horizontal ? lengths : []);
         Replace(grid.Children, children);
+    }
+
+    /// <summary>Gives the grid these rows; when it has them already nothing is touched, so the grid is not laid out again for nothing.</summary>
+    internal static void SetRows(Grid grid, IReadOnlyList<GridLength> heights)
+    {
+        if (grid.RowDefinitions.Select(r => r.Height).SequenceEqual(heights)) return;
+        grid.RowDefinitions.Clear();
+        foreach (var height in heights) grid.RowDefinitions.Add(new RowDefinition(height));
+    }
+
+    /// <summary>Gives the grid these columns; when it has them already nothing is touched.</summary>
+    internal static void SetColumns(Grid grid, IReadOnlyList<GridLength> widths)
+    {
+        if (grid.ColumnDefinitions.Select(c => c.Width).SequenceEqual(widths)) return;
+        grid.ColumnDefinitions.Clear();
+        foreach (var width in widths) grid.ColumnDefinitions.Add(new ColumnDefinition(width));
     }
 
     internal static void Replace(Avalonia.Controls.Controls target, IReadOnlyList<Control> children)
@@ -204,11 +219,9 @@ internal sealed class GridComponent : IUiComponent
         var p = state.Props;
         var gap = UiLayout.Space(Num(p, "gap") ?? 2);
         var columns = Num(p, "columns") is { } n ? (int)Math.Clamp(n, 1, 24) : Arr(p, "columns")?.Count ?? 2;
-        grid.ColumnDefinitions.Clear();
-        grid.RowDefinitions.Clear();
-        for (var c = 0; c < columns; c++) grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
         var rows = (children.Count + columns - 1) / columns;
-        for (var r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        Flex.SetColumns(grid, Enumerable.Repeat(GridLength.Star, columns).ToList());
+        Flex.SetRows(grid, Enumerable.Repeat(GridLength.Auto, rows).ToList());
         grid.RowSpacing = gap;
         grid.ColumnSpacing = gap;
         for (var i = 0; i < children.Count; i++)
@@ -348,10 +361,34 @@ internal sealed class SplitComponent : IUiComponent
     public Control Create(NodeState state, UiRenderer renderer) => new Grid();
     public void Update(Control control, NodeState state, UiRenderer renderer) { }
 
+    /// <summary>What the panes were laid out for, and the pane controls in order.</summary>
+    private sealed record Layout(bool Vertical, string? Sizes, List<Control> Panes);
+
     public void SetChildren(Control control, NodeState state, IReadOnlyList<Control> children)
     {
         var grid = (Grid)control;
         var vertical = Str(state.Props, "direction") == "vertical";
+        var sizesText = Arr(state.Props, "sizes")?.ToJsonString();
+        if (state.Extra is Layout layout && layout.Vertical == vertical && layout.Sizes == sizesText && layout.Panes.Count == children.Count)
+        {
+            // Same panes, direction and sizes: swap only the panes whose control changed, so the rest stay attached
+            // and the sizes the user dragged the splitters to are kept.
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (!ReferenceEquals(layout.Panes[i], children[i])) grid.Children.Remove(layout.Panes[i]);
+            }
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (ReferenceEquals(layout.Panes[i], children[i])) continue;
+                var pane = children[i];
+                if (pane.Parent is Panel old) old.Children.Remove(pane);
+                if (vertical) Grid.SetRow(pane, i * 2);
+                else Grid.SetColumn(pane, i * 2);
+                grid.Children.Add(pane);
+                layout.Panes[i] = pane;
+            }
+            return;
+        }
         var sizes = Arr(state.Props, "sizes")?.Select(n => n is JsonValue v && v.TryGetValue<double>(out var d) ? d : 1).ToList() ?? [];
         var all = new List<Control>();
         grid.RowDefinitions.Clear();
@@ -376,6 +413,7 @@ internal sealed class SplitComponent : IUiComponent
             if (c.Parent is Panel old) old.Children.Remove(c);
             grid.Children.Add(c);
         }
+        state.Extra = new Layout(vertical, sizesText, children.ToList());
     }
 }
 
@@ -767,14 +805,25 @@ internal sealed class SparklineComponent : IUiComponent
 {
     public Control Create(NodeState state, UiRenderer renderer) => new Sparkline { YSelector = v => (double)v }.Also(UiLayout.OwnLineHeight);
 
-    public void Update(Control control, NodeState state, UiRenderer renderer) =>
-        ((Sparkline)control).ItemsSource = (Arr(state.Props, "values") ?? []).Select(v => v is JsonValue n && n.TryGetValue<double>(out var d) ? (object)d : 0d).ToList();
+    public void Update(Control control, NodeState state, UiRenderer renderer)
+    {
+        var sparkline = (Sparkline)control;
+        var values = (Arr(state.Props, "values") ?? []).Select(v => v is JsonValue n && n.TryGetValue<double>(out var d) ? (object)d : 0d).ToList();
+        // Only a real change: a new list redraws the line.
+        if (sparkline.ItemsSource is not List<object> current || !current.SequenceEqual(values)) sparkline.ItemsSource = values;
+    }
 }
 
 internal sealed class JsonViewComponent : IUiComponent
 {
     public Control Create(NodeState state, UiRenderer renderer) => new JsonViewer { ExpandDepth = 1 };
-    public void Update(Control control, NodeState state, UiRenderer renderer) => ((JsonViewer)control).Value = state.Props["value"]?.DeepClone();
+    public void Update(Control control, NodeState state, UiRenderer renderer)
+    {
+        var viewer = (JsonViewer)control;
+        var value = state.Props["value"];
+        // Only a real change: a new value rebuilds the tree and folds what the user had opened.
+        if (!JsonNode.DeepEquals(viewer.Value, value)) viewer.Value = value?.DeepClone();
+    }
 }
 
 // ============================================================================ input
@@ -1246,6 +1295,9 @@ internal sealed class TableRow(JsonNode? id, JsonArray cells)
 {
     public JsonNode? Id { get; } = id;
     public JsonArray Cells { get; } = cells;
+
+    /// <summary>Same id and cells. Not <c>Equals</c>: the table may tell rows apart by reference.</summary>
+    public bool SameAs(TableRow other) => JsonNode.DeepEquals(Id, other.Id) && JsonNode.DeepEquals(Cells, other.Cells);
 }
 
 internal sealed class TableComponent : IUiComponent
@@ -1265,7 +1317,8 @@ internal sealed class TableComponent : IUiComponent
         var table = (Table)control;
         var columns = (Arr(state.Props, "columns") ?? []).OfType<JsonObject>().ToList();
         var signature = string.Join("|", columns.Select(c => $"{Str(c, "id")}:{Str(c, "title")}:{Str(c, "format")}"));
-        if (!Equals(state.Extra, signature))
+        var newColumns = !Equals(state.Extra, signature);
+        if (newColumns)
         {
             table.Columns.Clear();
             for (var i = 0; i < columns.Count; i++)
@@ -1285,8 +1338,10 @@ internal sealed class TableComponent : IUiComponent
             }
             state.Extra = signature;
         }
-        table.ItemsSource = (Arr(state.Props, "rows") ?? []).OfType<JsonObject>().Take(5000)
+        var rows = (Arr(state.Props, "rows") ?? []).OfType<JsonObject>().Take(5000)
             .Select(r => new TableRow(r["id"]?.DeepClone(), r["cells"] as JsonArray is { } cells ? (JsonArray)cells.DeepClone() : [])).ToList();
+        // Only a real change (or new columns, whose cells are read from the rows again): new rows rebuild every row.
+        if (newColumns || table.ItemsSource is not List<TableRow> old || old.Count != rows.Count || !old.Zip(rows).All(pair => pair.First.SameAs(pair.Second))) table.ItemsSource = rows;
     }
 
     private static string Display(JsonNode? cell, bool compact = false) => cell switch

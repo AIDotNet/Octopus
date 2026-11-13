@@ -42,6 +42,8 @@ public partial class ExplorerPanelView : UserControl
     {
         ProjectPathProperty.Changed.AddClassHandler<ExplorerPanelView>((view, e) => view.OnProjectChanged());
         TrailingInsetProperty.Changed.AddClassHandler<ExplorerPanelView>((view, e) => view.ApplyTrailingInset());
+        // A closed panel (the shell hides it) does no work; it catches up when it opens again.
+        IsVisibleProperty.Changed.AddClassHandler<ExplorerPanelView>((view, e) => view.Model.IsActive = view.IsVisible);
         ProjectNameProperty.Changed.AddClassHandler<ExplorerPanelView>((view, e) => view.Model.ProjectName = view.ProjectName ?? (view.ProjectPath is { } p ? PathText.NameOf(p) : ""));
     }
 

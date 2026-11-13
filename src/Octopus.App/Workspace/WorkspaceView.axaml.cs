@@ -20,6 +20,15 @@ public partial class WorkspaceView : UserControl
 
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Grid, StripAddButton> _addButtons = [];
 
+    /// <summary>
+    /// The group views and their strip rows as the last walk of the tree found them, with where each group was then
+    /// (<see cref="ApplyStrips"/>). Row and origin are null when the group had none yet.
+    /// </summary>
+    private readonly List<(Control Group, Grid? Row, Rect Bounds, Point? Origin)> _found = [];
+
+    /// <summary>The view's own bounds at that walk.</summary>
+    private Rect _foundIn;
+
     public WorkspaceView()
     {
         InitializeComponent();
@@ -59,6 +68,13 @@ public partial class WorkspaceView : UserControl
         Avalonia.Threading.Dispatcher.UIThread.Post(() => layout.IsLocked = false, Avalonia.Threading.DispatcherPriority.Input);
     }
 
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        // Not kept alive by this view; found again on the next layout pass.
+        _found.Clear();
+    }
+
     private DockLayout? CurrentLayoutOrNull() => (DataContext as WorkspaceViewModel)?.CurrentLayout as DockLayout;
 
     /// <summary>Room the tab strip of the group at the top left keeps free (the collapsed sidebar's lead).</summary>
@@ -78,12 +94,18 @@ public partial class WorkspaceView : UserControl
     /// chevron or the "..." button.</item>
     /// </list>
     /// Every value is only written when it changed, so the layout pass this triggers settles after one round.
+    /// This runs after every layout pass of the window (a working agent's tab icon alone causes about ten a second), so
+    /// the tree is only walked again when the groups found last time may no longer be all of them.
     /// </summary>
     private void ApplyStrips()
     {
-        foreach (var group in GroupViews(this))
+        if (!FoundGroupsHold())
         {
-            if (FindStripRow(group) is not { } row || group.TranslatePoint(default, this) is not { } origin)
+            FindGroups();
+        }
+        foreach (var (group, foundRow, _, foundOrigin) in _found)
+        {
+            if (foundRow is not { } row || foundOrigin is not { } origin)
             {
                 continue;
             }
@@ -97,6 +119,39 @@ public partial class WorkspaceView : UserControl
             }
             PlaceAddButton(group, row);
         }
+    }
+
+    /// <summary>
+    /// True while the walk's result still stands: every group found then is still in the tree with its strip row, in the
+    /// same place and size, and the view kept its own bounds. The groups tile the dock, so a group that is added takes room
+    /// from one of these (or the view resized), a closed group leaves the tree and a new layout replaces them all; any of
+    /// that makes this false. With no group found yet it is false, so an empty workspace keeps looking.
+    /// </summary>
+    private bool FoundGroupsHold()
+    {
+        if (_found.Count == 0 || Bounds != _foundIn)
+        {
+            return false;
+        }
+        foreach (var (group, row, bounds, origin) in _found)
+        {
+            if (row is null || !row.IsAttachedToVisualTree() || !group.IsAttachedToVisualTree() || group.Bounds != bounds
+                || group.TranslatePoint(default, this) != origin)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void FindGroups()
+    {
+        _found.Clear();
+        foreach (var group in GroupViews(this))
+        {
+            _found.Add((group, FindStripRow(group), group.Bounds, group.TranslatePoint(default, this)));
+        }
+        _foundIn = Bounds;
     }
 
     private void PlaceAddButton(Control group, Grid row)
@@ -136,9 +191,12 @@ public partial class WorkspaceView : UserControl
             strip.Margin = new Thickness(0, 0, reserve, 0);
         }
         var lastRight = 0.0;
-        foreach (var tab in strip.GetVisualChildren().OfType<Control>().Where(c => c.GetType().Name == "DockTab"))
+        foreach (var child in strip.GetVisualChildren())
         {
-            lastRight = Math.Max(lastRight, tab.Bounds.Right);
+            if (child is Control tab && tab.GetType().Name == "DockTab")
+            {
+                lastRight = Math.Max(lastRight, tab.Bounds.Right);
+            }
         }
         // Follows the last tab; at the end of the visible tab area when the tabs do not fit (the strip clips them there).
         var x = strip.Bounds.X + Math.Min(lastRight, strip.Bounds.Width) + AddGap;

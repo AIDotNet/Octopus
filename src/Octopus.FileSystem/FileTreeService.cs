@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using Octopus.Platform;
 
 namespace Octopus.FileSystem;
@@ -62,32 +63,24 @@ public sealed class FileTreeService(ITrashService? trash = null) : IFileTreeServ
         else File.Move(from, to);
     }
 
+    private static readonly EnumerationOptions ListOptions = new() { AttributesToSkip = 0, IgnoreInaccessible = true };
+
     public IReadOnlyList<FileEntry> List(string directory)
     {
         try
         {
-            var entries = new List<FileEntry>();
-            foreach (var path in Directory.EnumerateFileSystemEntries(directory))
+            // The enumerator's own entry data: whether an entry is a folder comes with the directory read itself, without
+            // a FileInfo (and its lookup) per entry. A link to a folder is listed as a folder: expanding it reads the
+            // target once; the tree is lazy, so a cycle only costs the depth the person opens.
+            var entries = new FileSystemEnumerable<FileEntry?>(directory, static (ref FileSystemEntry e) =>
             {
-                var name = Path.GetFileName(path);
-                bool isDirectory;
-                var hidden = name.StartsWith('.');
-                try
-                {
-                    var info = new FileInfo(path);
-                    var attributes = info.Attributes;
-                    hidden |= (attributes & FileAttributes.Hidden) != 0;
-                    // A link to a folder is listed as a folder: expanding it reads the target once; the tree is lazy,
-                    // so a cycle only costs the depth the person opens.
-                    isDirectory = (attributes & FileAttributes.Directory) != 0;
-                }
-                catch (Exception)
-                {
-                    isDirectory = Directory.Exists(path);
-                }
-                if (isDirectory && name == ".git") continue;
-                entries.Add(new FileEntry(name, path, isDirectory, hidden));
-            }
+                var isDirectory = e.IsDirectory;
+                if (isDirectory && e.FileName is ".git") return null;
+                var name = e.FileName.ToString();
+                return new FileEntry(name, e.ToFullPath(), isDirectory, name.StartsWith('.') || e.IsHidden);
+            }, ListOptions)
+                .OfType<FileEntry>()
+                .ToList();
             entries.Sort(static (a, b) =>
                 a.IsDirectory != b.IsDirectory ? (a.IsDirectory ? -1 : 1) : NaturalStringComparer.Instance.Compare(a.Name, b.Name));
             return entries;

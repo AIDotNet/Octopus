@@ -150,7 +150,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     public void Send(ReadOnlySpan<byte> bytes) => _link?.Writes.Writer.TryWrite(bytes.ToArray());
 
     /// <summary>Queues UTF-8 text for the process.</summary>
-    public void Send(string text) => Send(System.Text.Encoding.UTF8.GetBytes(text));
+    public void Send(string text) => _link?.Writes.Writer.TryWrite(System.Text.Encoding.UTF8.GetBytes(text));
 
     /// <summary>Changes the grid: the core first, then the pty (with pixel size).</summary>
     public void Resize(TerminalSize size)

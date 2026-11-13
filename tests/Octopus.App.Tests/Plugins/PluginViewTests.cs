@@ -78,6 +78,125 @@ public sealed class PluginViewTests
         Assert.NotSame(input, second.GetLogicalDescendants().OfType<Input>().Single());
     }
 
+    private static JsonObject Node(string json) => JsonNode.Parse(json)!.AsObject();
+
+    [AvaloniaFact]
+    public void Renderer_DoesNotApplyUnchangedProperties_Again()
+    {
+        var renderer = new UiRenderer(new RecordingSink());
+        var first = renderer.Render(Node("""{ "t": "Link", "p": { "label": "Docs" } }"""), null);
+        var window = new Window { Content = first };
+        window.Show();
+        // The link builds its label on each update: the same label object means the update was skipped.
+        var label = ((TKCode.Arc.Button)first).Content;
+        renderer.Render(Node("""{ "t": "Link", "p": { "label": "Docs" } }"""), first);
+        Assert.Same(label, ((TKCode.Arc.Button)first).Content);
+        renderer.Render(Node("""{ "t": "Link", "p": { "label": "Help" } }"""), first);
+        Assert.Equal("Help", Assert.IsType<TextBlock>(((TKCode.Arc.Button)first).Content).Text);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Renderer_KeepsTokenBindingsThatStay_AndReleasesTheOthers()
+    {
+        ArcTheme.Apply(b => b.Appearance(ArcAppearance.Light));
+        var renderer = new UiRenderer(new RecordingSink());
+        var column = (Border)renderer.Render(Node("""{ "t": "Column", "p": { "background": "surface" }, "c": [ { "t": "Text", "p": { "value": "a", "variant": "mono", "color": "accent" } } ] }"""), null);
+        var window = new Window { Content = column };
+        window.Show();
+        Frames.Pump();
+        var text = column.GetLogicalDescendants().OfType<SelectableTextBlock>().Single();
+        Assert.NotNull(column.Background);
+        Assert.True(text.IsSet(TextBlock.FontFamilyProperty));
+        var accent = text.Foreground;
+
+        // Another value, same tokens: the bindings stay and still give the token's value.
+        renderer.Render(Node("""{ "t": "Column", "p": { "background": "surface", "gap": 1 }, "c": [ { "t": "Text", "p": { "value": "b", "variant": "mono", "color": "accent" } } ] }"""), column);
+        Frames.Pump();
+        Assert.Equal("b", text.Text);
+        Assert.Equal(accent, text.Foreground);
+
+        // Tokens no longer asked for are released: no background, the default font, another color.
+        renderer.Render(Node("""{ "t": "Column", "p": {}, "c": [ { "t": "Text", "p": { "value": "b", "color": "danger" } } ] }"""), column);
+        Frames.Pump();
+        Assert.Null(column.Background);
+        Assert.False(text.IsSet(TextBlock.FontFamilyProperty));
+        Assert.Equal(Token(ArcDesignTokenKind.Danger), (text.Foreground as Avalonia.Media.ISolidColorBrush)?.Color);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Renderer_LeavesGridDefinitionsAlone_WhenTheyDoNotChange()
+    {
+        var renderer = new UiRenderer(new RecordingSink());
+        var column = (Border)renderer.Render(Node("""{ "t": "Column", "c": [ { "t": "Text", "p": { "value": "a" } }, { "t": "Text", "p": { "value": "b" } } ] }"""), null);
+        var grid = (Grid)column.Child!;
+        var row = grid.RowDefinitions[0];
+        renderer.Render(Node("""{ "t": "Column", "c": [ { "t": "Text", "p": { "value": "c" } }, { "t": "Text", "p": { "value": "d" } } ] }"""), column);
+        Assert.Same(row, grid.RowDefinitions[0]);
+        renderer.Render(Node("""{ "t": "Column", "c": [ { "t": "Text", "p": { "value": "c", "grow": 1 } }, { "t": "Text", "p": { "value": "d" } } ] }"""), column);
+        Assert.Equal(new GridLength(1, GridUnitType.Star), grid.RowDefinitions[0].Height);
+    }
+
+    [AvaloniaFact]
+    public void Split_KeepsDraggedSizesAndPanes_UntilItsShapeChanges()
+    {
+        var renderer = new UiRenderer(new RecordingSink());
+        const string Two = """{ "t": "Split", "c": [ { "t": "Text", "p": { "value": "%1" } }, { "t": "Text", "p": { "value": "%2" } } ] }""";
+        var split = (Grid)renderer.Render(Node(Two.Replace("%1", "a").Replace("%2", "b")), null);
+        var splitter = split.Children.OfType<GridSplitter>().Single();
+        var pane = split.Children.OfType<SelectableTextBlock>().First();
+        // As if the user dragged the splitter.
+        split.ColumnDefinitions[0].Width = new GridLength(3, GridUnitType.Star);
+
+        renderer.Render(Node(Two.Replace("%1", "c").Replace("%2", "d")), split);
+        Assert.Equal(new GridLength(3, GridUnitType.Star), split.ColumnDefinitions[0].Width);
+        Assert.Same(splitter, split.Children.OfType<GridSplitter>().Single());
+        Assert.Same(pane, split.Children.OfType<SelectableTextBlock>().First());
+        Assert.Equal("c", pane.Text);
+
+        // A pane of another type takes the old one's place.
+        renderer.Render(Node("""{ "t": "Split", "c": [ { "t": "Text", "p": { "value": "c" } }, { "t": "Badge", "p": { "text": "x" } } ] }"""), split);
+        Assert.Equal(3, split.Children.Count);
+        Assert.Equal(2, Grid.GetColumn(split.Children.OfType<Badge>().Single()));
+
+        // A third pane lays the split out again.
+        renderer.Render(Node("""{ "t": "Split", "c": [ { "t": "Text" }, { "t": "Text" }, { "t": "Text" } ] }"""), split);
+        Assert.Equal(5, split.ColumnDefinitions.Count);
+        Assert.Equal(2, split.Children.OfType<GridSplitter>().Count());
+    }
+
+    private sealed class RecordingSurface : IPluginSurface
+    {
+        public List<JsonNode?> Trees { get; } = [];
+        public void Update(JsonNode? tree) => Trees.Add(tree);
+    }
+
+    [AvaloniaFact]
+    public void Workbench_RendersOnlyTheLatestTree_WhenSeveralWait()
+    {
+        var workbench = AppHost.Get<PluginWorkbench>();
+        var surface = new RecordingSurface();
+        workbench.Attach("test.coalesce", "v1", surface);
+        try
+        {
+            workbench.PostTree("test.coalesce", "v1", Node("""{ "n": 1 }"""));
+            workbench.PostTree("test.coalesce", "v1", Node("""{ "n": 2 }"""));
+            workbench.PostTree("test.coalesce", "v1", Node("""{ "n": 3 }"""));
+            Frames.Pump();
+            Assert.Equal(["""{"n":3}"""], surface.Trees.Select(t => t!.ToJsonString()));
+
+            // Once that render ran, a new tree gets a render of its own.
+            workbench.PostTree("test.coalesce", "v1", Node("""{ "n": 4 }"""));
+            Frames.Pump();
+            Assert.Equal(2, surface.Trees.Count);
+        }
+        finally
+        {
+            workbench.Detach("test.coalesce", "v1", surface);
+        }
+    }
+
     private const string CounterPlugin = """
         import { commands, indicators, ui, views } from 'octopus';
         export function activate(ctx) {

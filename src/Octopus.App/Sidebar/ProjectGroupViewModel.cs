@@ -92,6 +92,13 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
     /// <summary>Dimmed like a project square that is not current.</summary>
     public double FolderOpacity => HasCurrent ? 1 : 0.72;
 
+    /// <summary>The current project changed (the squares were updated in place): the folder's ring follows.</summary>
+    public void RefreshCurrent()
+    {
+        OnPropertyChanged(nameof(HasCurrent));
+        OnPropertyChanged(nameof(FolderOpacity));
+    }
+
     /// <summary>The group's color (data, like a project's color): the open folder icon.</summary>
     public IBrush Tint { get; }
     public IBrush FolderBackground { get; }

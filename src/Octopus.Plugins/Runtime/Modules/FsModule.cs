@@ -361,12 +361,22 @@ public sealed class FsModule : IPluginApiModule
         }
         var recursive = subscription.Args?["recursive"]?.GetValue<bool>() ?? false;
         var last = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
+        var swept = Environment.TickCount64;
         var watcher = new FileSystemWatcher(decision.RealPath!) { IncludeSubdirectories = recursive, NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size };
         void Report(string type, string changed)
         {
             var now = Environment.TickCount64;
             if (last.TryGetValue(changed, out var before) && now - before < 200 && type == "changed") return;
             last[changed] = now;
+            // Only the last 200 ms matter: forget older paths now and then, or a long watch keeps every path it saw.
+            if (now - swept > 10_000)
+            {
+                swept = now;
+                foreach (var (path, at) in last)
+                {
+                    if (now - at >= 200) last.TryRemove(new KeyValuePair<string, long>(path, at));
+                }
+            }
             var current = GrantsOf(plugin);
             if (!_policy.Check(current.Set, changed, FileAccessKind.Read, current.Context).Allowed) return;
             plugin.EmitTo(subscription.Key, new JsonObject { ["type"] = type, ["path"] = changed });
@@ -398,7 +408,9 @@ public sealed class FsModule : IPluginApiModule
     {
         var grants = plugin.Grants;
         var project = _projects.Current?.Path;
-        var accounts = _hub is null ? 0 : _agents.Definitions.Sum(d => _hub.Accounts(d.Id).Count);
+        // A version, not the accounts themselves: this runs for every path a call touches (each file of a text
+        // search, each watch event), and listing every agent's accounts each time would cost more than the check.
+        var accounts = _hub?.AccountsVersion ?? 0;
         if (_grants.TryGetValue(plugin.Id, out var cached) && ReferenceEquals(cached.Source, grants) && cached.Project == project && cached.Accounts == accounts)
         {
             return cached;

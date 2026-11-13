@@ -292,7 +292,7 @@ public class ProjectGroupTests
         Assert.True(GroupEntry(rail, work.Id).IsWorking);
         Assert.False(Chip(b).IsWorking);
 
-        // A rebuild of the rail keeps it.
+        // Choosing another project keeps it.
         projects.SetCurrent(b.Id);
         Assert.True(Chip(a).IsWorking);
         Assert.True(GroupEntry(rail, work.Id).IsWorking);
@@ -326,5 +326,54 @@ public class ProjectGroupTests
         Assert.Equal("Clients", panel.GroupName);
         projects.MoveProjectToGroup(a.Id, null);
         Assert.False(panel.HasGroup);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public void Choosing_another_project_moves_the_ring_without_rebuilding_the_rail()
+    {
+        var projects = AppHost.Get<IProjectService>();
+        var rail = AppHost.Get<ProjectRailViewModel>();
+        var a = Add("a");
+        var b = Add("b");
+        var work = projects.AddGroup("Work", [a.Id]);
+        projects.SetExpandedGroup(null);
+        var chips = rail.Chips.ToList();
+        var entries = rail.Entries.ToList();
+        ProjectChipViewModel Chip(Project p) => rail.Chips.Single(x => x.Id == p.Id);
+        Assert.True(Chip(b).IsCurrent);
+        Assert.False(GroupEntry(rail, work.Id).HasCurrent);
+
+        var changed = new List<string?>();
+        Chip(a).PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        projects.SetCurrent(a.Id);
+
+        // The same squares and folders, with the ring moved.
+        Assert.Equal(chips, rail.Chips);
+        Assert.Equal(entries, rail.Entries);
+        Assert.True(Chip(a).IsCurrent);
+        Assert.False(Chip(b).IsCurrent);
+        Assert.Equal(1, Chip(a).ChipOpacity);
+        Assert.Contains(nameof(ProjectChipViewModel.ChipOpacity), changed);
+        Assert.True(GroupEntry(rail, work.Id).HasCurrent);
+        Assert.Equal(1, GroupEntry(rail, work.Id).FolderOpacity);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public void Activating_another_item_moves_the_highlight_without_rebuilding_the_panel()
+    {
+        var projects = AppHost.Get<IProjectService>();
+        var panel = AppHost.Get<ProjectPanelViewModel>();
+        var a = Add("a");
+        var first = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" };
+        var second = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "bash" };
+        projects.AddItem(a, first);
+        projects.AddItem(a, second);
+        var rows = panel.Items.ToList();
+        Assert.Equal([false, true], rows.Select(r => r.IsActive).ToArray());
+
+        projects.ActivateItem(first.Id);
+
+        Assert.Equal(rows, panel.Items);
+        Assert.Equal([true, false], panel.Items.Select(r => r.IsActive).ToArray());
     }
 }

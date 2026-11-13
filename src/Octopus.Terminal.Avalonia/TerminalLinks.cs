@@ -102,6 +102,10 @@ public static partial class TerminalLinks
     }
 
     /// <summary>The link under a cell of <paramref name="frame"/>.</summary>
-    public static LinkHit? Find(FrameSnapshot frame, int row, int column) =>
-        Find(frame.Rows.Length, i => RowOf(frame.Rows[i]), row, column);
+    public static LinkHit? Find(FrameSnapshot frame, int row, int column)
+    {
+        // Each row is asked for several times while the wrapped line is found: its text is built once.
+        var rows = new LinkRow?[frame.Rows.Length];
+        return Find(frame.Rows.Length, i => rows[i] ??= RowOf(frame.Rows[i]), row, column);
+    }
 }

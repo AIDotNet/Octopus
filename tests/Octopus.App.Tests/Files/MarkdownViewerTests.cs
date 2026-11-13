@@ -72,6 +72,9 @@ public class MarkdownViewerTests
         Assert.Equal(MarkdownBanner.None, h.Markdown.Banner);
         Assert.True(h.Markdown.ShowEditor);
         Assert.False(h.Markdown.ShowPreview);
+        // The hidden preview and source are given nothing to parse or color.
+        Assert.Equal("", h.MarkdownView.PreviewView.Text ?? "");
+        Assert.Equal("", h.MarkdownView.SourceSurface.Text ?? "");
         Assert.NotNull(h.MarkdownView.EditorScrollArea);
         Assert.Contains("Some **bold** text.", h.Editor.GetMarkdown());
         Assert.True(h.Editor.IsEffectivelyVisible);
@@ -95,6 +98,7 @@ public class MarkdownViewerTests
         Assert.False(h.Markdown.CanSave);
         // The same text still shows as the file has it.
         Assert.Equal(FrontMatter, h.Markdown.Text);
+        Assert.Equal(FrontMatter, h.MarkdownView.PreviewView.Text);
     }
 
     [AvaloniaFact]
@@ -263,6 +267,8 @@ public class MarkdownViewerTests
         using var h = await FileTabHarness.OpenAsync(Wrapped);
         h.Markdown.ViewMode = MarkdownViewerModel.SourceMode;
         Assert.Equal(Wrapped, h.Markdown.SourceText);
+        Frames.Pump();
+        Assert.Equal(Wrapped, h.MarkdownView.SourceSurface.Text);
     }
 
     [AvaloniaFact]

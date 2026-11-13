@@ -50,7 +50,10 @@ public sealed partial class ProjectChipViewModel(
 
     public bool ShowInitial => !HasImage && IconKind is null && Pixel is null;
 
-    public bool IsCurrent { get; } = isCurrent;
+    /// <summary>The square of the current project. Set in place by the rail when another project is chosen.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ChipOpacity))]
+    public partial bool IsCurrent { get; set; } = isCurrent;
 
     /// <summary>The folder is on an SSH host, not on this computer.</summary>
     public bool IsRemote { get; } = project.SshHost is not null;

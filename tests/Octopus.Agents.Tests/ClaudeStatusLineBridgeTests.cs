@@ -134,6 +134,7 @@ public sealed class ClaudeStatusLineBridgeTests : IDisposable
         public AgentSignal? LastSignal(string agentId, string channel, string? itemId = null) => null;
         public void ForgetItem(string itemId) { }
         public IReadOnlyList<AgentAccount> Accounts(string agentId) => [];
+        public int AccountsVersion => 0;
         public void Publish(AgentSignal signal) => Published.Add(signal);
         public string RegisterAccount(string agentId, string directory)
         {

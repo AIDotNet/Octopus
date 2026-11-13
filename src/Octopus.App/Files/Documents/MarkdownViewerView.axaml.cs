@@ -54,7 +54,7 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
             case nameof(MarkdownViewerModel.LoadId):
                 LoadEditorIfNeeded();
                 break;
-            case nameof(MarkdownViewerModel.Text):
+            case nameof(MarkdownViewerModel.PreviewText):
                 KeepPreviewPlace();
                 break;
         }
@@ -72,7 +72,8 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
         editor.ImageLoading += OnImageLoading;
         EditorHost.Child = editor;
         Editor = editor;
-        model.EditorLoaded(editor.GetMarkdown());
+        // The fidelity check already exported this text from an editor like this one: no second export of a large file.
+        model.EditorLoaded(model.ExportOfEditorText ?? editor.GetMarkdown());
         // Edits are reported from here on; the load itself raised nothing the model could mistake for one.
         editor.ContentChanged += (_, _) => _model?.EditorChanged();
     }
@@ -84,7 +85,7 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
         e.StreamTask = Task.Run(() => MarkdownImagePath.Open(file));
     }
 
-    /// <summary>The file changed on disk and the preview parses again: it returns to where it was once the new document is ready.</summary>
+    /// <summary>The preview's text changed and it parses again: it returns to where it was once the new document is ready.</summary>
     private void KeepPreviewPlace()
     {
         var offset = PreviewScroller.Offset;

@@ -283,4 +283,32 @@ public sealed class RuntimeTests : IAsyncDisposable
         Assert.Equal(PluginHostState.Running, manager.Find("acme.codex")!.State);
         Assert.Equal(PluginHostState.Inactive, manager.Find("acme.lazy")!.State);
     }
+
+    [Fact]
+    public async Task A_project_activates_onProject_plugins_and_those_whose_file_it_contains()
+    {
+        _h.Plugin("acme.any", "export function activate() {}", """ "activation": ["onProject"] """);
+        _h.Plugin("acme.node", "export function activate() {}", """ "activation": ["onProject:contains:package.json"] """);
+        _h.Plugin("acme.nested", "export function activate() {}", """ "activation": ["onProject:contains:*/Cargo.toml"] """);
+        _h.Plugin("acme.go", "export function activate() {}", """ "activation": ["onProject:contains:go.mod"] """);
+        var manager = await _h.StartAsync();
+        var project = Directory.CreateTempSubdirectory("octopus-project-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(project, "package.json"), "{}");
+            Directory.CreateDirectory(Path.Combine(project, "core"));
+            File.WriteAllText(Path.Combine(project, "core", "Cargo.toml"), "");
+
+            await manager.ProjectOpenedAsync(project);
+
+            Assert.Equal(PluginHostState.Running, manager.Find("acme.any")!.State);
+            Assert.Equal(PluginHostState.Running, manager.Find("acme.node")!.State);
+            Assert.Equal(PluginHostState.Running, manager.Find("acme.nested")!.State);
+            Assert.Equal(PluginHostState.Inactive, manager.Find("acme.go")!.State);
+        }
+        finally
+        {
+            Directory.Delete(project, recursive: true);
+        }
+    }
 }

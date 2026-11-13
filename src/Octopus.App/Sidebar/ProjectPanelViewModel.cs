@@ -87,6 +87,17 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             row.RefreshTitle();
             return;
         }
+        // Another tab was clicked: only the highlight moves. The rows (and their views) stay, so a tab click does not
+        // rebuild the whole list.
+        if (e.Kind == ProjectChangeKind.Active)
+        {
+            var active = _projects.Current?.ActiveItemId;
+            foreach (var item in Items)
+            {
+                item.IsActive = item.Id == active;
+            }
+            return;
+        }
         if (e.Kind is not (ProjectChangeKind.Layout or ProjectChangeKind.GroupExpanded or ProjectChangeKind.Tunnels) && !_moving)
         {
             Rebuild();

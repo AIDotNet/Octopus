@@ -17,6 +17,10 @@ public sealed class InMemorySettingsStore : ISettingsStore
         Current = SettingsNormalizer.Normalize(Current);
         Changed?.Invoke(this, EventArgs.Empty);
     }
+
+    public void Flush()
+    {
+    }
 }
 
 /// <summary>A project store that keeps the document in memory.</summary>

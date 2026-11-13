@@ -86,7 +86,7 @@ public sealed partial class CodeViewerModel : FileViewerModel
 /// <summary>The quiet line of facts the bar shows for a text file; shared by the code and the Markdown viewer.</summary>
 internal static class CodeMeta
 {
-    public static int CountLines(string text) => text.Length == 0 ? 0 : text.Count(c => c == '\n') + (text[^1] == '\n' ? 0 : 1);
+    public static int CountLines(string text) => text.Length == 0 ? 0 : text.AsSpan().Count('\n') + (text[^1] == '\n' ? 0 : 1);
 
     public static string Describe(string language, int lines, long size)
     {

@@ -22,8 +22,11 @@ public interface ISettingsStore
     /// <summary>Reads the file (synchronously: the theme of the first frame needs it). Defaults when missing or damaged.</summary>
     void Load();
 
-    /// <summary>Changes <see cref="Current"/> and writes the file.</summary>
+    /// <summary>Changes <see cref="Current"/> and raises <see cref="Changed"/> at once; the file is written shortly after.</summary>
     void Update(Action<AppSettingsModel> mutate);
+
+    /// <summary>Writes a change that is still waiting to be written, before returning (the end of the app).</summary>
+    void Flush();
 }
 
 /// <summary>

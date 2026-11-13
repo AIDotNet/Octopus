@@ -68,6 +68,12 @@ public interface ISignalHub : IDisposable
     /// <summary>The account directories seen in signals from this agent since start.</summary>
     IReadOnlyList<AgentAccount> Accounts(string agentId);
 
+    /// <summary>
+    /// Grows whenever an account becomes known for any agent, so what is built from <see cref="Accounts"/> can be kept
+    /// until it changes without asking for every agent's accounts again.
+    /// </summary>
+    int AccountsVersion { get; }
+
     /// <summary>Delivers a signal produced inside the host (a probe result) like one that came from a forwarder.</summary>
     void Publish(AgentSignal signal);
 

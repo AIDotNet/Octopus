@@ -28,6 +28,14 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private IDisposable? _changeWatch;
     private IDisposable? _gitWatch;
     private int _version;
+    private bool _isActive = true;
+    /// <summary>The project the shell asked for while the panel was closed: it is read when the panel opens.</summary>
+    private (string? Path, string? Name, string? SshHost)? _pendingProject;
+    /// <summary>The local folder's watches were stopped while the panel was closed: on opening, they restart and the panel catches up.</summary>
+    private bool _paused;
+    private GitDirectories? _gitDirectories;
+    /// <summary>The git lookup of the current folder finished (whether or not it is in a repository).</summary>
+    private bool _gitLookedUp;
 
     public ExplorerPanelViewModel(
         FileTreeViewModel files,
@@ -210,13 +218,71 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     }
 
     /// <summary>
+    /// Whether the panel is on screen. A closed panel does no work: nothing it shows is used elsewhere, yet its tree,
+    /// watches and git reads would cost on every project switch, every file change and every return to the window. The
+    /// project asked for meanwhile is read when the panel opens; the watches of the project it shows stop while it is
+    /// closed and it reads again what may have changed when it opens.
+    /// </summary>
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (_isActive == value) return;
+            _isActive = value;
+            if (value) _ = ResumeAsync();
+            else Pause();
+        }
+    }
+
+    private void Pause()
+    {
+        // An SSH tree only reads when asked, so it is left as it is; a local folder's watches stop.
+        if (ProjectPath is null || IsSshProject || _pendingProject is not null) return;
+        _version++; // a git lookup still running for this folder must not start watches now
+        DisposeLocalWatches();
+        _paused = true;
+    }
+
+    private async Task ResumeAsync()
+    {
+        if (_pendingProject is { } pending)
+        {
+            await SetProjectAsync(pending.Path, pending.Name, pending.SshHost);
+            return;
+        }
+        if (!_paused || ProjectPath is not { } folder) return;
+        _paused = false;
+        var version = ++_version;
+        if (!_gitLookedUp)
+        {
+            // The git lookup had not finished when the panel closed: the folder is read again from the start.
+            await SetProjectAsync(folder, ProjectName);
+            return;
+        }
+        WatchLocal(folder);
+        Files.Reload();
+        if (version == _version) await Git.RefreshAsync(includeLog: IsGitTab);
+    }
+
+    /// <summary>
     /// Points the panel at a project folder (null: none): loads the tree, finds out about git and starts watching. A folder
     /// on an SSH host (<paramref name="sshHost"/>) is read through the host: there is no git and no search for it here.
+    /// While the panel is closed (<see cref="IsActive"/>) this only remembers the folder.
     /// </summary>
     public async Task SetProjectAsync(string? path, string? name, string? sshHost = null)
     {
         var version = ++_version;
         StopWatching();
+        _paused = false;
+        if (!_isActive)
+        {
+            _pendingProject = (path, name, sshHost);
+            return;
+        }
+        _pendingProject = null;
+        _gitDirectories = null;
+        _gitLookedUp = false;
         IsSshProject = path is not null && sshHost is not null;
         if (path is not null && sshHost is not null)
         {
@@ -238,24 +304,48 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         _watch = _tree.Watch(folder, OnDirectoryChanged);
 
         var root = await _git.FindRepositoryRootAsync(folder);
-        if (version != _version || root is null) return;
+        if (version != _version) return;
+        if (root is null)
+        {
+            _gitLookedUp = true;
+            return;
+        }
+        var directories = await _git.GetGitDirectoriesAsync(folder);
+        if (version != _version) return;
+        _gitLookedUp = true;
         Git.SetRepository(root);
         IsGitRepository = true;
+        _gitDirectories = directories;
+        WatchGit(folder);
+        await Git.RefreshAsync(includeLog: IsGitTab);
+    }
+
+    private void WatchLocal(string folder)
+    {
+        _watch = _tree.Watch(folder, OnDirectoryChanged);
+        if (IsGitRepository) WatchGit(folder);
+    }
+
+    private void WatchGit(string folder)
+    {
         // Any change in the folder (a file saved, `git add`, `git commit`, `git checkout` in a terminal) may change the status.
         _changeWatch = _tree.WatchChanges(folder, OnAnyChange, GitRefreshDelay);
-        // The repository may be above the project folder: its .git is then outside the watch above, so the real git
-        // directory (a worktree's .git is a file) is watched for HEAD, index and refs on its own.
-        if (await _git.GetGitDirectoriesAsync(folder) is { } directories && version == _version)
+        // The repository may be above the project folder (or the folder is a worktree, whose .git is a file): the real
+        // git directory is then outside the watch above and is watched for HEAD, index and refs on its own. Inside the
+        // folder it is not watched twice: each git command would otherwise be read twice.
+        if (_gitDirectories is { } directories && (IsOutside(folder, directories.GitDirectory) || IsOutside(folder, directories.CommonDirectory)))
         {
             _gitWatch = _tree.WatchGitDirectory(directories.GitDirectory, directories.CommonDirectory, OnAnyChange, GitRefreshDelay);
         }
-        await Git.RefreshAsync(includeLog: IsGitTab);
     }
+
+    private static bool IsOutside(string folder, string directory) =>
+        RealPath.Relative(RealPath.Resolve(folder), RealPath.Resolve(directory)) is null;
 
     /// <summary>The window came back to the front: files may have changed outside the app.</summary>
     public void NotifyActivated()
     {
-        if (IsGitRepository) _ = Git.RefreshAsync(includeLog: IsGitTab);
+        if (_isActive && IsGitRepository) _ = Git.RefreshAsync(includeLog: IsGitTab);
     }
 
     /// <summary>The refresh button of the active tab.</summary>
@@ -358,6 +448,11 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         _resolving = false;
         _treeBusy = false;
         UpdateBusy();
+        DisposeLocalWatches();
+    }
+
+    private void DisposeLocalWatches()
+    {
         _watch?.Dispose();
         _watch = null;
         _changeWatch?.Dispose();

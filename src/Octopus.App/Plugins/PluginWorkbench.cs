@@ -34,6 +34,7 @@ public interface IPluginSurface
 public sealed class PluginWorkbench
 {
     private readonly ConcurrentDictionary<(string Plugin, string Instance), IPluginSurface> _surfaces = new();
+    private readonly Dictionary<(string Plugin, string Instance), PendingTree> _pendingTrees = new();
     private readonly IProjectService _projects;
     private readonly IItemOpener _opener;
     private readonly IPickerService _pickers;
@@ -69,6 +70,46 @@ public sealed class PluginWorkbench
             // The surface may have closed while this waited.
             if (_surfaces.TryGetValue((pluginId, instanceId), out var current) && ReferenceEquals(current, surface)) action(surface);
         });
+    }
+
+    /// <summary>
+    /// Shows a new tree (<c>view.update</c>) on the UI thread. Only the latest tree counts: while one is waiting for the
+    /// UI thread a newer one replaces it, so a busy UI thread renders once instead of every stale tree in turn.
+    /// </summary>
+    internal void PostTree(string pluginId, string instanceId, JsonNode? tree)
+    {
+        var key = (pluginId, instanceId);
+        if (!_surfaces.TryGetValue(key, out var surface)) return;
+        PendingTree pending;
+        lock (_pendingTrees)
+        {
+            if (_pendingTrees.TryGetValue(key, out var waiting) && ReferenceEquals(waiting.Surface, surface))
+            {
+                waiting.Tree = tree;
+                return;
+            }
+            pending = new PendingTree(surface) { Tree = tree };
+            _pendingTrees[key] = pending;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            JsonNode? latest;
+            lock (_pendingTrees)
+            {
+                // From here on a newer tree needs a post of its own.
+                if (_pendingTrees.TryGetValue(key, out var waiting) && ReferenceEquals(waiting, pending)) _pendingTrees.Remove(key);
+                latest = pending.Tree;
+            }
+            // The surface may have closed while this waited.
+            if (_surfaces.TryGetValue(key, out var current) && ReferenceEquals(current, surface)) surface.Update(latest);
+        });
+    }
+
+    /// <summary>The newest tree for a surface, waiting for the UI thread.</summary>
+    private sealed class PendingTree(IPluginSurface surface)
+    {
+        public IPluginSurface Surface { get; } = surface;
+        public JsonNode? Tree { get; set; }
     }
 
     /// <summary>The event sink for one view instance: control events become <c>view.event</c> calls.</summary>

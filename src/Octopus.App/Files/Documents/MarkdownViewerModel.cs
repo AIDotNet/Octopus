@@ -50,9 +50,12 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     private byte[]? _diskBytes;
     private FileRead? _pendingDisk;
     private string? _baseline;
+    private string? _assessedText;
+    private int _lineCount;
     private bool _editorLoading;
     private bool _saveConfirmed;
     private bool _forcedEdit;
+    private bool _applying;
 
     public MarkdownViewerModel(FileViewerContext context) : base(context)
     {
@@ -69,12 +72,27 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     /// <summary>The view reads the editor's current Markdown through this (set by the view that owns the editor).</summary>
     public Func<string>? ReadEditor { get; set; }
 
+    /// <summary>
+    /// What the editor writes for <see cref="EditorText"/> when the fidelity check already exported that same text (it
+    /// loads it the same way, into an editor of the same profile); null when it did not. Saves the view a second export.
+    /// </summary>
+    public string? ExportOfEditorText =>
+        Fidelity is { } fidelity && string.Equals(_assessedText, EditorText, StringComparison.Ordinal) ? fidelity.Exported : null;
+
     /// <summary>The file's text, as the file has it on disk (line endings made LF).</summary>
     [ObservableProperty] public partial string Text { get; private set; } = "";
     [ObservableProperty] public partial long FileSize { get; private set; }
 
     /// <summary>The text of the source view: the file's, or the editor's export while there are edits.</summary>
     [ObservableProperty] public partial string SourceText { get; private set; } = "";
+
+    /// <summary>
+    /// What the read-only preview and the source view are given: <see cref="Text"/> and <see cref="SourceText"/> while
+    /// that view shows. A hidden one keeps what it last had instead of parsing or coloring the whole file at every change
+    /// on disk, and gets the current text when it shows again.
+    /// </summary>
+    [ObservableProperty] public partial string PreviewText { get; private set; } = "";
+    [ObservableProperty] public partial string SourceViewText { get; private set; } = "";
 
     [ObservableProperty] public partial string ViewMode { get; set; } = RenderedMode;
 
@@ -117,16 +135,20 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     public bool BannerIsSaveFailed => Banner == MarkdownBanner.SaveFailed;
     public string LanguageName => "md";
 
-    public string MetaText => CodeMeta.Describe("md", CodeMeta.CountLines(Text), FileSize);
+    public string MetaText => CodeMeta.Describe("md", _lineCount, FileSize);
 
     public override bool HasUnsavedChanges => IsDirty && IsEditing;
     public override bool CanSave => IsEditing;
 
     partial void OnTextChanged(string value)
     {
+        _lineCount = CodeMeta.CountLines(value);
         OnPropertyChanged(nameof(MetaText));
         RefreshSource();
+        FeedViews();
     }
+
+    partial void OnSourceTextChanged(string value) => FeedViews();
 
     partial void OnFileSizeChanged(long value) => OnPropertyChanged(nameof(MetaText));
     partial void OnViewModeChanged(string value)
@@ -168,6 +190,14 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
         OnPropertyChanged(nameof(ShowEditor));
         OnPropertyChanged(nameof(ShowPreview));
         OnPropertyChanged(nameof(ShowSource));
+        FeedViews();
+    }
+
+    private void FeedViews()
+    {
+        if (_applying) return;
+        if (ShowPreview) PreviewText = Text;
+        if (ShowSource) SourceViewText = SourceText;
     }
 
     private void RefreshSource() =>
@@ -202,6 +232,21 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     /// <summary>Takes a read of the file as the new truth: text, verdict on editing, what the view shows. Edits are gone.</summary>
     private void Apply(FileRead read)
     {
+        // The views are fed once the verdict on editing is in: the preview of a file that opens in the editor gets nothing.
+        _applying = true;
+        try
+        {
+            ApplyRead(read);
+        }
+        finally
+        {
+            _applying = false;
+            FeedViews();
+        }
+    }
+
+    private void ApplyRead(FileRead read)
+    {
         _pendingDisk = null;
         _saveConfirmed = false;
         IsDirty = false;
@@ -227,6 +272,7 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
         Text = document.Text;
         CanEdit = utf8 && bytes.Length <= MaxEditBytes;
         Fidelity = CanEdit ? MarkdownFidelity.Assess(document.Text) : null;
+        _assessedText = document.Text;
         IsEditing = CanEdit && (_forcedEdit || Fidelity is { HasLoss: false });
         if (!CanEdit)
         {

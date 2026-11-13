@@ -46,6 +46,23 @@ public class DiffTabTests
     }
 
     [AvaloniaFact]
+    public async Task Reading_the_same_diff_again_keeps_the_lines_the_view_has()
+    {
+        if (ExplorerFixture.FindGit() is null) return;
+        using var repo = Repository();
+        repo.Write("a.txt", "one\nTWO\nthree\n");
+        using var diff = Open(repo, "a.txt", staged: false);
+        await WaitUntil(() => diff.Rows.Count > 0);
+        var marks = diff.Marks;
+        var rows = diff.Rows;
+
+        await diff.RefreshAsync();
+
+        Assert.Same(marks, diff.Marks);
+        Assert.Same(rows, diff.Rows);
+    }
+
+    [AvaloniaFact]
     public async Task A_diff_tab_shows_numbered_lines_and_follows_the_file_and_the_index()
     {
         if (ExplorerFixture.FindGit() is null) return;

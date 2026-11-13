@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Octopus.App.Files.Documents;
+using TKCode.Arc;
 using Xunit;
 
 namespace Octopus.App.Tests.Files;
@@ -120,6 +121,21 @@ public class MarkdownFidelityTests
         var text = MarkdownViewerModel.DescribeLoss(fidelity);
         Assert.Contains(MarkdownViewerModel.Describe(MarkdownIssue.FrontMatter), text);
         Assert.Contains(MarkdownViewerModel.Describe(MarkdownIssue.HtmlBlock), text);
+    }
+
+    // The viewer takes the check's export as the baseline of an editor it loads with the same text: the two must agree.
+    [AvaloniaTheory]
+    [InlineData("")]
+    [InlineData("no newline at end")]
+    [InlineData("# Title\n\nSome **bold** and `code`.\n\n- a\n  - b\n")]
+    [InlineData("line one\nline two\n")]
+    [InlineData("| a | b |\n|:--|--:|\n| 1 | 2 |\n")]
+    [InlineData("---\ntitle: x\n---\n\n<div>x</div>\n\n~~~\ncode\n~~~\n")]
+    public void The_check_exports_what_a_loaded_editor_exports(string markdown)
+    {
+        var editor = new RichTextEditor { Profile = RichTextEditorProfile.Docs };
+        editor.Markdown = markdown;
+        Assert.Equal(editor.GetMarkdown(), MarkdownFidelity.Assess(markdown).Exported);
     }
 
     [AvaloniaFact]

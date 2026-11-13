@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -148,34 +149,42 @@ public sealed class FileSearchService : IFileSearchService
         {
             token.ThrowIfCancellationRequested();
             var directory = queue.Dequeue();
-            IEnumerable<string> children;
+            IEnumerable<(FileEntry Entry, bool Enter)> children;
             try
             {
-                children = Directory.EnumerateFileSystemEntries(directory, "*", Options);
+                // The enumerator's own entry data, not a lookup per entry: a search walks the whole tree on every pause in
+                // typing, and on a large repository that lookup was most of the time.
+                children = new FileSystemEnumerable<(FileEntry, bool)>(directory, static (ref FileSystemEntry e) =>
+                {
+                    var name = e.FileName.ToString();
+                    var isDirectory = e.IsDirectory;
+                    // A link is listed but not entered: it could loop back.
+                    var enter = isDirectory && (e.Attributes & FileAttributes.ReparsePoint) == 0;
+                    return (new FileEntry(name, e.ToFullPath(), isDirectory, name.StartsWith('.') || e.IsHidden), enter);
+                }, Options)
+                {
+                    ShouldIncludePredicate = static (ref FileSystemEntry e) => !(e.IsDirectory && SkippedDirectories.Contains(e.FileName.ToString())),
+                };
             }
             catch (Exception)
             {
                 continue;
             }
-            foreach (var path in children)
+            using var enumerator = children.GetEnumerator();
+            while (true)
             {
-                var name = Path.GetFileName(path);
-                FileAttributes attributes;
+                (FileEntry Entry, bool Enter) child;
                 try
                 {
-                    attributes = File.GetAttributes(path);
+                    if (!enumerator.MoveNext()) break;
+                    child = enumerator.Current;
                 }
                 catch (Exception)
                 {
-                    continue;
+                    break;
                 }
-                var isDirectory = (attributes & FileAttributes.Directory) != 0;
-                var isLink = (attributes & FileAttributes.ReparsePoint) != 0;
-                if (isDirectory && SkippedDirectories.Contains(name)) continue;
-                var hidden = name.StartsWith('.') || (attributes & FileAttributes.Hidden) != 0;
-                yield return new FileEntry(name, path, isDirectory, hidden);
-                // A link is listed but not entered: it could loop back.
-                if (isDirectory && !isLink) queue.Enqueue(path);
+                yield return child.Entry;
+                if (child.Enter) queue.Enqueue(child.Entry.FullPath);
             }
         }
     }

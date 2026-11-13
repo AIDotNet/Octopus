@@ -98,7 +98,8 @@ public sealed partial class ShellViewModel : ObservableObject
     partial void OnIsRightPanelOpenChanged(bool value)
     {
         OnPropertyChanged(nameof(RightColumnWidth));
-        _settings.Update(s => s.RightPanel.IsOpen = value);
+        // The constructor sets the saved value: that is no change to write (or to announce) before the first frame.
+        if (_settings.Current.RightPanel.IsOpen != value) _settings.Update(s => s.RightPanel.IsOpen = value);
     }
 
     partial void OnRightPanelWidthChanged(double value) => OnPropertyChanged(nameof(RightColumnWidth));
@@ -167,7 +168,7 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsSidebarVisible));
         OnPropertyChanged(nameof(LeftColumnWidth));
-        _settings.Update(s => s.Sidebar.IsCollapsed = value);
+        if (_settings.Current.Sidebar.IsCollapsed != value) _settings.Update(s => s.Sidebar.IsCollapsed = value);
     }
 
     partial void OnPanelWidthChanged(double value) => OnPropertyChanged(nameof(LeftColumnWidth));

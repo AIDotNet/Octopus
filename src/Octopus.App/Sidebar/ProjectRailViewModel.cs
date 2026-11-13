@@ -77,9 +77,22 @@ public sealed partial class ProjectRailViewModel : ObservableObject
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
-        if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.CurrentProject or ProjectChangeKind.Groups)
+        if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.Groups)
         {
             Rebuild();
+        }
+        else if (e.Kind == ProjectChangeKind.CurrentProject)
+        {
+            // Another project was chosen: only the rings move. The squares and folders stay as they are.
+            var current = _projects.Current?.Id;
+            foreach (var chip in Chips)
+            {
+                chip.IsCurrent = chip.Id == current;
+            }
+            foreach (var group in Entries.OfType<ProjectGroupViewModel>())
+            {
+                group.RefreshCurrent();
+            }
         }
         else if (e.Kind == ProjectChangeKind.GroupExpanded)
         {

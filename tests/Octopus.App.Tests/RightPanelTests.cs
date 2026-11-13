@@ -24,6 +24,14 @@ public class RightPanelTests
         return (window, window.GetVisualDescendants().OfType<ExplorerPanelView>().Single());
     }
 
+    private static void OpenPanel(Window window, ExplorerPanelView panel)
+    {
+        AppHost.Get<ShellViewModel>().ToggleRightPanelCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(panel.IsVisible);
+    }
+
     private static string Folder(params string[] files)
     {
         var dir = Directory.CreateTempSubdirectory("octopus-panel-").FullName;
@@ -90,7 +98,8 @@ public class RightPanelTests
     [AvaloniaFact]
     public void The_panel_follows_the_current_project()
     {
-        var (_, panel) = Open();
+        var (window, panel) = Open();
+        OpenPanel(window, panel);
         var projects = AppHost.Get<IProjectService>();
         Assert.True(panel.Model.HasNoProject);
 
@@ -117,9 +126,34 @@ public class RightPanelTests
     }
 
     [AvaloniaFact]
+    public void A_closed_panel_reads_nothing_until_it_opens()
+    {
+        var (window, panel) = Open();
+        Assert.False(panel.IsVisible);
+        var projects = AppHost.Get<IProjectService>();
+
+        var a = projects.AddProject(Folder("a.txt"));
+        Assert.Null(panel.Model.ProjectPath);
+        Assert.Empty(panel.Model.Files.Roots);
+
+        OpenPanel(window, panel);
+        Assert.Equal(a.Path, panel.Model.ProjectPath);
+        Assert.Equal(["a.txt"], panel.Model.Files.Roots.Select(n => n.Name).ToArray());
+
+        // Closed again: a file added meanwhile shows when it opens, and what was read stays.
+        AppHost.Get<ShellViewModel>().ToggleRightPanelCommand.Execute(null);
+        WaitForRight(window, 0);
+        Assert.False(panel.IsVisible);
+        File.WriteAllText(Path.Combine(a.Path, "b.txt"), "x");
+        OpenPanel(window, panel);
+        Assert.Equal(["a.txt", "b.txt"], panel.Model.Files.Roots.Select(n => n.Name).ToArray());
+    }
+
+    [AvaloniaFact]
     public void A_file_chosen_in_the_panel_opens_as_a_tab_and_an_open_one_is_activated()
     {
-        var (_, panel) = Open();
+        var (window, panel) = Open();
+        OpenPanel(window, panel);
         var projects = AppHost.Get<IProjectService>();
         var project = projects.AddProject(Folder("a.txt", "b.txt"));
         var a = panel.Model.Files.Roots.Single(n => n.Name == "a.txt");

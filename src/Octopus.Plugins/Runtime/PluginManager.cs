@@ -209,14 +209,27 @@ public sealed class PluginManager : IPluginHostOwner, IAsyncDisposable, IDisposa
     }
 
     /// <summary>The current project changed: fires <c>onProject</c> and the <c>onProject:contains:</c> events that match it.</summary>
-    public Task ProjectOpenedAsync(string? projectPath)
+    public async Task ProjectOpenedAsync(string? projectPath)
     {
         _currentProjectPath = projectPath;
-        if (projectPath is null) return Task.CompletedTask;
-        var hosts = _hosts.Values.Where(h => h.State == PluginHostState.Inactive && h.Manifest.Activation.Any(a =>
-            a == "onProject" || (a.StartsWith("onProject:contains:", StringComparison.Ordinal) && ProjectContains(projectPath, a["onProject:contains:".Length..])))).ToList();
-        return Task.WhenAll(hosts.Select(h => ActivateQuietlyAsync(h)));
+        if (projectPath is null) return;
+        var waiting = _hosts.Values.Where(h => h.State == PluginHostState.Inactive).ToList();
+        var activations = waiting.Where(h => h.Manifest.Activation.Contains("onProject")).Select(ActivateQuietlyAsync).ToList();
+        var checks = waiting.Where(h => !h.Manifest.Activation.Contains("onProject") && h.Manifest.Activation.Any(IsContains)).ToList();
+        if (checks.Count > 0)
+        {
+            // The contains checks read the project directory: not on the caller's thread, which is the UI thread at a
+            // project switch.
+            var matched = await Task.Run(() => checks.Where(h => h.Manifest.Activation.Any(a =>
+                IsContains(a) && ProjectContains(projectPath, a[ContainsPrefix.Length..]))).ToList()).ConfigureAwait(false);
+            activations.AddRange(matched.Select(ActivateQuietlyAsync));
+        }
+        await Task.WhenAll(activations).ConfigureAwait(false);
     }
+
+    private const string ContainsPrefix = "onProject:contains:";
+
+    private static bool IsContains(string activation) => activation.StartsWith(ContainsPrefix, StringComparison.Ordinal);
 
     private static bool Matches(IReadOnlyList<string> activation, string fired) =>
         activation.Any(a => a == fired || (a.StartsWith("onFile:", StringComparison.Ordinal) && fired.StartsWith("onFile:", StringComparison.Ordinal)

@@ -24,6 +24,9 @@ public sealed partial class GitPanelViewModel : ObservableObject
     private string? _root;
     private int _version;
     private List<string> _itemKeys = [];
+    private Task? _running;
+    private Task? _queued;
+    private bool _queuedLog;
 
     public GitPanelViewModel(IGitService git, IDialogService? dialogs = null)
     {
@@ -175,6 +178,10 @@ public sealed partial class GitPanelViewModel : ObservableObject
     {
         _version++;
         _root = root;
+        // A read of the previous repository still running is dropped (by the version); the new one need not wait for it.
+        _running = null;
+        _queued = null;
+        _queuedLog = false;
         Groups = [];
         Commits = [];
         Branches = [];
@@ -195,10 +202,41 @@ public sealed partial class GitPanelViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Reads the status (and, when asked, the latest commits, the branches and the stashes). A newer refresh makes an
-    /// older one drop its result.
+    /// Reads the status (and, when asked, the latest commits, the branches and the stashes). One read runs at a time:
+    /// asked again while one runs, a single further read follows it (with the commits when any of the asks wanted them),
+    /// and the returned task completes after that one. A file watcher, the window coming to the front and a command
+    /// finishing often ask at once; each would otherwise start up to four git processes.
     /// </summary>
-    public async Task RefreshAsync(bool includeLog = true)
+    public Task RefreshAsync(bool includeLog = true)
+    {
+        if (_root is null) return Task.CompletedTask;
+        if (_running is { IsCompleted: false })
+        {
+            _queuedLog |= includeLog;
+            return _queued ??= RefreshAfterRunningAsync();
+        }
+        return _running = ReadAsync(includeLog);
+    }
+
+    private async Task RefreshAfterRunningAsync()
+    {
+        try
+        {
+            await _running!;
+        }
+        catch (Exception)
+        {
+            // Its failure was already reported; the next read starts afresh.
+        }
+        var includeLog = _queuedLog;
+        _queuedLog = false;
+        _queued = null;
+        var next = ReadAsync(includeLog);
+        _running = next;
+        await next;
+    }
+
+    private async Task ReadAsync(bool includeLog)
     {
         var root = _root;
         if (root is null) return;

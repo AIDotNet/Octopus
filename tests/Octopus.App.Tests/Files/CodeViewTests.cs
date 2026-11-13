@@ -66,6 +66,27 @@ public class CodeViewTests
     }
 
     [AvaloniaFact]
+    public void Marks_equal_to_the_ones_shown_lay_nothing_out_again()
+    {
+        var (window, _, view) = Host("a\nb\nc\n", null);
+        CodeLineMark[] Marks() => [new("1", "1", "", CodeLineTint.None, 3), new("2", "", "-", CodeLineTint.Removed, 1), new("", "2", "+", CodeLineTint.Added, 2)];
+        view.Marks = Marks();
+        Frames.Pump();
+        var created = view.LayoutsCreated;
+        Assert.True(created > 0);
+
+        view.Marks = Marks(); // a new list with the same marks, as a reload of an unchanged diff brings
+        view.InvalidateVisual();
+        Frames.Pump();
+        Assert.Equal(created, view.LayoutsCreated);
+
+        view.Marks = [new("1", "1", "", CodeLineTint.None, 3), new("2", "", "-", CodeLineTint.Removed, 1), new("", "3", "+", CodeLineTint.Added, 2)];
+        Frames.Pump();
+        Assert.True(view.LayoutsCreated > created);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void A_selection_across_lines_copies_the_text_between_its_ends()
     {
         var (window, _, view) = Host("alpha beta\r\ngamma delta\r\n\tepsilon zeta\r\neta\r\n", null);

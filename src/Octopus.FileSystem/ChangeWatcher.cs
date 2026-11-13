@@ -83,22 +83,31 @@ internal sealed class ChangeWatcher : IDisposable
         }
     }
 
+    private static readonly char[] Separators = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+
+    // Runs for every event: thousands a second during a build or an install, so it looks at the path without copying it.
     private bool IsRelevant(string path)
     {
         if (_filter is not null) return _filter(path);
         if (path.Length <= _root.Length) return true;
-        var relative = path.Substring(_root.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var parts = relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
-        var git = Array.IndexOf(parts, ".git");
-        if (git < 0) return true;
-        // Inside .git only the few files that tell the repository changed are worth a refresh.
-        if (git + 1 >= parts.Length) return true;
-        return parts[git + 1] switch
+        var rest = path.AsSpan(_root.Length).TrimStart(Separators);
+        while (true)
         {
-            "index" or "HEAD" or "packed-refs" => git + 2 == parts.Length,
-            "refs" => true,
-            _ => false,
-        };
+            var cut = rest.IndexOfAny(Separators);
+            var segment = cut < 0 ? rest : rest[..cut];
+            if (segment is ".git")
+            {
+                // Inside .git only the few files that tell the repository changed are worth a refresh.
+                if (cut < 0) return true;
+                var inner = rest[(cut + 1)..];
+                var next = inner.IndexOfAny(Separators);
+                var name = next < 0 ? inner : inner[..next];
+                if (name is "index" or "HEAD" or "packed-refs") return next < 0;
+                return name is "refs";
+            }
+            if (cut < 0) return true;
+            rest = rest[(cut + 1)..];
+        }
     }
 
     private void Flush()

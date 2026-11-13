@@ -294,7 +294,7 @@ public class SettingsStoreTests
     public void RoundTrip()
     {
         using var paths = new TempPaths();
-        var store = new JsonSettingsStore(paths);
+        using var store = new JsonSettingsStore(paths);
         store.Load();
         store.Update(s =>
         {
@@ -308,6 +308,7 @@ public class SettingsStoreTests
                 Features = new() { ["web"] = "true" }
             };
         });
+        store.Flush();
         Assert.Null(store.LastError);
         var text = File.ReadAllText(paths.SettingsFile);
         Assert.Contains("\"theme\": \"dark\"", text);
@@ -329,7 +330,7 @@ public class SettingsStoreTests
     public void UpdateRaisesChanged()
     {
         using var paths = new TempPaths();
-        var store = new JsonSettingsStore(paths);
+        using var store = new JsonSettingsStore(paths);
         var count = 0;
         store.Changed += (_, _) => count++;
         store.Update(s => s.Sidebar.IsCollapsed = true);
@@ -343,7 +344,7 @@ public class SettingsStoreTests
         using var paths = new TempPaths();
         Directory.CreateDirectory(paths.DataDirectory);
         File.WriteAllText(paths.SettingsFile, """{ "sidebar": { "width": 9999 }, "terminal": { "fontSize": 2, "scrollbackLines": 5 }, "appearance": null, "agents": null }""");
-        var store = new JsonSettingsStore(paths);
+        using var store = new JsonSettingsStore(paths);
         store.Load();
         Assert.Equal(480, store.Current.Sidebar.Width);
         Assert.Equal(8, store.Current.Terminal.FontSize);
@@ -385,9 +386,62 @@ public class SettingsStoreTests
         using var paths = new TempPaths();
         Directory.CreateDirectory(Path.GetDirectoryName(paths.DataDirectory)!);
         File.WriteAllText(paths.DataDirectory, "i am a file, not a directory");
-        var store = new JsonSettingsStore(paths);
+        using var store = new JsonSettingsStore(paths);
         store.Update(s => s.Appearance.Theme = "dark");
+        Assert.Equal("dark", store.Current.Appearance.Theme);
+        store.Flush();
         Assert.NotNull(store.LastError);
         Assert.Equal("dark", store.Current.Appearance.Theme);
+    }
+
+    [Fact]
+    public void UpdateWritesLaterAndFlushWritesNow()
+    {
+        using var paths = new TempPaths();
+        using var store = new JsonSettingsStore(paths);
+        store.Update(s => s.Terminal.FontSize = 14);
+        store.Update(s => s.Terminal.FontSize = 15);
+        // The change is current at once, before the file is written.
+        Assert.Equal(15, store.Current.Terminal.FontSize);
+        store.Flush();
+        var second = new JsonSettingsStore(paths);
+        second.Load();
+        Assert.Equal(15, second.Current.Terminal.FontSize);
+    }
+
+    [Fact]
+    public void PendingChangeIsWrittenOnItsOwn()
+    {
+        using var paths = new TempPaths();
+        using var store = new JsonSettingsStore(paths);
+        store.Update(s => s.Appearance.Theme = "light");
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!File.Exists(paths.SettingsFile) && DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(20);
+        }
+        Assert.Contains("\"theme\": \"light\"", File.ReadAllText(paths.SettingsFile));
+    }
+
+    [Fact]
+    public void DisposeWritesThePendingChange()
+    {
+        using var paths = new TempPaths();
+        var store = new JsonSettingsStore(paths);
+        store.Update(s => s.Sidebar.Width = 300);
+        store.Dispose();
+        var second = new JsonSettingsStore(paths);
+        second.Load();
+        Assert.Equal(300, second.Current.Sidebar.Width);
+    }
+
+    [Fact]
+    public void LoadKeepsAChangeNotWrittenYet()
+    {
+        using var paths = new TempPaths();
+        using var store = new JsonSettingsStore(paths);
+        store.Update(s => s.Sidebar.IsCollapsed = true);
+        store.Load();
+        Assert.True(store.Current.Sidebar.IsCollapsed);
     }
 }

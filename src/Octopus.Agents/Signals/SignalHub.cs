@@ -52,6 +52,7 @@ public sealed class SignalHub : ISignalHub
     private Socket? _listener;
     private NamedPipeServerStream? _listeningPipe;
     private string? _directory;
+    private int _accountsVersion;
     private long _received;
     private long _dropped;
     private bool _disposed;
@@ -150,6 +151,8 @@ public sealed class SignalHub : ISignalHub
         return _accounts.Values.Where(a => a.AgentId == agent).OrderBy(a => a.Directory, StringComparer.Ordinal).ToList();
     }
 
+    public int AccountsVersion => Volatile.Read(ref _accountsVersion);
+
     public string RegisterAccount(string agentId, string directory)
     {
         var definition = _catalog.Find(agentId);
@@ -158,9 +161,14 @@ public sealed class SignalHub : ISignalHub
         var key = SignalAccounts.KeyOfDirectory(resolved);
         if (key.Length > 0)
         {
-            _accounts.TryAdd((definition.Id, key), new AgentAccount(definition.Id, key, resolved, SignalAccounts.DefaultLabel(resolved)));
+            AddAccount(new AgentAccount(definition.Id, key, resolved, SignalAccounts.DefaultLabel(resolved)));
         }
         return key;
+    }
+
+    private void AddAccount(AgentAccount account)
+    {
+        if (_accounts.TryAdd((account.AgentId, account.Key), account)) Interlocked.Increment(ref _accountsVersion);
     }
 
     public void Publish(AgentSignal signal)
@@ -210,7 +218,7 @@ public sealed class SignalHub : ISignalHub
         var key = SignalAccounts.KeyOfDirectory(directory);
         if (key.Length > 0)
         {
-            _accounts.TryAdd((definition.Id, key), new AgentAccount(definition.Id, key, directory, SignalAccounts.DefaultLabel(directory)));
+            AddAccount(new AgentAccount(definition.Id, key, directory, SignalAccounts.DefaultLabel(directory)));
         }
         return new AgentSignal(
             definition.Id,

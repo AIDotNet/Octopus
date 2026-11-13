@@ -79,6 +79,7 @@ public sealed class CodeView : Control, ILogicalScrollable
     private Typeface _typeface = Typeface.Default;
     private Typeface _italic = Typeface.Default;
     private double _gutterWidth;
+    private int _markNumberCells = 1;
     private double _textLeft;
     private double _rightPad;
     private int _wrapCols = int.MaxValue;
@@ -94,6 +95,8 @@ public sealed class CodeView : Control, ILogicalScrollable
     // Caches of what is in view.
     private readonly Dictionary<int, RowLayout> _rows = [];
     private readonly Dictionary<int, TextLayout> _numbers = [];
+    private readonly Dictionary<string, TextLayout> _markNumbers = [];
+    private readonly Dictionary<(string, CodeLineTint), TextLayout> _markers = [];
     private GenericTextRunProperties?[] _roleProps = new GenericTextRunProperties?[10];
     private IBrush?[] _roleBrushes = new IBrush?[10];
 
@@ -260,10 +263,12 @@ public sealed class CodeView : Control, ILogicalScrollable
         }
         else if (property == MarksProperty)
         {
+            // A reload that brings the same marks changes nothing drawn: the colors and laid out rows stay.
+            if (change.OldValue is IReadOnlyList<CodeLineMark> before && change.NewValue is IReadOnlyList<CodeLineMark> after && before.SequenceEqual(after)) return;
             _metricsDirty = true;
             _layoutDirty = true;
             _rows.Clear();
-            _numbers.Clear();
+            ClearGutterLayouts();
             QueueHighlight();
             InvalidateMeasure();
             InvalidateVisual();
@@ -280,7 +285,7 @@ public sealed class CodeView : Control, ILogicalScrollable
             _metricsDirty = true;
             _layoutDirty = true;
             _rows.Clear();
-            _numbers.Clear();
+            ClearGutterLayouts();
             InvalidateMeasure();
             InvalidateVisual();
         }
@@ -289,11 +294,13 @@ public sealed class CodeView : Control, ILogicalScrollable
             _roleProps = new GenericTextRunProperties?[10];
             _roleBrushes = new IBrush?[10];
             _rows.Clear();
+            // The numbers fall back to the text color when the gutter has none.
+            if (property == ForegroundProperty) ClearGutterLayouts();
             InvalidateVisual();
         }
-        else if (property == GutterForegroundProperty)
+        else if (property == GutterForegroundProperty || property == AddedBrushProperty || property == RemovedBrushProperty)
         {
-            _numbers.Clear();
+            ClearGutterLayouts();
         }
         else if (property.Name == "ActualThemeVariant")
         {
@@ -357,7 +364,7 @@ public sealed class CodeView : Control, ILogicalScrollable
         _hasSelection = false;
         _hoverLine = -1;
         _rows.Clear();
-        _numbers.Clear();
+        ClearGutterLayouts();
         _layoutsCreated = 0;
         _metricsDirty = true;
         _layoutDirty = true;
@@ -454,6 +461,7 @@ public sealed class CodeView : Control, ILogicalScrollable
             var wide = 1;
             foreach (var mark in marks) wide = Math.Max(wide, Math.Max(mark.Number1.Length, mark.Number2.Length));
             _gutterWidth = Math.Round(pad + wide * _charWidth + _charWidth * 1.5 + wide * _charWidth + _charWidth * 1.5 + _charWidth + _charWidth);
+            _markNumberCells = wide;
         }
         _textLeft = _gutterWidth + Math.Round(_charWidth * 0.5);
         _rightPad = Math.Round(_charWidth * 2);
@@ -877,15 +885,13 @@ public sealed class CodeView : Control, ILogicalScrollable
             if (line >= marks.Count) continue;
             var mark = marks[line];
             if (mark.Tint == CodeLineTint.Hunk || (mark.Number1.Length == 0 && mark.Number2.Length == 0 && mark.Marker.Length == 0)) continue;
-            var wide = 1;
-            foreach (var m in marks) wide = Math.Max(wide, Math.Max(m.Number1.Length, m.Number2.Length));
-            var columnWidth = wide * _charWidth;
+            // The widest number of all marks, found once when the metrics are made (not per row in every frame).
+            var columnWidth = _markNumberCells * _charWidth;
             DrawNumber(context, mark.Number1, pad + columnWidth, y);
             DrawNumber(context, mark.Number2, pad + columnWidth + _charWidth * 1.5 + columnWidth, y);
             if (mark.Marker.Length > 0)
             {
-                var markerBrush = mark.Tint switch { CodeLineTint.Added => AddedBrush, CodeLineTint.Removed => RemovedBrush, _ => GutterForeground };
-                var layout = new TextLayout(mark.Marker, _typeface, FontSize, markerBrush ?? GutterForeground);
+                var layout = MarkerLayout(mark.Marker, mark.Tint);
                 layout.Draw(context, new Point(_gutterWidth - _charWidth * 1.8, y + (_rowHeight - layout.Height) / 2));
             }
         }
@@ -912,7 +918,31 @@ public sealed class CodeView : Control, ILogicalScrollable
         return layout;
     }
 
-    private TextLayout NumberLayoutFor(string text) => new(text, _typeface, FontSize is > 0 and < 200 ? FontSize : 13, GutterForeground ?? Foreground);
+    private TextLayout NumberLayoutFor(string text)
+    {
+        if (_markNumbers.TryGetValue(text, out var layout)) return layout;
+        if (_markNumbers.Count > 2000) _markNumbers.Clear();
+        layout = new TextLayout(text, _typeface, FontSize is > 0 and < 200 ? FontSize : 13, GutterForeground ?? Foreground);
+        _markNumbers[text] = layout;
+        return layout;
+    }
+
+    private TextLayout MarkerLayout(string marker, CodeLineTint tint)
+    {
+        if (_markers.TryGetValue((marker, tint), out var layout)) return layout;
+        var brush = tint switch { CodeLineTint.Added => AddedBrush, CodeLineTint.Removed => RemovedBrush, _ => GutterForeground };
+        layout = new TextLayout(marker, _typeface, FontSize, brush ?? GutterForeground);
+        _markers[(marker, tint)] = layout;
+        return layout;
+    }
+
+    /// <summary>The gutter's laid out numbers and signs are kept between frames; a change of text, font or color drops them.</summary>
+    private void ClearGutterLayouts()
+    {
+        _numbers.Clear();
+        _markNumbers.Clear();
+        _markers.Clear();
+    }
 
     // ---- Pointer and keyboard ----
 

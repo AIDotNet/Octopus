@@ -41,7 +41,7 @@ public sealed class WorkbenchModule(IServiceProvider services) : IPluginApiModul
     public void Register(PluginApiRouter router)
     {
         // views
-        router.Notify("view.update", call => Workbench.Post(call.Plugin.Id, call.RequiredString("instanceId"), s => s.Update(Take(call, "tree"))));
+        router.Notify("view.update", call => Workbench.PostTree(call.Plugin.Id, call.RequiredString("instanceId"), Take(call, "tree")));
         router.Notify("view.chrome", call =>
         {
             if (call.Args is JsonObject change) Workbench.Post(call.Plugin.Id, call.RequiredString("instanceId"), s => s.Chrome(change));

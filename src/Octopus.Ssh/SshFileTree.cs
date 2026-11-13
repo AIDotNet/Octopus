@@ -26,9 +26,16 @@ public sealed class SshFileTree(string host, IProcessRunner runner, IReadOnlyLis
     private static readonly TimeSpan Fresh = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan RunTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Folder reads run at once. Opening a folder reads the folders in it ahead: forty of them would start forty ssh runs,
+    /// more than a shared connection takes (OpenSSH's MaxSessions is 10), and the rest would fail.
+    /// </summary>
+    private const int ConcurrentReads = 4;
+
     private readonly ConcurrentDictionary<string, Listing> _listings = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, bool> _reading = new(StringComparer.Ordinal);
     private readonly object _gate = new();
+    private readonly SemaphoreSlim _reads = new(ConcurrentReads);
     private readonly List<(string Root, Action<string> OnChanged)> _watchers = [];
     private string? _status;
 
@@ -221,24 +228,29 @@ public sealed class SshFileTree(string host, IProcessRunner runner, IReadOnlyLis
 
     private async Task ReadFolderAsync(string directory)
     {
+        var previous = _listings.TryGetValue(directory, out var known) ? known.Entries : null;
+        IReadOnlyList<FileEntry> entries;
+        await _reads.WaitAsync().ConfigureAwait(false);
         try
         {
-            var entries = Parse(directory, await RunAsync("ls -1Ap -- " + SshCommands.RemotePath(directory), CancellationToken.None));
+            entries = Parse(directory, await RunAsync("ls -1Ap -- " + SshCommands.RemotePath(directory), CancellationToken.None));
             _listings[directory] = new Listing(entries, DateTimeOffset.UtcNow);
             SetStatus(null);
         }
         catch (SshCommandException e)
         {
             // What was on screen stays: a failed read must not empty the folder.
-            var kept = _listings.TryGetValue(directory, out var previous) ? previous.Entries : [];
-            _listings[directory] = new Listing(kept, DateTimeOffset.UtcNow);
+            entries = previous ?? [];
+            _listings[directory] = new Listing(entries, DateTimeOffset.UtcNow);
             SetStatus(e.Message);
         }
         finally
         {
+            _reads.Release();
             _reading.TryRemove(directory, out _);
         }
-        Notify(directory);
+        // The same answer again (the tree asks often) leaves the tree alone.
+        if (previous is null || !previous.SequenceEqual(entries)) Notify(directory);
     }
 
     private Task<string> RunAsync(string command, CancellationToken cancellationToken) =>

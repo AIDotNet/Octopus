@@ -15,7 +15,7 @@ namespace Octopus.App.Tests.Explorer;
 public class ExplorerViewModelTests
 {
     [AvaloniaFact]
-    public void The_tree_reads_folders_one_step_ahead_so_opening_one_never_shows_an_empty_row()
+    public async Task The_tree_reads_folders_one_step_ahead_so_opening_one_never_shows_an_empty_row()
     {
         using var project = new ExplorerFixture();
         project.Write("src/Program.cs", "class P {}");
@@ -27,6 +27,7 @@ public class ExplorerViewModelTests
         var tree = AppHost.Get<FileTreeViewModel>();
 
         tree.Load(project.Root);
+        await tree.ReadAheadIdle;
 
         Assert.Equal(["src", "void", ".env", "README.md"], tree.Roots.Select(n => n.Name).ToArray());
         var src = tree.Roots[0];
@@ -42,19 +43,21 @@ public class ExplorerViewModelTests
         Assert.Empty(deep.Children);
 
         tree.EnsureLoaded(src);
+        await tree.ReadAheadIdle;
 
         Assert.True(deep.IsLoaded);
         Assert.Equal(["x.txt"], deep.Children.Select(n => n.Name).ToArray());
     }
 
     [AvaloniaFact]
-    public void A_changed_directory_keeps_the_rows_that_remain()
+    public async Task A_changed_directory_keeps_the_rows_that_remain()
     {
         using var project = new ExplorerFixture();
         project.Write("src/a.cs");
         project.Write("src/b.cs");
         var tree = AppHost.Get<FileTreeViewModel>();
         tree.Load(project.Root);
+        await tree.ReadAheadIdle;
         var src = tree.Roots[0];
         tree.EnsureLoaded(src);
         var a = src.Children[0];

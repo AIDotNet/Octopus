@@ -474,6 +474,9 @@ public sealed class TerminalControl : Decorator
         _router?.HandleKey(e);
     }
 
+    // One for every terminal: a cursor holds a platform resource, and the pointer crosses links often.
+    private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
+
     private const KeyMods ModifierMask = KeyMods.Shift | KeyMods.Ctrl | KeyMods.Alt | KeyMods.Super;
 
     private void OnPointer(object? sender, TerminalPointerEventArgs e)
@@ -511,7 +514,7 @@ public sealed class TerminalControl : Decorator
             && (link is null || link.Spans[0] == _hoverLink!.Spans[0])) return;
         _hoverLink = link;
         _overlay.SetLink(link);
-        _view.Cursor = link is null ? null : new Cursor(StandardCursorType.Hand);
+        _view.Cursor = link is null ? null : HandCursor;
     }
 
     private async Task<bool> AllowPasteAsync(string text, bool bracketed)
