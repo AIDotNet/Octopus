@@ -32,7 +32,7 @@ public sealed class TerminalInputRouter(
     /// <summary>A non-text key. Sets <see cref="TerminalKeyEventArgs.Handled"/> when it was consumed.</summary>
     public void HandleKey(TerminalKeyEventArgs e)
     {
-        var input = e.Input;
+        var input = WithCodepoint(e.Input);
         var shortcut = keymap().Match(input);
         if (shortcut != TerminalShortcut.None && RunShortcut(shortcut))
         {
@@ -60,6 +60,36 @@ public sealed class TerminalInputRouter(
             session.Send(buffer[..n]);
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// The view reports the physical key only. A program that turned on the extended keyboard protocol (Claude Code
+    /// does) is told the key by its unshifted character, and without one the encoder sends nothing at all: Ctrl+C
+    /// never reached the program. US layout, which is what the physical key names stand for.
+    /// </summary>
+    public static KeyInput WithCodepoint(in KeyInput input)
+    {
+        if (input.UnshiftedCodepoint != 0) return input;
+        var key = input.Key;
+        uint cp = key switch
+        {
+            >= TerminalKey.A and <= TerminalKey.Z => (uint)('a' + (key - TerminalKey.A)),
+            >= TerminalKey.Digit0 and <= TerminalKey.Digit9 => (uint)('0' + (key - TerminalKey.Digit0)),
+            TerminalKey.Backquote => '`',
+            TerminalKey.Backslash => '\\',
+            TerminalKey.BracketLeft => '[',
+            TerminalKey.BracketRight => ']',
+            TerminalKey.Comma => ',',
+            TerminalKey.Equal => '=',
+            TerminalKey.Minus => '-',
+            TerminalKey.Period => '.',
+            TerminalKey.Quote => '\'',
+            TerminalKey.Semicolon => ';',
+            TerminalKey.Slash => '/',
+            TerminalKey.Space => ' ',
+            _ => 0,
+        };
+        return cp == 0 ? input : input with { UnshiftedCodepoint = cp };
     }
 
     /// <summary>

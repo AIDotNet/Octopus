@@ -64,6 +64,20 @@ public class KeyInputTests
     public async Task Sends(TerminalKey key, KeyMods mods, string expected) =>
         Assert.Equal(expected, await Press(key, mods));
 
+    [Theory]
+    [InlineData(0, "03")]
+    [InlineData(1, "1B-5B-39-39-3B-35-75")] // ESC [ 99 ; 5 u
+    [InlineData(31, "1B-5B-39-39-3B-35-75")]
+    public void Ctrl_c_reaches_the_program_with_and_without_the_extended_keyboard(byte kittyFlags, string expected)
+    {
+        using var encoder = new InputEncoder();
+        encoder.Apply(InputModes.Defaults with { KittyFlags = kittyFlags });
+        var buffer = new byte[64];
+        var key = TerminalInputRouter.WithCodepoint(new KeyInput(TerminalKey.C, KeyAction.Press, KeyMods.Ctrl));
+        var n = encoder.EncodeKey(key, buffer);
+        Assert.Equal(expected, BitConverter.ToString(buffer, 0, n));
+    }
+
     [Fact]
     public void Leaves_full_screen_programs_and_extended_keyboards_alone()
     {
