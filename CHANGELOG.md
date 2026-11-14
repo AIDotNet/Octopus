@@ -2,6 +2,12 @@
 
 版本号规则与发布流程见 `.agents/skills/publish-release/SKILL.md`。每个版本的说明会同步到对应的 GitHub Release。
 
+## 1.0.1119 — 2026-11-14
+
+### 修复
+
+- **终端里 Ctrl+C 无效**：Claude Code 这类开启了扩展键盘协议的程序，在终端里按 Ctrl+C 没有任何反应，既不中断也不退出。现在 Ctrl+C 能正常送达；同类的 Ctrl+D、Ctrl+R、Alt+字母等组合键在这类程序里也一并恢复。
+
 ## 1.0.1118 — 2026-11-13
 
 ### 新功能
