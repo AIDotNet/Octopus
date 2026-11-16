@@ -26,6 +26,10 @@ public sealed class Harness : IAsyncDisposable, IAppPaths
     public CapturingModule Captured { get; } = new();
     public UsageRegistry Usage => _usage ??= new UsageRegistry(Paths);
     private UsageRegistry? _usage;
+    /// <summary>Opens the models.dev catalog for <see cref="Prices"/>; by default a tiny one, never the network.</summary>
+    public Func<CancellationToken, Task<Stream>> PriceCatalog { get; set; } = _ => Task.FromResult<Stream>(new MemoryStream("{}"u8.ToArray()));
+    public ModelPriceCatalog Prices => _prices ??= new ModelPriceCatalog(Paths, ct => PriceCatalog(ct));
+    private ModelPriceCatalog? _prices;
     public PluginConfigStore Config => _config ??= new PluginConfigStore(Paths);
     private PluginConfigStore? _config;
     public IPluginConsent? Consent { get; set; }
@@ -79,7 +83,7 @@ public sealed class Harness : IAsyncDisposable, IAppPaths
         var catalog = new PluginCatalog(Paths, State, host, new PluginCatalogOptions { BuiltinRoots = [BuiltinRoot] });
         IPluginApiModule[] modules =
         [
-            new EnvModule(host, Settings), new StorageModule(), new ConfigModule(Config, Commands), new UsageModule(Usage), Captured,
+            new EnvModule(host, Settings), new StorageModule(), new ConfigModule(Config, Commands), new UsageModule(Usage), new ModelPricesModule(Prices), Captured,
             .. ExtraModules,
         ];
         _manager = new PluginManager(catalog, State, new JauntPluginRuntimeFactory(), modules, Paths, Options, Consent);

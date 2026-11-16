@@ -728,6 +728,8 @@ export const agents = Object.freeze({
   usage: (agentId, account) => sync('usage.get', { agentId, account }) ?? undefined,
   /** The last snapshot of every account of the agent that the host remembers: [{ account, updatedAt, snapshot }]. */
   usageList: agentId => sync('usage.list', { agentId }) ?? [],
+  // Public prices (USD per million tokens) of the named models, from the host's models.dev index; refresh asks models.dev again.
+  modelPrices: (models, options = {}) => request('usage.prices', { models: [...models], refresh: !!options.refresh }),
   onDidChangeUsage: onHost('usage.changed'),
   registerStatusProvider(agentId, impl) {
     const key = `status:${agentId}`;

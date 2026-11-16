@@ -1324,15 +1324,15 @@ internal sealed class TableComponent : IUiComponent
             for (var i = 0; i < columns.Count; i++)
             {
                 var index = i;
-                // format "compact": 1,689,323,400 shows as 1.69B (sorting still uses the number).
-                var compact = Str(columns[i], "format") == "compact";
+                // format "compact": 1,689,323,400 shows as 1.69B; "usd": 1234.5 shows as $1,234.50. Sorting still uses the number.
+                var format = Str(columns[i], "format");
                 table.Columns.Add(new DataTableColumn
                 {
                     Header = Str(columns[i], "title") ?? "",
                     Key = Str(columns[i], "id"),
                     IsSortable = Bool(columns[i], "sortable") ?? false,
                     IsNumeric = Str(columns[i], "type") == "number" || Str(columns[i], "align") == "end",
-                    ValueSelector = r => ((TableRow)r).Cells.Count > index ? Display(((TableRow)r).Cells[index], compact) : "",
+                    ValueSelector = r => ((TableRow)r).Cells.Count > index ? Display(((TableRow)r).Cells[index], format) : "",
                     SortValueSelector = r => ((TableRow)r).Cells.Count > index && ((TableRow)r).Cells[index] is JsonValue v && v.TryGetValue<double>(out var d) ? d : (object?)Display(((TableRow)r).Cells.ElementAtOrDefault(index)),
                 });
             }
@@ -1344,11 +1344,13 @@ internal sealed class TableComponent : IUiComponent
         if (newColumns || table.ItemsSource is not List<TableRow> old || old.Count != rows.Count || !old.Zip(rows).All(pair => pair.First.SameAs(pair.Second))) table.ItemsSource = rows;
     }
 
-    private static string Display(JsonNode? cell, bool compact = false) => cell switch
+    private static string Display(JsonNode? cell, string? format = null) => cell switch
     {
         null => "",
         JsonValue v when v.TryGetValue<string>(out var s) => s,
-        JsonValue v when compact && v.TryGetValue<double>(out var c) => BarChartComponent.Compact(c),
+        JsonValue v when format == "compact" && v.TryGetValue<double>(out var c) => BarChartComponent.Compact(c),
+        // Dollars always in the invariant form ($1,234.50): the amounts are USD whatever the display language.
+        JsonValue v when format == "usd" && v.TryGetValue<double>(out var usd) => "$" + usd.ToString("N2", CultureInfo.InvariantCulture),
         // Whole numbers with group separators (2,008,910); fractions as they are.
         JsonValue v when v.TryGetValue<double>(out var d) => d == Math.Floor(d) && Math.Abs(d) < 1e15 ? d.ToString("N0", CultureInfo.CurrentCulture) : d.ToString("G", CultureInfo.CurrentCulture),
         _ => cell.ToJsonString(),

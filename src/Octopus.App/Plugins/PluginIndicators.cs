@@ -184,12 +184,15 @@ public sealed class IndicatorStrip : Panel
             _instanceId = result["instanceId"]?.GetValue<string>() ?? $"indicator:{_indicator.Id}";
             _renderer ??= new UiRenderer(workbench.SinkFor(plugin, _instanceId));
             var instanceId = _instanceId;
-            var host = new Border { Padding = new Thickness(12), MinWidth = 280, MaxWidth = 420, MaxHeight = 560 };
+            // The content scrolls once it passes the height cap: a popover listing several agents and accounts is
+            // taller than the window can show. The padding sits inside the scroll area, so the bar runs along the edge.
+            var host = new Border { Padding = new Thickness(12) };
+            var scroll = new ScrollArea { Content = host, MinWidth = 280, MaxWidth = 420, MaxHeight = 560, FadeLength = 0 };
             var surface = new PopoverSurface(this, host);
             _rendered = null;
             surface.Update(tree.DeepClone());
             workbench.Attach(plugin.Id, instanceId, surface);
-            _popover.Content = host;
+            _popover.Content = scroll;
             EventHandler<OverlayClosedEventArgs>? closed = null;
             closed = (_, _) =>
             {

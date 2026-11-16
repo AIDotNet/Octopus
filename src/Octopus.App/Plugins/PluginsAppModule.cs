@@ -43,6 +43,7 @@ internal static class PluginsAppModule
         });
         services.AddSingleton<IPluginRuntimeFactory, JauntPluginRuntimeFactory>();
         services.AddSingleton<UsageRegistry>();
+        services.AddSingleton<ModelPriceCatalog>(sp => new ModelPriceCatalog(sp.GetRequiredService<PluginPaths>()));
         services.AddSingleton<PluginConfigStore>();
         services.AddSingleton<Octopus.Agents.IAgentDefinitionSource, PluginAgentSource>();
         services.AddSingleton<AppProjectContext>();
@@ -55,6 +56,7 @@ internal static class PluginsAppModule
         services.AddSingleton<IPluginApiModule, SecretsModule>();
         services.AddSingleton<IPluginApiModule, ConfigModule>();
         services.AddSingleton<IPluginApiModule, UsageModule>();
+        services.AddSingleton<IPluginApiModule, ModelPricesModule>();
         services.AddSingleton<IPluginApiModule, ProjectsModule>();
         services.AddSingleton<IPluginApiModule, GitModule>();
         services.AddSingleton<IPluginApiModule, AgentsListModule>();

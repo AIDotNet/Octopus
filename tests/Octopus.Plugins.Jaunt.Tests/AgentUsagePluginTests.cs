@@ -27,7 +27,8 @@ public sealed class AgentUsagePluginTests
         Assert.Empty(result.Issues);
         var manifest = result.Manifest!;
         Assert.Equal(5, manifest.Contributes.UsageProviders.Count);
-        // Official sources only: no network, no process, no credential files (design 12 §9 is undecided).
+        // Official sources only: no network, no process, no credential files (design 12 §9 is undecided). The model
+        // prices of the cost estimate come from the host, which syncs them from models.dev.
         Assert.DoesNotContain(manifest.Permissions.Requests, r => r.Key is "net" or "process.run" or "fs.external");
     }
 
@@ -162,6 +163,27 @@ public sealed class AgentUsagePluginTests
         agents.Signal("claude", "statusline", StatusLine(97, resets), account: "a1b2c3d4e5f6");
         await Task.Delay(500);
         Assert.Equal(2, Toasts());
+    }
+
+    [Fact]
+    public async Task AnIdleSessionsOlderReading_DoesNotLowerTheWindow_UntilANewCycle()
+    {
+        var (harness, _, agents) = await StartAsync();
+        await using var _ = harness;
+        double FiveHour() => harness.Usage.Get("claude", "a1b2c3d4e5f6")!.Snapshot["windows"]![0]!["usedPercent"]!.GetValue<double>();
+        var resets = DateTimeOffset.UtcNow.AddHours(3).ToUnixTimeSeconds();
+
+        // Two sessions of one account: the busy one says 80, the idle one repeats the 79 of its last reply.
+        agents.Signal("claude", "statusline", StatusLine(80, resets), account: "a1b2c3d4e5f6");
+        await Harness.WaitUntil(() => harness.Usage.Get("claude", "a1b2c3d4e5f6") is not null);
+        agents.Signal("claude", "statusline", StatusLine(79, resets + 30), account: "a1b2c3d4e5f6");
+        await Task.Delay(300);
+        Assert.Equal(80, FiveHour());
+        await Harness.WaitUntil(() => agents.Indicator?["text"]?.GetValue<string>() == "80%");
+
+        // A later reset time is the next cycle: its low reading is the truth.
+        agents.Signal("claude", "statusline", StatusLine(3, resets + 5 * 3600), account: "a1b2c3d4e5f6");
+        await Harness.WaitUntil(() => FiveHour() == 3);
     }
 
     /// <summary>A snapshot as the plugin reported it last run: one weekly window.</summary>
@@ -336,6 +358,7 @@ public sealed class AgentUsagePluginTests
             router.Sync("workspace.activeItem", _ => "null");
             router.Sync("app.state", _ => """{ "focused": true, "visible": true, "idleSeconds": 0 }""");
             router.Sync("fs.scopes", _ => "[]");
+
             router.Notify("indicators.create", _ => { });
             router.Notify("indicators.update", call => Indicator = call["state"]?.DeepClone() as JsonObject);
             router.Notify("indicators.remove", _ => { });

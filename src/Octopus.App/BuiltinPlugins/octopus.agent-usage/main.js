@@ -5,7 +5,7 @@
 import { agents, app, commands, config, env, indicators, notifications, permissions, scheduler, ui, views, workspace } from 'octopus';
 import * as adapters from './adapters.js';
 import { renderPopover } from './popover.js';
-import { HistoryView } from './history.js';
+import { HistoryView, costSummary, ensureScanned, onChange as onHistoryChange } from './history.js';
 
 const AGENTS = ['claude', 'codex', 'grok', 'cursor', 'opencode'];
 const CODEX_INTERVAL = 5 * 60_000;
@@ -57,10 +57,13 @@ export async function activate(ctx) {
       // A state made during render belongs to this popover: setting it re-renders the popover while it is open.
       const tick = ui.state(0);
       invalidatePopover = () => tick.set(tick.get() + 1);
+      // The cost lines come from the history totals: an opened popover brings them up to date (at most every 5 minutes).
+      ensureScanned();
       return renderPopover(view());
     },
   };
   ctx.subscriptions.push(indicator);
+  ctx.subscriptions.push(onHistoryChange(() => refreshViews()));
 
   // Claude: every status line refresh of a running session carries the windows (official, design 12 §4.1). With a
   // custom command as the source, the windows come from the command and the status line only adds the session cost.
@@ -70,11 +73,17 @@ export async function activate(ctx) {
       const snapshot = adapters.claudeFromStatusLine(e.payload, e.account);
       if (!snapshot) return;
       if (claudeSource() === 'command') mergeSession('claude', snapshot.session);
-      else publish('claude', e.account, snapshot);
+      else publish('claude', e.account, keepHighest(state.get('claude').snapshots.get(e.account ?? '')?.snapshot, snapshot));
       if (e.account && !claudePlans.has(e.account)) refreshClaudePlans();
     }));
     const last = agents.lastSignal('claude', 'statusline');
-    if (last && claudeSource() !== 'command') publish('claude', last.account, adapters.claudeFromStatusLine(last.payload, last.account), last.receivedAt);
+    if (last && claudeSource() !== 'command') {
+      const cached = state.get('claude').snapshots.get(last.account ?? '');
+      // The cache may hold a newer reading than the last signal (a session that reported through another window).
+      if (!cached || !(cached.updatedAt > last.receivedAt)) {
+        publish('claude', last.account, keepHighest(cached?.snapshot, adapters.claudeFromStatusLine(last.payload, last.account)), last.receivedAt);
+      }
+    }
   }
   if (state.get('claude')?.installed) {
     // The plan of each account, from `claude auth status --json` (Claude reads its own login; we only get the plan).
@@ -306,6 +315,24 @@ async function refreshClaudeCommand({ force = false } = {}) {
   publish('claude', '', { ...snapshot, session: snapshot.session ?? previous?.session });
 }
 
+/**
+ * Every running Claude session reports the account's windows, each from its own last reply: an idle session repeats
+ * an older, lower reading after a busy one reported a higher one, and the percentage bounced (80%, 79%, 80%…). Within
+ * one cycle of a window (the same reset time) the usage only grows, so a lower reading of the same cycle is stale and
+ * the higher one stays. A new reset time is a new cycle and is taken as it is.
+ */
+export function keepHighest(previous, snapshot) {
+  if (!previous || !snapshot) return snapshot;
+  const now = Date.now();
+  const windows = (snapshot.windows ?? []).map(w => {
+    const old = (previous.windows ?? []).find(p => p.id === w.id);
+    if (!old || old.reset || !(old.usedPercent > w.usedPercent)) return w;
+    if (!old.resetsAt || old.resetsAt <= now || !w.resetsAt) return w;
+    return Math.abs(w.resetsAt - old.resetsAt) <= CYCLE_SLACK ? { ...w, usedPercent: old.usedPercent } : w;
+  });
+  return { ...snapshot, windows };
+}
+
 /** Status line session numbers added to the command's snapshot. */
 function mergeSession(agentId, session) {
   const entry = state.get(agentId);
@@ -522,7 +549,7 @@ function view() {
     snapshots.sort((a, b) => (labels.get(a.account) ?? a.account).localeCompare(labels.get(b.account) ?? b.account));
     rows.push({ id, name: entry.name, snapshots: snapshots.map(s => ({ ...s, label: labels.get(s.account) })), error: entry.error });
   }
-  return { rows, refresh: () => refreshAll(), t, formatReset };
+  return { rows, costs: costSummary(), refresh: () => refreshAll(), t, formatReset };
 }
 
 /** Windows whose reset time has passed are shown as reset (0%), not as the stale value. */

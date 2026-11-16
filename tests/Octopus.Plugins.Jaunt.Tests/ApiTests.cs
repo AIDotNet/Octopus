@@ -56,6 +56,30 @@ public sealed class ApiTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ModelPrices_ComeFromTheHostsCatalog_ForTheNamedModels()
+    {
+        _h.PriceCatalog = _ => Task.FromResult<Stream>(new MemoryStream("""
+            { "anthropic": { "models": { "claude-opus-5-5": { "cost": { "input": 4, "output": 20, "cache_read": 0.2, "cache_write": 5 } } } },
+              "requesty": { "models": { "deepseek/deepseek-flash": { "cost": { "input": 0.15, "output": 0.6 } } } } }
+            """u8.ToArray()));
+        _h.Plugin("acme.p", """
+            import { agents, commands } from 'octopus';
+            export function activate() {
+              commands.register('acme.p.ask', () => agents.modelPrices(['claude-opus-5.5', 'deepseek-flash', 'nobody-1']));
+            }
+            """, """ "contributes": { "commands": [ { "id": "acme.p.ask", "title": "Ask" } ] } """);
+        var manager = await _h.StartAsync();
+
+        // The first question waits for the first sync, so it is answered from the catalog, not the built-in table.
+        var answer = (await manager.ExecuteCommandAsync("acme.p.ask"))!;
+        Assert.Equal("models.dev", answer["source"]!.GetValue<string>());
+        Assert.Equal(4, answer["prices"]!["claude-opus-5.5"]!["input"]!.GetValue<double>());
+        Assert.Equal(0.6, answer["prices"]!["deepseek-flash"]!["output"]!.GetValue<double>());
+        Assert.Null(answer["prices"]!["nobody-1"]);
+        Assert.True(answer["prices"]!.AsObject().ContainsKey("nobody-1"));
+    }
+
+    [Fact]
     public async Task A_hidden_view_renders_again_only_when_shown()
     {
         _h.Plugin("acme.v", """
