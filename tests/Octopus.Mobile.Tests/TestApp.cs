@@ -38,9 +38,10 @@ internal sealed class Phone : IDisposable
     private static readonly TimeSpan Short = TimeSpan.FromMilliseconds(60);
 
     /// <param name="signInDelay">How long the made-up browser confirmation takes; a moment unless the test needs the sign-in page to stay.</param>
-    public Phone(bool signedIn = true, TimeSpan? signInDelay = null)
+    /// <param name="pairingDelay">How long the made-up host takes to allow a pairing; a moment unless the test looks at the number first.</param>
+    public Phone(bool signedIn = true, TimeSpan? signInDelay = null, TimeSpan? pairingDelay = null)
     {
-        Workspace = new DemoWorkspace { PairingDelay = Short };
+        Workspace = new DemoWorkspace { PairingDelay = pairingDelay ?? Short };
         Account = new DemoAccount { SignInDelay = signInDelay ?? Short };
         if (!signedIn) Account.SignOut();
         Shell = new MobileShell(Workspace, Account, uri => Opened = uri);

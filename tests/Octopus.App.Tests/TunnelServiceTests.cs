@@ -266,7 +266,8 @@ public class TunnelServiceTests : IDisposable
         RemoteGrace = TimeSpan.FromMilliseconds(60),
         RetryDelays = [TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(40)],
         MaxFailuresInARow = 3,
-        PortGrace = TimeSpan.FromMilliseconds(40),
+        // Well past the 15 ms a test's ended ssh holds its port: on a busy CI machine that release came after a 40 ms grace.
+        PortGrace = TimeSpan.FromMilliseconds(500),
         WarningLifetime = TimeSpan.FromMilliseconds(150),
         WaitPoll = TimeSpan.FromMilliseconds(20),
         AnchorSettle = TimeSpan.FromMilliseconds(40),

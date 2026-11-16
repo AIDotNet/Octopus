@@ -144,7 +144,8 @@ public class NavigationTests
     [AvaloniaFact]
     public void Pairing_shows_the_number_and_the_host_joins_the_list_once_it_allows()
     {
-        using var phone = new Phone();
+        // Long enough that the number is seen before the host allows, even on a slow machine.
+        using var phone = new Phone(pairingDelay: TimeSpan.FromSeconds(1));
         var hosts = (HostsViewModel)phone.Top<HostsPage>().DataContext!;
         var linux = phone.Workspace.Hosts.Single(host => !host.IsPaired);
 

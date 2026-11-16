@@ -10,6 +10,7 @@ using Xunit;
 namespace Octopus.Terminal.Tests;
 
 /// <summary>The bytes the router sends to the program for keys users expect to behave like in other terminals.</summary>
+[Collection(TerminalSessionCollection.Name)]
 public class KeyInputTests
 {
     private sealed class Recorder : ITerminalConnection, ITerminalConnectionFactory

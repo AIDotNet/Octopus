@@ -13,6 +13,7 @@ namespace Octopus.Terminal.Tests;
 /// A session without a view, a second reader of its output, and the registry that keeps sessions apart from views:
 /// what a view on another device is built on (design/12-远程操作.md §4).
 /// </summary>
+[Collection(TerminalSessionCollection.Name)]
 public class SessionTapTests
 {
     /// <summary>A connection whose output the test writes and whose input it reads.</summary>
@@ -333,6 +334,7 @@ public class SessionTapTests
 }
 
 /// <summary>One terminal, several views: who decides its size, and how a mirror follows the terminal it shows (design/12-远程操作.md §6.5, §4.4).</summary>
+[Collection(TerminalSessionCollection.Name)]
 public class SessionSizeAndMirrorTests
 {
     private sealed class Wire : ITerminalMirrorConnection, ITerminalConnectionFactory
@@ -484,6 +486,7 @@ public class SessionSizeAndMirrorTests
     }
 }
 
+[Collection(TerminalSessionCollection.Name)]
 public class SessionSizeHandoverTests
 {
     private sealed class Quiet : ITerminalConnection, ITerminalConnectionFactory
