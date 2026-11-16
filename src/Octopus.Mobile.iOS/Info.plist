@@ -9,6 +9,12 @@
   <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
   <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
   <key>UILaunchStoryboardName</key><string></string>
+  <!-- The UIKit scene lifecycle, which the iOS 27 SDK requires (MT7199). One window; the scene's configuration comes
+       from Avalonia's app delegate (application:configurationForConnectingSceneSession:options:). -->
+  <key>UIApplicationSceneManifest</key>
+  <dict>
+    <key>UIApplicationSupportsMultipleScenes</key><false/>
+  </dict>
   <key>XSAppIconAssets</key><string>Assets.xcassets/AppIcon.appiconset</string>
   <!-- A host on the same network is ws://address:port. Not plain text: everything in it is the app's own end-to-end
        channel (design/remote/安全通道.md). The relay is wss:// and keeps the system's rules. -->
