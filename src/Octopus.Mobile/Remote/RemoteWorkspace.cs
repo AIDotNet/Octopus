@@ -137,11 +137,14 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
             return new NoteFactory("The connection to the computer was lost.");
         }
         var view = client.ViewTerminal(session.Id);
-        view.SizeChanged += (columns, rows, owns) => Ui(() =>
+        // Who decides is read when the page is updated, not taken from the event: the events come from the answers to this
+        // view's calls and from the output on different threads, and can reach the UI thread in another order than
+        // they were raised (a "not yours" from before the claim landed after it, on a slow machine).
+        view.SizeChanged += (columns, rows, _) => Ui(() =>
         {
             session.Columns = columns;
             session.Rows = rows;
-            session.SizeOwner = owns ? null : host.Name;
+            session.SizeOwner = view.OwnsSize ? null : host.Name;
         });
         state.Views[session.Id] = view;
         return view.Factory;
