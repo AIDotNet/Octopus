@@ -53,6 +53,7 @@ src/
   Octopus.Remote.Client      远程端一侧：连接主机、调用它的工作区、把它的终端接成本地的终端连接
   Octopus.Mobile             手机端的界面与视图模型（设计稿见 design/12-远程操作.md 第 9 节；目前跑在示例数据上）
   Octopus.Mobile.Desktop     手机端的桌面预览壳：dotnet run --project src/Octopus.Mobile.Desktop
+  Octopus.Mobile.Android/.iOS  手机端的安卓、iOS 壳（只在 Octopus.Mobile.slnx 里，需要 android / ios 工作负载；由 .github/workflows/mobile.yml 构建）
 tests/                       各层测试
 design/                      设计文档与调研，从 design/README.md 开始
 ```
