@@ -75,17 +75,18 @@ jobs:
 
   ios:
     name: ios
-    runs-on: macos-latest
+    # .NET 11's ios workload (27.2) requires Xcode 27.2; macos-latest (macOS 26) stops at Xcode 26.6. The xcode-27 image
+    # (a preview, actions/runner-images#14404) has it. Move to macos-latest once that image carries Xcode 27.
+    runs-on: xcode-27
+    env:
+      XCODE: /Applications/Xcode_27.2.app
     steps:
       - uses: actions/checkout@v4
 
-      # The ios workload names the Xcode it is built for; the runner's default is not always that one, so the newest
-      # installed Xcode is used.
+      # The image's default Xcode is not the one the workload is built for.
       - name: Select Xcode
         run: |
-          xcode=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
-          echo "Using $xcode"
-          sudo xcode-select -s "$xcode/Contents/Developer"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
 
       - uses: actions/setup-dotnet@v4
