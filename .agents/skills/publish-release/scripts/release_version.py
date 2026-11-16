@@ -29,6 +29,7 @@ EXPECTED_ASSETS = [
     "Octopus-{v}-osx-arm64.zip", "Octopus-{v}-osx-x64.zip",
     "Octopus-{v}-win-x64-setup.exe", "Octopus-{v}-win-x64.zip",
     "Octopus-{v}-linux-x64.run", "Octopus-{v}-linux-x64.tar.gz",
+    "Octopus-{v}-android.apk",
     "update.json", "update.json.sig",
 ]
 MANIFEST_TARGETS = ["osx-arm64", "osx-x64", "win-x64", "linux-x64"]

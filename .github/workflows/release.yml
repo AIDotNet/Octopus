@@ -204,10 +204,55 @@ jobs:
             dist/*.run
           if-no-files-found: error
 
+  # The phone app's APK, to install by hand. It is signed with the Android SDK's default (debug) key, which each runner
+  # makes afresh: an install does not update in place to the next release's APK (uninstall it first). It is not in
+  # update.json (make-update-manifest.py takes win, osx and linux only).
+  android:
+    name: Android (apk)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '21'
+
+      - name: Install the android workload
+        run: dotnet workload install android
+
+      - name: Android SDK packages
+        run: >
+          dotnet build src/Octopus.Mobile.Android -t:InstallAndroidDependencies
+          -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
+
+      - name: Publish
+        run: |
+          V="${VERSION#v}"
+          # versionName is the release's version; versionCode has to be an integer that grows: major·10⁷ + minor·10⁵ + patch.
+          IFS=. read -r MAJOR MINOR PATCH <<< "${V%%-*}"
+          CODE=$(( MAJOR * 10000000 + MINOR * 100000 + PATCH ))
+          dotnet publish src/Octopus.Mobile.Android -c Release \
+            -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" \
+            -p:ApplicationDisplayVersion="$V" -p:ApplicationVersion="$CODE" -o build/android
+          mkdir -p dist
+          cp build/android/*-Signed.apk "dist/Octopus-$V-android.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octopus-android
+          path: dist/*.apk
+          if-no-files-found: error
+
   release:
     name: GitHub release
     if: github.ref_type == 'tag'
-    needs: [macos, windows, linux]
+    needs: [macos, windows, linux, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write

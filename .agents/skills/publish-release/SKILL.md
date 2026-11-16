@@ -91,7 +91,7 @@ python3 -I .agents/skills/publish-release/scripts/release_version.py verify v<�
 它会检查：
 
 - 是不是草稿、"预发布"标记和版本类型对不对；
-- 10 个产物都在：两个 dmg、两个 macOS zip、Windows 安装包和 zip、Linux `.run` 和 tar.gz、`update.json`、`update.json.sig`；
+- 11 个产物都在：两个 dmg、两个 macOS zip、Windows 安装包和 zip、Linux `.run` 和 tar.gz、手机端的 Android `.apk`、`update.json`、`update.json.sig`；
 - `update.json` 由 `src/Octopus.Updates/UpdateEndpoints.cs` 里的公钥签名，版本号与标签一致，四个平台都有包，大小与 Release 上的文件一致。
 
 全部通过后，把 Release 链接和结果告诉用户。有问题按第 4 步的办法处理。
