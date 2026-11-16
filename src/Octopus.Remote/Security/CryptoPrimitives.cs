@@ -32,9 +32,17 @@ internal static class CryptoPrimitives
         return point;
     }
 
-    public static ECDsa ImportSigningKey(ReadOnlySpan<byte> point) => ECDsa.Create(ParametersOf(point));
+    public static ECDsa ImportSigningKey(ReadOnlySpan<byte> point) => Import(ParametersOf(point), ECDsa.Create);
 
-    public static ECDiffieHellman ImportExchangeKey(ReadOnlySpan<byte> point) => ECDiffieHellman.Create(ParametersOf(point));
+    public static ECDiffieHellman ImportExchangeKey(ReadOnlySpan<byte> point) => Import(ParametersOf(point), ECDiffieHellman.Create);
+
+    // Windows (CNG) reports a point off the curve as PlatformNotSupportedException ("the curve or its parameters are
+    // not valid for this platform"): it is a bad key like on the other platforms, so callers catch one exception type.
+    private static T Import<T>(ECParameters parameters, Func<ECParameters, T> create)
+    {
+        try { return create(parameters); }
+        catch (PlatformNotSupportedException e) { throw new CryptographicException("Not a point of the P-256 curve.", e); }
+    }
 
     /// <summary>The input keying material of a key exchange: SHA-256 of the shared point's X coordinate.</summary>
     public static byte[] Agree(ECDiffieHellman own, ReadOnlySpan<byte> peerPoint)

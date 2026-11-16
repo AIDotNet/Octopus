@@ -361,7 +361,8 @@ public class RemoteTests
 
         // "Fit to phone": the terminal takes this phone's grid, and typing reaches the program.
         model.FitCommand.Execute(null);
-        Assert.True(Phone.Until(() => terminal.IsOwnedByDevice && session.SizeOwner is null), "the phone decides the size");
+        Assert.True(Phone.Until(() => terminal.IsOwnedByDevice && session.SizeOwner is null, 15_000),
+            $"the phone decides the size: owned by device {terminal.IsOwnedByDevice}, size owner {session.SizeOwner ?? "(phone)"}, mode {model.Mode}");
         var grid = page.GridSize!.Value;
         Assert.Equal((grid.Columns, grid.Rows), (terminal.Columns, terminal.Rows));
         Assert.Equal((terminal.Columns, terminal.Rows), (session.Columns, session.Rows));

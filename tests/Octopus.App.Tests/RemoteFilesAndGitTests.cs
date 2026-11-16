@@ -206,6 +206,10 @@ public class RemoteFilesAndGitTests
     {
         await using var other = new OtherComputer();
         other.Git("init", "-q", "-b", "main");
+        // The commit below is made by the host's own git, which a CI machine has no identity for.
+        other.Git("config", "user.name", "Test");
+        other.Git("config", "user.email", "test@example.com");
+        other.Git("config", "commit.gpgsign", "false");
         other.Git("add", "-A");
         other.Git("commit", "-q", "-m", "first");
         var hostId = await Pair(other);
