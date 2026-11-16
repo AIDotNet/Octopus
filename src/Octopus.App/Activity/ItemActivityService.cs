@@ -136,6 +136,8 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         }
     }
 
+    public void ReportRemote(string itemId, ItemActivity activity) => Set(itemId, activity);
+
     private void Set(string itemId, ItemActivity activity)
     {
         if (Of(itemId) == activity)

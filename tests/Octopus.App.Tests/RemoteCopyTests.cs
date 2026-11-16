@@ -37,7 +37,7 @@ public class RemoteCopyTests
         var host = new Host(hostContent);
         var dialogs = new FakeDialogService();
         var files = new RemoteFiles(host, new TestPaths(), Path.Combine(Path.GetTempPath(), "octopus-rc-" + Guid.NewGuid().ToString("N")));
-        var copy = new RemoteCopy(files, "prod", "/srv/notes.md", System.Text.Encoding.UTF8.GetBytes(lastSeen), dialogs);
+        var copy = new RemoteCopy(files.TreeFor("prod"), "/srv/notes.md", System.Text.Encoding.UTF8.GetBytes(lastSeen), dialogs);
         return (copy, host, dialogs);
     }
 
@@ -103,7 +103,7 @@ public class RemoteCopyTests
     {
         var host = new FailingHost();
         var dialogs = new FakeDialogService();
-        var copy = new RemoteCopy(new RemoteFiles(host, new TestPaths(), Path.Combine(Path.GetTempPath(), "octopus-rc-" + Guid.NewGuid().ToString("N"))), "prod", "/srv/notes.md", "old"u8.ToArray(), dialogs);
+        var copy = new RemoteCopy(new RemoteFiles(host, new TestPaths(), Path.Combine(Path.GetTempPath(), "octopus-rc-" + Guid.NewGuid().ToString("N"))).TreeFor("prod"), "/srv/notes.md", "old"u8.ToArray(), dialogs);
 
         var result = await copy.WriteAsync("mine"u8.ToArray());
 

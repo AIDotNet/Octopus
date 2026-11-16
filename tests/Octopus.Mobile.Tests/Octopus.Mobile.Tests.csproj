@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Tests that run the phone app on Avalonia's headless platform, on made-up hosts: no window, no network. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="xunit.v3" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+        <PackageReference Include="Avalonia.Headless.XUnit" />
+        <PackageReference Include="Avalonia.Skia" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Octopus.Mobile/Octopus.Mobile.csproj" />
+        <ProjectReference Include="../../src/Octopus.Remote.Host/Octopus.Remote.Host.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The stand-in relay of the remote library's tests: the phone runs against the same one. -->
+        <Compile Include="../Octopus.Remote.Tests/FakeRelay.cs" Link="FakeRelay.cs" />
+    </ItemGroup>
+</Project>

@@ -13,6 +13,9 @@ internal static class SettingsNormalizer
         settings.Agents ??= new();
         settings.Updates ??= new();
         settings.Tray ??= new();
+        settings.Remote ??= new();
+        // 0 is allowed: the system then picks a free port (tests, and a second instance on one machine).
+        if (settings.Remote.LanPort is < 0 or > 65535) settings.Remote.LanPort = Octopus.Core.Settings.RemoteSettings.DefaultLanPort;
         if (!Octopus.Core.Updates.UpdateSettingValues.IsKnownMode(settings.Updates.Mode))
             settings.Updates.Mode = Octopus.Core.Updates.UpdateSettingValues.Auto;
         if (!Octopus.Core.Updates.UpdateSettingValues.IsKnownChannel(settings.Updates.Channel))

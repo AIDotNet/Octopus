@@ -24,14 +24,15 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private readonly ISettingsStore _settings;
     private readonly RemoteFiles _remote;
     private readonly UiContext _ui = new();
-    private SshFileTree? _remoteTree;
+    private IRemoteFileTree? _remoteTree;
+    private readonly Octopus.App.Remote.RemoteProjectAccess? _access;
     private IDisposable? _watch;
     private IDisposable? _changeWatch;
     private IDisposable? _gitWatch;
     private int _version;
     private bool _isActive = true;
     /// <summary>The project the shell asked for while the panel was closed: it is read when the panel opens.</summary>
-    private (string? Path, string? Name, string? SshHost)? _pendingProject;
+    private (string? Path, string? Name, string? SshHost, string? RemoteHost)? _pendingProject;
     /// <summary>The local folder's watches were stopped while the panel was closed: on opening, they restart and the panel catches up.</summary>
     private bool _paused;
     private GitDirectories? _gitDirectories;
@@ -47,9 +48,11 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         IFileTreeService tree,
         IGitService git,
         ISettingsStore settings,
-        RemoteFiles remote)
+        RemoteFiles remote,
+        Octopus.App.Remote.RemoteProjectAccess? access = null)
     {
         _remote = remote;
+        _access = access;
         Files = files;
         Search = search;
         Git = gitPanel;
@@ -109,6 +112,9 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     /// <summary>The project is on an SSH host: the panel then has a tunnels tab (and no git, no search).</summary>
     [ObservableProperty] public partial bool IsSshProject { get; private set; }
 
+    /// <summary>The project is on a computer that runs Octopus: files and git are that computer's; sessions and tunnels have no tab.</summary>
+    [ObservableProperty] public partial bool IsHostProject { get; private set; }
+
     /// <summary>The number of changed files, for the badge on the Git tab.</summary>
     [ObservableProperty] public partial int ChangeCount { get; private set; }
 
@@ -121,7 +127,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     public bool IsGitTab => HasProject && IsGitRepository && Tab == ExplorerTab.Git;
     public bool IsTunnelsTab => HasProject && IsSshProject && Tab == ExplorerTab.Tunnels;
     /// <summary>Sessions are read from this computer: a project on an SSH host has none here.</summary>
-    public bool IsSessionsTab => HasProject && !IsSshProject && Tab == ExplorerTab.Sessions;
+    public bool IsSessionsTab => HasProject && !IsSshProject && !IsHostProject && Tab == ExplorerTab.Sessions;
     public bool HasChanges => ChangeCount > 0;
 
     /// <summary>The numbers next to the tab icons: changed files, running tunnels.</summary>
@@ -170,6 +176,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     partial void OnIsGitRepositoryChanged(bool value) => NotifyTabs();
 
     partial void OnIsSshProjectChanged(bool value) => NotifyTabs();
+    partial void OnIsHostProjectChanged(bool value) => NotifyTabs();
 
     partial void OnRemoteStatusChanged(string? value)
     {
@@ -223,7 +230,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     [RelayCommand]
     public void ShowSessions()
     {
-        if (IsSshProject) return;
+        if (IsSshProject || IsHostProject) return;
         SelectTab(ExplorerTab.Sessions);
     }
 
@@ -262,8 +269,8 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     private void Pause()
     {
-        // An SSH tree only reads when asked, so it is left as it is; a local folder's watches stop.
-        if (ProjectPath is null || IsSshProject || _pendingProject is not null) return;
+        // A tree on another machine only reads when asked (or told by its host), so it is left as it is; a local folder's watches stop.
+        if (ProjectPath is null || IsSshProject || IsHostProject || _pendingProject is not null) return;
         _version++; // a git lookup still running for this folder must not start watches now
         DisposeLocalWatches();
         _paused = true;
@@ -273,7 +280,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     {
         if (_pendingProject is { } pending)
         {
-            await SetProjectAsync(pending.Path, pending.Name, pending.SshHost);
+            await SetProjectAsync(pending.Path, pending.Name, pending.SshHost, pending.RemoteHost);
             return;
         }
         if (!_paused || ProjectPath is not { } folder) return;
@@ -295,24 +302,34 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     /// on an SSH host (<paramref name="sshHost"/>) is read through the host: there is no git and no search for it here.
     /// While the panel is closed (<see cref="IsActive"/>) this only remembers the folder.
     /// </summary>
-    public async Task SetProjectAsync(string? path, string? name, string? sshHost = null)
+    /// <param name="remoteHost">The device id of the Octopus host the folder is on: read through that host, with its git.</param>
+    public async Task SetProjectAsync(string? path, string? name, string? sshHost = null, string? remoteHost = null)
     {
         var version = ++_version;
         StopWatching();
         _paused = false;
         if (!_isActive)
         {
-            _pendingProject = (path, name, sshHost);
+            _pendingProject = (path, name, sshHost, remoteHost);
             return;
         }
         _pendingProject = null;
         _gitDirectories = null;
         _gitLookedUp = false;
+        // Without the service that reaches hosts there is nothing to read the folder through: no project is shown.
+        if (remoteHost is not null && _access is null) path = null;
         IsSshProject = path is not null && sshHost is not null;
-        Sessions.SetProject(sshHost is null && path is not null && Directory.Exists(path) ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) : null);
+        // A folder on another machine is never looked up here, even when this computer happens to have the same path.
+        Sessions.SetProject(sshHost is null && remoteHost is null && path is not null && Directory.Exists(path) ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) : null);
+        IsHostProject = path is not null && remoteHost is not null;
+        if (path is not null && remoteHost is not null && _access is not null)
+        {
+            await SetRemoteProjectAsync(path, name, _access.TreeOfHost(remoteHost), _access.GitOfHost(remoteHost), version);
+            return;
+        }
         if (path is not null && sshHost is not null)
         {
-            await SetRemoteProjectAsync(path, name, sshHost, version);
+            await SetRemoteProjectAsync(path, name, _remote.TreeFor(sshHost), null, version);
             return;
         }
         RemoteStatus = null;
@@ -405,9 +422,9 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     /// The folder is found on the host first (its absolute path, with "~" expanded there); then the tree reads the host.
     /// A host that cannot be reached is said in the panel, and the tree stays empty until it can be read.
     /// </summary>
-    private async Task SetRemoteProjectAsync(string path, string? name, string host, int version)
+    /// <param name="git">The git service of the machine the folder is on; null where there is none to ask (an SSH host).</param>
+    private async Task SetRemoteProjectAsync(string path, string? name, IRemoteFileTree tree, IGitService? git, int version)
     {
-        var tree = _remote.TreeFor(host);
         ProjectName = name ?? PathText.NameOf(path);
         IsGitRepository = false;
         ChangeCount = 0;
@@ -426,7 +443,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         {
             root = await tree.ResolveAsync(path);
         }
-        catch (SshCommandException e)
+        catch (Exception e) when (e is SshCommandException or IOException)
         {
             if (version == _version) RemoteStatus = e.Message;
             return;
@@ -440,6 +457,17 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         Files.Load(root, tree);
         _watch = tree.Watch(root, OnDirectoryChanged);
         RemoteStatus = tree.Status;
+        if (git is null) return;
+
+        // A host that runs Octopus has git too: asked there, and refreshed when the host says the folder changed.
+        var repository = await git.FindRepositoryRootAsync(root);
+        if (version != _version) return;
+        _gitLookedUp = true;
+        if (repository is null) return;
+        Git.SetRepository(repository, git);
+        IsGitRepository = true;
+        _changeWatch = tree.WatchChanges(root, OnAnyChange, GitRefreshDelay);
+        await Git.RefreshAsync(includeLog: IsGitTab);
     }
 
     private void OnRemoteStatus(object? sender, string? message)

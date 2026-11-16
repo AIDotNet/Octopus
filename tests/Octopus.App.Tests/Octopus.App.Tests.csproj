@@ -14,4 +14,8 @@
     <ItemGroup>
         <ProjectReference Include="../../src/Octopus.App/Octopus.App.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- The stand-in relay of the remote library's tests, for the app's own tests of the relay. -->
+        <Compile Include="../Octopus.Remote.Tests/FakeRelay.cs" Link="FakeRelay.cs" />
+    </ItemGroup>
 </Project>

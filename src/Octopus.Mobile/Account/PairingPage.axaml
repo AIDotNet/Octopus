@@ -1,0 +1,52 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Account"
+           x:Class="Octopus.Mobile.Account.PairingPage"
+           x:DataType="vm:PairingViewModel">
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource PairingTitle}"
+                     ShowBack="True"
+                     BackText="{l:MobileLangResource Hosts}"
+                     BackCommand="{Binding CancelCommand}" />
+    </arcm:Page.Header>
+
+    <StackPanel VerticalAlignment="Center" Margin="32,0" Spacing="18">
+        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Monitor}" Size="34"
+                      Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                      HorizontalAlignment="Center" />
+        <TextBlock Name="HostName"
+                   Text="{Binding HostName}"
+                   FontSize="{arc:ArcDesignTokenResource TypeXL}"
+                   FontWeight="{arc:ArcDesignTokenResource WeightMedium}"
+                   HorizontalAlignment="Center" />
+        <TextBlock Classes="secondary"
+                   Text="{l:MobileLangResource PairingHint}"
+                   TextWrapping="Wrap"
+                   TextTrimming="None"
+                   TextAlignment="Center" />
+        <!-- The same number is on the computer. "Allow" is only there: here one can only wait or cancel. -->
+        <TextBlock Name="Code" Classes="code" Text="{Binding Code}" IsVisible="{Binding HasCode}" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" IsVisible="{Binding IsContacting}">
+            <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" Text="{l:MobileLangResource PairingContacting}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" IsVisible="{Binding IsComparing}">
+            <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" Text="{l:MobileLangResource PairingWaiting}" />
+        </StackPanel>
+        <TextBlock Name="Failed"
+                   Text="{Binding FailureText}"
+                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center"
+                   IsVisible="{Binding HasFailed}" />
+        <arcm:Button Name="CancelButton"
+                     Variant="Plain"
+                     HorizontalAlignment="Center"
+                     Content="{l:MobileLangResource Cancel}"
+                     Command="{Binding CancelCommand}" />
+    </StackPanel>
+</arcm:Page>

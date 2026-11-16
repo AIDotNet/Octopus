@@ -20,7 +20,9 @@ public sealed class TabContentRegistry(
     IGitService git,
     IFileTreeService files,
     IDialogService dialogs,
-    IServiceProvider services) : ITabContentRegistry
+    IServiceProvider services,
+    Octopus.Terminal.Avalonia.TerminalSessionRegistry? sessions = null,
+    Octopus.App.Remote.RemoteProjects? remote = null) : ITabContentRegistry
 {
     private readonly Dictionary<string, Control> _controls = [];
     private readonly Dictionary<string, Task> _releasing = [];
@@ -36,7 +38,10 @@ public sealed class TabContentRegistry(
             ProjectItemKind.File => new FileTabView { DataContext = new FileTabViewModel(item, files, settings, dialogs: dialogs) },
             // Resolved here, not injected: the plugin workbench needs the item opener, which needs this registry's peers.
             ProjectItemKind.Plugin => new PluginViewTab(project, item, services.GetRequiredService<PluginWorkbench>(), services.GetRequiredService<IProjectService>()),
-            _ => new TerminalTabView { DataContext = new TerminalTabViewModel(project, item, launcher, factory, settings) },
+            // A project on another computer: the tab mirrors the terminal that computer runs, and owns nothing here.
+            _ when ProjectLocation.IsOnRemoteHost(project) && remote is not null =>
+                new TerminalTabView { DataContext = new TerminalTabViewModel(project, item, launcher, remote.TerminalFactory(project, item), settings) { IsMirror = true } },
+            _ => new TerminalTabView { DataContext = new TerminalTabViewModel(project, item, launcher, factory, settings, sessions) },
         };
         _controls[item.Id] = control;
         return control;
@@ -48,7 +53,13 @@ public sealed class TabContentRegistry(
         {
             return existing;
         }
-        var control = new DiffTabView { DataContext = new DiffTabViewModel(request, git, files, settings) };
+        // A change of a project on another computer: that computer's git and files answer for it.
+        var current = services.GetRequiredService<IProjectService>().Current;
+        var access = services.GetService<Octopus.App.Remote.RemoteProjectAccess>();
+        var control = new DiffTabView
+        {
+            DataContext = new DiffTabViewModel(request, access?.GitOf(current) ?? git, access?.GitOf(current) is null ? files : access.TreeOf(current) ?? files, settings),
+        };
         _controls[request.Key] = control;
         return control;
     }
@@ -63,7 +74,8 @@ public sealed class TabContentRegistry(
         }
         if (!_controls.Remove(itemId, out var control))
         {
-            return Task.CompletedTask;
+            // No tab was ever built for it, but its session may run (started for a view on another device).
+            return sessions?.CloseAsync(itemId) ?? Task.CompletedTask;
         }
         var release = ReleaseCoreAsync(itemId, control);
         if (!release.IsCompleted)
@@ -80,12 +92,16 @@ public sealed class TabContentRegistry(
             _ = ReleaseAsync(id);
         }
         await Task.WhenAll(_releasing.Values.ToList());
+        // Sessions that never had a tab.
+        if (sessions is not null) await sessions.CloseAllAsync();
     }
 
     public async Task<bool> AnyRunningChildAsync()
     {
         var checks = _controls.Values.OfType<ITabContent>().Select(c => c.HasRunningChildAsync()).ToList();
-        return (await Task.WhenAll(checks)).Any(running => running);
+        if ((await Task.WhenAll(checks)).Any(running => running)) return true;
+        // Sessions that never had a tab count too: quitting ends their programs just the same.
+        return sessions is not null && await sessions.AnyRunningChildAsync();
     }
 
     public async Task<bool> AnyUnsavedChangesAsync()
@@ -103,6 +119,8 @@ public sealed class TabContentRegistry(
                 await content.CloseAsync();
             }
             (control.DataContext as IDisposable)?.Dispose();
+            // A terminal tab closed its session through the registry already; this covers a tab that never started it.
+            if (sessions is not null) await sessions.CloseAsync(itemId);
         }
         finally
         {

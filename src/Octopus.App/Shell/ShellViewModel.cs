@@ -90,6 +90,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
     /// <summary>The SSH host of the current project; null when its folder is on this computer.</summary>
     [ObservableProperty] public partial string? CurrentProjectSshHost { get; private set; }
+
+    /// <summary>The device id of the Octopus host the current project lives on; null otherwise.</summary>
+    [ObservableProperty] public partial string? CurrentProjectRemoteHost { get; private set; }
     [ObservableProperty] public partial string? CurrentProjectName { get; private set; }
 
     public GridLength RightColumnWidth => IsRightPanelOpen ? new GridLength(RightPanelWidth) : new GridLength(0);
@@ -114,7 +117,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>On an SSH host the file is copied here first (read-only); otherwise it is opened where it is.</summary>
     public void OpenFileFromPanel(string path)
     {
-        if (CurrentProjectSshHost is not null) _ = _opener.OpenRemoteFileAsync(path);
+        if (CurrentProjectSshHost is not null || CurrentProjectRemoteHost is not null) _ = _opener.OpenRemoteFileAsync(path);
         else _opener.OpenFile(path);
     }
 
@@ -123,6 +126,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private void ReadProject()
     {
         CurrentProjectPath = _projects.Current?.Path;
+        CurrentProjectRemoteHost = _projects.Current?.RemoteHost;
         CurrentProjectName = _projects.Current?.Name;
         CurrentProjectSshHost = _projects.Current?.SshHost;
     }

@@ -61,6 +61,9 @@ public sealed class TerminalControl : Decorator
     private LaunchSpec? _spec;
     private ITerminalConnectionFactory? _factory;
     private TerminalSession? _session;
+    // With a registry the session belongs to it (under _key) and outlives this control; without one it is the control's own.
+    private TerminalSessionRegistry? _registry;
+    private string? _key;
     private TerminalInputRouter? _router;
     private TopLevel? _topLevel;
     private readonly Border _searchHost = new()
@@ -168,6 +171,12 @@ public sealed class TerminalControl : Decorator
     /// </summary>
     public bool PathLinksEnabled { get; set; } = true;
 
+    /// <summary>
+    /// The terminal shows a session that another computer runs (see <see cref="TerminalSession.IsMirror"/>). Read when
+    /// the control starts a session of its own; a session taken from a registry keeps what it is.
+    /// </summary>
+    public bool IsMirror { get; set; }
+
     /// <summary>The window title the program set; null before it set one.</summary>
     public string? Title { get => _title; private set => SetAndRaise(TitleProperty, ref _title, value); }
 
@@ -190,11 +199,24 @@ public sealed class TerminalControl : Decorator
     /// Runs <paramref name="spec"/>. Safe to call before the control has been laid out: the process starts once the
     /// control has a size, because a pty needs its initial rows and columns. A start failure is shown in the control.
     /// </summary>
-    public void Start(LaunchSpec spec, ITerminalConnectionFactory factory)
+    public void Start(LaunchSpec spec, ITerminalConnectionFactory factory) => Start(spec, factory, null, null);
+
+    /// <summary>
+    /// Like <see cref="Start(LaunchSpec, ITerminalConnectionFactory)"/>, with the session kept in
+    /// <paramref name="registry"/> under <paramref name="key"/>. A session that already runs there (started for a view
+    /// on another device before this control existed) is shown as it is, and <paramref name="spec"/> is not started a
+    /// second time. Calling this again on a control that shows a session replaces that session with a new run.
+    /// </summary>
+    public void Start(LaunchSpec spec, ITerminalConnectionFactory factory, TerminalSessionRegistry? registry, string? key)
     {
         var old = _session;
+        var (oldRegistry, oldKey) = (_registry, _key);
         DetachSession();
-        if (old is not null) _ = old.DisposeAsync().AsTask();
+        if (old is not null)
+        {
+            _ = oldRegistry is not null && oldKey is not null ? oldRegistry.CloseAsync(oldKey, old) : old.DisposeAsync().AsTask();
+        }
+        (_registry, _key) = registry is not null && key is not null ? (registry, key) : (null, null);
         _spec = spec;
         _factory = factory;
         _startFailed = false;
@@ -234,11 +256,15 @@ public sealed class TerminalControl : Decorator
     public async Task CloseAsync()
     {
         var session = _session;
+        var (registry, key) = (_registry, _key);
         DetachSession();
         _spec = null;
         _factory = null;
+        (_registry, _key) = (null, null);
         IsRunning = false;
-        if (session is not null) await session.DisposeAsync();
+        if (session is null) return;
+        if (registry is not null && key is not null) await registry.CloseAsync(key, session);
+        else await session.DisposeAsync();
     }
 
     /// <summary>Opens the search bar (or asks the open one to take focus again).</summary>
@@ -283,19 +309,30 @@ public sealed class TerminalControl : Decorator
     public void FocusTerminal() => _view.Focus();
 
     /// <summary>True when the foreground process in the terminal is not the shell itself (ask before closing).</summary>
-    public async Task<bool> HasRunningChildAsync()
-    {
-        if (_session is not { IsRunning: true } session || _spec is null) return false;
-        var name = await session.GetForegroundProcessNameAsync();
-        if (string.IsNullOrEmpty(name)) return false;
-        return !SameProgram(name, _spec.FileName);
-    }
+    public Task<bool> HasRunningChildAsync() => _session?.HasRunningChildAsync() ?? Task.FromResult(false);
 
     /// <summary>Sends text to the process as if it had been typed (no paste wrapping).</summary>
     public void SendText(string text) => _session?.Send(text);
 
+    /// <summary>Sends a key as if it had been pressed (a key of a touch key bar), encoded for the terminal's current modes.</summary>
+    public void SendKey(TerminalKey key, KeyMods mods = KeyMods.None) => _router?.SendKey(key, mods);
+
     /// <summary>Screen and scrollback as plain text. Empty when nothing runs.</summary>
     public string ReadScreenText() => _session?.ReadText() ?? string.Empty;
+
+    /// <summary>
+    /// The grid this view holds at its present size, whatever grid the terminal has: for a mirror the two differ while
+    /// another view decides the size. Null before the control is laid out.
+    /// </summary>
+    public (int Columns, int Rows)? ViewGridSize
+    {
+        get
+        {
+            if (_view.Bounds is not { Width: > 0, Height: > 0 } bounds) return null;
+            var grid = _view.GridSizeFor(bounds.Size);
+            return grid.Columns < 2 ? null : (grid.Columns, grid.Rows);
+        }
+    }
 
     /// <summary>Current grid size, or null before the process started.</summary>
     public (int Columns, int Rows)? GridSize =>
@@ -383,28 +420,53 @@ public sealed class TerminalControl : Decorator
         var grid = _view.GridSizeFor(bounds.Size);
         if (grid.Columns < 2) return;
 
-        var session = new TerminalSession(_spec, _factory, grid, TerminalPalettes.For(_dark),
-            TerminalPalettes.SchemeFor(_dark), Math.Max(100, ScrollbackLines), IsOnScreen);
-        session.FrameReady += OnFrame;
-        session.TitleChanged += OnTitle;
-        session.Bell += OnBell;
-        session.Exited += OnExited;
+        TerminalSession session;
+        var created = true;
         try
         {
-            session.Start();
+            if (_registry is not null && _key is not null)
+            {
+                session = _registry.GetOrStart(_key, _spec, _factory, grid, TerminalPalettes.For(_dark),
+                    TerminalPalettes.SchemeFor(_dark), Math.Max(100, ScrollbackLines), out created);
+            }
+            else
+            {
+                session = new TerminalSession(_spec, _factory, grid, TerminalPalettes.For(_dark),
+                    TerminalPalettes.SchemeFor(_dark), Math.Max(100, ScrollbackLines), IsOnScreen) { IsMirror = IsMirror };
+                try { session.Start(); }
+                catch
+                {
+                    _ = session.DisposeAsync().AsTask();
+                    throw;
+                }
+            }
         }
         catch (Exception ex)
         {
-            _ = session.DisposeAsync().AsTask();
             _startFailed = true;
             IsRunning = false;
             ShowMessage(ex.Message);
             return;
         }
+        session.FrameReady += OnFrame;
+        session.TitleChanged += OnTitle;
+        session.Bell += OnBell;
+        session.Exited += OnExited;
+        session.SizeOwnerChanged += OnSizeOwnerChanged;
         _session = session;
         _router = new TerminalInputRouter(session, () => Keymap, GetClipboardTextAsync, SaveClipboardImageAsync, SetClipboardTextAsync, AllowPasteAsync, OpenSearch);
-        IsRunning = true;
-        session.ForceFlush();
+        IsRunning = session.IsRunning;
+        if (!created)
+        {
+            // It ran before this control existed: take what it has (its program's title, how it ended) and give it this
+            // control's colors and size.
+            _spec = session.Spec;
+            if (session.Title is { } title) Title = title;
+            session.SetPalette(TerminalPalettes.For(_dark), TerminalPalettes.SchemeFor(_dark));
+            session.Resize(grid);
+            if (!session.IsRunning && session.LastExit is { } exit) ShowExit(exit);
+        }
+        session.SetViewer(IsOnScreen);
     }
 
     private void DetachSession()
@@ -415,6 +477,8 @@ public sealed class TerminalControl : Decorator
             session.TitleChanged -= OnTitle;
             session.Bell -= OnBell;
             session.Exited -= OnExited;
+            session.SizeOwnerChanged -= OnSizeOwnerChanged;
+            session.SetViewer(null);
         }
         _router?.Dispose();
         _router = null;
@@ -462,17 +526,37 @@ public sealed class TerminalControl : Decorator
 
     private void OnBell() => Bell?.Invoke(this, EventArgs.Empty);
 
-    private void OnExited(TerminalExit exit)
+    private void OnExited(TerminalExit exit) => Exited?.Invoke(this, ShowExit(exit));
+
+    private int? ShowExit(TerminalExit exit)
     {
         var code = exit.ExitCode ?? (exit.Signal is { } s ? 128 + s : null);
         IsRunning = false;
         ExitCode = code;
         ShowMessage(string.Format(ExitedMessageFormat, code?.ToString() ?? "?"));
-        Exited?.Invoke(this, code);
+        return code;
+    }
+
+    // A view on another device took the say over the size, or gave it back: in the second case this view's size applies again.
+    private void OnSizeOwnerChanged() => Dispatcher.UIThread.Post(() =>
+    {
+        if (_session is { SizeOwner: null }) RecomputeGrid();
+    });
+
+    /// <summary>
+    /// The person is using this view: the terminal takes this view's size again if a view on another device had it
+    /// (the view that was last used decides, design/12-远程操作.md §6.5).
+    /// </summary>
+    private void ReclaimSize()
+    {
+        if (_session is not { SizeOwner: not null } session) return;
+        if (_view.Bounds is not { Width: > 0, Height: > 0 } bounds) return;
+        session.ClaimSize(null, _view.GridSizeFor(bounds.Size));
     }
 
     private void OnKeyPressed(object? sender, TerminalKeyEventArgs e)
     {
+        if (e.Input.Action == KeyAction.Press) ReclaimSize();
         if (!IsRunning)
         {
             // Nothing to type into: Enter starts the command again.
@@ -499,6 +583,9 @@ public sealed class TerminalControl : Decorator
             case TerminalPointerKind.Move:
                 _hoverCell = e.Cell;
                 SetHover(held ? FindLink(e.Cell) : null);
+                break;
+            case TerminalPointerKind.Press when e.Mouse.Button == MouseButton.Left && !held:
+                ReclaimSize();
                 break;
             case TerminalPointerKind.Press when e.Mouse.Button == MouseButton.Left && held:
                 if (FindLink(e.Cell) is { } link)
@@ -618,11 +705,6 @@ public sealed class TerminalControl : Decorator
     private Task SetClipboardTextAsync(string text) =>
         TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard ? clipboard.SetTextAsync(text) : Task.CompletedTask;
 
-    private static bool SameProgram(string running, string shellPath)
-    {
-        static string Normalize(string s) => Path.GetFileNameWithoutExtension(s.Trim()).TrimStart('-').ToLowerInvariant();
-        return Normalize(running) == Normalize(shellPath);
-    }
 }
 
 /// <summary>A file path followed in the terminal (see <see cref="TerminalControl.PathActivated"/>).</summary>

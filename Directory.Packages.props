@@ -11,6 +11,8 @@
         <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
+        <!-- Real drawing in the phone app's headless tests (the desktop app's tests get it through Avalonia.Desktop). -->
+        <PackageVersion Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="TKCode.Arc" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Blocks" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Dock" Version="$(ArcVersion)" />
@@ -18,6 +20,8 @@
         <PackageVersion Include="TKCode.Arc.Icons.Lucide" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Themes.Corners" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Terminal" Version="$(ArcVersion)" />
+        <!-- Touch-first controls for the phone app (src/Octopus.Mobile). -->
+        <PackageVersion Include="TKCode.Arc.Mobile" Version="$(ArcVersion)" />
         <PackageVersion Include="MiniPty" Version="1.5.0" />
         <!-- JavaScript engine for plugins (design/plugins/02). Referenced only by the plugin runtime adapter. -->
         <PackageVersion Include="Jaunt" Version="1.0.3" />

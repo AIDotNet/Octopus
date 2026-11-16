@@ -60,7 +60,7 @@ public partial class ExplorerPanelView : UserControl
         ApplyTrailingInset();
         Model.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(ExplorerPanelViewModel.IsGitRepository) or nameof(ExplorerPanelViewModel.IsSshProject)) SyncOptions();
+            if (e.PropertyName is nameof(ExplorerPanelViewModel.IsGitRepository) or nameof(ExplorerPanelViewModel.IsSshProject) or nameof(ExplorerPanelViewModel.IsHostProject)) SyncOptions();
             else if (e.PropertyName == nameof(ExplorerPanelViewModel.GitTabTooltip) && _gitOption is not null) _gitOption.Title = Model.GitTabTooltip;
             else if (e.PropertyName == nameof(ExplorerPanelViewModel.TunnelsTabTooltip) && _tunnelsOption is not null) _tunnelsOption.Title = Model.TunnelsTabTooltip;
         };
@@ -89,8 +89,9 @@ public partial class ExplorerPanelView : UserControl
 
         var wanted = new List<ToggleGroupOption> { _filesOption };
         if (Model.IsGitRepository) wanted.Add(_gitOption);
-        if (!Model.IsSshProject) wanted.Add(_sessionsOption);
-        else wanted.Add(_tunnelsOption);
+        // Sessions are this computer's and tunnels an SSH host's: a project on a computer running Octopus has neither.
+        if (Model.IsSshProject) wanted.Add(_tunnelsOption);
+        else if (!Model.IsHostProject) wanted.Add(_sessionsOption);
         if (Tabs.Items.Cast<object>().SequenceEqual(wanted)) return;
         Tabs.Items.Clear();
         foreach (var option in wanted) Tabs.Items.Add(option);
@@ -154,6 +155,9 @@ public partial class ExplorerPanelView : UserControl
         set => SetValue(ProjectSshHostProperty, value);
     }
 
+    /// <summary>The device id of the Octopus host the current project lives on; null otherwise.</summary>
+    public string? ProjectRemoteHost { get; private set; }
+
     public double TrailingInset
     {
         get => GetValue(TrailingInsetProperty);
@@ -174,12 +178,13 @@ public partial class ExplorerPanelView : UserControl
     /// Points the panel at a project. The folder is read again only when the folder or the host changed: a rename keeps
     /// what is open in the tree.
     /// </summary>
-    public void SetProject(string? path, string? name, string? sshHost)
+    public void SetProject(string? path, string? name, string? sshHost, string? remoteHost = null)
     {
-        var changed = path != ProjectPath || sshHost != ProjectSshHost;
+        var changed = path != ProjectPath || sshHost != ProjectSshHost || remoteHost != ProjectRemoteHost;
         _settingProject = true;
         try
         {
+            ProjectRemoteHost = remoteHost;
             ProjectSshHost = sshHost;
             ProjectName = name;
             ProjectPath = path;
@@ -193,7 +198,7 @@ public partial class ExplorerPanelView : UserControl
 
     private void OnProjectChanged()
     {
-        if (!_settingProject) _ = Model.SetProjectAsync(ProjectPath, ProjectName, ProjectSshHost);
+        if (!_settingProject) _ = Model.SetProjectAsync(ProjectPath, ProjectName, ProjectSshHost, ProjectRemoteHost);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)

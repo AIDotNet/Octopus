@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The phone app in a desktop window the size of a phone: for development and for looking at it without a device.
+         The iOS and Android heads are separate projects (they need their workloads) and start the same MobileApp. -->
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <AssemblyName>octopus-mobile-preview</AssemblyName>
+        <RootNamespace>Octopus.Mobile.Desktop</RootNamespace>
+        <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+        <!-- The .NET 11 SDK's optimized AOT publish drops Avalonia's compiled XAML (see Octopus.App.csproj). -->
+        <UseOptimizedPublish>false</UseOptimizedPublish>
+    </PropertyGroup>
+
+    <!-- Published for a runtime it is NativeAOT, as every head of the phone app is: what trimming breaks shows here first. -->
+    <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' And '$(Configuration)' == 'Release'">
+        <PublishAot>true</PublishAot>
+        <StripSymbols>true</StripSymbols>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia.Desktop" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Mobile/Octopus.Mobile.csproj" />
+    </ItemGroup>
+</Project>

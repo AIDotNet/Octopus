@@ -36,8 +36,8 @@ public sealed class FileTabViewModel : ObservableObject, IDisposable
             string.IsNullOrWhiteSpace(terminal.FontFamily) ? null : terminal.FontFamily,
             terminal.FontSize is > 6 and < 60 ? terminal.FontSize : 13,
             dialogs ?? AppHost.Get<IDialogService>(),
-            Remote: item.RemotePath is { } remotePath && project?.SshHost is { } host
-                ? new RemoteCopy(AppHost.Get<RemoteFiles>(), host, remotePath, File.Exists(Path) ? File.ReadAllBytes(Path) : [], dialogs ?? AppHost.Get<IDialogService>())
+            Remote: item.RemotePath is { } remotePath && AppHost.Get<Remote.RemoteProjectAccess>().TreeOf(project) is { } tree
+                ? new RemoteCopy(tree, remotePath, File.Exists(Path) ? File.ReadAllBytes(Path) : [], dialogs ?? AppHost.Get<IDialogService>())
                 : null);
         Viewer = FileViewers.For(Kind).CreateModel(context);
         Viewer.PropertyChanged += (_, e) =>

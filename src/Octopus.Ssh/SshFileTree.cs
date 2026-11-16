@@ -20,7 +20,7 @@ public sealed class SshFileTooLargeException(long size, long limit) : SshCommand
 /// folder again. Only read commands are sent: nothing on the host is changed.
 /// </summary>
 /// <remarks>Folders are read by <c>ls -1Ap</c>, so a name with a line break in it is not shown.</remarks>
-public sealed class SshFileTree(string host, IProcessRunner runner, IReadOnlyList<string> options) : IFileTreeService
+public sealed class SshFileTree(string host, IProcessRunner runner, IReadOnlyList<string> options) : IRemoteFileTree
 {
     /// <summary>An answer this recent is not asked for again: the tree asks for the same folder several times in a row.</summary>
     private static readonly TimeSpan Fresh = TimeSpan.FromSeconds(3);

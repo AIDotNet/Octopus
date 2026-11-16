@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Remote operation, the part both sides share: device identity, the secure channel, the transport and the
+         messages (design/12-远程操作.md, design/remote/安全通道.md). No project or package references: the wire format
+         is not tied to the app's own models, and everything is in the base class library, so it runs under NativeAOT
+         on desktop and on phones alike. -->
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Remote.Tests" />
+    </ItemGroup>
+</Project>

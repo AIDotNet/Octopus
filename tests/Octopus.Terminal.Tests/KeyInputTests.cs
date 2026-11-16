@@ -36,7 +36,17 @@ public class KeyInputTests
         public string Text() { lock (Written) return Encoding.UTF8.GetString(Written.ToArray()); }
     }
 
-    private static async Task<string> Press(TerminalKey key, KeyMods mods)
+    /// <summary>A key of a touch key bar is sent like the same key on a keyboard.</summary>
+    [Theory]
+    [InlineData(TerminalKey.Escape, KeyMods.None, "ESC")]
+    [InlineData(TerminalKey.Tab, KeyMods.None, "\t")]
+    [InlineData(TerminalKey.ArrowUp, KeyMods.None, "ESC[A")]
+    [InlineData(TerminalKey.C, KeyMods.Ctrl, "\u0003")]
+    [InlineData(TerminalKey.J, KeyMods.Ctrl, "\\n")]
+    public async Task SendKey_sends(TerminalKey key, KeyMods mods, string expected) =>
+        Assert.Equal(expected, await Press(key, mods, viaSendKey: true));
+
+    private static async Task<string> Press(TerminalKey key, KeyMods mods, bool viaSendKey = false)
     {
         var rec = new Recorder();
         await using var session = new TerminalSession(
@@ -45,7 +55,8 @@ public class KeyInputTests
         session.Start();
         using var router = new TerminalInputRouter(session, () => new MacTerminalKeymap(),
             () => Task.FromResult<string?>(null), () => Task.FromResult<string?>(null), _ => Task.CompletedTask, (_, _) => Task.FromResult(true), () => { });
-        router.HandleKey(new TerminalKeyEventArgs(new KeyInput(key, KeyAction.Press, mods), global::Avalonia.Input.KeyModifiers.None));
+        if (viaSendKey) router.SendKey(key, mods);
+        else router.HandleKey(new TerminalKeyEventArgs(new KeyInput(key, KeyAction.Press, mods), global::Avalonia.Input.KeyModifiers.None));
         for (var i = 0; i < 50 && rec.Written.Count == 0; i++) await Task.Delay(20);
         return rec.Text().Replace("\x1b", "ESC").Replace("\r", "\\r").Replace("\n", "\\n").Replace("\x7f", "DEL");
     }

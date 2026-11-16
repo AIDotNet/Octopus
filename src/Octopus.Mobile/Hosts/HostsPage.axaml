@@ -1,0 +1,83 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Hosts"
+           x:Class="Octopus.Mobile.Hosts.HostsPage"
+           x:DataType="vm:HostsViewModel"
+           IsScrollable="True">
+    <arcm:Page.Resources>
+        <!-- One computer: how it is reached, and a pill with what needs the person there. -->
+        <DataTemplate x:Key="HostRow" x:DataType="vm:HostRowViewModel">
+            <arcm:ListItem Icon="{x:Static arc:ArcIcons.Monitor}"
+                           Content="{Binding Name}"
+                           Subtitle="{Binding Summary}"
+                           ShowChevron="{Binding ShowChevron}"
+                           Command="{Binding OpenCommand}">
+                <arcm:ListItem.Trailing>
+                    <Panel>
+                        <Border Classes="pill"
+                                Classes.waiting="{Binding IsWaiting}"
+                                Classes.error="{Binding IsError}"
+                                Classes.working="{Binding IsWorking}"
+                                Classes.action="{Binding IsPairAction}"
+                                IsVisible="{Binding HasPill}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <arc:ArcSpinner IsVisible="{Binding IsWorking}" />
+                                <TextBlock Text="{Binding PillText}" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Classes="muted" Text="{l:MobileLangResource Idle}" IsVisible="{Binding IsIdle}" VerticalAlignment="Center" />
+                    </Panel>
+                </arcm:ListItem.Trailing>
+            </arcm:ListItem>
+        </DataTemplate>
+    </arcm:Page.Resources>
+
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource Hosts}" LargeTitle="True">
+            <arcm:Navbar.Trailing>
+                <arcm:IconButton Name="AccountButton"
+                                 Icon="{x:Static arc:ArcIcons.User}"
+                                 Command="{Binding OpenAccountCommand}"
+                                 AutomationProperties.Name="{l:MobileLangResource Account}" />
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
+    </arcm:Page.Header>
+
+    <StackPanel Margin="0,4,0,24" Spacing="18">
+        <arcm:ListGroup Name="OnlineGroup"
+                        Header="{l:MobileLangResource HostsOnline}"
+                        ItemsSource="{Binding Online}"
+                        ItemTemplate="{StaticResource HostRow}"
+                        IsVisible="{Binding HasOnline}" />
+        <arcm:ListGroup Name="OfflineGroup"
+                        Header="{l:MobileLangResource HostsOffline}"
+                        ItemsSource="{Binding Offline}"
+                        ItemTemplate="{StaticResource HostRow}"
+                        IsVisible="{Binding HasOffline}" />
+        <arcm:ListGroup Name="UnpairedGroup"
+                        Header="{l:MobileLangResource HostsNotPaired}"
+                        ItemsSource="{Binding Unpaired}"
+                        ItemTemplate="{StaticResource HostRow}"
+                        IsVisible="{Binding HasUnpaired}" />
+        <TextBlock Classes="muted"
+                   Text="{l:MobileLangResource HostsEmpty}"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center"
+                   Margin="16,48"
+                   IsVisible="{Binding IsEmpty}" />
+    </StackPanel>
+
+    <arcm:Page.Overlay>
+        <arcm:ActionSheet Name="AccountSheet"
+                          IsOpen="{Binding IsAccountOpen, Mode=TwoWay}"
+                          Title="{Binding AccountName}"
+                          CancelText="{l:MobileLangResource Cancel}">
+            <arcm:ActionSheetItem Content="{l:MobileLangResource SignOut}"
+                                  IsDestructive="True"
+                                  Command="{Binding SignOutCommand}" />
+        </arcm:ActionSheet>
+    </arcm:Page.Overlay>
+</arcm:Page>

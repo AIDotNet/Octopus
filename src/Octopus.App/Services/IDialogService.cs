@@ -45,4 +45,5 @@ public sealed record ProjectAppearanceChoice(string? Color, string? Icon, string
 /// What the new project dialog returns: a folder and the name to show (empty: the folder's name). With an SSH host the
 /// folder is a path on that host and is not checked here; without one it is an existing local folder.
 /// </summary>
-public sealed record NewProjectChoice(string Path, string Name, string? SshHost = null);
+/// <param name="RemoteHost">The device id of a paired Octopus host when the folder is there; null otherwise.</param>
+public sealed record NewProjectChoice(string Path, string Name, string? SshHost = null, string? RemoteHost = null);

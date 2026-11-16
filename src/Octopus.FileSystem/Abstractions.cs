@@ -73,3 +73,35 @@ public interface IFileSearchService
     /// </summary>
     IAsyncEnumerable<ContentMatch> SearchContentAsync(string root, string query, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// A folder tree that is on another machine (an SSH host, a computer that runs Octopus): besides listing it reads and
+/// writes whole files, and says how the connection is doing. Nothing is watched: the tree is read again when asked.
+/// Failures are <see cref="IOException"/>s whose message is what the other machine said.
+/// </summary>
+public interface IRemoteFileTree : IFileTreeService
+{
+    /// <summary>What went wrong the last time the other machine was asked; null when it answered.</summary>
+    string? Status { get; }
+    /// <summary>Raised on a background thread when <see cref="Status"/> changed.</summary>
+    event EventHandler<string?>? StatusChanged;
+    /// <summary>True while a request is under way.</summary>
+    bool IsBusy { get; }
+    /// <summary>Raised on a background thread when <see cref="IsBusy"/> changed.</summary>
+    event EventHandler<bool>? BusyChanged;
+
+    /// <summary>The absolute path of a folder there (<c>~</c> and relative paths are that machine's to resolve).</summary>
+    Task<string> ResolveAsync(string path, CancellationToken cancellationToken = default);
+    /// <summary>The bytes of a file. Throws <see cref="RemoteFileTooLargeException"/> (or the tree's own exception of that meaning) when it has more than <paramref name="maxBytes"/>.</summary>
+    Task<byte[]> ReadAsync(string path, long maxBytes, CancellationToken cancellationToken = default);
+    /// <summary>Replaces a file's content; the old content stays whole until the new one is complete.</summary>
+    Task WriteAsync(string path, byte[] bytes, CancellationToken cancellationToken = default);
+    Task<bool> ExistsAsync(string path, CancellationToken cancellationToken = default);
+}
+
+/// <summary>A file on another machine is larger than what is copied to this one.</summary>
+public sealed class RemoteFileTooLargeException(long size, long limit) : IOException($"{size} bytes is more than the {limit} bytes that are copied.")
+{
+    public long Size { get; } = size;
+    public long Limit { get; } = limit;
+}

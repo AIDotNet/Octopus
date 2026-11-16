@@ -45,6 +45,37 @@ public class WorkspaceTests
         Assert.True(window.GetVisualDescendants().OfType<NoProjectView>().Single().IsEffectivelyVisible);
     }
 
+    /// <summary>An item somebody on another device created opens its tab, but the person here keeps what they were looking at.</summary>
+    [AvaloniaFact]
+    public void An_item_added_without_activating_it_opens_behind_the_tab_in_front()
+    {
+        var window = Open();
+        var project = AddProject();
+        var projects = AppHost.Get<IProjectService>();
+        var front = AppHost.Get<IItemOpener>().OpenTerminal()!;
+        Dispatcher.UIThread.RunJobs();
+        var layout = (DockLayout)AppHost.Get<WorkspaceViewModel>().CurrentLayout!;
+        var frontPane = layout.Workspace.FindPane(front.Id)!;
+        Assert.Same(frontPane, layout.ActivePane);
+
+        var quiet = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" };
+        projects.AddItem(project, quiet, activate: false);
+        Dispatcher.UIThread.RunJobs();
+
+        var quietPane = layout.Workspace.FindPane(quiet.Id);
+        Assert.NotNull(quietPane);
+        Assert.Same(frontPane, layout.ActivePane);
+        Assert.Equal(front.Id, project.ActiveItemId);
+        // Its program was not started: a tab starts it when it is first shown.
+        Assert.Single(AppHost.Get<FakeTerminalConnectionFactory>().Started);
+
+        // Activated the usual way it comes to the front.
+        projects.ActivateItem(quiet.Id);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(quietPane, layout.ActivePane);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void A_new_terminal_adds_a_tab_to_the_dock_layout()
     {

@@ -14,9 +14,28 @@ public sealed class AppSettingsModel
     public AgentSettings Agents { get; set; } = new();
     public UpdateSettings Updates { get; set; } = new();
     public TraySettings Tray { get; set; } = new();
+    public RemoteSettings Remote { get; set; } = new();
 }
 
 /// <summary>The icon in the notification area (Windows, Linux) or the menu bar (macOS).</summary>
+/// <summary>Remote operation: whether other devices may reach this computer (design/12-远程操作.md §7.1).</summary>
+public sealed class RemoteSettings
+{
+    /// <summary>The port other devices of the local network connect to.</summary>
+    public const int DefaultLanPort = 47600;
+
+    /// <summary>The name other devices see; null or empty: the computer's name.</summary>
+    public string? DeviceName { get; set; }
+    /// <summary>Listen for paired devices on the local network. Off until the person turns it on.</summary>
+    public bool LanEnabled { get; set; }
+    public int LanPort { get; set; } = DefaultLanPort;
+
+    /// <summary>The relay service this computer uses to reach hosts outside its network, and to be reached; null: none. Its access token is not here but in the keystore.</summary>
+    public string? RelayUrl { get; set; }
+    /// <summary>Stay connected to the relay so that paired devices can reach this computer through it. Off until the person turns it on.</summary>
+    public bool RelayHostEnabled { get; set; }
+}
+
 public sealed class TraySettings
 {
     public bool Enabled { get; set; } = true;

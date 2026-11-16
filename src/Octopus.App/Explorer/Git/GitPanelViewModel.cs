@@ -18,7 +18,8 @@ public sealed partial class GitPanelViewModel : ObservableObject
 {
     public const int CommitCount = 30;
 
-    private readonly IGitService _git;
+    private IGitService _git;
+    private readonly IGitService _local;
     private readonly IDialogService? _dialogs;
     private readonly GitCommitsHeaderViewModel _commitsHeader = new();
     private string? _root;
@@ -30,7 +31,7 @@ public sealed partial class GitPanelViewModel : ObservableObject
 
     public GitPanelViewModel(IGitService git, IDialogService? dialogs = null)
     {
-        _git = git;
+        _git = _local = git;
         _dialogs = dialogs;
     }
 
@@ -174,9 +175,11 @@ public sealed partial class GitPanelViewModel : ObservableObject
     [RelayCommand]
     private void ToggleAmend() => IsAmend = !IsAmend;
 
-    public void SetRepository(string? root)
+    /// <param name="service">The git service of the machine the repository is on; null: this computer's.</param>
+    public void SetRepository(string? root, IGitService? service = null)
     {
         _version++;
+        _git = service ?? _local;
         _root = root;
         // A read of the previous repository still running is dropped (by the version); the new one need not wait for it.
         _running = null;

@@ -28,6 +28,12 @@ public interface IItemActivityService
     /// <summary>The terminal of the item set its title (OSC 0/2). Call on the UI thread.</summary>
     void ReportTitle(string itemId, string? rawTitle);
 
+    /// <summary>
+    /// What the item is doing, as the computer that runs it says (an item of a project on another computer: the agent's
+    /// own signals only arrive there). Call on the UI thread.
+    /// </summary>
+    void ReportRemote(string itemId, ItemActivity activity);
+
     /// <summary>The program of the item exited, or its tab was closed. Call on the UI thread.</summary>
     void ReportExit(string itemId);
 }

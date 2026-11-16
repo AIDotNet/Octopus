@@ -1,0 +1,112 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Terminals"
+           xmlns:term="using:Octopus.Terminal.Avalonia"
+           x:Class="Octopus.Mobile.Terminals.TerminalPage"
+           x:DataType="vm:TerminalViewModel"
+           AvoidKeyboard="True">
+    <arcm:Page.Header>
+        <!-- No text beside the back arrow: a session's title is long, and the strip below names the host. -->
+        <arcm:Navbar Title="{Binding Title}"
+                     ShowBack="True"
+                     BackCommand="{Binding BackCommand}" />
+    </arcm:Page.Header>
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Where the session is, and who decides its size. -->
+        <Border Classes="strip" Grid.Row="0">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Name="LocationText" Classes="secondary" Text="{Binding Location}" />
+                    <TextBlock Name="SizeText" Classes="muted" Text="{Binding SizeText}" FontSize="{arc:ArcDesignTokenResource TypeXS}" />
+                </StackPanel>
+                <arcm:Button Name="FitButton" Grid.Column="1" Variant="Plain"
+                             Content="{l:MobileLangResource FitToPhone}"
+                             Command="{Binding FitCommand}"
+                             IsVisible="{Binding IsViewing}" />
+                <arcm:Button Name="ReleaseButton" Grid.Column="1" Variant="Plain"
+                             Content="{l:MobileLangResource ReturnSize}"
+                             Command="{Binding ReleaseCommand}"
+                             IsVisible="{Binding IsFitted}" />
+            </Grid>
+        </Border>
+        <term:TerminalControl Name="Terminal" Grid.Row="1" FontSize="12" />
+    </Grid>
+
+    <arcm:Page.Footer>
+        <StackPanel>
+            <!-- Only looking: one button takes the size and opens the input. -->
+            <Border Classes="bar" IsVisible="{Binding IsViewing}">
+                <arcm:Button Name="FitAndTypeButton"
+                             Variant="Filled"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             Content="{l:MobileLangResource FitAndType}"
+                             Command="{Binding FitCommand}" />
+            </Border>
+
+            <!-- The choices of the agent's question, each a row to tap, then Esc. -->
+            <Border Classes="bar" Padding="0,8,0,2" IsVisible="{Binding HasQuickReplies}">
+                <arcm:ListGroup Name="Replies" ItemsSource="{Binding QuickReplies}">
+                    <arcm:ListGroup.ItemTemplate>
+                        <DataTemplate x:DataType="vm:QuickReply">
+                            <arcm:ListItem Content="{Binding Label}"
+                                           Command="{Binding $parent[arcm:ListGroup].((vm:TerminalViewModel)DataContext).ReplyCommand}"
+                                           CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </arcm:ListGroup.ItemTemplate>
+                </arcm:ListGroup>
+            </Border>
+
+            <!-- The composer: a whole line, sent at once. -->
+            <Border Classes="bar" IsVisible="{Binding IsComposing}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                    <arcm:IconButton Name="KeyboardButton"
+                                     Icon="{x:Static arc:ArcIcons.Keyboard}"
+                                     Command="{Binding ToggleInputCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource UseKeyboard}" />
+                    <arcm:TextField Name="Composer" Grid.Column="1"
+                                    Text="{Binding ComposeText, Mode=TwoWay}"
+                                    PlaceholderText="{l:MobileLangResource ReplyPlaceholder}"
+                                    VerticalAlignment="Center" />
+                    <arcm:IconButton Name="SendButton" Grid.Column="2"
+                                     Variant="Filled"
+                                     Icon="{x:Static arc:ArcIcons.ArrowUp}"
+                                     Command="{Binding SendCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource Send}" />
+                </Grid>
+            </Border>
+
+            <!-- Typing straight into the terminal: the keys a phone keyboard lacks. Ctrl is sticky. -->
+            <Border Classes="bar" IsVisible="{Binding IsDirect}">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                    <arcm:IconButton Name="ComposerButton"
+                                     Icon="{x:Static arc:ArcIcons.MessageSquare}"
+                                     Command="{Binding ToggleInputCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource UseComposer}" />
+                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl Name="KeyRow" ItemsSource="{Binding Keys}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:KeyCapViewModel">
+                                    <arcm:Button Classes="keycap"
+                                                 Classes.armed="{Binding IsArmed}"
+                                                 Focusable="False"
+                                                 Content="{Binding Label}"
+                                                 Command="{Binding PressCommand}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </StackPanel>
+    </arcm:Page.Footer>
+</arcm:Page>

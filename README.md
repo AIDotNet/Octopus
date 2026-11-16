@@ -48,6 +48,11 @@ src/
   Octopus.Updates            自动更新：签名清单、下载、状态机（安装步骤在各平台工程里）
   Octopus.Terminal(.MiniPty/.Avalonia)       PTY 与终端控件
   Octopus.App                Avalonia 界面
+  Octopus.Remote             远程操作两端共用的部分：设备身份、安全通道、WebSocket 传输、消息（design/12-远程操作.md）
+  Octopus.Remote.Host        主机一侧：谁能连进来、配对、把工作区交给已连接的设备
+  Octopus.Remote.Client      远程端一侧：连接主机、调用它的工作区、把它的终端接成本地的终端连接
+  Octopus.Mobile             手机端的界面与视图模型（设计稿见 design/12-远程操作.md 第 9 节；目前跑在示例数据上）
+  Octopus.Mobile.Desktop     手机端的桌面预览壳：dotnet run --project src/Octopus.Mobile.Desktop
 tests/                       各层测试
 design/                      设计文档与调研，从 design/README.md 开始
 ```

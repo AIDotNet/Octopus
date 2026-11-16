@@ -32,7 +32,18 @@ internal static class ShellModule
         services.AddSingleton<Octopus.App.Activity.IItemActivityService, Octopus.App.Activity.ItemActivityService>();
         services.AddSingleton<Octopus.App.Activity.ISubagentService, Octopus.App.Activity.SubagentService>();
         services.AddSingleton<IItemOpener, ItemOpener>();
+        // Terminal sessions by item id: they live apart from the tabs that show them (design/12-远程操作.md §4.1).
+        services.AddSingleton<Octopus.Terminal.Avalonia.TerminalSessionRegistry>();
         services.AddSingleton<ITabContentRegistry, TabContentRegistry>();
+        // Remote operation, host side: this computer's workspace for paired devices, and the service that lets them in.
+        services.AddSingleton<Octopus.App.Remote.RemoteIdentityProvider>();
+        services.AddSingleton<Octopus.App.Remote.HostWorkspace>();
+        // Device side: the hosts this computer is paired with and the connections to them.
+        services.AddSingleton<Octopus.App.Remote.RelayAccess>();
+        services.AddSingleton<Octopus.App.Remote.RemoteClientRuntime>();
+        services.AddSingleton<Octopus.App.Remote.RemoteProjects>();
+        services.AddSingleton<Octopus.App.Remote.RemoteProjectAccess>();
+        services.AddSingleton<Octopus.App.Remote.RemoteHostRuntime>();
         services.AddSingleton<CloseConfirmation>();
 
         // View models

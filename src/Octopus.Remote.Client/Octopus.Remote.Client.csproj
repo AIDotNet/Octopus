@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The device side of remote operation: a connection to a host, its workspace as calls, and a host's terminal as an
+         ITerminalConnection the ordinary terminal control can show (design/12-远程操作.md §6). Used by the desktop app
+         and by the phone app alike. -->
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.App.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Remote/Octopus.Remote.csproj" />
+        <ProjectReference Include="../Octopus.Terminal/Octopus.Terminal.csproj" />
+    </ItemGroup>
+</Project>

@@ -27,6 +27,32 @@ public interface ITerminalConnection : IAsyncDisposable
     ValueTask<string?> GetForegroundProcessNameAsync();
 }
 
+/// <summary>What a mirror applies to its terminal besides the output bytes.</summary>
+public enum TerminalMirrorEventKind
+{
+    /// <summary>The terminal's grid on the owning side is now <see cref="TerminalMirrorEvent.Columns"/> by <see cref="TerminalMirrorEvent.Rows"/>.</summary>
+    Resize,
+    /// <summary>The terminal was cleared for a restart of its program.</summary>
+    Reset,
+    /// <summary>The whole terminal, as the terminal library's own snapshot: it replaces what the mirror has.</summary>
+    Snapshot,
+}
+
+public readonly record struct TerminalMirrorEvent(TerminalMirrorEventKind Kind, int Columns = 0, int Rows = 0, byte[]? Snapshot = null);
+
+/// <summary>
+/// The connection of a terminal whose process another terminal owns (a session on another computer). Besides output it
+/// has events that take effect at an exact place in that output: for each event the reader gets one empty chunk from
+/// <see cref="ITerminalConnection.ReadOutputAsync"/>, at that place, and takes the event with <see cref="TakeEvent"/>
+/// before it goes on reading. <see cref="ITerminalConnection.ResizeAsync"/> only asks: the size changes when a
+/// <see cref="TerminalMirrorEventKind.Resize"/> event says so.
+/// </summary>
+public interface ITerminalMirrorConnection : ITerminalConnection
+{
+    /// <summary>The event the empty chunk just read stands for; events come out in the order of their chunks.</summary>
+    TerminalMirrorEvent? TakeEvent();
+}
+
 public interface ITerminalConnectionFactory
 {
     /// <summary>Starts <paramref name="spec"/> in a new pty of the given size. Throws when the process cannot start.</summary>

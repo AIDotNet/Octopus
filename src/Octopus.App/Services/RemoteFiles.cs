@@ -50,9 +50,17 @@ public sealed class RemoteFiles(IProcessRunner runner, IAppPaths paths, string? 
     /// Copies a file of a host into the app's cache and returns the copy's path. The copy is read-only: edits to it are not
     /// written back. Throws <see cref="SshCommandException"/> (or <see cref="SshFileTooLargeException"/>) when it cannot be copied.
     /// </summary>
-    public async Task<string> CopyAsync(string host, string remotePath, CancellationToken cancellationToken = default)
+    public Task<string> CopyAsync(string host, string remotePath, CancellationToken cancellationToken = default) =>
+        CopyAsync(TreeFor(host), host, remotePath, cancellationToken);
+
+    /// <summary>
+    /// Copies a file of another machine (read through <paramref name="tree"/>) into the app's cache and returns the copy's
+    /// path. <paramref name="host"/> names the machine in the cache. Throws <see cref="IOException"/> or the tree's own
+    /// exception when it cannot be copied.
+    /// </summary>
+    public async Task<string> CopyAsync(Octopus.FileSystem.IRemoteFileTree tree, string host, string remotePath, CancellationToken cancellationToken = default)
     {
-        var bytes = await TreeFor(host).ReadAsync(remotePath, MaxCopyBytes, cancellationToken);
+        var bytes = await tree.ReadAsync(remotePath, MaxCopyBytes, cancellationToken);
         var name = remotePath.Split('/').LastOrDefault(s => s.Length > 0) ?? "file";
         var folder = Path.Combine(paths.CacheDirectory, "remote", Hash(host + "\n" + remotePath));
         Directory.CreateDirectory(folder);

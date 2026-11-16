@@ -18,6 +18,8 @@ public partial class NewProjectView : UserControl
     private const string LocalValue = "local";
     /// <summary>The prefix of an SSH host's option value, so that no host alias can be mistaken for <see cref="LocalValue"/>.</summary>
     private const string HostPrefix = "ssh:";
+    /// <summary>The prefix of the option of another computer that runs Octopus; what follows is its device id.</summary>
+    private const string RemotePrefix = "octopus:";
 
     private readonly IPickerService? _pickers;
     private string _suggestedName = "";
@@ -27,11 +29,13 @@ public partial class NewProjectView : UserControl
     }
 
     /// <param name="hosts">The SSH hosts offered as locations; with none, the location is not shown.</param>
-    public NewProjectView(IPickerService? pickers, NewProjectChoice? initial, IReadOnlyList<SshHost>? hosts = null)
+    /// <param name="remoteHosts">The paired Octopus hosts offered as locations: device id and name.</param>
+    public NewProjectView(IPickerService? pickers, NewProjectChoice? initial, IReadOnlyList<SshHost>? hosts = null,
+        IReadOnlyList<(string Id, string Name)>? remoteHosts = null)
     {
         _pickers = pickers;
         InitializeComponent();
-        ConfigureLocation(hosts ?? [], initial?.SshHost);
+        ConfigureLocation(hosts ?? [], initial?.SshHost, remoteHosts ?? [], initial?.RemoteHost);
         PathInput.Text = initial?.Path ?? "";
         NameInput.Text = initial?.Name ?? "";
         _suggestedName = SuggestName(PathInput.Text);
@@ -59,13 +63,20 @@ public partial class NewProjectView : UserControl
             ? value[HostPrefix.Length..]
             : null;
 
+    /// <summary>The paired Octopus host the folder is on (its device id), or null.</summary>
+    public string? RemoteHost =>
+        LocationSelect.SelectedValue is string value && value.StartsWith(RemotePrefix, StringComparison.Ordinal)
+            ? value[RemotePrefix.Length..]
+            : null;
+
     /// <summary>
-    /// The message for a folder that cannot be used, or null when it can. A folder on an SSH host is not on this computer,
-    /// so only its emptiness is checked; the host is checked when a terminal opens there.
+    /// The message for a folder that cannot be used, or null when it can. A folder on another machine is not on this
+    /// computer, so only its emptiness is checked; that machine says the rest (an SSH host when a terminal opens there,
+    /// an Octopus host when the project is added).
     /// </summary>
-    public static string? Validate(string path, string? sshHost = null) =>
+    public static string? Validate(string path, string? sshHost = null, string? remoteHost = null) =>
         path.Length == 0 ? AppLangResources.Get(AppLangResourceKind.NewProjectFolderRequired)
-        : sshHost is null && !Directory.Exists(ExpandHome(path)) ? AppLangResources.Get(AppLangResourceKind.NewProjectFolderMissing)
+        : sshHost is null && remoteHost is null && !Directory.Exists(ExpandHome(path)) ? AppLangResources.Get(AppLangResourceKind.NewProjectFolderMissing)
         : null;
 
     /// <summary>A leading ~ stands for the home folder, as in a shell.</summary>
@@ -83,27 +94,35 @@ public partial class NewProjectView : UserControl
     }
 
     /// <summary>Offers this computer and each host; the location is shown only when there is a host to choose.</summary>
-    private void ConfigureLocation(IReadOnlyList<SshHost> hosts, string? initialHost)
+    private void ConfigureLocation(IReadOnlyList<SshHost> hosts, string? initialHost, IReadOnlyList<(string Id, string Name)> remoteHosts, string? initialRemote)
     {
-        LocationSelect.IsVisible = hosts.Count > 0;
-        if (hosts.Count == 0) return;
+        LocationSelect.IsVisible = hosts.Count > 0 || remoteHosts.Count > 0;
+        if (!LocationSelect.IsVisible) return;
         var options = new List<SelectOption> { new(LocalValue, AppLangResources.Get(AppLangResourceKind.NewProjectLocalMachine)) };
+        // Computers that run Octopus first: there the project gets agents too.
+        foreach (var (id, name) in remoteHosts)
+        {
+            options.Add(new SelectOption(RemotePrefix + id, string.Format(AppLangResources.Get(AppLangResourceKind.NewProjectOctopusHost), name)));
+        }
         foreach (var host in hosts)
         {
             options.Add(new SelectOption(HostPrefix + host.Alias, host.HostName == host.Alias ? host.Alias : $"{host.Alias} ({host.HostName})"));
         }
         LocationSelect.ItemsSource = options;
-        var chosen = initialHost is not null && hosts.Any(h => h.Alias == initialHost) ? HostPrefix + initialHost : LocalValue;
+        var chosen = initialRemote is not null && remoteHosts.Any(h => h.Id == initialRemote) ? RemotePrefix + initialRemote
+            : initialHost is not null && hosts.Any(h => h.Alias == initialHost) ? HostPrefix + initialHost
+            : LocalValue;
         LocationSelect.SelectedValue = chosen;
     }
 
     /// <summary>A folder on a host is a path there: the label, the hint and the browse button follow that.</summary>
     private void OnLocationChanged()
     {
-        var remote = SshHost is not null;
+        var remote = SshHost is not null || RemoteHost is not null;
         PathInput.Label = AppLangResources.Get(remote ? AppLangResourceKind.NewProjectRemoteFolder : AppLangResourceKind.NewProjectFolder);
         PathInput.Placeholder = AppLangResources.Get(remote ? AppLangResourceKind.NewProjectRemoteFolderPlaceholder : AppLangResourceKind.NewProjectFolderPlaceholder);
-        PathInput.Description = remote ? AppLangResources.Get(AppLangResourceKind.NewProjectRemoteHint) : null;
+        PathInput.Description = RemoteHost is not null ? AppLangResources.Get(AppLangResourceKind.NewProjectOctopusHint)
+            : remote ? AppLangResources.Get(AppLangResourceKind.NewProjectRemoteHint) : null;
         BrowseButton.IsVisible = !remote;
         PathInput.ErrorMessage = null;
     }

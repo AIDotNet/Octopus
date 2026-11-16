@@ -1,0 +1,99 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:remote="using:Octopus.App.Settings.Remote"
+             x:Class="Octopus.App.Settings.Remote.RemoteHostsPageView"
+             x:DataType="remote:RemoteHostsSettingsViewModel">
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsRemoteHostsTitle}" />
+            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsRemoteHostsSubtitle}" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- Pairing with another host. -->
+        <TextBlock Classes="group" Text="{l:AppLangResource SettingsRemoteHostsAdd}" Margin="0,8,0,0" />
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="14,12">
+            <StackPanel Spacing="12">
+                <TextBlock Classes="hint" Text="{l:AppLangResource SettingsRemoteHostsAddHint}" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <arc:Input x:Name="TargetInput" Size="Small"
+                               AutomationProperties.Name="{l:AppLangResource SettingsRemoteHostsAddress}"
+                               Text="{Binding Target, Mode=TwoWay}"
+                               IsEnabled="{Binding !IsPairing}"
+                               PlaceholderText="{l:AppLangResource SettingsRemoteHostsAddressPlaceholder}" />
+                    <Panel Grid.Column="1">
+                        <arc:Button x:Name="PairButton" Variant="Primary" Size="Small"
+                                    IsVisible="{Binding !IsPairing}"
+                                    Content="{l:AppLangResource SettingsRemoteHostsPair}"
+                                    Command="{Binding PairCommand}" />
+                        <arc:Button x:Name="CancelPairButton" Variant="Secondary" Size="Small"
+                                    IsVisible="{Binding IsPairing}"
+                                    Content="{l:AppLangResource SettingsRemoteHostsCancel}"
+                                    Command="{Binding CancelPairingCommand}" />
+                    </Panel>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsConnecting}">
+                    <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsRemoteHostsConnecting}" />
+                </StackPanel>
+
+                <!-- The host waits for its person: this number is the thing to compare. -->
+                <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                        Padding="14,12"
+                        IsVisible="{Binding HasSas}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsRemoteHostsCompare}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <TextBlock x:Name="SasText" Grid.Column="1" Text="{Binding Sas}"
+                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                   FontSize="26" FontWeight="Bold" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <arc:Alert Tone="Danger" Content="{Binding ErrorText}" IsVisible="{Binding HasError}" />
+            </StackPanel>
+        </Border>
+
+        <TextBlock Classes="hint" Margin="2,0,0,0" Text="{l:AppLangResource SettingsRemoteHostsNone}" IsVisible="{Binding !HasHosts}" />
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                ClipToBounds="True"
+                IsVisible="{Binding HasHosts}">
+            <ItemsControl x:Name="HostList" ItemsSource="{Binding Hosts}" Margin="0,-1,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="remote:RemoteHostRow">
+                        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,10">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <lucide:LucideIcon Kind="Monitor" Size="16" VerticalAlignment="Center"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="name" Text="{Binding Name}" />
+                                        <arc:Badge Size="Small" Tone="Success" Content="{Binding StateText}" IsVisible="{Binding IsConnected}" VerticalAlignment="Center" />
+                                        <arc:Badge Size="Small" Tone="Neutral" Content="{Binding StateText}" IsVisible="{Binding !IsConnected}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Classes="mono" Text="{Binding Address}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="hint" Text="{Binding ProjectsText}" IsVisible="{Binding ProjectsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    <TextBlock Classes="hint" Text="{Binding Error}" TextWrapping="Wrap"
+                                               Foreground="{arc:ArcDesignTokenResource Danger}"
+                                               IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                </StackPanel>
+                                <arc:Button Grid.Column="2" Variant="Secondary" Size="Small" VerticalAlignment="Center"
+                                            Content="{l:AppLangResource SettingsRemoteHostsRemove}"
+                                            Command="{Binding $parent[ItemsControl].((remote:RemoteHostsSettingsViewModel)DataContext).RemoveCommand}"
+                                            CommandParameter="{Binding}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+    </StackPanel>
+</UserControl>

@@ -56,7 +56,7 @@ public sealed partial class ProjectChipViewModel(
     public partial bool IsCurrent { get; set; } = isCurrent;
 
     /// <summary>The folder is on an SSH host, not on this computer.</summary>
-    public bool IsRemote { get; } = project.SshHost is not null;
+    public bool IsRemote { get; } = !ProjectLocation.IsOnThisComputer(project);
 
     /// <summary>The group the square sits in; null: none.</summary>
     public string? GroupId { get; } = project.GroupId;
@@ -70,7 +70,8 @@ public sealed partial class ProjectChipViewModel(
     /// <summary>An agent of the project stopped to ask the user: the square carries a yellow dot (it wins over the ring).</summary>
     [ObservableProperty] public partial bool NeedsInput { get; set; }
 
-    public string Tip { get; } = project.Name + "\n" + (project.SshHost is { } host ? host + ":" + project.Path : project.Path);
+    public string Tip { get; } = project.Name + "\n" + ProjectLocation.Describe(project,
+        project.RemoteHost is { } host ? Composition.AppHost.Get<Remote.RemoteClientRuntime>().HostName(host) : null);
     public double ChipOpacity => IsCurrent ? 1 : 0.72;
 
     [RelayCommand] private void Select() => select(this);

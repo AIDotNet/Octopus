@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The phone app's text in zh-CN: each unit's target translates its source; a missing unit fails the build (ARCF021). -->
+<xliff version="2.1" srcLang="en-US" trgLang="zh-CN" xmlns="urn:oasis:names:tc:xliff:document:2.0">
+  <file id="Octopus.Mobile.Localization.MobileLangResourceKind">
+    <unit id="Hosts"><segment><source>Hosts</source><target state="translated">主机</target></segment></unit>
+    <unit id="HostsOnline"><segment><source>Online</source><target state="translated">在线</target></segment></unit>
+    <unit id="HostsOffline"><segment><source>Offline</source><target state="translated">离线</target></segment></unit>
+    <unit id="HostsNotPaired"><segment><source>Not paired yet</source><target state="translated">还没配对</target></segment></unit>
+    <unit id="HostsEmpty"><segment><source>No computer of this account is running Octopus with remote access on.</source><target state="translated">这个账号下还没有开启远程访问的电脑。</target></segment></unit>
+    <unit id="LinkLan"><segment><source>Local network</source><target state="translated">局域网</target></segment></unit>
+    <unit id="LinkRelay"><segment><source>Relay</source><target state="translated">中转</target></segment></unit>
+    <unit id="LinkOffline"><segment><source>Offline</source><target state="translated">离线</target></segment></unit>
+    <unit id="ProjectCount"><segment><source>{0} projects</source><target state="translated">{0} 个项目</target></segment></unit>
+    <unit id="LastSeen"><segment><source>Last online: {0}</source><target state="translated">上次在线：{0}</target></segment></unit>
+    <unit id="Pair"><segment><source>Pair</source><target state="translated">配对</target></segment></unit>
+    <unit id="Idle"><segment><source>Idle</source><target state="translated">空闲</target></segment></unit>
+    <unit id="WaitingCount"><segment><source>{0} waiting</source><target state="translated">{0} 等你</target></segment></unit>
+    <unit id="WorkingCount"><segment><source>{0} working</source><target state="translated">{0} 工作中</target></segment></unit>
+    <unit id="ErrorCount"><segment><source>{0} failed</source><target state="translated">{0} 出错</target></segment></unit>
+    <unit id="StatusWaiting"><segment><source>Waiting</source><target state="translated">等你</target></segment></unit>
+    <unit id="StatusWorking"><segment><source>Working</source><target state="translated">工作中</target></segment></unit>
+    <unit id="StatusError"><segment><source>Failed</source><target state="translated">出错</target></segment></unit>
+    <unit id="Account"><segment><source>Account</source><target state="translated">账号</target></segment></unit>
+    <unit id="SignOut"><segment><source>Sign out</source><target state="translated">退出登录</target></segment></unit>
+    <unit id="Cancel"><segment><source>Cancel</source><target state="translated">取消</target></segment></unit>
+    <unit id="Back"><segment><source>Back</source><target state="translated">返回</target></segment></unit>
+    <unit id="HostEmpty"><segment><source>This computer has no projects yet.</source><target state="translated">这台主机上还没有项目。</target></segment></unit>
+    <unit id="NewSession"><segment><source>New</source><target state="translated">新建</target></segment></unit>
+    <unit id="NewSessionProject"><segment><source>Project</source><target state="translated">项目</target></segment></unit>
+    <unit id="NewSessionKind"><segment><source>Run</source><target state="translated">运行</target></segment></unit>
+    <unit id="NewSessionModel"><segment><source>Model</source><target state="translated">模型</target></segment></unit>
+    <unit id="NewSessionModelDefault"><segment><source>Agent default</source><target state="translated">智能体默认</target></segment></unit>
+    <unit id="NewSessionEffort"><segment><source>Effort</source><target state="translated">强度</target></segment></unit>
+    <unit id="NewSessionPrompt"><segment><source>Prompt</source><target state="translated">提示词</target></segment></unit>
+    <unit id="NewSessionPromptPlaceholder"><segment><source>What should it do?</source><target state="translated">让它做什么…</target></segment></unit>
+    <unit id="NewSessionStart"><segment><source>Start</source><target state="translated">启动</target></segment></unit>
+    <unit id="Terminal"><segment><source>Terminal</source><target state="translated">终端</target></segment></unit>
+    <unit id="SizeOwnedBy"><segment><source>{0}×{1} · sized by {2}</source><target state="translated">{0}×{1} · 尺寸由 {2} 决定</target></segment></unit>
+    <unit id="SizeFitted"><segment><source>{0}×{1} · fitted to this phone</source><target state="translated">{0}×{1} · 已适应手机</target></segment></unit>
+    <unit id="FitToPhone"><segment><source>Fit to phone</source><target state="translated">适应手机</target></segment></unit>
+    <unit id="ReturnSize"><segment><source>Give size back</source><target state="translated">交还尺寸</target></segment></unit>
+    <unit id="FitAndType"><segment><source>Fit to phone and type</source><target state="translated">适应手机并输入</target></segment></unit>
+    <unit id="ReplyPlaceholder"><segment><source>Reply…</source><target state="translated">回复…</target></segment></unit>
+    <unit id="Send"><segment><source>Send</source><target state="translated">发送</target></segment></unit>
+    <unit id="UseKeyboard"><segment><source>Type into the terminal</source><target state="translated">直接输入到终端</target></segment></unit>
+    <unit id="UseComposer"><segment><source>Write a message</source><target state="translated">用输入框</target></segment></unit>
+    <unit id="SignInTitle"><segment><source>Sign in to Octopus</source><target state="translated">登录 Octopus</target></segment></unit>
+    <unit id="SignInHint"><segment><source>Sign in in the browser and confirm this code</source><target state="translated">在浏览器里登录，并确认下面这个码</target></segment></unit>
+    <unit id="SignInOpenBrowser"><segment><source>Open browser</source><target state="translated">打开浏览器</target></segment></unit>
+    <unit id="SignInWaiting"><segment><source>Waiting for confirmation</source><target state="translated">等待确认</target></segment></unit>
+    <unit id="PairingTitle"><segment><source>Pair</source><target state="translated">配对</target></segment></unit>
+    <unit id="PairingHint"><segment><source>Check that the computer shows the same number, then choose Allow on the computer.</source><target state="translated">确认主机上显示的是同一个数字，然后在主机上点“允许”。</target></segment></unit>
+    <unit id="PairingWaiting"><segment><source>Waiting for the computer</source><target state="translated">等待主机确认</target></segment></unit>
+    <unit id="PairingFailed"><segment><source>The computer did not allow this phone.</source><target state="translated">主机没有允许这台手机。</target></segment></unit>
+    <unit id="SignInServer"><segment><source>Service address</source><target state="translated">服务地址</target></segment></unit>
+    <unit id="SignInServerHint"><segment><source>Enter the address of the Octopus service your computers are signed in to.</source><target state="translated">填写你的电脑登录的那个 Octopus 服务的地址。</target></segment></unit>
+    <unit id="SignInStart"><segment><source>Sign in</source><target state="translated">登录</target></segment></unit>
+    <unit id="SignInStarting"><segment><source>Contacting the service</source><target state="translated">正在联系服务</target></segment></unit>
+    <unit id="SignInFailed"><segment><source>Sign-in could not start: {0}</source><target state="translated">没能开始登录：{0}</target></segment></unit>
+    <unit id="SignInDenied"><segment><source>The sign-in was refused in the browser.</source><target state="translated">登录在浏览器里被拒绝了。</target></segment></unit>
+    <unit id="SignInExpired"><segment><source>The code was not confirmed in time. Sign in again.</source><target state="translated">代码没有在有效期内确认，请重新登录。</target></segment></unit>
+    <unit id="SignInLost"><segment><source>The service could not be reached any more. Sign in again.</source><target state="translated">联系不上服务了，请重新登录。</target></segment></unit>
+    <unit id="SignInEnded"><segment><source>This phone is no longer signed in (it was removed from the account, or signed out elsewhere). Sign in again.</source><target state="translated">这台手机的登录已经失效（被从账号里移除，或在别处退出）。请重新登录。</target></segment></unit>
+    <unit id="PairingContacting"><segment><source>Reaching the computer</source><target state="translated">正在联系主机</target></segment></unit>
+    <unit id="PairingNotOpen"><segment><source>The computer is not accepting new devices. On it, open Settings → Remote access and choose "Start pairing", then try again.</source><target state="translated">那台电脑现在不接受新设备。在它上面打开 设置 → 远程访问，点“开始配对”，再试一次。</target></segment></unit>
+    <unit id="PairingUnreachable"><segment><source>The computer could not be reached.</source><target state="translated">连不上那台电脑。</target></segment></unit>
+  </file>
+</xliff>

@@ -410,7 +410,7 @@ public sealed class ProjectDockController : IDisposable
         switch (e.Kind)
         {
             case ProjectChangeKind.Items when !_syncing:
-                SyncItems();
+                SyncItems(e.Item);
                 break;
             case ProjectChangeKind.ItemTitle when e.Item is { } item && _panes.TryGetValue(item.Id, out var titled):
                 titled.Title = TitleOf(item, (titled.Content as Control)?.DataContext as FileTabViewModel);
@@ -423,7 +423,8 @@ public sealed class ProjectDockController : IDisposable
         }
     }
 
-    private void SyncItems()
+    /// <param name="changed">The item the change was about, when it was one item.</param>
+    private void SyncItems(ProjectItem? changed = null)
     {
         foreach (var gone in _panes.Keys.Where(id => !_diffKeys.Contains(id) && _project.Items.All(i => i.Id != id)).ToList())
         {
@@ -438,7 +439,22 @@ public sealed class ProjectDockController : IDisposable
         }
         foreach (var item in _project.Items.Where(i => !_panes.ContainsKey(i.Id)).ToList())
         {
-            Layout.Open(PaneOf(item), NewTabGroup is { Panes.Count: > 0 } target ? DockTarget.Into(target) : null);
+            // An item added without being made the active one (IProjectService.AddItem, activate: false): its tab opens,
+            // and the tab that was in front stays there. The dock has no way to open a tab behind, so the front one is
+            // activated again in the same step, without telling the project service about either change.
+            var behind = changed is not null && item.Id == changed.Id && item.Id != _project.ActiveItemId ? Layout.ActivePane : null;
+            if (behind is null)
+            {
+                Layout.Open(PaneOf(item), NewTabGroup is { Panes.Count: > 0 } target ? DockTarget.Into(target) : null);
+                continue;
+            }
+            _syncing = true;
+            try
+            {
+                Layout.Open(PaneOf(item), NewTabGroup is { Panes.Count: > 0 } group ? DockTarget.Into(group) : null);
+                Layout.Activate(behind);
+            }
+            finally { _syncing = false; }
         }
     }
 }

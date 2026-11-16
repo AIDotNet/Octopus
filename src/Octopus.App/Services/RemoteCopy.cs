@@ -21,7 +21,7 @@ public sealed record RemoteWriteResult(RemoteWriteOutcome Outcome, string? Error
 /// The host's copy of a file that is open in a tab. It remembers the content the host had when the app last agreed with
 /// it, so a save can tell whether the host has changed since: then the person decides before anything is overwritten.
 /// </summary>
-public sealed class RemoteCopy(RemoteFiles files, string host, string remotePath, byte[] synced, IDialogService dialogs)
+public sealed class RemoteCopy(Octopus.FileSystem.IRemoteFileTree tree, string remotePath, byte[] synced, IDialogService dialogs)
 {
     private byte[] _synced = synced;
 
@@ -31,7 +31,6 @@ public sealed class RemoteCopy(RemoteFiles files, string host, string remotePath
     /// <summary>Writes the content to the host, after checking that the host still has what the app last saw there.</summary>
     public async Task<RemoteWriteResult> WriteAsync(byte[] bytes, CancellationToken cancellationToken = default)
     {
-        var tree = files.TreeFor(host);
         try
         {
             var exists = await tree.ExistsAsync(remotePath, cancellationToken);
@@ -43,7 +42,7 @@ public sealed class RemoteCopy(RemoteFiles files, string host, string remotePath
                     var current = await tree.ReadAsync(remotePath, RemoteFiles.MaxCopyBytes, cancellationToken);
                     changed = !current.SequenceEqual(_synced);
                 }
-                catch (SshFileTooLargeException)
+                catch (Exception e) when (e is SshFileTooLargeException or Octopus.FileSystem.RemoteFileTooLargeException)
                 {
                     // Larger than the copies the app keeps: it has changed, as far as the app can tell.
                     changed = true;

@@ -63,6 +63,26 @@ public sealed class TerminalInputRouter(
     }
 
     /// <summary>
+    /// A key that did not come from the keyboard (a key of a touch key bar): sent as the same key press would be, in
+    /// the terminal's current modes (arrow keys differ in a full-screen program). No app shortcut is matched.
+    /// </summary>
+    public void SendKey(TerminalKey key, KeyMods mods = KeyMods.None)
+    {
+        var input = WithCodepoint(new KeyInput(key, KeyAction.Press, mods));
+        var modes = session.ReadInputModes();
+        session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
+        if (Translate(input, modes) is { } text)
+        {
+            session.Send(text);
+            return;
+        }
+        _encoder.Apply(modes);
+        Span<byte> buffer = stackalloc byte[128];
+        var n = _encoder.EncodeKey(input, buffer);
+        if (n > 0) session.Send(buffer[..n]);
+    }
+
+    /// <summary>
     /// The view reports the physical key only. A program that turned on the extended keyboard protocol (Claude Code
     /// does) is told the key by its unshifted character, and without one the encoder sends nothing at all: Ctrl+C
     /// never reached the program. US layout, which is what the physical key names stand for.

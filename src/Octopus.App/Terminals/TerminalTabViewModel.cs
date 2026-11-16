@@ -22,8 +22,10 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IDisposable
         ProjectItem item,
         IItemLaunchService launcher,
         ITerminalConnectionFactory factory,
-        ISettingsStore settings)
+        ISettingsStore settings,
+        Octopus.Terminal.Avalonia.TerminalSessionRegistry? sessions = null)
     {
+        Sessions = sessions;
         _project = project;
         Item = item;
         _launcher = launcher;
@@ -46,6 +48,15 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IDisposable
     /// <summary>The connection of a terminal on an SSH host; null for a terminal on this computer.</summary>
     public SshConnectProgress? Connect { get; }
     public ITerminalConnectionFactory Factory { get; }
+
+    /// <summary>The tab shows a terminal that another computer runs (a project on a remote Octopus host).</summary>
+    public bool IsMirror { get; init; }
+
+    /// <summary>
+    /// Where the tab's session is kept, under the item's id: the session then belongs to the item, not to the tab's
+    /// control, and one that already runs is shown instead of being started again. Null: the control keeps its own.
+    /// </summary>
+    public Octopus.Terminal.Avalonia.TerminalSessionRegistry? Sessions { get; }
 
     /// <summary>The process starts when the tab is shown for the first time, not when it is restored.</summary>
     public bool Started { get; set; }

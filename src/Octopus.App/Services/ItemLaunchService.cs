@@ -26,10 +26,17 @@ public sealed class ItemLaunchService(
     public const string ForwarderVariable = "OCTOPUS_SIGNAL_FORWARDER";
 
     public bool Resumes(ProjectItem item) =>
-        item.Kind == ProjectItemKind.Agent && projects.WasRestored(item.Id) && settings.Current.Terminal.ResumeAgentsOnRestart;
+        item.Kind == ProjectItemKind.Agent && projects.WasRestored(item.Id) && settings.Current.Terminal.ResumeAgentsOnRestart
+        // An agent on another computer was never stopped by this app's restart: there is nothing to resume.
+        && projects.FindProjectOf(item.Id) is not { RemoteHost: not null };
+
+    /// <summary>What a tab of a project on another computer is started with: the program runs there, nothing is launched here.</summary>
+    public static LaunchSpec RemoteSession { get; } = new("octopus-remote-session", [], null, new Dictionary<string, string>());
 
     public LaunchSpec Plan(Project project, ProjectItem item, bool allowResume = true)
     {
+        // The host plans and runs it (with its own agents, settings and hooks); this side only shows its terminal.
+        if (ProjectLocation.IsOnRemoteHost(project)) return RemoteSession;
         var current = settings.Current;
         var cwd = item.WorkingDirectory ?? project.Path;
         if (item.Kind != ProjectItemKind.Agent)
@@ -49,7 +56,7 @@ public sealed class ItemLaunchService(
             };
         }
 
-        if (project.SshHost is not null)
+        if (!ProjectLocation.CanRunAgents(project))
         {
             throw new InvalidOperationException("Agents do not run in a project on an SSH host.");
         }

@@ -1,0 +1,169 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Hosts"
+           xmlns:common="using:Octopus.Mobile.Common"
+           x:Class="Octopus.Mobile.Hosts.HostPage"
+           x:DataType="vm:HostViewModel"
+           IsScrollable="True">
+    <arcm:Page.Resources>
+        <!-- One session: its square, title, what it runs, a line about what it is doing, and its state. -->
+        <DataTemplate x:Key="SessionRow" x:DataType="common:SessionRowViewModel">
+            <arcm:ListItem ShowChevron="True" Command="{Binding OpenCommand}">
+                <arcm:ListItem.Trailing>
+                    <Border Classes="pill"
+                            Classes.waiting="{Binding IsWaiting}"
+                            Classes.working="{Binding IsWorking}"
+                            Classes.error="{Binding IsError}"
+                            IsVisible="{Binding HasStatus}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <arc:ArcSpinner IsVisible="{Binding IsWorking}" />
+                            <TextBlock Text="{Binding StatusText}" />
+                        </StackPanel>
+                    </Border>
+                </arcm:ListItem.Trailing>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="0,4">
+                    <Panel Grid.Column="0">
+                        <Border Classes="badge" Background="{Binding Tint}" IsVisible="{Binding IsAgent}">
+                            <TextBlock Text="{Binding Initial}" />
+                        </Border>
+                        <Border Classes="badge" IsVisible="{Binding IsTerminal}">
+                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Terminal}" Size="16"
+                                          Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Panel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Classes="secondary" Text="{Binding Detail}" />
+                        <TextBlock Classes="preview" Text="{Binding Preview}" IsVisible="{Binding HasPreview}" />
+                    </StackPanel>
+                </Grid>
+            </arcm:ListItem>
+        </DataTemplate>
+    </arcm:Page.Resources>
+
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{Binding Title}"
+                     ShowBack="True"
+                     BackText="{l:MobileLangResource Hosts}"
+                     BackCommand="{Binding BackCommand}">
+            <arcm:Navbar.Trailing>
+                <arcm:IconButton Name="NewButton"
+                                 Icon="{x:Static arc:ArcIcons.Plus}"
+                                 Command="{Binding OpenNewSessionCommand}"
+                                 AutomationProperties.Name="{l:MobileLangResource NewSession}" />
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
+    </arcm:Page.Header>
+
+    <Panel Margin="0,12,0,24">
+        <ItemsControl Name="Sections" ItemsSource="{Binding Sections}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Spacing="18" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProjectSectionViewModel">
+                    <arcm:ListGroup Header="{Binding Header}"
+                                    ItemsSource="{Binding Sessions}"
+                                    ItemTemplate="{StaticResource SessionRow}" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="muted"
+                   Text="{l:MobileLangResource HostEmpty}"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center"
+                   Margin="16,48"
+                   IsVisible="{Binding IsEmpty}" />
+    </Panel>
+
+    <arcm:Page.Overlay>
+        <Panel>
+            <!-- New: which project, what to run, and for an agent its model, effort and first prompt. -->
+            <arcm:Sheet Name="NewSheet"
+                        DataContext="{Binding NewSession}"
+                        x:DataType="vm:NewSessionViewModel"
+                        IsOpen="{Binding IsOpen, Mode=TwoWay}"
+                        Title="{l:MobileLangResource NewSession}">
+                <StackPanel Margin="0,4,0,16" Spacing="10">
+                    <arcm:ListGroup Name="ProjectChoices"
+                                    Header="{l:MobileLangResource NewSessionProject}"
+                                    ItemsSource="{Binding Projects}">
+                        <arcm:ListGroup.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ProjectChoiceViewModel">
+                                <arcm:ListItem Content="{Binding Name}" Subtitle="{Binding Path}" Command="{Binding ChooseCommand}">
+                                    <arcm:ListItem.Trailing>
+                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Check}" Size="18"
+                                                      Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                      IsVisible="{Binding IsSelected}" />
+                                    </arcm:ListItem.Trailing>
+                                </arcm:ListItem>
+                            </DataTemplate>
+                        </arcm:ListGroup.ItemTemplate>
+                    </arcm:ListGroup>
+
+                    <TextBlock Classes="fieldLabel" Margin="32,0,16,0" Text="{l:MobileLangResource NewSessionKind}" />
+                    <arcm:Segmented Name="KindChoice" Margin="16,0" ItemsSource="{Binding Kinds}" SelectedIndex="{Binding SelectedKind, Mode=TwoWay}" />
+
+                    <StackPanel Spacing="10" IsVisible="{Binding IsAgent}">
+                        <arcm:ListGroup>
+                            <arcm:ListItem Name="ModelRow"
+                                           Content="{l:MobileLangResource NewSessionModel}"
+                                           ShowChevron="True"
+                                           Command="{Binding OpenModelMenuCommand}">
+                                <arcm:ListItem.Trailing>
+                                    <TextBlock Text="{Binding ModelText}" VerticalAlignment="Center" />
+                                </arcm:ListItem.Trailing>
+                            </arcm:ListItem>
+                        </arcm:ListGroup>
+
+                        <TextBlock Classes="fieldLabel" Margin="32,0,16,0" Text="{l:MobileLangResource NewSessionEffort}" IsVisible="{Binding HasEfforts}" />
+                        <arcm:Segmented Name="EffortChoice"
+                                        Margin="16,0"
+                                        ItemsSource="{Binding Efforts}"
+                                        SelectedIndex="{Binding SelectedEffort, Mode=TwoWay}"
+                                        IsVisible="{Binding HasEfforts}" />
+
+                        <TextBlock Classes="fieldLabel" Margin="32,0,16,0" Text="{l:MobileLangResource NewSessionPrompt}" />
+                        <arcm:TextField Name="PromptField"
+                                        Margin="16,0"
+                                        Text="{Binding Prompt, Mode=TwoWay}"
+                                        PlaceholderText="{l:MobileLangResource NewSessionPromptPlaceholder}"
+                                        AcceptsReturn="True"
+                                        TextWrapping="Wrap"
+                                        MinHeight="76"
+                                        MaxHeight="140"
+                                        VerticalContentAlignment="Top" />
+                    </StackPanel>
+
+                    <TextBlock Name="NewSessionError"
+                               Margin="32,0,16,0"
+                               Text="{Binding ErrorText}"
+                               Foreground="{arc:ArcDesignTokenResource Danger}"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding HasError}" />
+                    <arcm:Button Name="StartButton"
+                                 Variant="Filled"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Margin="16,6,16,0"
+                                 Content="{l:MobileLangResource NewSessionStart}"
+                                 Command="{Binding CreateCommand}" />
+                </StackPanel>
+            </arcm:Sheet>
+
+            <!-- The models of the chosen agent; filled from the view model in the code-behind. -->
+            <arcm:ActionSheet Name="ModelSheet"
+                              DataContext="{Binding NewSession}"
+                              x:DataType="vm:NewSessionViewModel"
+                              IsOpen="{Binding IsModelMenuOpen, Mode=TwoWay}"
+                              Title="{l:MobileLangResource NewSessionModel}"
+                              CancelText="{l:MobileLangResource Cancel}" />
+        </Panel>
+    </arcm:Page.Overlay>
+</arcm:Page>

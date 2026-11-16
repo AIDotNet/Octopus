@@ -75,12 +75,13 @@ public partial class TerminalTabView : UserControl, ITabContent
         if (Model is { Started: false } model)
         {
             model.Started = true;
-            // The files of a terminal on an SSH host are not on this computer: its paths are not links.
-            Terminal.PathLinksEnabled = model.Connect is null;
+            // The files of a terminal on another machine are not on this computer: its paths are not links.
+            Terminal.PathLinksEnabled = model.Connect is null && !model.IsMirror;
+            Terminal.IsMirror = model.IsMirror;
             if (model.TryCreateSpec() is { } spec)
             {
                 _startedAt = Environment.TickCount64;
-                Terminal.Start(spec, model.Factory);
+                Terminal.Start(spec, model.Factory, model.Sessions, model.Item.Id);
             }
         }
     }
@@ -113,7 +114,7 @@ public partial class TerminalTabView : UserControl, ITabContent
         }
         if (model.TryCreateSpec(allowResume: false) is { } fresh)
         {
-            Terminal.Start(fresh, model.Factory);
+            Terminal.Start(fresh, model.Factory, model.Sessions, model.Item.Id);
         }
     }
 

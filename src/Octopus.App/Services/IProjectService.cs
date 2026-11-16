@@ -17,7 +17,13 @@ public interface IProjectService
     /// Adds a project for a directory, or for a folder on the SSH host <paramref name="sshHost"/>; returns the existing
     /// project when that folder is already one.
     /// </summary>
-    Project AddProject(string path, string? name = null, string? sshHost = null);
+    /// <param name="activate">False adds it without making it the current project (somebody on another device added it).</param>
+    Project AddProject(string path, string? name = null, string? sshHost = null, bool activate = true);
+    /// <summary>
+    /// Adds a project that lives on another computer running Octopus (design/12-远程操作.md): <paramref name="path"/> is
+    /// its folder there, <paramref name="remoteId"/> its id there. Returns the existing project when it is already one.
+    /// </summary>
+    Project AddRemoteProject(string hostId, string remoteId, string path, string name);
     void RemoveProject(string projectId);
     void RenameProject(string projectId, string name);
     void SetProjectColor(string projectId, string? color);
@@ -55,8 +61,11 @@ public interface IProjectService
     /// <summary>True for an item that was loaded from the saved file in this run (not created in it).</summary>
     bool WasRestored(string itemId);
 
-    /// <summary>Adds the item and activates it.</summary>
-    void AddItem(Project project, ProjectItem item);
+    /// <summary>
+    /// Adds the item and activates it. With <paramref name="activate"/> false it is only added: its tab opens behind the
+    /// one the person is looking at (an item that somebody on another device created must not take the screen).
+    /// </summary>
+    void AddItem(Project project, ProjectItem item, bool activate = true);
     /// <summary>Removes the item; the dock layout closes its tab.</summary>
     void RemoveItem(string itemId);
     /// <summary>Moves the item next to another item of the same project: right after it, or right before it.</summary>

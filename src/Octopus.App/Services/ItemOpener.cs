@@ -18,13 +18,22 @@ public sealed class ItemOpener(
     IDialogService dialogs,
     IShellResolver shells,
     PathComparer paths,
-    RemoteFiles remote) : IItemOpener
+    RemoteFiles remote,
+    Octopus.App.Remote.RemoteProjects? remoteProjects = null,
+    Octopus.App.Remote.RemoteClientRuntime? remoteHosts = null,
+    Octopus.App.Remote.RemoteProjectAccess? access = null) : IItemOpener
 {
     public ProjectItem? OpenTerminal()
     {
         var project = projects.Current;
         if (project is null)
         {
+            return null;
+        }
+        if (ProjectLocation.IsOnRemoteHost(project))
+        {
+            // Made on the host; it shows up here (and comes to the front) once the host has it.
+            _ = CreateOnHostAsync(project, null, null);
             return null;
         }
         var chosen = settings.Current.Terminal.Shell;
@@ -42,9 +51,15 @@ public sealed class ItemOpener(
     public ProjectItem? OpenAgent(string agentId, AgentLaunchOptions? launch = null)
     {
         var project = projects.Current;
+        if (project is not null && ProjectLocation.IsOnRemoteHost(project))
+        {
+            // The host's own agent of that id, with the host's settings; only what was chosen here goes along.
+            _ = CreateOnHostAsync(project, agentId, launch);
+            return null;
+        }
         var definition = catalog.Find(agentId);
         // Agents need this computer's files, programs and hooks, so they do not start in a project on an SSH host.
-        if (project is null || definition is null || project.SshHost is not null)
+        if (project is null || definition is null || !ProjectLocation.CanRunAgents(project))
         {
             return null;
         }
@@ -96,7 +111,9 @@ public sealed class ItemOpener(
     public async Task<ProjectItem?> OpenRemoteFileAsync(string remotePath)
     {
         var project = projects.Current;
-        if (project?.SshHost is not { } host)
+        // An SSH host's tree, or that of a computer running Octopus: either way the file is copied here and written back.
+        var tree = access?.TreeOf(project) ?? (project?.SshHost is { } alias ? remote.TreeFor(alias) : null);
+        if (project is null || tree is null || Octopus.App.Remote.RemoteProjectAccess.MachineOf(project) is not { } host)
         {
             return null;
         }
@@ -109,7 +126,7 @@ public sealed class ItemOpener(
         }
         try
         {
-            var copy = await remote.CopyAsync(host, remotePath);
+            var copy = await remote.CopyAsync(tree, host, remotePath);
             var name = remotePath.Split('/').LastOrDefault(s => s.Length > 0) ?? remotePath;
             var item = new ProjectItem { Kind = ProjectItemKind.File, FilePath = copy, RemotePath = remotePath, Title = name };
             projects.AddItem(project, item);
@@ -117,7 +134,7 @@ public sealed class ItemOpener(
         }
         catch (Exception e) when (e is SshCommandException or IOException)
         {
-            var reason = e is SshFileTooLargeException
+            var reason = e is SshFileTooLargeException or Octopus.FileSystem.RemoteFileTooLargeException
                 ? AppLangResources.Format(AppLangResourceKind.RemoteFileTooLarge, RemoteFiles.MaxCopyBytes / (1024 * 1024))
                 : e.Message;
             await dialogs.ConfirmAsync(
@@ -132,7 +149,7 @@ public sealed class ItemOpener(
     {
         var project = projects.Current;
         // A file on an SSH host is not a file of this computer: the picker would look in the wrong place.
-        if (project is null || project.SshHost is not null)
+        if (project is null || !ProjectLocation.IsOnThisComputer(project))
         {
             return null;
         }
@@ -143,11 +160,44 @@ public sealed class ItemOpener(
     public async Task<Project?> PickAndAddProjectAsync()
     {
         var choice = await dialogs.AskNewProjectAsync();
-        return choice is null ? null : projects.AddProject(choice.Path, choice.Name.Length == 0 ? null : choice.Name, choice.SshHost);
+        if (choice is null) return null;
+        if (choice.RemoteHost is { } hostId && remoteProjects is not null)
+        {
+            try
+            {
+                return await remoteProjects.AddAsync(hostId, choice.Path, choice.Name.Length == 0 ? null : choice.Name);
+            }
+            catch (Exception e) when (e is IOException or Octopus.Remote.Protocol.RemoteException or Octopus.Remote.Security.HandshakeException)
+            {
+                await dialogs.ConfirmAsync(AppLangResources.Get(AppLangResourceKind.RemoteProjectFailed), e.Message, AppLangResources.Get(AppLangResourceKind.RemoteOk));
+                return null;
+            }
+        }
+        return projects.AddProject(choice.Path, choice.Name.Length == 0 ? null : choice.Name, choice.SshHost);
+    }
+
+    private async Task CreateOnHostAsync(Project project, string? agentId, AgentLaunchOptions? launch)
+    {
+        if (remoteProjects is null) return;
+        try
+        {
+            await remoteProjects.CreateItemAsync(project, agentId, launch);
+        }
+        catch (Exception e) when (e is IOException or Octopus.Remote.Protocol.RemoteException)
+        {
+            await dialogs.ConfirmAsync(AppLangResources.Get(AppLangResourceKind.RemoteItemFailed), e.Message, AppLangResources.Get(AppLangResourceKind.RemoteOk));
+        }
     }
 
     public ProjectItem? OpenDefaultAgent()
     {
+        if (projects.Current is { RemoteHost: { } host } && remoteHosts is not null)
+        {
+            // The host's default agent, or its first one.
+            var agents = remoteHosts.AgentsOf(host);
+            var chosen = agents.FirstOrDefault(a => a.IsDefault) ?? agents.FirstOrDefault();
+            return chosen is null ? null : OpenAgent(chosen.Id, null);
+        }
         var id = settings.Current.Agents.DefaultAgentId;
         if (id is null || scanner.Find(id) is null || !settings.Current.Agents.ProfileOf(id).Enabled)
         {

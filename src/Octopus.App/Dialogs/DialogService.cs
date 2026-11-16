@@ -167,11 +167,13 @@ public sealed class DialogService(IWindowAccessor windows, IPickerService picker
         // ~/.ssh/config may have changed since the last look: the hosts offered are the ones it has now.
         sshHosts.Refresh();
         var hosts = sshHosts.Current.Hosts;
+        // The Octopus hosts this computer is paired with. Looked up here, not injected: the hosts need the window too.
+        var remoteHosts = Composition.AppHost.Get<Remote.RemoteClientRuntime>().Hosts.Peers.Select(peer => (peer.Id, peer.Name)).ToList();
         NewProjectChoice? typed = null;
         string? error = null;
         while (true)
         {
-            var form = new NewProjectView(pickers, typed, hosts);
+            var form = new NewProjectView(pickers, typed, hosts, remoteHosts);
             form.ShowError(error);
             var result = await Dialog.ShowAsync(
                 windows.Window,
@@ -184,12 +186,12 @@ public sealed class DialogService(IWindowAccessor windows, IPickerService picker
             {
                 return null;
             }
-            typed = new NewProjectChoice(form.FolderPath, form.ProjectName, form.SshHost);
-            error = NewProjectView.Validate(typed.Path, typed.SshHost);
+            typed = new NewProjectChoice(form.FolderPath, form.ProjectName, form.SshHost, form.RemoteHost);
+            error = NewProjectView.Validate(typed.Path, typed.SshHost, typed.RemoteHost);
             if (error is null)
             {
                 // A folder on a host stays as typed: this computer cannot resolve it.
-                return typed.SshHost is null ? typed with { Path = Path.GetFullPath(NewProjectView.ExpandHome(typed.Path)) } : typed;
+                return typed.SshHost is null && typed.RemoteHost is null ? typed with { Path = Path.GetFullPath(NewProjectView.ExpandHome(typed.Path)) } : typed;
             }
             // Not a usable folder: the dialog comes back with what was typed and says why.
         }

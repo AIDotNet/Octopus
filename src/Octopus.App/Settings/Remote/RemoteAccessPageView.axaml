@@ -1,0 +1,216 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:remote="using:Octopus.App.Settings.Remote"
+             x:Class="Octopus.App.Settings.Remote.RemoteAccessPageView"
+             x:DataType="remote:RemoteAccessSettingsViewModel">
+    <StackPanel Spacing="16">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsRemoteTitle}" />
+            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsRemoteSubtitle}" />
+        </StackPanel>
+
+        <!-- A paired device can run anything here: said before any switch. -->
+        <arc:Alert Tone="Warning" Content="{l:AppLangResource SettingsRemoteWarning}" />
+
+        <arc:SettingsGroup Appearance="Plain">
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteDeviceName}"
+                             Description="{l:AppLangResource SettingsRemoteDeviceNameHint}">
+                <arc:Input x:Name="DeviceNameInput" Size="Small" Width="220"
+                           AutomationProperties.Name="{l:AppLangResource SettingsRemoteDeviceName}"
+                           Text="{Binding DeviceName, Mode=TwoWay}"
+                           PlaceholderText="{Binding DeviceNamePlaceholder}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteLan}"
+                             Description="{l:AppLangResource SettingsRemoteLanHint}">
+                <arc:Switch x:Name="LanSwitch" IsChecked="{Binding LanEnabled, Mode=TwoWay}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemotePort}"
+                             Description="{l:AppLangResource SettingsRemotePortHint}">
+                <arc:Input x:Name="PortInput" Size="Small" Width="100"
+                           AutomationProperties.Name="{l:AppLangResource SettingsRemotePort}"
+                           Text="{Binding Port, Mode=TwoWay}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteAddresses}"
+                             Description="{l:AppLangResource SettingsRemoteAddressesHint}">
+                <SelectableTextBlock x:Name="AddressesText" Classes="mono" Text="{Binding AddressesText}" VerticalAlignment="Center" />
+            </arc:SettingsRow>
+        </arc:SettingsGroup>
+
+        <arc:Alert Tone="Danger" Content="{Binding ErrorText}" IsVisible="{Binding HasError}" />
+        <arc:Alert Tone="Info" Content="{l:AppLangResource SettingsRemoteTrayHint}" IsVisible="{Binding ShowTrayHint}" />
+
+        <!-- The relay: for when the two computers are not on one network. -->
+        <TextBlock Classes="group" Text="{l:AppLangResource SettingsRemoteRelay}" Margin="0,8,0,0" />
+        <TextBlock Classes="hint" Margin="2,0,0,0" Text="{l:AppLangResource SettingsRemoteRelayHint}" TextWrapping="Wrap" />
+        <arc:SettingsGroup Appearance="Plain">
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteRelayUrl}"
+                             Description="{l:AppLangResource SettingsRemoteRelayUrlHint}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <arc:Input x:Name="RelayUrlInput" Size="Small" Width="260"
+                               AutomationProperties.Name="{l:AppLangResource SettingsRemoteRelayUrl}"
+                               Text="{Binding RelayUrl, Mode=TwoWay}"
+                               PlaceholderText="relay.example.com" />
+                    <arc:Button x:Name="RelayApplyButton" Variant="Secondary" Size="Small"
+                                Content="{l:AppLangResource SettingsRemoteRelayApply}"
+                                Command="{Binding SaveRelayCommand}" />
+                </StackPanel>
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteRelayAccount}"
+                             Description="{l:AppLangResource SettingsRemoteRelayAccountHint}">
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <TextBlock x:Name="RelayAccountText" Classes="name" Text="{Binding RelayAccountText}"
+                               TextTrimming="CharacterEllipsis" MaxWidth="260" VerticalAlignment="Center" />
+                    <arc:Button x:Name="RelaySignInButton" Variant="Primary" Size="Small"
+                                IsVisible="{Binding CanSignInRelay}"
+                                Content="{l:AppLangResource SettingsRemoteRelaySignIn}"
+                                Command="{Binding SignInRelayCommand}" />
+                    <arc:Button x:Name="RelaySignOutButton" Variant="Secondary" Size="Small"
+                                IsVisible="{Binding IsRelaySignedIn}"
+                                Content="{l:AppLangResource SettingsRemoteRelaySignOut}"
+                                Command="{Binding SignOutRelayCommand}" />
+                </StackPanel>
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteRelayHost}"
+                             Description="{l:AppLangResource SettingsRemoteRelayHostHint}">
+                <arc:Switch x:Name="RelaySwitch" IsChecked="{Binding RelayHostEnabled, Mode=TwoWay}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteRelayStatus}">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <arc:Badge Size="Small" Tone="Success" Content="{l:AppLangResource SettingsRemoteOnline}" IsVisible="{Binding IsRelayOnline}" VerticalAlignment="Center" />
+                    <TextBlock x:Name="RelayStatusText" Classes="hint" Text="{Binding RelayStatus}" TextWrapping="Wrap" MaxWidth="360" VerticalAlignment="Center" />
+                </StackPanel>
+            </arc:SettingsRow>
+        </arc:SettingsGroup>
+        <!-- A sign-in under way: the code is the thing to look at, as in the browser. -->
+        <Border x:Name="RelayLoginPanel"
+                IsVisible="{Binding IsRelaySigningIn}"
+                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="14,12">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsRemoteRelayCodeTitle}" />
+                    </StackPanel>
+                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsRemoteRelayCodeHint}" TextWrapping="Wrap" />
+                </StackPanel>
+                <SelectableTextBlock x:Name="RelayLoginCodeText" Grid.Column="1" Text="{Binding RelayLoginCode}"
+                                     FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                     FontSize="26" FontWeight="Bold" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <arc:Button x:Name="RelayOpenBrowserButton" Variant="Secondary" Size="Small"
+                                Content="{l:AppLangResource SettingsRemoteRelayOpenBrowser}"
+                                Command="{Binding OpenRelayLoginCommand}" />
+                    <arc:Button x:Name="RelayCancelSignInButton" Variant="Ghost" Size="Small"
+                                Content="{l:AppLangResource SettingsRemoteRelayCancel}"
+                                Command="{Binding CancelRelaySignInCommand}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+        <arc:Alert Tone="Warning" Content="{l:AppLangResource SettingsRemoteRelayEnded}" IsVisible="{Binding RelaySignInEnded}" />
+        <arc:Alert Tone="Warning" Content="{l:AppLangResource SettingsRemoteRelayInsecure}" IsVisible="{Binding IsRelayInsecure}" />
+        <arc:Alert Tone="Danger" Content="{Binding RelayErrorText}" IsVisible="{Binding HasRelayError}" />
+
+        <!-- Pairing a new device. -->
+        <TextBlock Classes="group" Text="{l:AppLangResource SettingsRemotePairing}" Margin="0,8,0,0" />
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="14,12">
+            <StackPanel Spacing="12">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsRemotePairingHint}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <Panel Grid.Column="1" VerticalAlignment="Center">
+                        <arc:Button x:Name="StartPairingButton" Variant="Primary" Size="Small"
+                                    IsVisible="{Binding !IsPairing}"
+                                    Content="{l:AppLangResource SettingsRemotePairingStart}"
+                                    Command="{Binding StartPairingCommand}" />
+                        <arc:Button x:Name="StopPairingButton" Variant="Secondary" Size="Small"
+                                    IsVisible="{Binding IsPairing}"
+                                    Content="{l:AppLangResource SettingsRemotePairingStop}"
+                                    Command="{Binding StopPairingCommand}" />
+                    </Panel>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsWaitingForRequest}">
+                    <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsRemotePairingWaiting}" />
+                </StackPanel>
+
+                <!-- The devices that ask: the number is the thing to look at. -->
+                <ItemsControl x:Name="RequestList" ItemsSource="{Binding Requests}" IsVisible="{Binding HasRequests}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="remote:PairingRequestRow">
+                            <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                    Padding="14,10" Margin="0,0,0,8">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16">
+                                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Classes="name" Text="{Binding Name}" />
+                                        <TextBlock Classes="mono" Text="{Binding DeviceId}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding Sas}"
+                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                               FontSize="26" FontWeight="Bold" VerticalAlignment="Center" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <arc:Button Variant="Primary" Size="Small" Content="{l:AppLangResource SettingsRemoteAllow}" Command="{Binding AllowCommand}" />
+                                        <arc:Button Variant="Secondary" Size="Small" Content="{l:AppLangResource SettingsRemoteRefuse}" Command="{Binding RefuseCommand}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Spacing="4" IsVisible="{Binding HasPairingLink}">
+                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsRemotePairingLink}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <SelectableTextBlock x:Name="PairingLinkText" Classes="mono" Text="{Binding PairingLink}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <arc:Button x:Name="CopyLinkButton" Grid.Column="1" Variant="Secondary" Size="Small"
+                                    Content="{l:AppLangResource SettingsRemoteCopy}" Click="OnCopyLink" />
+                    </Grid>
+                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsRemotePairingLinkHint}" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- The devices that may connect. -->
+        <TextBlock Classes="group" Text="{l:AppLangResource SettingsRemoteDevices}" Margin="0,8,0,0" />
+        <TextBlock Classes="hint" Margin="2,0,0,0" Text="{l:AppLangResource SettingsRemoteNoDevices}" IsVisible="{Binding !HasDevices}" />
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                ClipToBounds="True"
+                IsVisible="{Binding HasDevices}">
+            <ItemsControl x:Name="DeviceList" ItemsSource="{Binding Devices}" Margin="0,-1,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="remote:PairedDeviceRow">
+                        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,10">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                <lucide:LucideIcon Kind="MonitorSmartphone" Size="16" VerticalAlignment="Center"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="name" Text="{Binding Name}" />
+                                        <arc:Badge Size="Small" Tone="Neutral" Content="{Binding Kind}" VerticalAlignment="Center" />
+                                        <arc:Badge Size="Small" Tone="Success" Content="{l:AppLangResource SettingsRemoteOnline}" IsVisible="{Binding IsOnline}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Classes="hint" Text="{Binding Details}" IsVisible="{Binding !IsOnline}" />
+                                    <TextBlock Classes="mono" Text="{Binding Id}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <arc:Button Grid.Column="2" Variant="Secondary" Size="Small" VerticalAlignment="Center"
+                                            Content="{l:AppLangResource SettingsRemoteRevoke}"
+                                            Command="{Binding $parent[ItemsControl].((remote:RemoteAccessSettingsViewModel)DataContext).RevokeCommand}"
+                                            CommandParameter="{Binding}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+    </StackPanel>
+</UserControl>

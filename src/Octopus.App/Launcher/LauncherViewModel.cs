@@ -86,7 +86,8 @@ public sealed partial class LauncherViewModel : ObservableObject
     [ObservableProperty] public partial AgentLaunchViewModel? Panel { get; private set; }
 
     /// <summary>In a project on an SSH host no agent is offered: agents need this computer's files and programs.</summary>
-    public bool IsRemoteProject => _projects.Current?.SshHost is not null;
+    /// <summary>The current project is somewhere agents cannot run (an SSH host): the menu says so instead of listing them.</summary>
+    public bool IsRemoteProject => _projects.Current is { } current && !Octopus.Core.Projects.ProjectLocation.CanRunAgents(current);
     public bool ShowRemoteNote => IsRemoteProject;
     public bool ShowScanning => IsScanning && Agents.Count == 0 && !IsRemoteProject;
     public bool ShowNoAgents => !IsScanning && Agents.Count == 0 && !IsRemoteProject;
@@ -100,6 +101,16 @@ public sealed partial class LauncherViewModel : ObservableObject
         var agents = _settings.Current.Agents;
         var rows = new List<LauncherAgentViewModel>();
         var installed = IsRemoteProject ? Enumerable.Empty<AgentInstallation>() : _scanner.Current.Installations;
+        if (_projects.Current is { RemoteHost: { } remoteHost })
+        {
+            // A project on another computer: the agents that computer has, with its own default first. The panel beside
+            // a row is built from this computer's definition of the same agent, when it knows one.
+            installed = [];
+            foreach (var agent in Composition.AppHost.Get<Remote.RemoteClientRuntime>().AgentsOf(remoteHost))
+            {
+                rows.Add(new LauncherAgentViewModel(agent.Id, agent.Name, agent.IsDefault, LaunchAgent, Expand));
+            }
+        }
         foreach (var installation in installed)
         {
             var definition = _catalog.Find(installation.AgentId);
@@ -171,6 +182,13 @@ public sealed partial class LauncherViewModel : ObservableObject
     {
         if (agent is null)
         {
+            return;
+        }
+        if (_projects.Current is { RemoteHost: not null })
+        {
+            // The host's own settings for that agent apply: nothing of this computer's is sent along.
+            _opener.OpenAgent(agent.Id, null);
+            Close();
             return;
         }
         var profile = _settings.Current.Agents.ProfileOf(agent.Id);

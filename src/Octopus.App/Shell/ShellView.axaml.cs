@@ -73,7 +73,8 @@ public partial class ShellView : UserControl
         {
             SyncRight();
         }
-        if (e.PropertyName is nameof(ShellViewModel.CurrentProjectPath) or nameof(ShellViewModel.CurrentProjectName) or nameof(ShellViewModel.CurrentProjectSshHost))
+        if (e.PropertyName is nameof(ShellViewModel.CurrentProjectPath) or nameof(ShellViewModel.CurrentProjectName) or nameof(ShellViewModel.CurrentProjectSshHost)
+            or nameof(ShellViewModel.CurrentProjectRemoteHost))
         {
             ApplyProject();
         }
@@ -267,7 +268,7 @@ public partial class ShellView : UserControl
     /// The name goes first, so the panel never shows the new folder under the old name.
     /// </summary>
     private void ApplyProject() =>
-        RightPanel.SetProject(_model?.CurrentProjectPath, _model?.CurrentProjectName, _model?.CurrentProjectSshHost);
+        RightPanel.SetProject(_model?.CurrentProjectPath, _model?.CurrentProjectName, _model?.CurrentProjectSshHost, _model?.CurrentProjectRemoteHost);
 
     private void OnRightSplitterDragCompleted(object? sender, Avalonia.Input.VectorEventArgs e)
     {

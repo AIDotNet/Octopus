@@ -1,0 +1,342 @@
+namespace Octopus.Remote.Protocol;
+
+/// <summary>The methods and events of a host's workspace (design/12-远程操作.md §6.2). The device calls, the host answers; events go from the host.</summary>
+public static class RemoteMethods
+{
+    public const string HostInfo = "host/info";
+    public const string ProjectList = "project/list";
+    public const string ProjectCreate = "project/create";
+    public const string ItemList = "item/list";
+    public const string ItemCreate = "item/create";
+    public const string ItemRemove = "item/remove";
+    public const string ItemRename = "item/rename";
+    public const string AgentCatalog = "agent/catalog";
+    public const string SessionAttach = "session/attach";
+    public const string SessionDetach = "session/detach";
+    public const string SessionResize = "session/resize";
+    /// <summary>Gives up the say over a terminal's size while still showing it (design/12 §6.5): the view that had it before decides again.</summary>
+    public const string SessionRelease = "session/release";
+    public const string SessionRestart = "session/restart";
+
+    // Files of the host's projects (design/12 §6.2). Every path must lie inside a project's folder.
+    public const string FsResolve = "fs/resolve";
+    public const string FsList = "fs/list";
+    public const string FsExists = "fs/exists";
+    public const string FsRead = "fs/read";
+    public const string FsWrite = "fs/write";
+    public const string FsCreateFile = "fs/createFile";
+    public const string FsCreateDirectory = "fs/createDirectory";
+    public const string FsRename = "fs/rename";
+    public const string FsDelete = "fs/delete";
+    /// <summary>Asks to be told when anything under a folder changes (<see cref="FsChanged"/>, with the same path).</summary>
+    public const string FsWatch = "fs/watch";
+    public const string FsUnwatch = "fs/unwatch";
+    /// <summary>A call of the host's git service: the method's name and its arguments as JSON, the result as JSON.</summary>
+    public const string GitCall = "git/call";
+
+    /// <summary>Event: something under a watched folder changed.</summary>
+    public const string FsChanged = "fs/changed";
+    /// <summary>Event: projects or their items changed; the device reads the lists again.</summary>
+    public const string WorkspaceChanged = "workspace/changed";
+    /// <summary>Event: one item's title or activity changed.</summary>
+    public const string ItemChanged = "item/changed";
+    /// <summary>Event: the program of an attached terminal ended.</summary>
+    public const string SessionExited = "session/exited";
+    /// <summary>Event: the device fell too far behind; the host stopped sending and the device attaches again for a fresh snapshot.</summary>
+    public const string SessionResync = "session/resync";
+
+    /// <summary>Capabilities named in <c>hello</c>.</summary>
+    public const string CapabilityWorkspace = "workspace";
+    public const string CapabilityNativeSnapshot = "snapshot.native";
+    public const string CapabilityFiles = "files";
+    public const string CapabilityGit = "git";
+    /// <summary>The host knows <see cref="SessionRelease"/>.</summary>
+    public const string CapabilitySizeRelease = "session.release";
+
+    /// <summary>The most bytes of a file in one <see cref="FsRead"/> answer or <see cref="FsWrite"/> request.</summary>
+    public const int FilePieceBytes = 256 * 1024;
+
+    public const int NotFound = -33010;
+    public const int NotAllowed = -33002;
+    public const int StartFailed = -33020;
+}
+
+/// <summary>What a terminal's record frame says (after its 8 bytes of position).</summary>
+public static class RecordKinds
+{
+    /// <summary>The grid changed: two bytes of columns, two of rows, little-endian.</summary>
+    public const byte Resize = 1;
+    /// <summary>The terminal was cleared for a restart of its program.</summary>
+    public const byte Reset = 2;
+}
+
+/// <summary>What an item is doing, as the host's own activity tracking sees it.</summary>
+public static class ItemActivities
+{
+    public const string Idle = "idle";
+    public const string Working = "working";
+    public const string Waiting = "waiting";
+    public const string Error = "error";
+}
+
+public static class ItemKinds
+{
+    public const string Terminal = "terminal";
+    public const string Agent = "agent";
+}
+
+public static class SnapshotFormats
+{
+    public const string Vt = "vt";
+    public const string Native = "native";
+}
+
+/// <summary>Parameters or a result with nothing in it.</summary>
+public sealed class Nothing;
+
+public sealed class HostInfoMessage
+{
+    public string Name { get; set; } = "";
+    /// <summary><c>macos</c>, <c>windows</c> or <c>linux</c>.</summary>
+    public string Os { get; set; } = "";
+    public string AppVersion { get; set; } = "";
+    /// <summary>The home folder, where "new project" starts looking.</summary>
+    public string Home { get; set; } = "";
+}
+
+public sealed class ProjectMessage
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    /// <summary>The folder on the host.</summary>
+    public string Path { get; set; } = "";
+    public string? Color { get; set; }
+    public string? Icon { get; set; }
+}
+
+public sealed class ProjectListMessage
+{
+    public List<ProjectMessage> Projects { get; set; } = [];
+}
+
+public sealed class CreateProjectMessage
+{
+    /// <summary>A folder on the host; <c>~</c> stands for its home.</summary>
+    public string Path { get; set; } = "";
+    public string? Name { get; set; }
+    /// <summary>Make the folder when it does not exist; otherwise a missing folder is an error.</summary>
+    public bool CreateFolder { get; set; }
+}
+
+public sealed class ProjectRefMessage
+{
+    public string ProjectId { get; set; } = "";
+}
+
+public sealed class ItemMessage
+{
+    public string Id { get; set; } = "";
+    public string ProjectId { get; set; } = "";
+    /// <summary>One of <see cref="ItemKinds"/>.</summary>
+    public string Kind { get; set; } = ItemKinds.Terminal;
+    public string Title { get; set; } = "";
+    public string? AgentId { get; set; }
+    public string? Model { get; set; }
+    public string? Effort { get; set; }
+    /// <summary>One of <see cref="ItemActivities"/>.</summary>
+    public string Activity { get; set; } = ItemActivities.Idle;
+    /// <summary>True when its program runs (a tab that was never shown has none yet).</summary>
+    public bool IsRunning { get; set; }
+}
+
+public sealed class ItemListMessage
+{
+    public List<ItemMessage> Items { get; set; } = [];
+}
+
+public sealed class CreateItemMessage
+{
+    public string ProjectId { get; set; } = "";
+    public string Kind { get; set; } = ItemKinds.Terminal;
+    public string? AgentId { get; set; }
+    public string? Model { get; set; }
+    public string? Effort { get; set; }
+    public string? Prompt { get; set; }
+}
+
+public sealed class ItemRefMessage
+{
+    public string ItemId { get; set; } = "";
+}
+
+public sealed class RenameItemMessage
+{
+    public string ItemId { get; set; } = "";
+    /// <summary>Null or empty goes back to the item's own title.</summary>
+    public string? Title { get; set; }
+}
+
+/// <summary>An agent that is installed and enabled on the host, with what can be chosen when starting it.</summary>
+public sealed class AgentMessage
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public List<AgentChoiceMessage> Models { get; set; } = [];
+    public bool AllowCustomModel { get; set; }
+    /// <summary>What the host calls the effort setting of this agent ("Effort", "Reasoning effort"); null when it has none.</summary>
+    public string? EffortLabel { get; set; }
+    public List<AgentChoiceMessage> Efforts { get; set; } = [];
+    public bool TakesPrompt { get; set; }
+    public bool IsDefault { get; set; }
+}
+
+public sealed class AgentChoiceMessage
+{
+    public string Id { get; set; } = "";
+    public string Label { get; set; } = "";
+}
+
+public sealed class AgentListMessage
+{
+    public List<AgentMessage> Agents { get; set; } = [];
+}
+
+public sealed class AttachMessage
+{
+    public string ItemId { get; set; } = "";
+    /// <summary>
+    /// The channel the terminal's frames will use, chosen by the device (any number it does not use on this connection,
+    /// not 0): it can be listening before the first frame arrives.
+    /// </summary>
+    public uint Channel { get; set; }
+    /// <summary>The device's grid; used to start the program when it does not run yet, and as the size when <see cref="ClaimSize"/>.</summary>
+    public int Columns { get; set; }
+    public int Rows { get; set; }
+    /// <summary>One of <see cref="SnapshotFormats"/>.</summary>
+    public string Snapshot { get; set; } = SnapshotFormats.Vt;
+    /// <summary>Make this device's view decide the terminal's size (design/12 §6.5).</summary>
+    public bool ClaimSize { get; set; }
+}
+
+public sealed class AttachedMessage
+{
+    /// <summary>The channel the terminal's frames use on this connection.</summary>
+    public uint Channel { get; set; }
+    /// <summary>The position of the first output after the snapshot.</summary>
+    public ulong Position { get; set; }
+    public string Snapshot { get; set; } = SnapshotFormats.Vt;
+    public int SnapshotLength { get; set; }
+    public int Columns { get; set; }
+    public int Rows { get; set; }
+    public string? Title { get; set; }
+    public bool IsRunning { get; set; }
+    public int? ExitCode { get; set; }
+    /// <summary>True when this device's view decides the size.</summary>
+    public bool OwnsSize { get; set; }
+}
+
+public sealed class ChannelMessage
+{
+    public uint Channel { get; set; }
+}
+
+public sealed class ResizeMessage
+{
+    public uint Channel { get; set; }
+    public int Columns { get; set; }
+    public int Rows { get; set; }
+    /// <summary>Take the say over the size for this device's view (the person there is using the terminal now).</summary>
+    public bool Claim { get; set; }
+}
+
+public sealed class ResizedMessage
+{
+    /// <summary>False when another view decides the size: the terminal keeps <see cref="Columns"/> by <see cref="Rows"/>.</summary>
+    public bool Applied { get; set; }
+    public int Columns { get; set; }
+    public int Rows { get; set; }
+}
+
+public sealed class ExitedMessage
+{
+    public uint Channel { get; set; }
+    public int? ExitCode { get; set; }
+}
+
+public sealed class PathMessage
+{
+    public string Path { get; set; } = "";
+}
+
+public sealed class ResolvedMessage
+{
+    /// <summary>The absolute path on the host.</summary>
+    public string Path { get; set; } = "";
+}
+
+public sealed class ExistsMessage
+{
+    public bool Exists { get; set; }
+}
+
+public sealed class FileEntryMessage
+{
+    public string Name { get; set; } = "";
+    public string Path { get; set; } = "";
+    public bool IsDirectory { get; set; }
+    public bool IsHidden { get; set; }
+}
+
+public sealed class FileListMessage
+{
+    public List<FileEntryMessage> Entries { get; set; } = [];
+}
+
+public sealed class ReadFileMessage
+{
+    public string Path { get; set; } = "";
+    public long Offset { get; set; }
+    /// <summary>At most <see cref="RemoteMethods.FilePieceBytes"/>.</summary>
+    public int Length { get; set; }
+}
+
+public sealed class FilePieceMessage
+{
+    /// <summary>The file's whole size.</summary>
+    public long Size { get; set; }
+    /// <summary>The bytes from the asked offset, base64.</summary>
+    public string Data { get; set; } = "";
+}
+
+public sealed class WriteFileMessage
+{
+    public string Path { get; set; } = "";
+    /// <summary>One id for all pieces of one write: they collect beside the file and replace it with the last piece.</summary>
+    public string Upload { get; set; } = "";
+    public string Data { get; set; } = "";
+    public bool Last { get; set; }
+}
+
+public sealed class MoveMessage
+{
+    public string Path { get; set; } = "";
+    public string NewPath { get; set; } = "";
+}
+
+public sealed class DeleteMessage
+{
+    public string Path { get; set; } = "";
+    public bool IsDirectory { get; set; }
+}
+
+public sealed class CallMessage
+{
+    public string Method { get; set; } = "";
+    /// <summary>The arguments, as JSON text the two apps agree on (this library does not know the types).</summary>
+    public string Arguments { get; set; } = "";
+}
+
+public sealed class CallResultMessage
+{
+    public string Result { get; set; } = "";
+}

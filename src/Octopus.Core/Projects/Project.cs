@@ -12,6 +12,14 @@ public sealed class Project
     /// folder on that host, kept as typed. Null: a folder on this computer.
     /// </summary>
     public string? SshHost { get; set; }
+    /// <summary>
+    /// The device id of another computer that runs Octopus, when the project lives there (design/12-远程操作.md):
+    /// <see cref="Path"/> is then a folder on that computer and <see cref="RemoteId"/> the project's id there. Its
+    /// terminals and agents run on that computer; the items kept here are a copy of that computer's list. Null: not such a project.
+    /// </summary>
+    public string? RemoteHost { get; set; }
+    /// <summary>The id the project has on <see cref="RemoteHost"/>.</summary>
+    public string? RemoteId { get; set; }
     public string? Color { get; set; }
     /// <summary>A Lucide icon name shown on the project's square instead of its initial; null shows the initial.</summary>
     public string? Icon { get; set; }

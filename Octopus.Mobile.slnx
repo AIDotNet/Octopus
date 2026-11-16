@@ -1,0 +1,11 @@
+<Solution>
+  <!-- The phone app alone: its shared part, the desktop preview and the tests. The iOS and Android heads go here (and
+       only here) once they exist: they need workloads the desktop build must not depend on (design/12-远程操作.md §9.1). -->
+  <Folder Name="/src/">
+    <Project Path="src/Octopus.Mobile.Desktop/Octopus.Mobile.Desktop.csproj" />
+    <Project Path="src/Octopus.Mobile/Octopus.Mobile.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Octopus.Mobile.Tests/Octopus.Mobile.Tests.csproj" />
+  </Folder>
+</Solution>

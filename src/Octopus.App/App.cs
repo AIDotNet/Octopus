@@ -47,6 +47,15 @@ public class App : Application
             desktop.MainWindow = new MainWindow();
             AppHost.Get<Shell.TrayService>().Start(this);
             AppHost.Get<Activity.AgentAttentionNotifier>().Start();
+            // Projects on other computers: kept in line with their hosts from now on; the host of the one on screen is
+            // connected in the background.
+            var remoteProjects = AppHost.Get<Remote.RemoteProjects>();
+            if (projects.Current is { RemoteHost: { } remoteHost }) _ = Task.Run(() => remoteProjects.ConnectQuietlyAsync(remoteHost));
+            // Remote access that was left on listens again from the start; off, nothing of it is even created.
+            if (AppHost.Get<Octopus.Storage.ISettingsStore>().Current.Remote is { LanEnabled: true } or { RelayHostEnabled: true })
+            {
+                _ = Task.Run(AppHost.Get<Remote.RemoteHostRuntime>().ApplyAsync);
+            }
             // Plugins start once the window exists: views, dialogs and indicators need it.
             Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = Plugins.PluginStartup.StartAsync(), Avalonia.Threading.DispatcherPriority.Background);
             // The updater starts once the window is up: its first check waits a while anyway (design/10-自动更新.md §7).

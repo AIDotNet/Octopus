@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The phone app's shared part: pages, view models and the seam to a remote host (design/12-远程操作.md §9).
+         Plain net11.0, so it builds without the iOS / Android workloads; the platform heads only start it. -->
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <!-- AVLN3001: the pages take their view model in the constructor and are never loaded by URI. -->
+        <NoWarn>$(NoWarn);AVLN3001</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Mobile.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" />
+        <PackageReference Include="Avalonia.Fonts.Inter" />
+        <PackageReference Include="TKCode.Arc.Mobile" />
+        <PackageReference Include="TKCode.Arc.Fonts" />
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Core/Octopus.Core.csproj" />
+        <ProjectReference Include="../Octopus.Remote/Octopus.Remote.csproj" />
+        <ProjectReference Include="../Octopus.Remote.Client/Octopus.Remote.Client.csproj" />
+        <ProjectReference Include="../Octopus.Terminal/Octopus.Terminal.csproj" />
+        <ProjectReference Include="../Octopus.Terminal.Avalonia/Octopus.Terminal.Avalonia.csproj" />
+    </ItemGroup>
+</Project>

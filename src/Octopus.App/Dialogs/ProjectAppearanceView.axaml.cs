@@ -53,7 +53,7 @@ public partial class ProjectAppearanceView : UserControl
         _category = PixelIcons.Parse(Icon)?.Category ?? LineCategory;
         Image = project.Image;
         ProjectNameText.Text = project.Name;
-        ProjectPathText.Text = project.SshHost is { } host ? host + ":" + project.Path : project.Path;
+        ProjectPathText.Text = ProjectLocation.Describe(project);
         PreviewInitial.Text = InitialOf(project.Name);
 
         BuildColors();

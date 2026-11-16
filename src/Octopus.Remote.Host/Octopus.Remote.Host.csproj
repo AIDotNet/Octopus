@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The host side of remote operation: who may connect, and what a connected device can ask of this computer's
+         workspace (design/12-远程操作.md §5, §6). It knows the workspace only through IHostWorkspace, which the app
+         implements; nothing here touches the UI, projects or terminals directly. -->
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Remote.Host.Tests" />
+        <InternalsVisibleTo Include="Octopus.App.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Remote/Octopus.Remote.csproj" />
+    </ItemGroup>
+</Project>

@@ -1,0 +1,109 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        x:Class="Octopus.Mobile.Shell.MobileStyles"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+        xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile">
+    <!-- A state pill at the end of a row: waiting (the person is needed), working, failed, or an action ("Pair"). -->
+    <Style Selector="Border.pill">
+        <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+        <Setter Property="Padding" Value="9,3" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+    </Style>
+    <Style Selector="Border.pill arc|ArcSpinner">
+        <Setter Property="Width" Value="9" />
+        <Setter Property="Height" Value="9" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.pill TextBlock">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+    </Style>
+    <Style Selector="Border.pill.waiting">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource WarningSubtle}" />
+    </Style>
+    <Style Selector="Border.pill.waiting TextBlock">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
+    </Style>
+    <Style Selector="Border.pill.working, Border.pill.action">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+    </Style>
+    <Style Selector="Border.pill.working TextBlock, Border.pill.action TextBlock">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Border.pill.error">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource DangerSubtle}" />
+    </Style>
+    <Style Selector="Border.pill.error TextBlock">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+
+    <!-- The square before a session's title: the agent's letter on its color, or a terminal glyph. -->
+    <Style Selector="Border.badge">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="CornerRadius" Value="9" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+    </Style>
+    <Style Selector="Border.badge TextBlock">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="TextBlock.secondary">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+    </Style>
+    <!-- What a session is doing or asking: one line in the terminal's own face. -->
+    <Style Selector="TextBlock.preview">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="Margin" Value="0,2,0,0" />
+    </Style>
+    <Style Selector="TextBlock.fieldLabel">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+    </Style>
+
+    <!-- The strip under the terminal's title: where the session is and who decides its size. -->
+    <Style Selector="Border.strip">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="Padding" Value="12,2,4,2" />
+    </Style>
+    <!-- The bars under the terminal: replies, the composer, the key row. -->
+    <Style Selector="Border.bar">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="8,6" />
+    </Style>
+    <!-- A key of the row above the keyboard; the sticky Ctrl is filled while it waits for its key. -->
+    <Style Selector="arcm|Button.keycap">
+        <Setter Property="Variant" Value="Tinted" />
+    </Style>
+    <Style Selector="arcm|Button.keycap.armed">
+        <Setter Property="Variant" Value="Filled" />
+    </Style>
+
+    <!-- The number both sides show while pairing, and the sign-in code: large, evenly spaced digits. -->
+    <Style Selector="TextBlock.code">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource Type3XL}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+</Styles>

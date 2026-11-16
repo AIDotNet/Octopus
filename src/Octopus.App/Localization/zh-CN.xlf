@@ -719,5 +719,92 @@
     <unit id="MigrateFailed"><segment><source>The session could not be moved</source><target state="translated">迁移失败</target></segment></unit>
     <unit id="MigrateFailedClose"><segment><source>Close</source><target state="translated">关闭</target></segment></unit>
     <unit id="SessionsAccountCount"><segment><source>{0} accounts</source><target state="translated">{0} 个帐户</target></segment></unit>
+    <unit id="SettingsNavRemote"><segment><source>Remote access</source><target state="translated">远程访问</target></segment></unit>
+    <unit id="SettingsRemoteTitle"><segment><source>Remote access</source><target state="translated">远程访问</target></segment></unit>
+    <unit id="SettingsRemoteSubtitle"><segment><source>Let your other devices use this computer's Octopus: its projects, terminals and agents.</source><target state="translated">让你的其他设备使用这台电脑上的 Octopus：它的项目、终端和智能体。</target></segment></unit>
+    <unit id="SettingsRemoteWarning"><segment><source>A paired device can run any command on this computer. Pair only devices that are yours.</source><target state="translated">已配对的设备可以在这台电脑上运行任何命令。只配对你自己的设备。</target></segment></unit>
+    <unit id="SettingsRemoteDeviceName"><segment><source>Name of this computer</source><target state="translated">这台电脑的名字</target></segment></unit>
+    <unit id="SettingsRemoteDeviceNameHint"><segment><source>What other devices see.</source><target state="translated">其他设备看到的名字。</target></segment></unit>
+    <unit id="SettingsRemoteLan"><segment><source>Local network access</source><target state="translated">局域网访问</target></segment></unit>
+    <unit id="SettingsRemoteLanHint"><segment><source>Paired devices on the same network can connect. Devices that are not paired are turned away.</source><target state="translated">同一网络里已配对的设备可以连接。没配对的设备会被拒绝。</target></segment></unit>
+    <unit id="SettingsRemotePort"><segment><source>Port</source><target state="translated">端口</target></segment></unit>
+    <unit id="SettingsRemotePortHint"><segment><source>Takes effect the next time local network access is turned on.</source><target state="translated">下次开启局域网访问时生效。</target></segment></unit>
+    <unit id="SettingsRemoteAddresses"><segment><source>Addresses</source><target state="translated">地址</target></segment></unit>
+    <unit id="SettingsRemoteAddressesHint"><segment><source>Type one of these on the other device.</source><target state="translated">在另一台设备上输入其中一个。</target></segment></unit>
+    <unit id="SettingsRemoteNotListening"><segment><source>Not listening</source><target state="translated">没有监听</target></segment></unit>
+    <unit id="SettingsRemoteListenFailed"><segment><source>Could not listen on port {0}: {1}</source><target state="translated">无法监听端口 {0}：{1}</target></segment></unit>
+    <unit id="SettingsRemoteTrayHint"><segment><source>Closing the window quits Octopus, and other devices can then no longer connect. To keep it running, turn on "Keep in the tray when the window is closed" in General.</source><target state="translated">关闭窗口会退出 Octopus，其他设备就连不上了。要保持运行，在“通用”里打开“关闭窗口时保留在托盘”。</target></segment></unit>
+    <unit id="SettingsRemotePairing"><segment><source>Pair a new device</source><target state="translated">配对新设备</target></segment></unit>
+    <unit id="SettingsRemotePairingHint"><segment><source>For five minutes, a device may ask to be paired. Compare the number it shows with the one here before you allow it.</source><target state="translated">在五分钟内，设备可以请求配对。允许之前，核对它显示的数字和这里的是否相同。</target></segment></unit>
+    <unit id="SettingsRemotePairingStart"><segment><source>Start pairing</source><target state="translated">开始配对</target></segment></unit>
+    <unit id="SettingsRemotePairingStop"><segment><source>Stop pairing</source><target state="translated">停止配对</target></segment></unit>
+    <unit id="SettingsRemotePairingWaiting"><segment><source>Waiting for a device to ask…</source><target state="translated">等待设备发起请求…</target></segment></unit>
+    <unit id="SettingsRemotePairingLink"><segment><source>Pairing link</source><target state="translated">配对链接</target></segment></unit>
+    <unit id="SettingsRemotePairingLinkHint"><segment><source>A device that opens this link is paired without asking. Whoever has the link can pair once: do not post it anywhere.</source><target state="translated">设备打开这个链接后直接配对，不再询问。拿到链接的人可以配对一次，不要发到任何公开的地方。</target></segment></unit>
+    <unit id="SettingsRemoteCopy"><segment><source>Copy</source><target state="translated">复制</target></segment></unit>
+    <unit id="SettingsRemoteAllow"><segment><source>Allow</source><target state="translated">允许</target></segment></unit>
+    <unit id="SettingsRemoteRefuse"><segment><source>Refuse</source><target state="translated">拒绝</target></segment></unit>
+    <unit id="SettingsRemoteDevices"><segment><source>Paired devices</source><target state="translated">已配对设备</target></segment></unit>
+    <unit id="SettingsRemoteNoDevices"><segment><source>No device is paired with this computer.</source><target state="translated">还没有设备和这台电脑配对。</target></segment></unit>
+    <unit id="SettingsRemoteRevoke"><segment><source>Revoke</source><target state="translated">撤销</target></segment></unit>
+    <unit id="SettingsRemoteOnline"><segment><source>Connected</source><target state="translated">已连接</target></segment></unit>
+    <unit id="SettingsRemoteLastSeen"><segment><source>Last connected {0}</source><target state="translated">上次连接 {0}</target></segment></unit>
+    <unit id="SettingsRemoteKindDesktop"><segment><source>Computer</source><target state="translated">电脑</target></segment></unit>
+    <unit id="SettingsRemoteKindPhone"><segment><source>Phone</source><target state="translated">手机</target></segment></unit>
+    <unit id="RemoteOk"><segment><source>OK</source><target state="translated">好</target></segment></unit>
+    <unit id="RemoteProjectFailed"><segment><source>The project could not be added on the host</source><target state="translated">无法在主机上添加项目</target></segment></unit>
+    <unit id="RemoteItemFailed"><segment><source>Could not start it on the host</source><target state="translated">无法在主机上启动</target></segment></unit>
+    <unit id="NewProjectOctopusHost"><segment><source>{0} (Octopus)</source><target state="translated">{0}（Octopus）</target></segment></unit>
+    <unit id="NewProjectOctopusHint"><segment><source>A folder on that computer. It is made there if it does not exist; a folder that is already a project there opens that project.</source><target state="translated">那台电脑上的文件夹。不存在时会在那边创建；已经是那边的项目时，打开的就是那个项目。</target></segment></unit>
+    <unit id="SettingsNavRemoteHosts"><segment><source>Remote hosts</source><target state="translated">远程主机</target></segment></unit>
+    <unit id="SettingsRemoteHostsTitle"><segment><source>Remote hosts</source><target state="translated">远程主机</target></segment></unit>
+    <unit id="SettingsRemoteHostsSubtitle"><segment><source>Other computers that run Octopus and let this one in. A project on one of them runs its terminals and agents there.</source><target state="translated">运行着 Octopus、并且允许这台电脑连接的其他电脑。放在它们上面的项目，终端和智能体都在那边运行。</target></segment></unit>
+    <unit id="SettingsRemoteHostsAdd"><segment><source>Pair with a host</source><target state="translated">配对主机</target></segment></unit>
+    <unit id="SettingsRemoteHostsAddHint"><segment><source>On the other computer, open Settings → Remote access, turn on local network access and start pairing. Then type one of its addresses here, or paste its pairing link.</source><target state="translated">在另一台电脑上打开 设置 → 远程访问，开启局域网访问并开始配对。然后在这里输入它的一个地址，或粘贴它的配对链接。</target></segment></unit>
+    <unit id="SettingsRemoteHostsAddress"><segment><source>Address or pairing link</source><target state="translated">地址或配对链接</target></segment></unit>
+    <unit id="SettingsRemoteHostsAddressPlaceholder"><segment><source>192.168.1.5:47600</source><target state="translated">192.168.1.5:47600</target></segment></unit>
+    <unit id="SettingsRemoteHostsPair"><segment><source>Pair</source><target state="translated">配对</target></segment></unit>
+    <unit id="SettingsRemoteHostsCancel"><segment><source>Cancel</source><target state="translated">取消</target></segment></unit>
+    <unit id="SettingsRemoteHostsCompare"><segment><source>Check that the host shows this number, then choose Allow on the host.</source><target state="translated">确认主机上显示的是这个数字，然后在主机上点“允许”。</target></segment></unit>
+    <unit id="SettingsRemoteHostsConnecting"><segment><source>Connecting…</source><target state="translated">正在连接…</target></segment></unit>
+    <unit id="SettingsRemoteHostsBadAddress"><segment><source>That is neither an address nor a pairing link.</source><target state="translated">这既不是地址，也不是配对链接。</target></segment></unit>
+    <unit id="SettingsRemoteHostsRefused"><segment><source>The host did not allow this computer.</source><target state="translated">主机没有允许这台电脑。</target></segment></unit>
+    <unit id="SettingsRemoteHostsNotPairing"><segment><source>The host is not pairing right now. Start pairing there first.</source><target state="translated">主机现在没有在配对。先在那边点“开始配对”。</target></segment></unit>
+    <unit id="SettingsRemoteHostsUnreachable"><segment><source>The host could not be reached: {0}</source><target state="translated">连不上主机：{0}</target></segment></unit>
+    <unit id="SettingsRemoteHostsNone"><segment><source>This computer is not paired with any host.</source><target state="translated">这台电脑还没有和任何主机配对。</target></segment></unit>
+    <unit id="SettingsRemoteHostsRemove"><segment><source>Remove</source><target state="translated">移除</target></segment></unit>
+    <unit id="SettingsRemoteHostsStateConnected"><segment><source>Connected</source><target state="translated">已连接</target></segment></unit>
+    <unit id="SettingsRemoteHostsStateConnecting"><segment><source>Connecting…</source><target state="translated">正在连接…</target></segment></unit>
+    <unit id="SettingsRemoteHostsStateOffline"><segment><source>Not connected</source><target state="translated">未连接</target></segment></unit>
+    <unit id="SettingsRemoteHostsProjects"><segment><source>{0} projects here</source><target state="translated">这里有 {0} 个项目</target></segment></unit>
+    <unit id="SettingsRemoteRelay"><segment><source>Relay service</source><target state="translated">中转服务</target></segment></unit>
+    <unit id="SettingsRemoteRelayHint"><segment><source>When the two computers are not on the same network they connect through a relay service. The relay only carries encrypted data and cannot read a terminal; who may operate this computer is still decided by pairing.</source><target state="translated">两台电脑不在同一网络时，经中转服务连接。中转只转发加密后的数据，看不到终端内容；谁能操作这台电脑仍然由配对决定。</target></segment></unit>
+    <unit id="SettingsRemoteRelayUrl"><segment><source>Relay address</source><target state="translated">中转地址</target></segment></unit>
+    <unit id="SettingsRemoteRelayUrlHint"><segment><source>For example relay.example.com. Also used when this computer connects to other hosts.</source><target state="translated">例如 relay.example.com。这台电脑连接其他主机时也用它。</target></segment></unit>
+    <unit id="SettingsRemoteRelayApply"><segment><source>Apply</source><target state="translated">应用</target></segment></unit>
+    <unit id="SettingsRemoteRelayHost"><segment><source>Reach this computer through the relay</source><target state="translated">允许经中转访问这台电脑</target></segment></unit>
+    <unit id="SettingsRemoteRelayHostHint"><segment><source>This computer keeps a connection to the relay; paired devices can then reach it from any network.</source><target state="translated">这台电脑保持一条到中转服务的连接，已配对的设备在任何网络都能连上它。</target></segment></unit>
+    <unit id="SettingsRemoteRelayStatus"><segment><source>Status</source><target state="translated">状态</target></segment></unit>
+    <unit id="SettingsRemoteRelayStateOff"><segment><source>Not connected to a relay</source><target state="translated">没有连接中转</target></segment></unit>
+    <unit id="SettingsRemoteRelayStateConnecting"><segment><source>Connecting to the relay…</source><target state="translated">正在连接中转…</target></segment></unit>
+    <unit id="SettingsRemoteRelayStateOnline"><segment><source>Connected to the relay</source><target state="translated">已连接到中转</target></segment></unit>
+    <unit id="SettingsRemoteRelayStateFailed"><segment><source>Cannot connect to the relay: {0}</source><target state="translated">连不上中转：{0}</target></segment></unit>
+    <unit id="SettingsRemoteRelayAccount"><segment><source>Account</source><target state="translated">账号</target></segment></unit>
+    <unit id="SettingsRemoteRelayAccountHint"><segment><source>Sign in to use the relay. Only devices signed in to the same account are joined through it.</source><target state="translated">登录后才能使用中转。只有登录同一个账号的设备才会被中转接到一起。</target></segment></unit>
+    <unit id="SettingsRemoteRelaySignedOut"><segment><source>Not signed in</source><target state="translated">未登录</target></segment></unit>
+    <unit id="SettingsRemoteRelaySignIn"><segment><source>Sign in</source><target state="translated">登录</target></segment></unit>
+    <unit id="SettingsRemoteRelaySignOut"><segment><source>Sign out</source><target state="translated">退出登录</target></segment></unit>
+    <unit id="SettingsRemoteRelayCodeTitle"><segment><source>Confirm this code in your browser</source><target state="translated">在浏览器里确认这个代码</target></segment></unit>
+    <unit id="SettingsRemoteRelayCodeHint"><segment><source>The sign-in page has been opened in your browser. Check that it shows this same code, then confirm there.</source><target state="translated">浏览器已打开登录页。确认页面上显示的代码和这里一致，再在页面上点确认。</target></segment></unit>
+    <unit id="SettingsRemoteRelayOpenBrowser"><segment><source>Open the page again</source><target state="translated">再次打开页面</target></segment></unit>
+    <unit id="SettingsRemoteRelayCancel"><segment><source>Cancel</source><target state="translated">取消</target></segment></unit>
+    <unit id="SettingsRemoteRelayDenied"><segment><source>The sign-in was refused in the browser.</source><target state="translated">登录在浏览器里被拒绝了。</target></segment></unit>
+    <unit id="SettingsRemoteRelayExpired"><segment><source>The code was not confirmed in time. Sign in again.</source><target state="translated">代码没有在有效期内确认，请重新登录。</target></segment></unit>
+    <unit id="SettingsRemoteRelaySignInFailed"><segment><source>Sign-in failed: {0}</source><target state="translated">登录失败：{0}</target></segment></unit>
+    <unit id="SettingsRemoteRelayEnded"><segment><source>This computer is no longer signed in to the relay (it was removed from the account, signed out elsewhere, or not used for a long time). Sign in again.</source><target state="translated">这台电脑在中转服务上的登录已经失效（被从账号里移除、在别处退出，或太久没有使用）。请重新登录。</target></segment></unit>
+    <unit id="SettingsRemoteRelayStateNoUrl"><segment><source>Enter the relay address first</source><target state="translated">先填写中转地址</target></segment></unit>
+    <unit id="SettingsRemoteRelayStateSignIn"><segment><source>Sign in to the relay first</source><target state="translated">先登录中转服务</target></segment></unit>
+    <unit id="SettingsRemoteRelayInsecure"><segment><source>This address is not encrypted (http): the sign-in is sent in the clear. Use it only for a relay on this computer or a network you trust.</source><target state="translated">这个地址没有加密（http），登录凭据会明文发送。只用于本机或你信任的网络里的中转。</target></segment></unit>
+    <unit id="SettingsRemoteHostsViaRelay"><segment><source>Through the relay</source><target state="translated">经中转</target></segment></unit>
   </file>
 </xliff>

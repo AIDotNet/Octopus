@@ -8,6 +8,7 @@
              xmlns:general="using:Octopus.App.Settings.General"
              xmlns:terminal="using:Octopus.App.Settings.Terminal"
              xmlns:ssh="using:Octopus.App.Settings.Ssh"
+             xmlns:remote="using:Octopus.App.Settings.Remote"
              xmlns:appearance="using:Octopus.App.Settings.Appearance"
              xmlns:shortcuts="using:Octopus.App.Settings.Shortcuts"
              xmlns:pluginSettings="using:Octopus.App.Plugins.Settings"
@@ -64,6 +65,12 @@
         </DataTemplate>
         <DataTemplate DataType="ssh:SshSettingsViewModel">
             <ssh:SshPageView />
+        </DataTemplate>
+        <DataTemplate DataType="remote:RemoteAccessSettingsViewModel">
+            <remote:RemoteAccessPageView />
+        </DataTemplate>
+        <DataTemplate DataType="remote:RemoteHostsSettingsViewModel">
+            <remote:RemoteHostsPageView />
         </DataTemplate>
         <DataTemplate DataType="appearance:AppearanceSettingsViewModel">
             <appearance:AppearancePageView />

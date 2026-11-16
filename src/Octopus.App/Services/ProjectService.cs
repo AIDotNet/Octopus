@@ -83,15 +83,15 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
 
     // ---- projects ----
 
-    public Project AddProject(string path, string? name = null, string? sshHost = null)
+    public Project AddProject(string path, string? name = null, string? sshHost = null, bool activate = true)
     {
         var host = string.IsNullOrWhiteSpace(sshHost) ? null : sshHost.Trim();
         // A folder on another machine is that machine's path: it is kept as typed, never made absolute here.
         var full = host is null ? Path.GetFullPath(path) : RemotePath(path);
-        var existing = _document.Projects.FirstOrDefault(p => p.SshHost == host && (host is null ? paths.Equals(p.Path, full) : p.Path == full));
+        var existing = _document.Projects.FirstOrDefault(p => p.RemoteHost is null && p.SshHost == host && (host is null ? paths.Equals(p.Path, full) : p.Path == full));
         if (existing is not null)
         {
-            SetCurrent(existing.Id);
+            if (activate) SetCurrent(existing.Id);
             return existing;
         }
         var project = new Project
@@ -99,6 +99,35 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
             Path = full,
             SshHost = host,
             Name = string.IsNullOrWhiteSpace(name) ? PathText.NameOf(full) : name.Trim(),
+            Color = Palette[_document.Projects.Count % Palette.Length],
+        };
+        _document.Projects.Add(project);
+        // Without a current project there is nothing on screen to keep: the new one becomes it either way.
+        if (!activate && _document.ActiveProjectId is not null)
+        {
+            Raise(ProjectChangeKind.Projects, project);
+            return project;
+        }
+        _document.ActiveProjectId = project.Id;
+        Raise(ProjectChangeKind.Projects, project);
+        Raise(ProjectChangeKind.CurrentProject, project, save: false);
+        return project;
+    }
+
+    public Project AddRemoteProject(string hostId, string remoteId, string path, string name)
+    {
+        var existing = _document.Projects.FirstOrDefault(p => p.RemoteHost == hostId && p.RemoteId == remoteId);
+        if (existing is not null)
+        {
+            SetCurrent(existing.Id);
+            return existing;
+        }
+        var project = new Project
+        {
+            Path = path,
+            RemoteHost = hostId,
+            RemoteId = remoteId,
+            Name = string.IsNullOrWhiteSpace(name) ? PathText.NameOf(path) : name.Trim(),
             Color = Palette[_document.Projects.Count % Palette.Length],
         };
         _document.Projects.Add(project);
@@ -361,9 +390,14 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
 
     // ---- items ----
 
-    public void AddItem(Project project, ProjectItem item)
+    public void AddItem(Project project, ProjectItem item, bool activate = true)
     {
         project.Items.Add(item);
+        if (!activate)
+        {
+            Raise(ProjectChangeKind.Items, project, item);
+            return;
+        }
         project.ActiveItemId = item.Id;
         Raise(ProjectChangeKind.Items, project, item);
         Raise(ProjectChangeKind.Active, project, item, save: false);

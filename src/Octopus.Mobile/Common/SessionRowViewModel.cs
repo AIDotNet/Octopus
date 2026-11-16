@@ -1,0 +1,58 @@
+using System.ComponentModel;
+using Avalonia.Media;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Octopus.Mobile.Localization;
+using Octopus.Mobile.Workspace;
+
+namespace Octopus.Mobile.Common;
+
+/// <summary>One session in a list: its square, title, what it runs, what it is doing, and its state.</summary>
+public sealed partial class SessionRowViewModel : ObservableObject, IDisposable
+{
+    private readonly Action<RemoteSession> _open;
+
+    public SessionRowViewModel(RemoteSession session, Action<RemoteSession> open)
+    {
+        Session = session;
+        _open = open;
+        var agent = session.AgentId is null ? null : session.Project.Host.Agents.FirstOrDefault(a => a.Id == session.AgentId);
+        IsAgent = session.Kind == SessionKind.Agent;
+        Initial = agent?.Initial ?? (IsAgent ? "A" : "");
+        Tint = agent is not null && Color.TryParse(agent.Color, out var color) ? new SolidColorBrush(color) : null;
+        session.PropertyChanged += OnSessionChanged;
+    }
+
+    public RemoteSession Session { get; }
+    public bool IsAgent { get; }
+    public bool IsTerminal => !IsAgent;
+    /// <summary>The letter in an agent's square.</summary>
+    public string Initial { get; }
+    /// <summary>The agent's color; null for a terminal or an agent the host did not describe.</summary>
+    public IBrush? Tint { get; }
+    public string Title => Session.Title;
+    public string? Detail => Session.Detail;
+    public string? Preview => Session.Preview;
+    public bool HasPreview => !string.IsNullOrEmpty(Session.Preview);
+    public bool IsWaiting => Session.Activity == SessionActivity.Waiting;
+    public bool IsWorking => Session.Activity == SessionActivity.Working;
+    public bool IsError => Session.Activity == SessionActivity.Error;
+    public bool HasStatus => Session.Activity != SessionActivity.Idle;
+    public string StatusText => StatusOf(Session.Activity);
+
+    public static string StatusOf(SessionActivity activity) => activity switch
+    {
+        SessionActivity.Waiting => MobileLangResources.Get(MobileLangResourceKind.StatusWaiting),
+        SessionActivity.Working => MobileLangResources.Get(MobileLangResourceKind.StatusWorking),
+        SessionActivity.Error => MobileLangResources.Get(MobileLangResourceKind.StatusError),
+        _ => "",
+    };
+
+    [RelayCommand]
+    private void Open() => _open(Session);
+
+    public void Dispose() => Session.PropertyChanged -= OnSessionChanged;
+
+    // Everything shown comes from the session: one change refreshes the whole row.
+    private void OnSessionChanged(object? sender, PropertyChangedEventArgs e) => OnPropertyChanged(string.Empty);
+}

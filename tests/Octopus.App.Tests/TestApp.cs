@@ -61,6 +61,9 @@ public static class TestApp
             services.AddSingleton(p => (FakeDialogService)p.GetRequiredService<IDialogService>());
             services.Replace(ServiceDescriptor.Singleton<IAppIcon, NoAppIcon>()); // never touch the real Dock
             services.Replace(ServiceDescriptor.Singleton<IPickerService, FakePickerService>());
+            // Model prices never come from the network in tests: an empty catalog, so the built-in table answers.
+            services.Replace(ServiceDescriptor.Singleton(p => new Octopus.Plugins.Usage.ModelPriceCatalog(
+                p.GetRequiredService<Octopus.Plugins.PluginPaths>(), _ => Task.FromResult<Stream>(new MemoryStream("{}"u8.ToArray())))));
             // The updater stays off in every configuration (CI tests a Release build): no request ever leaves a test.
             services.Replace(ServiceDescriptor.Singleton(new Octopus.Updates.UpdateOptions { CurrentVersion = null, IsDevelopment = true }));
             services.AddSingleton(p => (FakePickerService)p.GetRequiredService<IPickerService>());

@@ -22,7 +22,10 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     private readonly object _gate = new();
     private readonly LaunchSpec _spec;
     private readonly ITerminalConnectionFactory _factory;
-    private readonly Func<bool> _isVisible;
+    private Func<bool> _isVisible;
+    private readonly List<ITerminalTap> _taps = [];
+    // The place in the output a tap is told: every byte takes one position, a resize or a reset takes one too.
+    private ulong _head;
     /// <summary>
     /// What one terminal's scrollback may take. A full-screen program (an agent's TUI redraws the screen all the time)
     /// fills it long before the line limit, and the pages are never given back: measured on a running app, seven
@@ -32,8 +35,14 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     public const long MaxScrollbackBytes = 8L * 1024 * 1024;
 
     private readonly int _scrollbackLines;
-    private readonly ColorScheme _initialScheme;
-    private readonly TerminalPalette _initialPalette;
+    private ColorScheme _initialScheme;
+    private TerminalPalette _initialPalette;
+    // A mirror's last request to its connection; its own grid follows the terminal it mirrors.
+    private TerminalSize _requested;
+    private object? _sizeOwner;
+    // The views on other devices that claimed the size, the latest last: when the one that has the say leaves, it goes
+    // back to the one before it, and to this app's own view when none is left.
+    private readonly List<object> _claims = [];
     private TerminalCore? _core;
     private TerminalSize _size;
     private Link? _link;
@@ -75,19 +84,92 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     /// <summary>True from <see cref="Start"/> until the process exits.</summary>
     public bool IsRunning { get; private set; }
 
+    /// <summary>What runs.</summary>
+    public LaunchSpec Spec => _spec;
+
+    /// <summary>The window title the program last set; null before it set one. Readable from any thread.</summary>
+    public string? Title => _title;
+    private volatile string? _title;
+
+    /// <summary>How the last process ended; null while one runs or before the first. Readable from any thread.</summary>
+    public TerminalExit? LastExit
+    {
+        get { lock (_gate) return _lastExit; }
+        private set { lock (_gate) _lastExit = value; }
+    }
+    private TerminalExit? _lastExit;
+
+    /// <summary>
+    /// A mirror shows a terminal whose process another terminal owns (a session on another computer): it parses the
+    /// same output, so it must not answer the program's queries a second time. Its replies are dropped; what the
+    /// person types is still sent.
+    /// </summary>
+    public bool IsMirror { get; init; }
+
+    /// <summary>
+    /// The view that shows this session, or none: frames are only taken while <paramref name="isVisible"/> is true.
+    /// A session lives without a view (started for another device, or its tab is not built yet) and can get one later.
+    /// </summary>
+    public void SetViewer(Func<bool>? isVisible)
+    {
+        _isVisible = isVisible ?? (static () => false);
+        if (isVisible is not null) ForceFlush();
+    }
+
+    /// <summary>
+    /// Adds a second reader of the output, for a view somewhere else. In one step, with no output in between, it takes
+    /// the terminal's state (<see cref="TerminalTapStart.Snapshot"/>, in <paramref name="format"/>) and starts
+    /// reporting to <paramref name="tap"/> everything from <see cref="TerminalTapStart.Position"/> on: the snapshot
+    /// followed by what the tap is told is exactly what this terminal showed, nothing twice and nothing missing.
+    /// Disposing the result ends the reports.
+    /// </summary>
+    public IDisposable Tap(ITerminalTap tap, TerminalSnapshotFormat format, out TerminalTapStart start)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed || _core is null, this);
+            var snapshot = format == TerminalSnapshotFormat.Native
+                ? _core.EncodeSnapshot()
+                : System.Text.Encoding.UTF8.GetBytes(_core.FormatVt());
+            start = new TerminalTapStart(_head, format, snapshot, _size, Title);
+            _taps.Add(tap);
+        }
+        return new TapRegistration(this, tap);
+    }
+
+    /// <summary>True when the foreground process is not the program that was started (a shell running something).</summary>
+    public async Task<bool> HasRunningChildAsync()
+    {
+        if (!IsRunning) return false;
+        // What runs on the other computer cannot be looked at from here: as long as the terminal is live, assume it matters.
+        if (IsMirror) return true;
+        var name = await GetForegroundProcessNameAsync().ConfigureAwait(false);
+        return !string.IsNullOrEmpty(name) && !SameProgram(name, _spec.FileName);
+    }
+
+    private static bool SameProgram(string running, string started)
+    {
+        static string Normalize(string s) => Path.GetFileNameWithoutExtension(s.Trim()).TrimStart('-').ToLowerInvariant();
+        return Normalize(running) == Normalize(started);
+    }
+
+    private sealed class TapRegistration(TerminalSession session, ITerminalTap tap) : IDisposable
+    {
+        public void Dispose()
+        {
+            lock (session._gate) session._taps.Remove(tap);
+        }
+    }
+
     /// <summary>Creates the core and starts the process. Throws when the process cannot start.</summary>
     public void Start()
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            _core = TerminalCore.Create(new TerminalCoreOptions(_size)
-            {
-                ScrollbackMaxLines = _scrollbackLines,
-                ScrollbackMaxBytes = MaxScrollbackBytes,
-                Replies = new TerminalReplyProfile("Octopus", AdvertiseOsc52: false, _initialScheme),
-            }, this);
+            _core = TerminalCore.Create(Options(_size), this);
             _core.SetDefaultColors(_initialPalette, _initialScheme);
+            _requested = _size;
         }
         try { StartLink(); }
         catch
@@ -106,7 +188,10 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
             if (_disposed || _core is null) return;
             _core.Reset();
             _core.SetDefaultColors(_initialPalette, _initialScheme);
+            foreach (var tap in _taps) tap.OnReset(_head);
+            _head++;
         }
+        LastExit = null;
         StartLink();
         ForceFlush();
     }
@@ -160,28 +245,140 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     /// <summary>Queues UTF-8 text for the process.</summary>
     public void Send(string text) => _link?.Writes.Writer.TryWrite(System.Text.Encoding.UTF8.GetBytes(text));
 
-    /// <summary>Changes the grid: the core first, then the pty (with pixel size).</summary>
-    public void Resize(TerminalSize size)
+    /// <summary>Changes the grid for this app's own view (see <see cref="Resize(TerminalSize, object?)"/>).</summary>
+    public bool Resize(TerminalSize size) => Resize(size, null);
+
+    /// <summary>
+    /// Changes the grid on behalf of <paramref name="owner"/>: the core first, then the pty (with pixel size). A terminal
+    /// has one size and one view decides it (<see cref="SizeOwner"/>); a resize from any other view is not applied and
+    /// returns false. A mirror only asks its connection: its grid follows the terminal it mirrors.
+    /// </summary>
+    public bool Resize(TerminalSize size, object? owner)
     {
-        if (size.Columns < 1 || size.Rows < 1) return;
+        if (size.Columns < 1 || size.Rows < 1) return false;
         Link? link;
         lock (_gate)
         {
-            if (_core is null || size == _size) return;
-            _size = size;
-            _core.Resize(size);
+            if (_core is null) return false;
+            if (IsMirror)
+            {
+                if (size == _requested) return true;
+                _requested = size;
+            }
+            else
+            {
+                if (!ReferenceEquals(owner, _sizeOwner)) return false;
+                if (size == _size) return true;
+                _size = size;
+                _core.Resize(size);
+                foreach (var tap in _taps) tap.OnResize(_head, size);
+                _head++;
+            }
             link = _link;
         }
         if (link is not null)
             _ = link.Connection.ResizeAsync(size.Columns, size.Rows, size.PixelWidth, size.PixelHeight).AsTask();
         RequestFlush();
+        return true;
+    }
+
+    /// <summary>
+    /// The view whose size the terminal has: null is the view of this app's own window, anything else stands for a
+    /// view somewhere else (design/12-远程操作.md §6.5). The view that was last given the say keeps it until another
+    /// claims it.
+    /// </summary>
+    public object? SizeOwner
+    {
+        get { lock (_gate) return _sizeOwner; }
+    }
+
+    /// <summary>The terminal's current grid.</summary>
+    public TerminalSize Size
+    {
+        get { lock (_gate) return _size; }
+    }
+
+    /// <summary>Another view decides the size from now on, or the one that did let go. Raised on the thread that caused it.</summary>
+    public event Action? SizeOwnerChanged;
+
+    /// <summary>Makes <paramref name="owner"/> the view that decides the size, and gives the terminal that view's <paramref name="size"/>.</summary>
+    public void ClaimSize(object? owner, TerminalSize size)
+    {
+        bool changed;
+        lock (_gate)
+        {
+            changed = !ReferenceEquals(owner, _sizeOwner);
+            if (owner is not null)
+            {
+                _claims.Remove(owner);
+                _claims.Add(owner);
+            }
+            _sizeOwner = owner;
+        }
+        Resize(size, owner);
+        if (changed) SizeOwnerChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// The view <paramref name="owner"/> is gone. When it had the say, the say goes to the view that had it before and
+    /// is still there, or to this app's own view; whoever gets it applies its size again (<see cref="SizeOwnerChanged"/>).
+    /// </summary>
+    public void ReleaseSize(object owner)
+    {
+        lock (_gate)
+        {
+            _claims.Remove(owner);
+            if (!ReferenceEquals(owner, _sizeOwner)) return;
+            _sizeOwner = _claims.Count > 0 ? _claims[^1] : null;
+        }
+        SizeOwnerChanged?.Invoke();
     }
 
     /// <summary>Changes the default colours. Programs that ask for them get the new ones.</summary>
     public void SetPalette(TerminalPalette palette, ColorScheme scheme)
     {
-        lock (_gate) _core?.SetDefaultColors(palette, scheme);
+        lock (_gate)
+        {
+            (_initialPalette, _initialScheme) = (palette, scheme);
+            _core?.SetDefaultColors(palette, scheme);
+        }
         ForceFlush();
+    }
+
+    private TerminalCoreOptions Options(TerminalSize size) => new(size)
+    {
+        ScrollbackMaxLines = _scrollbackLines,
+        ScrollbackMaxBytes = MaxScrollbackBytes,
+        Replies = new TerminalReplyProfile("Octopus", AdvertiseOsc52: false, _initialScheme),
+    };
+
+    // A mirror's connection says, at exact places in the output, what else happened to the terminal it mirrors.
+    // Called by the pump with the lock held.
+    private void ApplyMirrorEvent(ITerminalMirrorConnection mirror)
+    {
+        if (_core is not null && mirror.TakeEvent() is { } change)
+        {
+            switch (change.Kind)
+            {
+                case TerminalMirrorEventKind.Resize when change.Columns > 0 && change.Rows > 0:
+                    _size = new TerminalSize(change.Columns, change.Rows, _size.PixelWidth, _size.PixelHeight);
+                    _core.Resize(_size);
+                    break;
+                case TerminalMirrorEventKind.Reset:
+                    _core.Reset();
+                    _core.SetDefaultColors(_initialPalette, _initialScheme);
+                    break;
+                case TerminalMirrorEventKind.Snapshot when change.Snapshot is { } snapshot:
+                    // The whole terminal as the owning side has it, in place of this one; the colors stay this side's.
+                    var restored = TerminalCore.Restore(snapshot, Options(_size), this);
+                    _core.Dispose();
+                    _core = restored;
+                    _size = restored.Size;
+                    _core.SetDefaultColors(_initialPalette, _initialScheme);
+                    _dirtyWhileHidden = true;
+                    break;
+            }
+        }
     }
 
     /// <summary>Takes a full frame at the next opportunity (after the view became visible or its metrics changed).</summary>
@@ -256,7 +453,14 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
                 lock (_gate)
                 {
                     if (_core is null || _link != link) return;
-                    _core.Write(chunk.Span);
+                    // An empty chunk of a mirror stands for one event, at this place between the chunks around it.
+                    if (chunk.IsEmpty && link.Connection is ITerminalMirrorConnection mirror) ApplyMirrorEvent(mirror);
+                    if (!chunk.IsEmpty && _core is not null)
+                    {
+                        _core.Write(chunk.Span);
+                        foreach (var tap in _taps) tap.OnOutput(_head, chunk.Span);
+                        _head += (ulong)chunk.Length;
+                    }
                 }
                 RequestFlush();
             }
@@ -267,6 +471,11 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
         TerminalExit exit;
         try { exit = await link.Connection.Exited.ConfigureAwait(false); }
         catch { exit = new TerminalExit(null, null); }
+        // Known at once, also where nothing runs the UI thread's queue (a session with no view).
+        lock (_gate)
+        {
+            if (_link == link) _lastExit = exit;
+        }
         Dispatcher.UIThread.Post(() =>
         {
             if (_link != link) return; // replaced by a restart or closed
@@ -303,9 +512,16 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
 
     // ---- ITerminalEffects: called inside Write/Resize with the lock held ----
 
-    void ITerminalEffects.WriteToPty(ReadOnlySpan<byte> reply) => Send(reply);
+    void ITerminalEffects.WriteToPty(ReadOnlySpan<byte> reply)
+    {
+        if (!IsMirror) Send(reply);
+    }
 
-    void ITerminalEffects.TitleChanged(string title) => Dispatcher.UIThread.Post(() => TitleChanged?.Invoke(title));
+    void ITerminalEffects.TitleChanged(string title)
+    {
+        _title = title;
+        Dispatcher.UIThread.Post(() => TitleChanged?.Invoke(title));
+    }
 
     void ITerminalEffects.Bell() => Dispatcher.UIThread.Post(() => Bell?.Invoke());
 }

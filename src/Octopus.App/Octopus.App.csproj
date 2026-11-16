@@ -62,6 +62,9 @@
         <ProjectReference Include="../Octopus.Terminal.MiniPty/Octopus.Terminal.MiniPty.csproj" />
         <ProjectReference Include="../Octopus.Terminal.Avalonia/Octopus.Terminal.Avalonia.csproj" />
         <ProjectReference Include="../Octopus.Updates/Octopus.Updates.csproj" />
+        <ProjectReference Include="../Octopus.Remote/Octopus.Remote.csproj" />
+        <ProjectReference Include="../Octopus.Remote.Host/Octopus.Remote.Host.csproj" />
+        <ProjectReference Include="../Octopus.Remote.Client/Octopus.Remote.Client.csproj" />
         <ProjectReference Include="../Octopus.Plugins/Octopus.Plugins.csproj" />
         <ProjectReference Include="../Octopus.Plugins.Jaunt/Octopus.Plugins.Jaunt.csproj" />
         <!-- Built with the app, not referenced: the signal forwarder is a separate executable (design/plugins/11 §1.5). -->
