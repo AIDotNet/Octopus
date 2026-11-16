@@ -33,6 +33,23 @@ public sealed class TerminalInputRouter(
     public void HandleKey(TerminalKeyEventArgs e)
     {
         var input = WithCodepoint(e.Input);
+        if (input.Action == KeyAction.Press && (input.Mods & Relevant) == KeyMods.Shift)
+        {
+            ViewportScroll? scroll = input.Key switch
+            {
+                TerminalKey.PageUp => ViewportScroll.Lines(-Math.Max(1, session.Read(c => c.Size.Rows) - 1)),
+                TerminalKey.PageDown => ViewportScroll.Lines(Math.Max(1, session.Read(c => c.Size.Rows) - 1)),
+                TerminalKey.Home => ViewportScroll.Top,
+                TerminalKey.End => ViewportScroll.Bottom,
+                _ => null,
+            };
+            if (scroll is { } target && !session.ReadInputModes().AlternateScreen)
+            {
+                session.Use(c => c.ScrollViewport(target));
+                e.Handled = true;
+                return;
+            }
+        }
         var shortcut = keymap().Match(input);
         if (shortcut != TerminalShortcut.None && RunShortcut(shortcut))
         {
@@ -233,14 +250,18 @@ public sealed class TerminalInputRouter(
 
     private void HandleWheel(TerminalPointerEventArgs e, InputModes modes)
     {
+        if (e.WheelDelta == 0) return;
         var notches = Math.Max(1, (int)Math.Round(Math.Abs(e.WheelDelta)));
         if (modes.MouseTracking != MouseTracking.None && !e.Mouse.Mods.HasFlag(KeyMods.Shift))
         {
             _encoder.Apply(modes);
+            // TerminalView labels wheel events as Motion; tracking modes discard those without a held button.
+            // A wheel notch is a button press (64/65 in SGR), never a pointer motion.
+            var mouse = e.Mouse with { Action = MouseAction.Press };
             Span<byte> buffer = stackalloc byte[64];
             for (var i = 0; i < notches; i++)
             {
-                var n = _encoder.EncodeMouse(e.Mouse, e.Geometry, anyButtonPressed: false, buffer);
+                var n = _encoder.EncodeMouse(mouse, e.Geometry, anyButtonPressed: false, buffer);
                 if (n > 0) session.Send(buffer[..n]);
             }
             return;

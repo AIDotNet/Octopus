@@ -2,6 +2,12 @@
 
 版本号规则与发布流程见 `.agents/skills/publish-release/SKILL.md`。每个版本的说明会同步到对应的 GitHub Release。
 
+## 未发布
+
+### 修复
+
+- **终端历史滚动**：补充跟随历史缓冲区的右侧滚动条、Shift+PageUp / PageDown 翻页和 Shift+Home / End 首尾跳转；修正鼠标上报模式下滚轮被误标为移动事件、智能体收不到滚轮的问题。按住 Shift 滚轮可绕过程序的鼠标上报查看终端历史。
+
 ## 1.0.1120 — 2026-11-16
 
 ### 新功能

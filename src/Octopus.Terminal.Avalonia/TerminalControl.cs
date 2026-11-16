@@ -53,6 +53,14 @@ public sealed class TerminalControl : Decorator
         AvaloniaProperty.RegisterDirect<TerminalControl, int?>(nameof(ExitCode), o => o.ExitCode);
 
     private readonly TerminalView _view = new() { Padding = 8, ClipToBounds = true };
+    private readonly ScrollBar _scrollBar = new()
+    {
+        Orientation = Orientation.Vertical,
+        SmallChange = 3,
+        IsVisible = false,
+        Focusable = false,
+    };
+    private bool _updatingScrollBar;
     private readonly SelectionOverlay _overlay;
     private readonly Border _background = new();
     private readonly Border _messageBar;
@@ -98,7 +106,18 @@ public sealed class TerminalControl : Decorator
             IsHitTestVisible = false,
             Child = _message,
         };
-        Child = new Grid { Children = { _background, _view, _overlay, _messageBar, _searchHost } };
+        var surface = new Grid { Children = { _view, _overlay, _messageBar, _searchHost } };
+        Grid.SetColumn(_scrollBar, 1);
+        Grid.SetColumnSpan(_background, 2);
+        Child = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,12"),
+            Children = { _background, surface, _scrollBar },
+        };
+        _scrollBar.ValueChanged += (_, e) =>
+        {
+            if (!_updatingScrollBar) _session?.Use(c => c.ScrollViewport(ViewportScroll.ToRow((long)Math.Round(e.NewValue))));
+        };
         ClipToBounds = true;
         ApplyColors();
 
@@ -485,6 +504,7 @@ public sealed class TerminalControl : Decorator
         _session = null;
         _view.Snapshot = null;
         _frame = null;
+        _scrollBar.IsVisible = false;
         _overlay.Update(null);
         SetHover(null);
         if (_searchOpen)
@@ -504,6 +524,17 @@ public sealed class TerminalControl : Decorator
         _view.Snapshot = frame;
         _frame = frame;
         _overlay.Update(frame);
+        _updatingScrollBar = true;
+        try
+        {
+            var scroll = frame.Scrollbar;
+            _scrollBar.Maximum = Math.Max(0, scroll.Total - scroll.Length);
+            _scrollBar.ViewportSize = scroll.Length;
+            _scrollBar.LargeChange = Math.Max(1, scroll.Length - 1);
+            _scrollBar.Value = scroll.Offset;
+            _scrollBar.IsVisible = _scrollBar.Maximum > 0 && _session?.ReadInputModes().AlternateScreen != true;
+        }
+        finally { _updatingScrollBar = false; }
         if (_hoverLink is not null) SetHover(FindLink(_hoverCell));
         if (_searchOpen)
         {

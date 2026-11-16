@@ -10,6 +10,8 @@
 dotnet run --project src/Octopus.App
 ```
 
+终端右侧在有历史内容时显示滚动条，也可用滚轮和 `Shift+PageUp` / `Shift+PageDown` 翻页、`Shift+Home` / `Shift+End` 跳到历史顶部 / 底部。智能体接管鼠标时，普通滚轮交给智能体，按住 `Shift` 滚轮可查看终端历史。全屏备用屏由程序自己管理滚动，不显示主屏历史滚动条；已被程序清除或超过回滚上限的内容无法从终端恢复。
+
 ## 测试
 
 ```bash
