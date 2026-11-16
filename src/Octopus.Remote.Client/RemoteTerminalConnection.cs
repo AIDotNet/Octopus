@@ -27,6 +27,12 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
     private uint _channel;
     private int _columns, _rows;
     private volatile bool _ownsSize;
+    // Who decides the size is told by the answers to this view's own calls and by the resize records in the output, on
+    // different threads. Under this gate they are applied one at a time and an answer older than one applied is dropped,
+    // so a stale "not yours" cannot land after the claim's "yours" (it did, on a slow machine).
+    private readonly Lock _sizeGate = new();
+    private long _sizeCalls;
+    private long _sizeApplied;
     private int _disposed;
 
     private enum IncomingKind { Frame, Exited, Resync, Lost }
@@ -69,10 +75,10 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
         if (_disposed != 0) return;
         try
         {
+            var call = Interlocked.Increment(ref _sizeCalls);
             var released = await _client.CallAsync(RemoteMethods.SessionRelease, new ChannelMessage { Channel = _channel },
                 RemoteJsonContext.Default.ChannelMessage, RemoteJsonContext.Default.ResizedMessage, _closed.Token).ConfigureAwait(false);
-            _ownsSize = false;
-            SizeChanged?.Invoke(released.Columns, released.Rows, false);
+            ApplySize(call, released.Columns, released.Rows, owns: false);
         }
         // An older host does not know how to let go: the size stays this view's until it leaves.
         catch (Exception e) when (e is IOException or RemoteException or OperationCanceledException) { }
@@ -176,7 +182,7 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
                     processed = BinaryPrimitives.ReadUInt64LittleEndian(payload) + 1;
                     if (payload[8] == RecordKinds.Resize && payload.Length >= 13)
                     {
-                        SizeChanged?.Invoke(BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(9)), BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(11)), _ownsSize);
+                        lock (_sizeGate) SizeChanged?.Invoke(BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(9)), BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(11)), _ownsSize);
                         yield return Announce(new TerminalMirrorEvent(TerminalMirrorEventKind.Resize,
                             BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(9)), BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(11))));
                     }
@@ -231,6 +237,7 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
 
     private async Task<AttachedMessage> AttachAsync(bool claim, CancellationToken cancellationToken)
     {
+        var call = Interlocked.Increment(ref _sizeCalls);
         var attached = await _client.CallAsync(RemoteMethods.SessionAttach, new AttachMessage
         {
             ItemId = _itemId,
@@ -240,8 +247,7 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
             Snapshot = _client.NativeSnapshots ? SnapshotFormats.Native : SnapshotFormats.Vt,
             ClaimSize = claim,
         }, RemoteJsonContext.Default.AttachMessage, RemoteJsonContext.Default.AttachedMessage, cancellationToken).ConfigureAwait(false);
-        _ownsSize = attached.OwnsSize;
-        SizeChanged?.Invoke(attached.Columns, attached.Rows, attached.OwnsSize);
+        ApplySize(call, attached.Columns, attached.Rows, attached.OwnsSize);
         return attached;
     }
 
@@ -250,12 +256,24 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
         if (_disposed != 0) return;
         try
         {
+            var call = Interlocked.Increment(ref _sizeCalls);
             var resized = await _client.CallAsync(RemoteMethods.SessionResize, new ResizeMessage { Channel = _channel, Columns = columns, Rows = rows, Claim = claim },
                 RemoteJsonContext.Default.ResizeMessage, RemoteJsonContext.Default.ResizedMessage, _closed.Token).ConfigureAwait(false);
-            _ownsSize = resized.Applied;
-            SizeChanged?.Invoke(resized.Columns, resized.Rows, resized.Applied);
+            ApplySize(call, resized.Columns, resized.Rows, resized.Applied);
         }
         catch (Exception e) when (e is IOException or RemoteException or OperationCanceledException) { }
+    }
+
+    /// <summary>The answer to size call number <paramref name="call"/>, unless a later call's answer is already applied.</summary>
+    private void ApplySize(long call, int columns, int rows, bool owns)
+    {
+        lock (_sizeGate)
+        {
+            if (call < _sizeApplied) return;
+            _sizeApplied = call;
+            _ownsSize = owns;
+            SizeChanged?.Invoke(columns, rows, owns);
+        }
     }
 
     private async Task AcknowledgeAsync(ulong position)
