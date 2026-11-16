@@ -8,6 +8,9 @@
     <ItemGroup>
         <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+        <!-- The phone app's platform heads (src/Octopus.Mobile.Android, .iOS): only in Octopus.Mobile.slnx, they need the workloads. -->
+        <PackageVersion Include="Avalonia.Android" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.iOS" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />

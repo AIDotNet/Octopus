@@ -1,0 +1,118 @@
+name: Mobile
+
+# The phone app's own CI (design/12-远程操作.md §9.1): it needs the android / ios workloads, which the desktop build
+# (ci.yml) must not depend on. Its tests (tests/Octopus.Mobile.Tests) run headless in ci.yml; this builds the heads.
+on:
+  push:
+    branches: [main]
+    paths: &mobile-paths
+      - src/Octopus.Mobile*/**
+      - src/Octopus.Remote/**
+      - src/Octopus.Remote.Client/**
+      - src/Octopus.Terminal/**
+      - src/Octopus.Terminal.Avalonia/**
+      - src/Octopus.Core/**
+      - src/Octopus.Platform/**
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - Octopus.Mobile.slnx
+      - .github/workflows/mobile.yml
+  pull_request:
+    paths: *mobile-paths
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  android:
+    name: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '21'
+
+      - name: Install the android workload
+        run: dotnet workload install android
+
+      # The runner has an Android SDK, not necessarily the platform the workload targets: let the build fetch what it needs.
+      - name: Android SDK packages
+        run: >
+          dotnet build src/Octopus.Mobile.Android -t:InstallAndroidDependencies
+          -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
+
+      - name: Build (Release APK)
+        run: >
+          dotnet publish src/Octopus.Mobile.Android -c Release
+          -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME"
+          -o artifacts/android
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octopus-mobile-android
+          path: artifacts/android/*-Signed.apk
+          if-no-files-found: error
+
+  ios:
+    name: ios
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The ios workload names the Xcode it is built for; the runner's default is not always that one, so the newest
+      # installed Xcode is used.
+      - name: Select Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $xcode"
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Install the ios workload
+        run: dotnet workload install ios
+
+      # The simulator build needs no signing. A device build is NativeAOT and needs a signing identity and profile,
+      # which this repository does not have yet: it is compiled, not signed (EnableCodeSigning=false).
+      - name: Build (simulator)
+        run: dotnet build src/Octopus.Mobile.iOS -c Debug -p:RuntimeIdentifier=iossimulator-arm64
+
+      - name: Build (device, NativeAOT, unsigned)
+        run: dotnet build src/Octopus.Mobile.iOS -c Release -p:RuntimeIdentifier=ios-arm64 -p:EnableCodeSigning=false
+
+      - name: Pack the simulator app
+        run: |
+          app=$(find src/Octopus.Mobile.iOS/bin/Debug -name '*.app' -type d -path '*iossimulator-arm64*' | head -1)
+          mkdir -p artifacts/ios
+          ditto -c -k --keepParent "$app" artifacts/ios/Octopus-simulator.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octopus-mobile-ios-simulator
+          path: artifacts/ios/Octopus-simulator.zip
+          if-no-files-found: error

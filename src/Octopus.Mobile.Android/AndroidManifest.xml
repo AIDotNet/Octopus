@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Hosts are reached over the network: on the same network directly, elsewhere through the relay. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- A host on the same network is ws://address:port. That is not plain text: everything in it is the app's own
+         end-to-end channel (design/remote/安全通道.md), so Android's block on cleartext traffic is lifted. -->
+    <application android:label="Octopus" android:icon="@mipmap/octopus" android:usesCleartextTraffic="true" />
+</manifest>

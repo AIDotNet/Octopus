@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The phone app on Android: starts the shared MobileApp (src/Octopus.Mobile) on the system's keystore
+         (design/12-远程操作.md §9.1). Needs the .NET android workload, so it is only in Octopus.Mobile.slnx.
+         Emulator or device attached:  dotnet build -t:Run src/Octopus.Mobile.Android
+         An APK to install by hand:    dotnet publish src/Octopus.Mobile.Android -c Release -->
+    <PropertyGroup>
+        <TargetFramework>net11.0-android</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+        <RootNamespace>Octopus.Mobile.Android</RootNamespace>
+        <AssemblyName>Octopus.Mobile.Android</AssemblyName>
+        <ApplicationId>com.aidotnet.octopus.mobile</ApplicationId>
+        <ApplicationTitle>Octopus</ApplicationTitle>
+        <ApplicationVersion>1</ApplicationVersion>
+        <ApplicationDisplayVersion>0.1</ApplicationDisplayVersion>
+        <AndroidManifest>AndroidManifest.xml</AndroidManifest>
+        <AndroidPackageFormat>apk</AndroidPackageFormat>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <AndroidResource Include="Resources/**" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia.Android" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Mobile/Octopus.Mobile.csproj" />
+    </ItemGroup>
+</Project>
