@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "omp",
+  "name": "omp",
+  "homepage": "https://omp.sh",
+  "verified": true,
+  "detect": {
+    "executables": ["omp"],
+    "versionArgs": ["--version"],
+    "versionRegex": "omp/(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)",
+    "fingerprint": "omp/",
+    "extraDirs": ["%LOCALAPPDATA%/omp", "$PI_INSTALL_DIR"],
+    "installHints": [{ "kind": "bun", "command": "bun install -g @oh-my-pi/pi-coding-agent" }]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "effort": {
+      "label": "Thinking",
+      "args": ["--thinking", "{value}"],
+      "options": [
+        { "id": "off" }, { "id": "minimal" }, { "id": "low" }, { "id": "medium" },
+        { "id": "high" }, { "id": "xhigh" }, { "id": "max" }, { "id": "auto" }
+      ]
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "full": { "args": ["--auto-approve"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional", "separator": true },
+    "resume": {
+      "continueLatest": ["--continue"],
+      "byId": ["--resume", "{id}"]
+    },
+    "env": {
+      "known": [
+        { "name": "PI_CODING_AGENT_DIR", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } }
+      ],
+      "allowCustom": true
+    },
+    "extraArgs": true
+  }
+}

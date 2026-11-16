@@ -14,5 +14,6 @@
         <ProjectReference Include="../../src/Octopus.Terminal.MiniPty/Octopus.Terminal.MiniPty.csproj" />
         <ProjectReference Include="../../src/Octopus.Core/Octopus.Core.csproj" />
         <ProjectReference Include="../../src/Octopus.Platform/Octopus.Platform.csproj" />
+        <ProjectReference Include="../../src/Octopus.Platform.Windows/Octopus.Platform.Windows.csproj" />
     </ItemGroup>
 </Project>

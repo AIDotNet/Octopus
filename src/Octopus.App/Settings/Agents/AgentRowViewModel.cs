@@ -181,6 +181,9 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
 
     partial void OnIsExpandedChanged(bool value)
     {
+        var states = _services.Settings.Current.Agents.ExpansionStates;
+        if (!states.TryGetValue(Id, out var saved) || saved != value)
+            _services.Settings.Update(s => s.Agents.ExpansionStates[Id] = value);
         if (value)
         {
             _ = DiscoverModelsAsync();

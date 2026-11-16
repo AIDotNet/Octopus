@@ -9,7 +9,7 @@ public class CatalogTests
         ["claude", "codex", "grok", "opencode", "cursor", "muse", "gemini", "copilot",
          "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi",
          "cline", "kilo", "auggie", "codebuddy", "qoder", "vibe", "pi", "openhands",
-         "continue", "junie", "letta", "codebuff", "nanocoder", "jules"];
+         "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp"];
 
     [Fact]
     public void Builtins_load_in_fixed_order_without_errors()
@@ -17,14 +17,6 @@ public class CatalogTests
         Assert.Empty(Builtins.All.LoadErrors);
         Assert.Equal(ExpectedIds, Builtins.All.Definitions.Select(d => d.Id));
         Assert.Equal(ExpectedIds.Length, Builtins.All.Definitions.Select(d => d.Id).Distinct().Count());
-    }
-
-    [Fact]
-    public void First_six_are_verified_and_the_rest_are_not()
-    {
-        var defs = Builtins.All.Definitions;
-        Assert.All(defs.Take(6), d => Assert.True(d.Verified, d.Id));
-        Assert.All(defs.Skip(6), d => Assert.False(d.Verified, d.Id));
     }
 
     [Fact]

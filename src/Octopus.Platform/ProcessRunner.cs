@@ -39,18 +39,14 @@ public sealed class ProcessRunner : IProcessRunner
         TimeSpan? timeout,
         CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(fileName)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (var argument in arguments)
-            startInfo.ArgumentList.Add(argument);
+        var startInfo = ProcessCommand.Create(fileName, arguments);
+        startInfo.RedirectStandardInput = true;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.StandardOutputEncoding = Encoding.UTF8;
+        startInfo.StandardErrorEncoding = Encoding.UTF8;
+        startInfo.UseShellExecute = false;
+        startInfo.CreateNoWindow = true;
         if (environment is not null)
         {
             // Overlay on the inherited environment: callers add or override variables, they do not rebuild it.

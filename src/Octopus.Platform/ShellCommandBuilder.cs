@@ -13,7 +13,7 @@ public sealed class ShellCommandBuilder : IShellCommandBuilder
         ShellKind.Posix => QuotePosix(argument),
         ShellKind.Fish => QuoteFish(argument),
         ShellKind.PowerShell => QuotePowerShell(argument),
-        ShellKind.Cmd => QuoteCmd(argument),
+        ShellKind.Cmd => ProcessCommand.QuoteBatchArgument(argument),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
@@ -117,32 +117,4 @@ public sealed class ShellCommandBuilder : IShellCommandBuilder
         return builder.Append('\'').ToString();
     }
 
-    /// <summary>
-    /// cmd.exe has no real quoting. Two layers apply: the program parses its command line with the MSVCRT rules
-    /// (backslash-escaped quotes), and cmd itself interprets metacharacters, which are neutralised with <c>^</c>.
-    /// Limitation: a newline cannot be passed through cmd at all; it is kept as-is and will end the command line.
-    /// <c>%VAR%</c> expansion is defeated only on a best-effort basis.
-    /// </summary>
-    private static string QuoteCmd(string s)
-    {
-        if (s.Length > 0 && IsSafe(s, "_@+=:,./\\-")) return s;
-        var argv = new StringBuilder("\"");
-        var backslashes = 0;
-        foreach (var c in s)
-        {
-            if (c == '\\') { backslashes++; continue; }
-            if (c == '"') argv.Append('\\', backslashes * 2 + 1).Append('"');
-            else argv.Append('\\', backslashes).Append(c);
-            backslashes = 0;
-        }
-        argv.Append('\\', backslashes * 2).Append('"');
-
-        var result = new StringBuilder();
-        foreach (var c in argv.ToString())
-        {
-            if ("()%!^\"<>&|".IndexOf(c) >= 0) result.Append('^');
-            result.Append(c);
-        }
-        return result.ToString();
-    }
 }

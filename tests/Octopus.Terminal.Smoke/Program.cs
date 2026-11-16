@@ -4,8 +4,10 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Themes.Fluent;
 using Octopus.Core.Terminals;
+using Octopus.Platform.Windows;
 using Octopus.Terminal.Avalonia;
 using Octopus.Terminal.MiniPty;
+using Avalonia.VisualTree;
 
 // Manual check of TerminalControl. Without arguments: a window with a login shell.
 // With --script: drives the terminal and exits 0 (SMOKE OK) or 1.
@@ -29,14 +31,26 @@ internal sealed class SmokeApp : Application
         ((IClassicDesktopStyleApplicationLifetime)ApplicationLifetime!).MainWindow = window;
         terminal.TitleChanged += (_, t) => window.Title = t;
 
-        var shell = Environment.GetEnvironmentVariable("SHELL") is { Length: > 0 } s ? s : "/bin/zsh";
-        var env = new Dictionary<string, string>();
-        foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables())
-            env[(string)e.Key] = (string?)e.Value ?? "";
-        env["TERM"] = "xterm-256color";
-        env["COLORTERM"] = "truecolor";
-        env["TERM_PROGRAM"] = "Octopus";
-        var spec = new LaunchSpec(shell, ["-l"], Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), env);
+        LaunchSpec spec;
+        if (OperatingSystem.IsWindows())
+        {
+            var shells = new WindowsShellResolver(new WindowsExecutableLocator());
+            var shell = shells.GetDefaultShell();
+            spec = new LaunchSpec(shell.Path, shells.GetInteractiveArguments(shell),
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), new WindowsTerminalEnvironment().Build());
+        }
+        else
+        {
+            var shell = Environment.GetEnvironmentVariable("SHELL") is { Length: > 0 } s ? s : "/bin/sh";
+            var env = new Dictionary<string, string>();
+            foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables())
+                env[(string)e.Key] = (string?)e.Value ?? "";
+            env["TERM"] = "xterm-256color";
+            env["COLORTERM"] = "truecolor";
+            env["TERM_PROGRAM"] = "Octopus";
+            spec = new LaunchSpec(shell, ["-l"], Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), env);
+        }
+        Console.WriteLine($"shell: {spec.FileName}");
         terminal.Start(spec, new MiniPtyConnectionFactory());
         window.Opened += (_, _) => terminal.FocusTerminal();
 
@@ -53,6 +67,7 @@ internal static class ScriptRunner
         {
             if (!await WaitFor(t, s => s.Trim().Length > 0, 15)) return Fail(t, "shell never printed anything");
             await Task.Delay(1500); // let the profile finish
+            if (OperatingSystem.IsWindows()) return await RunWindowsAsync(t, window);
 
             // 1. a command runs and its output reaches the screen
             t.SendText("echo OCTOPUS_SMOKE_$((40+2))\r");
@@ -117,6 +132,50 @@ internal static class ScriptRunner
         }
     }
 
+    private static async Task<int> RunWindowsAsync(TerminalControl t, Window window)
+    {
+        t.SendText("Write-Output ('OCTOPUS_SMOKE_' + (40+2))\r");
+        if (!await WaitFor(t, s => Regex.IsMatch(s, @"(?m)^OCTOPUS_SMOKE_42\s*$"), 10))
+            return Fail(t, "PowerShell echo output missing");
+        Console.WriteLine("step 1 Windows input/output: ok");
+
+        window.Width = 700;
+        window.Height = 420;
+        await Task.Delay(1200);
+        var grid = t.GridSize ?? (0, 0);
+        t.SendText("Write-Output ('SIZE_{0}_{1}' -f [Console]::WindowWidth,[Console]::WindowHeight)\r");
+        if (!await WaitFor(t, s => Regex.IsMatch(s, $@"(?m)^SIZE_{grid.Item1}_{grid.Item2}\s*$"), 10))
+            return Fail(t, $"ConPTY size does not match grid {grid.Item1}x{grid.Item2}");
+        Console.WriteLine($"step 2 Windows resize: ok ({grid.Item1}x{grid.Item2})");
+
+        t.SendText("Start-Sleep -Seconds 30\r");
+        await Task.Delay(1000);
+        t.SendText("\u0003");
+        await Task.Delay(500);
+        t.SendText("Write-Output ('OCTOPUS_' + 'INTERRUPTED')\r");
+        // The marker is assembled by PowerShell, never present in the echoed command. ConPTY may wrap/repaint rows.
+        if (!await WaitFor(t, s => s.Contains("OCTOPUS_INTERRUPTED", StringComparison.Ordinal), 10))
+            return Fail(t, "Ctrl+C did not interrupt PowerShell");
+        Console.WriteLine("step 3 Windows Ctrl+C: ok");
+
+        var exited = new TaskCompletionSource<int?>();
+        t.Exited += (_, code) => exited.TrySetResult(code);
+        t.SendText("exit 7\r");
+        var exitCode = await exited.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        if (exitCode != 7 || t.IsRunning) return Fail(t, $"exit not reported (code {exitCode})");
+        Console.WriteLine("step 4 Windows exit: ok (code 7)");
+
+        await t.RestartAsync();
+        if (!await WaitFor(t, s => s.Trim().Length > 0, 15) || !t.IsRunning) return Fail(t, "restart failed");
+        t.SendText("Write-Output ('OCTOPUS_' + 'RESTARTED')\r");
+        if (!await WaitFor(t, s => s.Contains("OCTOPUS_RESTARTED", StringComparison.Ordinal), 10))
+            return Fail(t, "restarted shell does not accept input");
+        Console.WriteLine("step 5 Windows restart: ok");
+        await t.CloseAsync();
+        Console.WriteLine("SMOKE OK (Windows)");
+        return 0;
+    }
+
     private static async Task<bool> WaitFor(TerminalControl t, Func<string, bool> predicate, int seconds)
     {
         var deadline = DateTime.UtcNow.AddSeconds(seconds);
@@ -131,6 +190,9 @@ internal static class ScriptRunner
     private static int Fail(TerminalControl t, string why)
     {
         Console.WriteLine($"SMOKE FAILED: {why}");
+        Console.WriteLine($"running={t.IsRunning}, grid={t.GridSize}, exit={t.ExitCode}");
+        foreach (var text in t.GetVisualDescendants().OfType<TextBlock>().Where(b => b.IsVisible))
+            Console.WriteLine(text.Text);
         Console.WriteLine("---- screen ----");
         Console.WriteLine(t.ReadScreenText());
         return 1;

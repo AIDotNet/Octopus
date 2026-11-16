@@ -191,4 +191,21 @@ public class ScannerTests
         var scanner = Make(dir, new FixedCatalog(defs), new FakeLocator(map), new FakeRunner((_, _, _) => new ProcessResult(0, "9.9.9", "", false)));
         Assert.Equal(20, (await scanner.ScanAsync()).Installations.Count);
     }
+    [Fact]
+    public async Task Windows_installed_batch_agent_is_detected_with_its_version()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var dir = new TempDir();
+        var installation = Directory.CreateDirectory(Path.Combine(dir.Path, "npm tools"));
+        var shim = Path.Combine(installation.FullName, "claude.cmd");
+        await File.WriteAllTextAsync(shim, "@echo off\r\necho 2.1.322 (Claude Code)\r\n");
+        var scanner = new AgentScanner(new FixedCatalog(Def("claude", ["claude"], "Claude Code")),
+            new FakeLocator(new() { ["claude"] = [shim] }), new ProcessRunner(),
+            new FakeLoginEnvironment(installation.FullName), new TestPaths(dir.Path), () => []);
+
+        var installed = Assert.Single((await scanner.ScanAsync()).Installations);
+
+        Assert.Equal(shim, installed.Path);
+        Assert.Equal("2.1.322", installed.Version);
+    }
 }

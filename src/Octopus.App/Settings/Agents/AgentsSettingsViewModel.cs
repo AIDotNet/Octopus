@@ -196,7 +196,6 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     /// <summary>Builds the two groups from the catalog and the scan result. Rows keep their open state.</summary>
     public void Rebuild(bool expandFirst = false)
     {
-        var open = Installed.Where(r => r.IsExpanded).Select(r => r.Id).ToHashSet();
         foreach (var row in Installed)
         {
             row.FlushPending();
@@ -218,14 +217,14 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
             }
             Installed.Add(new AgentRowViewModel(definition, installation, _services)
             {
-                IsExpanded = open.Contains(definition.Id),
+                IsExpanded = _settings.Current.Agents.ExpansionStates.GetValueOrDefault(definition.Id),
                 OriginBadge = badge,
                 CanRemove = canRemove,
                 RemoveText = removeText,
                 CanEdit = CanEditAgents,
             });
         }
-        if (expandFirst && Installed.Count > 0)
+        if (expandFirst && Installed.Count > 0 && _settings.Current.Agents.ExpansionStates.Count == 0)
         {
             var preferred = Installed.FirstOrDefault(r => r.IsDefault) ?? Installed[0];
             preferred.IsExpanded = true;

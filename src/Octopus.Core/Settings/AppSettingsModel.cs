@@ -110,6 +110,9 @@ public sealed class AgentSettings
     public string DefaultPermission { get; set; } = PermissionModes.Default;
     public Dictionary<string, AgentProfile> Profiles { get; set; } = [];
 
+    /// <summary>The last expanded/collapsed choice for each agent on the settings page.</summary>
+    public Dictionary<string, bool> ExpansionStates { get; set; } = [];
+
     /// <summary>The profile of an agent; a new, unsaved one when the user has not configured it.</summary>
     public AgentProfile ProfileOf(string agentId) =>
         Profiles.TryGetValue(agentId, out var profile) ? profile : new AgentProfile();

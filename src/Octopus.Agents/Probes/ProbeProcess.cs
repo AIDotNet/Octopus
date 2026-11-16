@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Octopus.Core.Agents;
+using Octopus.Platform;
 
 namespace Octopus.Agents.Probes;
 
@@ -14,9 +15,9 @@ internal sealed record ProbeOutcome(ProbeErrorKind Error, string? Message, strin
 }
 
 /// <summary>
-/// Starts the agent's executable for one probe and reads its answer. No shell is involved; the process tree is killed
-/// when the answer is in, on timeout, or when the output passes the cap, so an RPC server that would keep running
-/// (<c>codex app-server</c>) never outlives the probe.
+/// Starts the agent's executable for one probe and reads its answer (Windows batch shims use cmd). The process tree
+/// is killed when the answer is in, on timeout, or when output passes the cap, so an RPC server that would keep
+/// running (<c>codex app-server</c>) never outlives the probe.
 /// </summary>
 internal static class ProbeProcess
 {
@@ -36,18 +37,12 @@ internal static class ProbeProcess
         int maxOutputBytes,
         CancellationToken cancellationToken)
     {
-        var start = new ProcessStartInfo(executable)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (var argument in arguments)
-        {
-            start.ArgumentList.Add(argument);
-        }
+        var start = ProcessCommand.Create(executable, arguments);
+        start.RedirectStandardInput = true;
+        start.RedirectStandardOutput = true;
+        start.RedirectStandardError = true;
+        start.UseShellExecute = false;
+        start.CreateNoWindow = true;
         start.Environment.Clear();
         foreach (var (key, value) in environment)
         {

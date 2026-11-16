@@ -78,6 +78,7 @@ public sealed class WindowsLoginEnvironment : ILoginEnvironment
         {
             yield return Path.Combine(local, "Volta", "bin");
             yield return Path.Combine(local, "pnpm");
+            yield return Path.Combine(local, "omp");
             yield return Path.Combine(local, "Microsoft", "WinGet", "Links");
         }
     }

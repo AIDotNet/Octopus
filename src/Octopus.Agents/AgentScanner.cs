@@ -166,7 +166,8 @@ public sealed partial class AgentScanner : IAgentScanner
         string? path,
         CancellationToken ct)
     {
-        var env = new Dictionary<string, string>(loginEnv, StringComparer.Ordinal);
+        var env = new Dictionary<string, string>(loginEnv,
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         foreach (var (k, v) in def.Detect.ProbeEnv)
         {
             env[k] = v;
@@ -231,7 +232,7 @@ public sealed partial class AgentScanner : IAgentScanner
     /// </summary>
     private static Dictionary<string, string> WithRuntimeNextToIt(Dictionary<string, string> env, string candidate, string? searchPath)
     {
-        var copy = new Dictionary<string, string>(env, StringComparer.Ordinal);
+        var copy = new Dictionary<string, string>(env, env.Comparer);
         var directory = Path.GetDirectoryName(candidate);
         var pathKey = copy.Keys.FirstOrDefault(k => string.Equals(k, "PATH", StringComparison.OrdinalIgnoreCase)) ?? "PATH";
         var parts = new List<string>();

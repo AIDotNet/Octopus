@@ -13,5 +13,6 @@
         <ProjectReference Include="../../src/Octopus.Terminal/Octopus.Terminal.csproj" />
         <ProjectReference Include="../../src/Octopus.Terminal.MiniPty/Octopus.Terminal.MiniPty.csproj" />
         <ProjectReference Include="../../src/Octopus.Terminal.Avalonia/Octopus.Terminal.Avalonia.csproj" />
+        <ProjectReference Include="../../src/Octopus.Platform.Windows/Octopus.Platform.Windows.csproj" />
     </ItemGroup>
 </Project>

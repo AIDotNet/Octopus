@@ -64,4 +64,42 @@ public class ProcessRunnerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             _runner.RunAsync("/bin/sleep", ["30"], cancellationToken: cts.Token));
     }
+    [Theory]
+    [InlineData(".cmd")]
+    [InlineData(".bat")]
+    public async Task Windows_batch_shim_preserves_arguments_output_environment_and_exit(string extension)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Directory.CreateTempSubdirectory("octopus batch & test ");
+        try
+        {
+            var script = Path.Combine(directory.FullName, "agent shim" + extension);
+            await File.WriteAllTextAsync(script,
+                "@echo off\r\necho [%1]\r\necho [%2]\r\necho [%3]\r\necho [%4]\r\necho %OCTOPUS_TEST_VALUE% 1>&2\r\nexit /b 7\r\n");
+            var result = await _runner.RunAsync(script, ["hello world", "a&b|c", "%PATH%", "bang!"],
+                new Dictionary<string, string> { ["OCTOPUS_TEST_VALUE"] = "probe-error" });
+            Assert.Equal(7, result.ExitCode);
+            Assert.Equal("[\"hello world\"]\r\n[\"a&b|c\"]\r\n[\"%PATH%\"]\r\n[\"bang!\"]\r\n", result.StandardOutput);
+            Assert.Contains("probe-error", result.StandardError);
+        }
+        finally { directory.Delete(true); }
+    }
+
+    [Fact]
+    public async Task Windows_batch_timeout_and_caller_cancellation_remain_bounded()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var directory = Directory.CreateTempSubdirectory("octopus-batch-timeout");
+        try
+        {
+            var script = Path.Combine(directory.FullName, "wait.cmd");
+            await File.WriteAllTextAsync(script, "@echo off\r\nping -n 30 127.0.0.1 >nul\r\n");
+            var result = await _runner.RunAsync(script, [], timeout: TimeSpan.FromMilliseconds(300));
+            Assert.True(result.TimedOut);
+            using var cts = new CancellationTokenSource(300);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                _runner.RunAsync(script, [], cancellationToken: cts.Token));
+        }
+        finally { directory.Delete(true); }
+    }
 }

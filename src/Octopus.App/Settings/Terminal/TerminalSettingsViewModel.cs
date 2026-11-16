@@ -19,7 +19,6 @@ public sealed partial class TerminalSettingsViewModel : ObservableObject, IDispo
     private readonly Debouncer _shellDebounce = new();
     private readonly Debouncer _fontDebounce = new();
 
-    [ObservableProperty]
     private string _shellMode;
 
     [ObservableProperty]
@@ -37,6 +36,7 @@ public sealed partial class TerminalSettingsViewModel : ObservableObject, IDispo
     private string? _detectedShellPath;
     private IReadOnlyList<ShellInfo> _availableShells = [];
     private bool _syncingShellMode;
+    private bool _disposed;
 
     public TerminalSettingsViewModel(ISettingsStore settings, IShellResolver shells)
     {
@@ -67,6 +67,7 @@ public sealed partial class TerminalSettingsViewModel : ObservableObject, IDispo
             }
             Dispatcher.UIThread.Post(() =>
             {
+                if (_disposed) return;
                 _detectedShellPath = path;
                 _availableShells = available;
                 DetectedShellText = AppLangResources.Format(AppLangResourceKind.SettingsShellDetected, path);
@@ -132,8 +133,20 @@ public sealed partial class TerminalSettingsViewModel : ObservableObject, IDispo
 
     public void Dispose()
     {
+        _disposed = true;
         ArcLanguage.Changed -= OnLanguageChanged;
         FlushPending();
+    }
+
+    public string ShellMode
+    {
+        get => _shellMode;
+        set
+        {
+            // A Select reset while its options change is not a request to clear the saved shell.
+            if (string.IsNullOrWhiteSpace(value)) return;
+            if (SetProperty(ref _shellMode, value)) OnShellModeChanged(value);
+        }
     }
 
     public bool IsCustomShell => ShellMode == CustomShell;
@@ -184,7 +197,7 @@ public sealed partial class TerminalSettingsViewModel : ObservableObject, IDispo
         }
     }
 
-    partial void OnShellModeChanged(string value)
+    private void OnShellModeChanged(string value)
     {
         OnPropertyChanged(nameof(IsCustomShell));
         OnPropertyChanged(nameof(IsAutoShell));

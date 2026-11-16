@@ -21,6 +21,7 @@ internal static class SettingsNormalizer
         if (!Octopus.Core.Updates.UpdateSettingValues.IsKnownChannel(settings.Updates.Channel))
             settings.Updates.Channel = null;
         settings.Agents.Profiles ??= [];
+        settings.Agents.ExpansionStates ??= [];
         foreach (var key in settings.Agents.Profiles.Where(p => p.Value is null).Select(p => p.Key).ToList())
             settings.Agents.Profiles[key] = new();
         foreach (var profile in settings.Agents.Profiles.Values)

@@ -6,6 +6,8 @@
 
 ## 运行
 
+需要 .NET 11 SDK（版本见 `global.json`）。Windows 终端使用系统的 ConPTY；默认优先启动 PowerShell 7，未安装时使用 Windows PowerShell，再退到 cmd。不需要安装 Bash 或 WSL。
+
 ```bash
 dotnet run --project src/Octopus.App
 ```
@@ -24,6 +26,12 @@ dotnet test Octopus.slnx
 ```bash
 dotnet run --project tests/Octopus.Terminal.Smoke -- --script
 ```
+
+Windows 的冒烟会启动本机默认 PowerShell，检查命令输入与输出、窗口缩放、Ctrl+C、退出码和重启；macOS / Linux 使用登录 shell，另检查设备应答、vim 和 terminfo。
+
+Windows 上通过 npm 等工具安装的 `.cmd` / `.bat` 智能体会通过系统 `cmd.exe` 执行版本和账号 / 用量探测，保留输出捕获与超时控制。终端启动时也会合并最新的注册表 PATH，避免扫描能找到智能体、终端却找不到其运行时。
+
+为兼容商店版 PowerShell，终端使用 ConPTY 的控制台会话生命周期，不强制把子进程放入 Job Object。关闭终端会结束控制台会话，但不会强制关闭已独立启动的 GUI 程序。
 
 ## CI 与发布
 

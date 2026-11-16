@@ -80,6 +80,10 @@ public static class AgentSearchPaths
             if (!string.IsNullOrEmpty(nvmSymlink)) Add(nvmSymlink);
             var nvmHome = getEnv("NVM_HOME");
             if (!string.IsNullOrEmpty(nvmHome)) AddVersioned(nvmHome, "");
+            var fnmDir = getEnv("FNM_DIR");
+            if (!string.IsNullOrEmpty(fnmDir)) AddVersioned(Path.Combine(fnmDir, "node-versions"), "installation");
+            AddVersioned(Path.Combine(appData, "fnm", "node-versions"), "installation");
+            AddVersioned(Path.Combine(localAppData, "fnm", "node-versions"), "installation");
             return result;
         }
 

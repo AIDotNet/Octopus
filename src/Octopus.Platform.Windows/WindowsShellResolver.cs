@@ -68,7 +68,7 @@ public sealed class WindowsShellResolver(IExecutableLocator locator) : IShellRes
     public IReadOnlyList<string> GetCommandArguments(ShellInfo shell, string commandLine) => shell.Kind switch
     {
         ShellKind.PowerShell => ["-NoLogo", "-Command", commandLine],
-        ShellKind.Cmd => ["/d", "/s", "/c", commandLine],
+        ShellKind.Cmd => ["/d", "/s", "/e:on", "/v:off", "/c", commandLine],
         _ => ["-l", "-i", "-c", commandLine],
     };
 

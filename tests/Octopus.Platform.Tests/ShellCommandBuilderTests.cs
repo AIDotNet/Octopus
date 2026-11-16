@@ -45,17 +45,6 @@ public class ShellCommandBuilderTests
     [InlineData("a\nb", "'a\nb'")]
     public void PowerShell_quote(string input, string expected) => Assert.Equal(expected, _b.Quote(input, ShellKind.PowerShell));
 
-    [Theory]
-    [InlineData("", "^\"^\"")]
-    [InlineData("abc", "abc")]
-    [InlineData("a b", "^\"a b^\"")]
-    [InlineData("a\"b", "^\"a\\^\"b^\"")]
-    [InlineData("a&b|c", "^\"a^&b^|c^\"")]
-    [InlineData("%PATH%", "^\"^%PATH^%^\"")]
-    [InlineData("你好 x", "^\"你好 x^\"")]
-    [InlineData("my dir\\", "^\"my dir\\\\^\"")]
-    public void Cmd_quote(string input, string expected) => Assert.Equal(expected, _b.Quote(input, ShellKind.Cmd));
-
     [Fact]
     public void Build_posix() =>
         Assert.Equal("claude --resume 'a b'", _b.Build("claude", ["--resume", "a b"], ShellKind.Posix));

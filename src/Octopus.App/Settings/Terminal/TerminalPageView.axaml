@@ -14,7 +14,7 @@
             <arc:SettingsRow Header="{l:AppLangResource SettingsShell}"
                              Description="{l:AppLangResource SettingsShellHint}">
                 <StackPanel Spacing="8">
-                    <arc:Select AutoScrollToSelectedItem="False" Size="Small"
+                    <arc:Select x:Name="ShellSelect" AutoScrollToSelectedItem="False" Size="Small"
                                 HorizontalAlignment="Stretch"
                                 AutomationProperties.Name="{l:AppLangResource SettingsShell}"
                                 ItemsSource="{Binding ShellModes}"
