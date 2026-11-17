@@ -74,12 +74,16 @@ internal sealed class UpdateNotesPresenter(IUpdateService updates, UpdateCardVie
                 // Downloading goes on behind the dialog; there is nothing to decide.
                 _ => [new DialogAction(AppLangResources.Get(AppLangResourceKind.UpdateClose), Later, ButtonVariant.Primary)],
             };
-            var result = await Dialog.ShowAsync(
-                window,
-                AppLangResources.Format(AppLangResourceKind.UpdateNotesTitle, offer.Version.ToString()),
-                new UpdateNotesView(notes),
-                UpdateText.Release(offer),
-                actions);
+            // Large: the notes hold long lines and links, and Medium's 440 leaves them cramped.
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Large,
+                Title = AppLangResources.Format(AppLangResourceKind.UpdateNotesTitle, offer.Version.ToString()),
+                Description = UpdateText.Release(offer),
+                Content = new UpdateNotesView(notes),
+                Actions = Dialog.BuildActions(actions),
+            };
+            var result = await dialog.ShowAsync(window);
             switch (result as string)
             {
                 case Skip: card.SkipCommand.Execute(null); break;

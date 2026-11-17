@@ -85,7 +85,7 @@ public sealed class GitHubReleasesFeed(HttpClient http, ManifestVerifier verifie
         var parts = new List<string>();
         foreach (var (release, version) in releases)
         {
-            var body = release.Body?.Trim();
+            var body = release.Body is { } text ? ReleaseNotesTidy.Apply(text) : null;
             if (string.IsNullOrEmpty(body)) continue;
             if (body.Length > MaxNotesChars) body = body[..MaxNotesChars].TrimEnd() + "\n\n…";
             parts.Add(releases.Count > 1 ? $"## {version}\n\n{body}" : body);
