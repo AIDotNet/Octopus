@@ -5,14 +5,17 @@
 
 import { env, fs, permissions, ui } from 'octopus';
 import { costOf, ensurePrices, priceSource } from './pricing.js';
+import { compact } from './bill.js';
+import { openBillExport } from './export.js';
 
 const t = (zh, en) => ((env.language ?? '').startsWith('zh') ? zh : en);
 const DAY = 24 * 60 * 60_000;
-const MAX_DAYS = 30;
+// The tab charts up to 30 days; the bill export reaches back as far as this (a quarter, or a month and a half more).
+const MAX_DAYS = 92;
 
 /** path → { size, mtime, offset, lastTotal, model } */
 const files = new Map();
-/** `${day}|${agent}|${model}` → { input, output, cache, total, cost, unpriced } (cost in USD at API list prices) */
+/** `${day}|${agent}|${model}` → { requests, input, output, cache, total, cost, unpriced } (cost in USD at API list prices) */
 const totals = new Map();
 const seenRequests = new Set();
 let scanning;
@@ -72,9 +75,10 @@ function record(timestamp, agent, model, tokens) {
   const ms = Date.parse(timestamp);
   if (!Number.isFinite(ms) || ms < Date.now() - MAX_DAYS * DAY) return;
   const key = `${localDay(ms)}|${agent}|${model}`;
-  const row = totals.get(key) ?? { input: 0, output: 0, cache: 0, total: 0, cost: 0, unpriced: 0 };
+  const row = totals.get(key) ?? { requests: 0, input: 0, output: 0, cache: 0, total: 0, cost: 0, unpriced: 0 };
   const { input = 0, output = 0, cacheRead = 0, cacheWrite5m = 0, cacheWrite1h = 0 } = tokens;
   const cache = cacheRead + cacheWrite5m + cacheWrite1h;
+  row.requests += 1;
   row.input += input;
   row.output += output;
   row.cache += cache;
@@ -97,6 +101,14 @@ function lastDays(count) {
   const today = new Date();
   for (let d = count - 1; d >= 0; d--) days.push(localDay(new Date(today.getFullYear(), today.getMonth(), today.getDate() - d, 12).getTime()));
   return days;
+}
+
+/** Every day, agent and model counted so far, as the bill export reads them (see bill.js). */
+export function usageRows() {
+  return [...totals].map(([key, row]) => {
+    const [day, agent, model] = key.split('|');
+    return { day, agent, model, requests: row.requests, input: row.input, output: row.output, cache: row.cache, cost: row.cost, unpriced: row.unpriced };
+  });
 }
 
 /**
@@ -253,6 +265,7 @@ export class HistoryView {
           onChange: v => this.set('groupBy', v),
         }),
         // Rescan also has the host sync the prices from models.dev; changed prices recount everything.
+        ui.button({ label: t('导出账单', 'Export bill'), icon: 'lucide:receipt-text', onClick: () => openBillExport(usageRows) }),
         ui.button({ label: t('重新扫描', 'Rescan'), icon: 'lucide:refresh-cw', loading: !!scanning, onClick: () => scan({ refreshPrices: true }) }),
       ]),
     ]);
@@ -386,13 +399,4 @@ const round2 = n => Math.round(n * 100) / 100;
 /** $1,234.56; under a dollar keeps two decimals too ($0.42). */
 export function usd(n) {
   return `$${(Number.isFinite(n) ? n : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-/** 1,010,000 → "1.01M": at most two decimals, trailing zeros dropped. */
-function compact(n) {
-  const units = [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
-  for (const [size, unit] of units) {
-    if (Math.abs(n) >= size) return `${Number((n / size).toFixed(2))}${unit}`;
-  }
-  return String(Math.round(n));
 }

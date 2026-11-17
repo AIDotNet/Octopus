@@ -675,6 +675,8 @@ public sealed class TerminalControl : Decorator
         _hoverLink = link;
         _overlay.SetLink(link);
         _view.Cursor = link is null ? null : HandCursor;
+        // A program's hyperlink can say anything on the screen: show where it really goes before it is clicked.
+        ToolTip.SetTip(_view, link is { IsHyperlink: true } ? link.Url : null);
     }
 
     private async Task<bool> AllowPasteAsync(string text, bool bracketed)
