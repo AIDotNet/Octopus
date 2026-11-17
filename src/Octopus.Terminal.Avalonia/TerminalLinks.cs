@@ -13,8 +13,11 @@ public readonly record struct LinkRow(string?[] Cells, bool WrapsToNext, bool Is
 /// <summary>
 /// A link on the screen and the cells it covers (one span per row). For a web link <paramref name="Url"/> is the address;
 /// for a file path (<paramref name="IsPath"/>) it is the path as printed, without the <c>:line:column</c> after it.
+/// <paramref name="IsHyperlink"/>: the program marked the cells as a link (OSC 8), so the target need not be the text
+/// on the screen.
 /// </summary>
-public sealed record LinkHit(string Url, IReadOnlyList<CellSpan> Spans, bool IsPath = false, int? Line = null, int? Column = null);
+public sealed record LinkHit(string Url, IReadOnlyList<CellSpan> Spans, bool IsPath = false, int? Line = null, int? Column = null,
+    bool IsHyperlink = false);
 
 /// <summary>
 /// Finds http and https links and file paths in terminal output, including those that wrap over several rows. A path is
@@ -153,11 +156,108 @@ public static partial class TerminalLinks
         return new LinkRow(cells, row.Flags.HasFlag(RowFlags.SoftWrapped), row.Flags.HasFlag(RowFlags.WrapContinuation));
     }
 
-    /// <summary>The link under a cell of <paramref name="frame"/>.</summary>
+    /// <summary>
+    /// The link under a cell of <paramref name="frame"/>: the program's own hyperlink (OSC 8) when the cell has one that
+    /// can be opened, otherwise a link or path found in the text.
+    /// </summary>
     public static LinkHit? Find(FrameSnapshot frame, int row, int column, Func<string, bool>? pathExists = null)
     {
+        if (FindHyperlink(frame, row, column, pathExists) is { } hyperlink) return hyperlink;
         // Each row is asked for several times while the wrapped line is found: its text is built once.
         var rows = new LinkRow?[frame.Rows.Length];
         return Find(frame.Rows.Length, i => rows[i] ??= RowOf(frame.Rows[i]), row, column, pathExists);
+    }
+
+    /// <summary>
+    /// The OSC 8 hyperlink under a cell, covering every cell next to it (across soft wraps) that carries the same link.
+    /// Only http and https addresses, and <c>file:</c> addresses on this computer that <paramref name="pathExists"/>
+    /// accepts, are links; any other target is null, and the text is then searched as usual.
+    /// </summary>
+    public static LinkHit? FindHyperlink(FrameSnapshot frame, int row, int column, Func<string, bool>? pathExists = null)
+    {
+        var id = LinkIdAt(frame, row, column);
+        if (id <= 0 || id > frame.Links.Count) return null;
+        var url = frame.Links[id - 1];
+
+        string target;
+        var isPath = false;
+        if (IsWebUrl(url))
+        {
+            target = url;
+        }
+        else if (pathExists is not null && LocalFilePath(url) is { } path && pathExists(path))
+        {
+            target = path;
+            isPath = true;
+        }
+        else
+        {
+            return null;
+        }
+
+        // Walk back to the first cell of the link, then forward over all of it.
+        var (r, c) = (row, column);
+        while (Previous(frame, r, c) is { } p && LinkIdAt(frame, p.Row, p.Column) == id) (r, c) = p;
+        var spans = new List<CellSpan>();
+        for (var at = ((int Row, int Column)?)(r, c); at is { } cell && LinkIdAt(frame, cell.Row, cell.Column) == id; at = Next(frame, cell.Row, cell.Column))
+        {
+            if (spans.Count > 0 && spans[^1].Row == cell.Row)
+                spans[^1] = spans[^1] with { EndColumn = cell.Column };
+            else
+                spans.Add(new CellSpan(cell.Row, cell.Column, cell.Column));
+        }
+        return new LinkHit(target, spans, IsPath: isPath, IsHyperlink: true);
+    }
+
+    /// <summary>The hyperlink id of a cell (0: none). The second half of a wide character belongs to its first half.</summary>
+    private static int LinkIdAt(FrameSnapshot frame, int row, int column)
+    {
+        if (row < 0 || row >= frame.Rows.Length) return 0;
+        var r = frame.Rows[row];
+        if (column < 0 || column >= r.Cells.Length) return 0;
+        if (TCell.Width(r.Cells[column]) == CellWidth.SpacerTail && column > 0) column--;
+        var cell = r.Cells[column];
+        return TCell.Hyperlink(cell) ? r.Styles[TCell.StyleIndex(cell)].HyperlinkId : 0;
+    }
+
+    private static (int Row, int Column)? Previous(FrameSnapshot frame, int row, int column)
+    {
+        if (column > 0) return (row, column - 1);
+        return row > 0 && frame.Rows[row - 1].Flags.HasFlag(RowFlags.SoftWrapped) ? (row - 1, frame.Rows[row - 1].Cells.Length - 1) : null;
+    }
+
+    private static (int Row, int Column)? Next(FrameSnapshot frame, int row, int column)
+    {
+        if (column + 1 < frame.Rows[row].Cells.Length) return (row, column + 1);
+        return row + 1 < frame.Rows.Length && frame.Rows[row].Flags.HasFlag(RowFlags.SoftWrapped) ? (row + 1, 0) : null;
+    }
+
+    /// <summary>
+    /// The local path of a <c>file:</c> address whose host is empty, <c>localhost</c> or this computer (as <c>ls
+    /// --hyperlink</c> and ripgrep write them); null for anything else, including a file on another host.
+    /// </summary>
+    public static string? LocalFilePath(string url)
+    {
+        // The scheme must be written out: on Unix a bare "/etc/hosts" also parses as a file address.
+        if (!url.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || !uri.IsFile || !IsThisHost(uri.Host)) return null;
+        var path = Uri.UnescapeDataString(uri.AbsolutePath);
+        // Windows: "/C:/Users/x" → "C:\Users\x".
+        return OperatingSystem.IsWindows() ? path.TrimStart('/').Replace('/', '\\') : path;
+    }
+
+    private static readonly Lazy<string> HostName = new(() =>
+    {
+        try { return System.Net.Dns.GetHostName(); }
+        catch (System.Net.Sockets.SocketException) { return Environment.MachineName; }
+    });
+
+    private static bool IsThisHost(string host)
+    {
+        if (host.Length == 0 || host.Equals("localhost", StringComparison.OrdinalIgnoreCase)) return true;
+        static string Short(string name) => name.Split('.')[0];
+        return host.Equals(HostName.Value, StringComparison.OrdinalIgnoreCase)
+            || Short(host).Equals(Short(HostName.Value), StringComparison.OrdinalIgnoreCase)
+            || Short(host).Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase);
     }
 }
