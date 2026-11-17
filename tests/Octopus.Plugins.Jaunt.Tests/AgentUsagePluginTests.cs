@@ -283,6 +283,8 @@ public sealed class AgentUsagePluginTests
         var json = await manager.Find(Id)!.InvokeAsync("view.open", ["view", "octopus.agent-usage.history", context], TimeSpan.FromSeconds(5));
         var tree = JsonNode.Parse(json)!["tree"]!.ToJsonString();
         Assert.Contains("\"Segmented\"", tree);
+        // The bill export (issue #5) starts from the history tab.
+        Assert.Contains("lucide:receipt-text", tree);
         await manager.Find(Id)!.InvokeAsync("view.close", ["tab:1"], TimeSpan.FromSeconds(5));
     }
 
