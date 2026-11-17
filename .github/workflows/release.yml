@@ -226,9 +226,11 @@ jobs:
       - name: Install the android workload
         run: dotnet workload install android
 
+      # MSBuild reads environment variables as properties, case-insensitively: VERSION (v1.2.3 on a tag) would become
+      # $(Version) and fail the restore. Every dotnet call here passes Version explicitly.
       - name: Android SDK packages
         run: >
-          dotnet build src/Octopus.Mobile.Android -t:InstallAndroidDependencies
+          dotnet build src/Octopus.Mobile.Android -t:InstallAndroidDependencies -p:Version="${VERSION#v}"
           -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
 
       - name: Publish
@@ -237,7 +239,7 @@ jobs:
           # versionName is the release's version; versionCode has to be an integer that grows: major·10⁷ + minor·10⁵ + patch.
           IFS=. read -r MAJOR MINOR PATCH <<< "${V%%-*}"
           CODE=$(( MAJOR * 10000000 + MINOR * 100000 + PATCH ))
-          dotnet publish src/Octopus.Mobile.Android -c Release \
+          dotnet publish src/Octopus.Mobile.Android -c Release -p:Version="$V" \
             -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" \
             -p:ApplicationDisplayVersion="$V" -p:ApplicationVersion="$CODE" -o build/android
           mkdir -p dist
