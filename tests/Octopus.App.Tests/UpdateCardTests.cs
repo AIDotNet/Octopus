@@ -137,6 +137,18 @@ public class UpdateCardTests
     }
 
     [AvaloniaFact]
+    public void TheNotesWrapWithinTheDialogInsteadOfBeingCut()
+    {
+        var view = new UpdateNotesView("* A pull request title by @someone in https://github.com/AIDotNet/Octopus/pull/4 and a long tail of words to wrap\n\n[Full changelog](https://github.com/AIDotNet/Octopus/compare/v1.0.1122...v1.0.1123)");
+        var host = new Window { Width = 800, Height = 600, Content = new Border { Width = 300, Child = view } };
+        host.Show();
+        host.UpdateLayout();
+        // No width of its own: it takes the dialog's, and its text wraps inside it.
+        Assert.Equal(300, view.Bounds.Width);
+        Assert.True(view.FindControl<TKCode.Arc.Markdown>("Notes")!.Bounds.Width <= 300);
+    }
+
+    [AvaloniaFact]
     public void TheDownloadShowsItsProgress()
     {
         var fake = UseFake();
