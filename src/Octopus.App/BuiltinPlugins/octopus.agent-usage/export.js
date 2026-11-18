@@ -24,7 +24,8 @@ const PRESETS = [
  */
 export async function openBillExport(getRows) {
   const [from0, to0] = PRESETS[1].range();
-  const form = { from: from0, to: to0, format: 'html', picked: undefined, saving: false };
+  // `rev` goes up when the script sets a value itself (a preset, All, None): the host keeps what a field holds until then.
+  const form = { from: from0, to: to0, format: 'html', picked: undefined, saving: false, rev: 0 };
 
   await ui.showDialog({
     title: t('导出账单', 'Export bill'),
@@ -52,11 +53,12 @@ export async function openBillExport(getRows) {
       const bill = rangeError ? undefined : buildBill(rows, { from: form.from, to: form.to, models: new Set(chosen.map(o => o.key)) });
       const nothing = !bill || bill.total.requests === 0;
 
-      const setPicked = next => { form.picked = next; invalidate(); };
+      const setPicked = next => { form.picked = next; form.rev++; invalidate(); };
       const toggle = (key, on) => {
         const next = new Set(picked);
         if (on) next.add(key); else next.delete(key);
-        setPicked(next);
+        form.picked = next;
+        invalidate();
       };
 
       const save = async () => {
@@ -84,16 +86,22 @@ export async function openBillExport(getRows) {
         }
       };
 
-      return ui.scroll({}, ui.column({ gap: 3, padding: 1 }, [
+      return ui.scroll({}, ui.column({ gap: 3, padding: 2 }, [
         ui.column({ gap: 1 }, [
           ui.text(t('时间段', 'Period'), { variant: 'heading' }),
           ui.row({ gap: 2, wrap: true }, PRESETS.map(p => ui.button({
             label: p.label(), size: 'sm',
-            onClick: () => { [form.from, form.to] = p.range(); invalidate(); },
+            onClick: () => { [form.from, form.to] = p.range(); form.rev++; invalidate(); },
           }))),
           ui.row({ gap: 2, align: 'start' }, [
-            ui.input({ label: t('开始', 'From'), value: form.from, placeholder: 'YYYY-MM-DD', error: rangeError && !isDay(form.from) ? rangeError : undefined, onChange: v => { form.from = v.trim(); invalidate(); } }),
-            ui.input({ label: t('结束', 'To'), value: form.to, placeholder: 'YYYY-MM-DD', error: rangeError && (isDay(form.from) || !isDay(form.to)) ? rangeError : undefined, onChange: v => { form.to = v.trim(); invalidate(); } }),
+            ui.column({ gap: 1, grow: 1 }, [
+              ui.text(t('开始', 'From'), { variant: 'caption', color: 'muted' }),
+              ui.datePicker({ key: 'from', value: form.from, rev: form.rev, onChange: v => { form.from = v; invalidate(); } }),
+            ]),
+            ui.column({ gap: 1, grow: 1 }, [
+              ui.text(t('结束', 'To'), { variant: 'caption', color: 'muted' }),
+              ui.datePicker({ key: 'to', value: form.to, rev: form.rev, onChange: v => { form.to = v; invalidate(); } }),
+            ]),
           ]),
         ]),
         ui.column({ gap: 1 }, [
@@ -107,14 +115,14 @@ export async function openBillExport(getRows) {
           options.length === 0
             ? ui.text(t('还没有扫描到用量记录。', 'No usage records have been scanned yet.'), { variant: 'caption', color: 'muted' })
             : ui.column({ gap: 0 }, options.map(o => ui.checkbox({
-              key: o.key, label: `${o.model}  ·  ${o.agent}`, value: picked.has(o.key), onChange: on => toggle(o.key, on),
+              key: o.key, label: `${o.model}  ·  ${o.agent}`, value: picked.has(o.key), rev: form.rev, onChange: on => toggle(o.key, on),
             }))),
         ]),
         ui.column({ gap: 1 }, [
           ui.text(t('格式', 'Format'), { variant: 'heading' }),
           ui.segmented({
             value: form.format,
-            options: [{ value: 'html', label: t('账单（HTML，可打印）', 'Bill (HTML, printable)') }, { value: 'csv', label: t('明细（CSV）', 'Details (CSV)') }],
+            options: [{ value: 'html', label: t('账单 HTML', 'Bill (HTML)') }, { value: 'csv', label: t('明细 CSV', 'Details (CSV)') }],
             onChange: v => { form.format = v; invalidate(); },
           }),
         ]),

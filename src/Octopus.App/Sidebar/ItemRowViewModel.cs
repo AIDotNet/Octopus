@@ -53,6 +53,8 @@ public sealed partial class ItemRowViewModel : ObservableObject
     [ObservableProperty] public partial bool IsWaiting { get; set; }
     /// <summary>The agent's turn failed: a red dot.</summary>
     [ObservableProperty] public partial bool HasError { get; set; }
+    /// <summary>A turn finished while the user was elsewhere: a green dot until the tab is viewed.</summary>
+    [ObservableProperty] public partial bool IsDone { get; set; }
     public bool NeedsAttention => IsWaiting || HasError;
     /// <summary>The subagents the session started (Claude Code's Agent tool); null for an item that never had one.</summary>
     [ObservableProperty] public partial SubagentListViewModel? Subagents { get; set; }
@@ -64,6 +66,7 @@ public sealed partial class ItemRowViewModel : ObservableObject
         IsWorking = activity == Activity.ItemActivity.Working;
         IsWaiting = activity == Activity.ItemActivity.Waiting;
         HasError = activity == Activity.ItemActivity.Error;
+        IsDone = activity == Activity.ItemActivity.Done;
         OnPropertyChanged(nameof(NeedsAttention));
     }
 

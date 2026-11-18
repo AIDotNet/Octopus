@@ -442,7 +442,7 @@ export const ui = Object.freeze({
   button: leaf('Button'), iconButton: leaf('IconButton'), input: leaf('Input'), textarea: leaf('Textarea'),
   password: leaf('Password'), search: leaf('Search'), numberField: leaf('NumberField'), select: leaf('Select'),
   combobox: leaf('Combobox'), checkbox: leaf('Checkbox'), switch: leaf('Switch'), radioGroup: leaf('RadioGroup'),
-  segmented: leaf('Segmented'), slider: leaf('Slider'), tagInput: leaf('TagInput'), pathPicker: leaf('PathPicker'),
+  segmented: leaf('Segmented'), slider: leaf('Slider'), datePicker: leaf('DatePicker'), tagInput: leaf('TagInput'), pathPicker: leaf('PathPicker'),
   form: container('Form'), field: container('Field'),
   // data
   list: leaf('List'), tree: leaf('Tree'), table: leaf('Table'),

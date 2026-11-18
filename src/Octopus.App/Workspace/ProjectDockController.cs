@@ -289,6 +289,8 @@ public sealed class ProjectDockController : IDisposable
         return Geometry.Parse($"M{Point(gap + 90)} A{radius} {radius} 0 1 1 {Point(gap)}");
     }
 
+    private bool IsDone(string itemId) => _activity?.Of(itemId) == Activity.ItemActivity.Done;
+
     private bool IsWorking(string itemId) => _activity?.Of(itemId) == Activity.ItemActivity.Working;
 
     private void OnActivityChanged(object? sender, string itemId)
@@ -297,7 +299,7 @@ public sealed class ProjectDockController : IDisposable
         {
             return;
         }
-        pane.Icon = IsWorking(itemId) ? s_spinFrames[_spinFrame] : IconOf(item);
+        pane.Icon = IsWorking(itemId) ? s_spinFrames[_spinFrame] : IsDone(itemId) ? ArcIcons.Check : IconOf(item);
         SetSpinning(_panes.Keys.Any(IsWorking));
     }
 

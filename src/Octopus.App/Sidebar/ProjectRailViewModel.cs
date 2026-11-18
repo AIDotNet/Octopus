@@ -118,6 +118,10 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     private bool NeedsInput(Project project) =>
         _activity is not null && project.Items.Any(i => _activity.Of(i.Id) == ItemActivity.Waiting);
 
+    /// <summary>True while an agent or terminal of the project has a finished turn that was not looked at.</summary>
+    private bool IsDone(Project project) =>
+        _activity is not null && project.Items.Any(i => _activity.Of(i.Id) == ItemActivity.Done);
+
     /// <summary>Updates the project's loading ring and waiting dot in place, and the ones of the folder it is in.</summary>
     private void ShowWork(Project project)
     {
@@ -127,10 +131,12 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         }
         chip.IsWorking = IsWorking(project);
         chip.NeedsInput = NeedsInput(project);
+        chip.IsDone = IsDone(project);
         foreach (var group in Entries.OfType<ProjectGroupViewModel>())
         {
             group.IsWorking = group.Chips.Any(c => c.IsWorking);
             group.NeedsInput = group.Chips.Any(c => c.NeedsInput);
+            group.IsDone = group.Chips.Any(c => c.IsDone);
         }
     }
 
@@ -149,6 +155,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
             {
                 IsWorking = IsWorking(project),
                 NeedsInput = NeedsInput(project),
+                IsDone = IsDone(project),
             };
             Chips.Add(chip);
             if (project.GroupId is { } groupId && members.TryGetValue(groupId, out var list))
@@ -171,6 +178,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
                 AnimateOnAttach = _built && isExpanded != (group.Id == _shownExpanded),
                 IsWorking = members[group.Id].Any(c => c.IsWorking),
                 NeedsInput = members[group.Id].Any(c => c.NeedsInput),
+                IsDone = members[group.Id].Any(c => c.IsDone),
             });
         }
         _shownExpanded = expanded;

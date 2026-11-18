@@ -434,7 +434,9 @@ public sealed class WorkbenchModule(IServiceProvider services) : IPluginApiModul
         var plugin = call.Plugin;
         var instanceId = call.RequiredString("instanceId");
         var renderer = new UiRenderer(Workbench.SinkFor(plugin, instanceId));
-        var host = new Border { MinWidth = call.String("size") switch { "sm" => 320, "lg" => 720, _ => 480 }, MaxHeight = 640 };
+        // The dialog's own panel sets the width (its size token); a minimum of the host's own would stick out of a panel
+        // that is narrower (the medium one is) and cut the content off on both sides.
+        var host = new Border { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch, MaxHeight = 640 };
         var surface = new DialogSurface(renderer, host);
         surface.Update(Take(call, "tree"));
         var dialog = new Dialog

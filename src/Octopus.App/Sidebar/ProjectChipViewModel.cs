@@ -70,6 +70,9 @@ public sealed partial class ProjectChipViewModel(
     /// <summary>An agent of the project stopped to ask the user: the square carries a yellow dot (it wins over the ring).</summary>
     [ObservableProperty] public partial bool NeedsInput { get; set; }
 
+    /// <summary>A turn of the project finished while the user was elsewhere: a green dot, under the ring and the yellow dot, until it is viewed.</summary>
+    [ObservableProperty] public partial bool IsDone { get; set; }
+
     public string Tip { get; } = project.Name + "\n" + ProjectLocation.Describe(project,
         project.RemoteHost is { } host ? Composition.AppHost.Get<Remote.RemoteClientRuntime>().HostName(host) : null);
     public double ChipOpacity => IsCurrent ? 1 : 0.72;

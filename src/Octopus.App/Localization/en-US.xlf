@@ -476,6 +476,7 @@
     <unit id="AgentWaitingToast"><segment><source>{0} is waiting for you</source></segment></unit>
     <unit id="AgentWaitingView"><segment><source>View</source></segment></unit>
     <unit id="ItemWaitingTip"><segment><source>Waiting for your reply</source></segment></unit>
+    <unit id="ItemDoneTip"><segment><source>Finished, not viewed yet</source></segment></unit>
     <unit id="SubagentsToggle"><segment><source>Subagents</source></segment></unit>
     <unit id="SubagentsFinished"><segment><source>{0} finished</source></segment></unit>
     <unit id="SubagentStarting"><segment><source>Starting…</source></segment></unit>
