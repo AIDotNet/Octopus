@@ -3,7 +3,7 @@
          packages on it, and all TKCode.Arc packages on the same Arc version. -->
     <PropertyGroup>
         <AvaloniaVersion>12.1.5</AvaloniaVersion>
-        <ArcVersion>1.1.0-preview.4</ArcVersion>
+        <ArcVersion>1.1.1-preview.5</ArcVersion>
     </PropertyGroup>
     <ItemGroup>
         <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />

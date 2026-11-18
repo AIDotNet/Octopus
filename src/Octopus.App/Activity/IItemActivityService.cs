@@ -11,6 +11,8 @@ public enum ItemActivity
     Waiting,
     /// <summary>The turn ended with an error.</summary>
     Error,
+    /// <summary>A turn finished while the user was looking elsewhere: it stays marked until the tab is viewed.</summary>
+    Done,
 }
 
 /// <summary>
@@ -33,6 +35,9 @@ public interface IItemActivityService
     /// own signals only arrive there). Call on the UI thread.
     /// </summary>
     void ReportRemote(string itemId, ItemActivity activity);
+
+    /// <summary>The user looked at the item: a finished-turn mark goes away. Call on the UI thread.</summary>
+    void MarkSeen(string itemId);
 
     /// <summary>The program of the item exited, or its tab was closed. Call on the UI thread.</summary>
     void ReportExit(string itemId);

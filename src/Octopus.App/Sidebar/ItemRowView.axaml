@@ -56,6 +56,9 @@
                              arc:Tooltip.Tip="{l:AppLangResource ItemWaitingTip}" />
                     <Ellipse Width="8" Height="8" VerticalAlignment="Center" IsVisible="{Binding HasError}"
                              Fill="{arc:ArcDesignTokenResource Danger}" />
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" IsVisible="{Binding IsDone}"
+                             Fill="{arc:ArcDesignTokenResource Success}"
+                             arc:Tooltip.Tip="{l:AppLangResource ItemDoneTip}" />
                 </StackPanel>
             </Grid>
         </Button>

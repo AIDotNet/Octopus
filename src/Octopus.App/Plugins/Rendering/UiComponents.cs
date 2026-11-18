@@ -74,6 +74,7 @@ internal static class UiComponents
         ["RadioGroup"] = new RadioComponent(),
         ["Segmented"] = new SegmentedComponent(),
         ["Slider"] = new SliderComponent(),
+        ["DatePicker"] = new DatePickerComponent(),
         ["TagInput"] = new TagInputComponent(),
         ["PathPicker"] = new PathPickerComponent(),
         ["List"] = new ListComponent(),
@@ -1102,6 +1103,38 @@ internal sealed class SliderComponent : IUiComponent
         slider.Maximum = Num(state.Props, "max") ?? 100;
         if (Num(state.Props, "step") is { } step) slider.SmallChange = step;
         if (UiRenderer.TakeValue(state)) slider.Value = Num(state.Props, "value") ?? slider.Minimum;
+    }
+}
+
+/// <summary>A day, as "YYYY-MM-DD": typed in the field or picked in the calendar popup. Empty text is no day.</summary>
+internal sealed class DatePickerComponent : IUiComponent
+{
+    private const string Format = "yyyy-MM-dd";
+
+    public Control Create(NodeState state, UiRenderer renderer)
+    {
+        var picker = new TKCode.Arc.DatePicker { DisplayFormat = Format, Culture = System.Globalization.CultureInfo.InvariantCulture };
+        picker.SelectedDateChanged += (_, e) =>
+        {
+            if (Equals(state.Extra, "applying")) return;
+            renderer.Fire(state, "onChange", JsonValue.Create(e.NewDate is { } day ? day.ToString(Format, System.Globalization.CultureInfo.InvariantCulture) : ""));
+        };
+        return picker;
+    }
+
+    public void Update(Control control, NodeState state, UiRenderer renderer)
+    {
+        var picker = (TKCode.Arc.DatePicker)control;
+        if (UiRenderer.TakeValue(state))
+        {
+            state.Extra = "applying";
+            try
+            {
+                picker.SelectedDate = DateOnly.TryParseExact(Str(state.Props, "value"), Format, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var day) ? day : null;
+            }
+            finally { state.Extra = null; }
+        }
     }
 }
 

@@ -28,6 +28,10 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         _projects.Changed += OnProjectsChanged;
     }
 
+    /// <summary>Whether the item is the tab on screen: the current project's active item.</summary>
+    private bool IsViewed(string itemId) =>
+        _projects.FindProjectOf(itemId) is { } project && _projects.Current?.Id == project.Id && project.ActiveItemId == itemId;
+
     public event EventHandler<string>? Changed;
 
     public ItemActivity Of(string itemId) => _activity.GetValueOrDefault(itemId);
@@ -69,7 +73,8 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         _titleWorking.Remove(itemId);
         _sessionNamed.Remove(itemId);
         _promptTitled.Remove(itemId);
-        Set(itemId, ItemActivity.Idle);
+        // A program that ended leaves nothing to look at, whatever it was doing.
+        Set(itemId, ItemActivity.Idle, finished: false);
     }
 
     private string? AgentName(ProjectItem item) =>
@@ -126,6 +131,15 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
+        // Looking at a finished tab is what clears its mark: a tab chosen, or the project it is in.
+        if (e.Kind == ProjectChangeKind.Active && e.Item is { } active)
+        {
+            MarkSeen(active.Id);
+        }
+        else if (e.Kind == ProjectChangeKind.CurrentProject && e.Project?.ActiveItemId is { } shown)
+        {
+            MarkSeen(shown);
+        }
         // A removed item: forget it, so a tab reopened under the same id starts clean.
         if (e.Kind == ProjectChangeKind.Items && e.Item is { } item && _projects.FindItem(item.Id) is null)
         {
@@ -138,9 +152,25 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
 
     public void ReportRemote(string itemId, ItemActivity activity) => Set(itemId, activity);
 
-    private void Set(string itemId, ItemActivity activity)
+    public void MarkSeen(string itemId)
     {
-        if (Of(itemId) == activity)
+        if (Of(itemId) == ItemActivity.Done)
+        {
+            Set(itemId, ItemActivity.Idle, finished: false);
+        }
+    }
+
+    /// <param name="finished">Going from working to idle is a finished turn, unless the item is on screen.</param>
+    private void Set(string itemId, ItemActivity activity, bool finished = true)
+    {
+        var before = Of(itemId);
+        if (finished && activity == ItemActivity.Idle)
+        {
+            // A repeated "idle" must not wipe the mark; the end of a turn nobody watched sets it.
+            if (before == ItemActivity.Done) return;
+            if (before == ItemActivity.Working && !IsViewed(itemId)) activity = ItemActivity.Done;
+        }
+        if (before == activity)
         {
             return;
         }

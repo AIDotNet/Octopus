@@ -37,6 +37,14 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </Button>
+                    <!-- A turn finished while the user was elsewhere: a green dot, under the ring and the yellow dot. -->
+                    <Border IsVisible="{Binding IsDone}" IsHitTestVisible="False" Width="16" Height="16" CornerRadius="8"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
+                            Background="{arc:ArcDesignTokenResource Background}"
+                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                        <Ellipse Width="8" Height="8" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                 Fill="{arc:ArcDesignTokenResource Success}" />
+                    </Border>
                     <!-- A project in the closed group is working: a loading ring in the corner (the top right stays free for a count). -->
                     <Border IsVisible="{Binding IsWorking}" IsHitTestVisible="False" Width="16" Height="16" CornerRadius="8"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"

@@ -182,6 +182,52 @@ public class ItemActivityTests
     }
 
     [AvaloniaFact, FreshApp]
+    public void A_turn_that_finished_out_of_sight_stays_marked_until_the_tab_is_viewed()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-activity-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var first = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude Code" };
+        var second = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude Code" };
+        projects.AddItem(project, first);
+        projects.AddItem(project, second);
+        projects.ActivateItem(second.Id);
+        var activity = AppHost.Get<IItemActivityService>();
+        var rows = AppHost.Get<ShellViewModel>().Panel.Items;
+        var chip = AppHost.Get<Octopus.App.Sidebar.ProjectRailViewModel>().Chips.Single(c => c.Id == project.Id);
+        var hub = AppHost.Get<ISignalHub>();
+        AgentSignal Signal(ProjectItem item, string channel) => new("claude", channel, item.Id, "", 0, 0, "{}");
+
+        // The tab in front finishes: the user saw it, nothing to mark.
+        hub.Publish(Signal(second, "prompt-submit"));
+        hub.Publish(Signal(second, "stop"));
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Idle, activity.Of(second.Id));
+        Assert.False(chip.IsDone);
+
+        // Another tab finishes while the user looks at this one: green dot on its row and on the project, until it is viewed.
+        hub.Publish(Signal(first, "prompt-submit"));
+        Frames.Pump();
+        Assert.True(chip.IsWorking);
+        hub.Publish(Signal(first, "stop"));
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Done, activity.Of(first.Id));
+        Assert.True(rows.Single(r => r.Id == first.Id).IsDone);
+        Assert.False(rows.Single(r => r.Id == first.Id).IsWorking);
+        Assert.True(chip.IsDone);
+        Assert.False(chip.IsWorking);
+
+        // A repeated end of turn does not wipe the mark; the next turn replaces it; viewing the tab clears it.
+        hub.Publish(Signal(first, "stop"));
+        Assert.Equal(ItemActivity.Done, activity.Of(first.Id));
+        projects.ActivateItem(first.Id);
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Idle, activity.Of(first.Id));
+        Assert.False(rows.Single(r => r.Id == first.Id).IsDone);
+        Assert.False(chip.IsDone);
+    }
+
+    [AvaloniaFact, FreshApp]
     public void A_session_the_agent_never_names_is_titled_after_its_prompt_then_its_transcript()
     {
         var dir = Directory.CreateTempSubdirectory("octopus-activity-").FullName;

@@ -485,6 +485,7 @@ public enum AppLangResourceKind
     AgentWaitingToast,
     AgentWaitingView,
     ItemWaitingTip,
+    ItemDoneTip,
     SubagentsToggle,
     SubagentsFinished,
     SubagentStarting,
