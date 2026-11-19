@@ -226,6 +226,22 @@
             </Grid>
         </Border>
 
+        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="14,10">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsUseSystemProxy}" />
+                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsUseSystemProxyHint}" />
+                </StackPanel>
+                <arc:Switch Grid.Column="1"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="{l:AppLangResource SettingsUseSystemProxy}"
+                            IsChecked="{Binding UseSystemProxy, Mode=TwoWay}" />
+            </Grid>
+        </Border>
+
         <arc:Alert Tone="Warning"
                    Title="{l:AppLangResource SettingsFullAccessWarningTitle}"
                    Content="{l:AppLangResource SettingsFullAccessWarning}"

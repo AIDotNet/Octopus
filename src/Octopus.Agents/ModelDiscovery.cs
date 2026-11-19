@@ -72,7 +72,9 @@ public sealed partial class ModelDiscovery : IModelDiscovery
     {
         var options = new List<AgentOption>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var byDash = string.Equals(parser, "idDashLabel", StringComparison.OrdinalIgnoreCase);
+        var separator = string.Equals(parser, "idDashLabel", StringComparison.OrdinalIgnoreCase) ? " - "
+            : string.Equals(parser, "idTabLabel", StringComparison.OrdinalIgnoreCase) ? "\t"
+            : null;
         foreach (var rawLine in AnsiRegex().Replace(output, "").Split('\n'))
         {
             var line = rawLine.Trim();
@@ -82,15 +84,15 @@ public sealed partial class ModelDiscovery : IModelDiscovery
             }
             string id;
             string? label = null;
-            if (byDash)
+            if (separator is not null)
             {
-                var split = line.IndexOf(" - ", StringComparison.Ordinal);
+                var split = line.IndexOf(separator, StringComparison.Ordinal);
                 if (split <= 0)
                 {
                     continue;
                 }
                 id = line[..split].Trim();
-                label = line[(split + 3)..].Trim();
+                label = line[(split + separator.Length)..].Trim();
             }
             else
             {

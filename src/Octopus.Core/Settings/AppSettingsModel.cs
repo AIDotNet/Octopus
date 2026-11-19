@@ -108,6 +108,11 @@ public sealed class AgentSettings
     public string? DefaultAgentId { get; set; }
     /// <summary>The permission level of every agent that has none of its own.</summary>
     public string DefaultPermission { get; set; } = PermissionModes.Default;
+    /// <summary>
+    /// Agents started here use the operating system's proxy, unless their environment already names one
+    /// (<c>HTTP_PROXY</c>, <c>HTTPS_PROXY</c> or <c>ALL_PROXY</c>). Off: agents start with the environment as it is.
+    /// </summary>
+    public bool UseSystemProxy { get; set; } = true;
     public Dictionary<string, AgentProfile> Profiles { get; set; } = [];
 
     /// <summary>The last expanded/collapsed choice for each agent on the settings page.</summary>

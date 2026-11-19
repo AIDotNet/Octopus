@@ -20,7 +20,8 @@ public sealed class ItemLaunchService(
     ISignalAttachPlanner? attach = null,
     ILoginEnvironment? login = null,
     RemoteFiles? remote = null,
-    Octopus.Ssh.ISshHostCatalog? hosts = null) : IItemLaunchService
+    Octopus.Ssh.ISshHostCatalog? hosts = null,
+    ISystemProxy? systemProxy = null) : IItemLaunchService
 {
     /// <summary>Points at an <c>octopus-signal</c> build when it is not next to the app (development).</summary>
     public const string ForwarderVariable = "OCTOPUS_SIGNAL_FORWARDER";
@@ -88,16 +89,35 @@ public sealed class ItemLaunchService(
         {
             command = compiler.Compile(request with { Signals = signal });
         }
-        return planner.PlanAgent(command, cwd, current.Terminal.Shell);
+        return planner.PlanAgent(UseSystemProxy(command, current.Agents.UseSystemProxy), cwd, current.Terminal.Shell);
     }
 
-    private SignalAttachment? Attach(AgentDefinition definition, ProjectItem item, string cwd, AgentCommand command)
+    /// <summary>
+    /// Adds the system proxy as <c>HTTP_PROXY</c>, <c>HTTPS_PROXY</c> and <c>NO_PROXY</c> (command-line agents read the
+    /// environment, not the system settings). A proxy the user already set, in the profile, the login environment or
+    /// the process environment, is left alone.
+    /// </summary>
+    private AgentCommand UseSystemProxy(AgentCommand command, bool enabled)
     {
-        if (definition.Signals is null || signals?.Endpoint is not { } endpoint || attach is null || ForwarderPath() is not { } forwarder)
+        if (!enabled || systemProxy?.Resolve() is not { } proxy)
         {
-            return null;
+            return command;
         }
-        // The login environment is read once at start-up; until then the process environment stands in.
+        var environment = BaseEnvironment();
+        foreach (var (key, value) in command.Environment) environment[key] = value;
+        var added = AgentProxyEnvironment.Compute(proxy, environment);
+        if (added.Count == 0)
+        {
+            return command;
+        }
+        var merged = new Dictionary<string, string>(command.Environment, StringComparer.Ordinal);
+        foreach (var (key, value) in added) merged[key] = value;
+        return command with { Environment = merged };
+    }
+
+    /// <summary>The login environment, read once at start-up; until then the process environment stands in.</summary>
+    private Dictionary<string, string> BaseEnvironment()
+    {
         var environment = new Dictionary<string, string>(StringComparer.Ordinal);
         if (login?.GetAsync() is { IsCompletedSuccessfully: true } ready)
         {
@@ -110,6 +130,16 @@ public sealed class ItemLaunchService(
                 if (entry.Key is string key && entry.Value is string value) environment[key] = value;
             }
         }
+        return environment;
+    }
+
+    private SignalAttachment? Attach(AgentDefinition definition, ProjectItem item, string cwd, AgentCommand command)
+    {
+        if (definition.Signals is null || signals?.Endpoint is not { } endpoint || attach is null || ForwarderPath() is not { } forwarder)
+        {
+            return null;
+        }
+        var environment = BaseEnvironment();
         foreach (var (key, value) in command.Environment) environment[key] = value;
         var plan = attach.Plan(new SignalAttachRequest(definition, item.Id, forwarder, endpoint, scanner.Find(definition.Id)?.Version, environment, cwd));
         return plan.Arguments.Count == 0 && plan.Environment.Count == 0 ? null : plan;

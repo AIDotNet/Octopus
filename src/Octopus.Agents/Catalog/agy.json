@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "id": "agy",
+  "name": "Antigravity CLI",
+  "icon": "agy",
+  "homepage": "https://antigravity.google/docs/getting-started",
+  "verified": false,
+  "detect": {
+    "executables": ["agy"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://antigravity.google/cli/install.sh | bash" },
+      { "kind": "script", "command": "irm https://antigravity.google/cli/install.ps1 | iex" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["--model", "{value}"],
+      "allowCustom": true,
+      "options": [],
+      "discover": { "args": ["models"], "parser": "idTabLabel" }
+    },
+    "effort": {
+      "label": "Effort",
+      "args": ["--effort", "{value}"],
+      "options": [
+        { "id": "low", "label": "Low" },
+        { "id": "medium", "label": "Medium" },
+        { "id": "high", "label": "High" },
+        { "id": "xhigh", "label": "Extra high" },
+        { "id": "max", "label": "Max" }
+      ]
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["--mode", "accept-edits"] },
+        "plan": { "args": ["--mode", "plan"] },
+        "auto": { "args": ["--mode", "auto"] },
+        "full": { "args": ["--dangerously-skip-permissions"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "flag", "args": ["-i", "{value}"] },
+    "resume": { "continueLatest": ["--continue"], "byId": ["--conversation", "{id}"] },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  }
+}

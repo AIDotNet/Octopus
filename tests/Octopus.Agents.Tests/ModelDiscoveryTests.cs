@@ -20,6 +20,14 @@ public class ModelDiscoveryTests
     }
 
     [Fact]
+    public void IdTabLabel_parser_reads_tab_separated_label()
+    {
+        var parsed = ModelDiscovery.Parse("gemini-3.8-flash-high\tGemini 3.8 Flash (High)\nclaude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)\nnote without tab\n", "idTabLabel");
+        Assert.Equal(["gemini-3.8-flash-high", "claude-sonnet-4-6"], parsed.Select(o => o.Id));
+        Assert.Equal("Claude Sonnet 4.6 (Thinking)", parsed[1].Label);
+    }
+
+    [Fact]
     public async Task Discover_runs_once_and_caches()
     {
         var runner = new FakeRunner((_, args, _) => new ProcessResult(0, "a/b\nc/d\n", "", false));

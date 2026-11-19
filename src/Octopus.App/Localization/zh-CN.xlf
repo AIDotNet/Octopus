@@ -131,6 +131,8 @@
     <unit id="SettingsAgentsSubtitle"><segment><source>{0} agents found on this machine. What you can configure for each one depends on what it supports.</source><target state="translated">已扫描到 {0} 个已安装的智能体。每个智能体能配置什么，取决于它自己支持什么。</target></segment></unit>
     <unit id="SettingsDefaultPermission"><segment><source>Default permission</source><target state="translated">默认权限</target></segment></unit>
     <unit id="SettingsDefaultPermissionHint"><segment><source>Used by every agent that has no permission of its own</source><target state="translated">未单独设置权限的智能体都使用它</target></segment></unit>
+    <unit id="SettingsUseSystemProxy"><segment><source>Use the system proxy</source><target state="translated">使用系统代理</target></segment></unit>
+    <unit id="SettingsUseSystemProxyHint"><segment><source>Agents started here go through the system proxy. A proxy already set in the agent's environment (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY) is kept. Takes effect on the next start.</source><target state="translated">在这里启动的智能体会走系统代理。智能体环境里已经设置的代理（HTTP_PROXY、HTTPS_PROXY、ALL_PROXY）会保留，不会被覆盖。下次启动时生效。</target></segment></unit>
     <unit id="SettingsFullAccessWarningTitle"><segment><source>Full access skips every approval</source><target state="translated">完全访问会跳过所有审批</target></segment></unit>
     <unit id="SettingsFullAccessWarning"><segment><source>Agents on this level run commands and change files without asking and without a sandbox. Use it only in projects you trust.</source><target state="translated">使用该档位的智能体会不经询问、不受沙箱限制地执行命令和修改文件，请只在可信的项目中使用。</target></segment></unit>
     <unit id="SettingsRescan"><segment><source>Scan again</source><target state="translated">重新扫描</target></segment></unit>
