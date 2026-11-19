@@ -2,6 +2,12 @@
 
 版本号规则与发布流程见 `.agents/skills/publish-release/SKILL.md`。每个版本的说明会同步到对应的 GitHub Release。
 
+## 1.0.1127 — 2026-11-19
+
+### 修复
+
+- **Antigravity CLI 没有图标**：智能体列表和标签页里的 Antigravity CLI 显示为字母方块，现在显示它的标志。
+
 ## 1.0.1126 — 2026-11-19
 
 ### 新功能
