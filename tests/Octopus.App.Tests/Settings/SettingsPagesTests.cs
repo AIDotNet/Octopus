@@ -126,6 +126,19 @@ public class SettingsPagesTests
     }
 
     [AvaloniaFact]
+    public void Agents_use_the_system_proxy_by_default_and_the_switch_is_saved()
+    {
+        var agents = AppHost.Get<AgentsSettingsViewModel>();
+        var settings = AppHost.Get<ISettingsStore>();
+        Assert.True(agents.UseSystemProxy);
+
+        agents.UseSystemProxy = false;
+
+        Assert.False(settings.Current.Agents.UseSystemProxy);
+        Assert.False(agents.UseSystemProxy);
+    }
+
+    [AvaloniaFact]
     public void General_settings_are_saved()
     {
         var general = AppHost.Get<GeneralSettingsViewModel>();

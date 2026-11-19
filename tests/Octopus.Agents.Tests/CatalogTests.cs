@@ -9,7 +9,7 @@ public class CatalogTests
         ["claude", "codex", "grok", "opencode", "cursor", "muse", "gemini", "copilot",
          "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi",
          "cline", "kilo", "auggie", "codebuddy", "qoder", "vibe", "pi", "openhands",
-         "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp"];
+         "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp", "agy"];
 
     [Fact]
     public void Builtins_load_in_fixed_order_without_errors()

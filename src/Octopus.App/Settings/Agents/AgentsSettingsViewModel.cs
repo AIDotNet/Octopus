@@ -86,6 +86,21 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         }
     }
 
+    /// <summary>Agents started here use the system proxy unless their environment already names one.</summary>
+    public bool UseSystemProxy
+    {
+        get => _settings.Current.Agents.UseSystemProxy;
+        set
+        {
+            if (value == UseSystemProxy)
+            {
+                return;
+            }
+            _settings.Update(s => s.Agents.UseSystemProxy = value);
+            OnPropertyChanged();
+        }
+    }
+
     public bool ShowFullWarning => GlobalPermission == PermissionModes.Full;
 
     public string RescanText => AppLangResources.Get(IsScanning ? AppLangResourceKind.SettingsScanning : AppLangResourceKind.SettingsRescan);

@@ -131,6 +131,8 @@
     <unit id="SettingsAgentsSubtitle"><segment><source>{0} agents found on this machine. What you can configure for each one depends on what it supports.</source></segment></unit>
     <unit id="SettingsDefaultPermission"><segment><source>Default permission</source></segment></unit>
     <unit id="SettingsDefaultPermissionHint"><segment><source>Used by every agent that has no permission of its own</source></segment></unit>
+    <unit id="SettingsUseSystemProxy"><segment><source>Use the system proxy</source></segment></unit>
+    <unit id="SettingsUseSystemProxyHint"><segment><source>Agents started here go through the system proxy. A proxy already set in the agent's environment (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY) is kept. Takes effect on the next start.</source></segment></unit>
     <unit id="SettingsFullAccessWarningTitle"><segment><source>Full access skips every approval</source></segment></unit>
     <unit id="SettingsFullAccessWarning"><segment><source>Agents on this level run commands and change files without asking and without a sandbox. Use it only in projects you trust.</source></segment></unit>
     <unit id="SettingsRescan"><segment><source>Scan again</source></segment></unit>

@@ -140,6 +140,8 @@ public enum AppLangResourceKind
     SettingsAgentsSubtitle,
     SettingsDefaultPermission,
     SettingsDefaultPermissionHint,
+    SettingsUseSystemProxy,
+    SettingsUseSystemProxyHint,
     SettingsFullAccessWarningTitle,
     SettingsFullAccessWarning,
     SettingsRescan,

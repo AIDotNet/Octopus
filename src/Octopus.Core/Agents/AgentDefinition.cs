@@ -107,7 +107,7 @@ public sealed class ModelDiscoverySpec
 {
     /// <summary>Arguments that make the CLI print its models, e.g. <c>["models"]</c>.</summary>
     public List<string> Args { get; set; } = [];
-    /// <summary><c>lines</c>: one id per line. <c>idDashLabel</c>: <c>id - label</c> per line.</summary>
+    /// <summary><c>lines</c>: one id per line. <c>idDashLabel</c>: <c>id - label</c> per line. <c>idTabLabel</c>: <c>id&lt;TAB&gt;label</c> per line.</summary>
     public string Parser { get; set; } = "lines";
 }
 
