@@ -43,7 +43,7 @@ public sealed class SshAliasTests : IDisposable
         Assert.Contains("User root", file);
         Assert.DoesNotContain("ServerAliveInterval", file);
         Assert.Contains("Match all", file);
-        Assert.Contains("Include \"" + Path.Combine(_home, ".ssh", "config") + "\"", file);
+        Assert.Contains("Include \"" + Path.Combine(_home, ".ssh", "config").Replace('\\', '/') + "\"", file);
         Assert.All(name, c => Assert.True(c < 128));
     }
 
