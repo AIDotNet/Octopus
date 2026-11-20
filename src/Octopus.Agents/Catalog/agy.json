@@ -46,5 +46,28 @@
     "resume": { "continueLatest": ["--continue"], "byId": ["--conversation", "{id}"] },
     "extraArgs": true,
     "env": { "allowCustom": true }
+  },
+  // agy has no per-session way to pass hooks (--settings rejects "hooks", there is no --plugin-dir), and reads them from
+  // hooks.json files only. Octopus keeps one entry named "octopus" in ~/.gemini/config/hooks.json; it runs the forwarder
+  // named by OCTOPUS_SIGNAL_FORWARDER, which only sessions started by Octopus have (anywhere else it just prints "{}").
+  // Checked against agy 1.5.12 with a plain hooks.json: SessionStart, PreInvocation and Stop all ran (a 429 included).
+  "signals": {
+    "minVersion": "1.5.12",
+    "attach": [
+      {
+        "env": { "OCTOPUS_SIGNAL_FORWARDER": "{forwarder}", "OCTOPUS_SIGNAL_HOOKS": "{signalHooks}" },
+        "verified": false,
+        "note": "hooks.json entry installed by Octopus; the session's environment tells it where the forwarder is. The three events fire from a hooks.json (agy 1.5.12); the forwarder end to end is still to be run"
+      }
+    ],
+    "channels": {
+      "session-start": { "via": "hook", "event": "SessionStart" },
+      "invocation": { "via": "hook", "event": "PreInvocation" },
+      "stop": { "via": "hook", "event": "Stop" }
+    },
+    "status": {
+      "working": ["invocation"],
+      "done": ["stop"]
+    }
   }
 }

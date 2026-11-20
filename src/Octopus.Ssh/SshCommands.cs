@@ -39,7 +39,7 @@ public static class SshCommands
 
     /// <summary>The argument list of one run.</summary>
     public static IReadOnlyList<string> Arguments(string host, string remoteCommand, IEnumerable<string> options) =>
-        [.. options, "--", host, remoteCommand];
+        SshAlias.Prepare([.. options, "--", host, remoteCommand]);
 
     /// <summary>A path on the host as a shell word: <c>~</c> and <c>~/</c> stay for the host's shell to expand, the rest is quoted.</summary>
     public static string RemotePath(string path) =>

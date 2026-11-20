@@ -12,7 +12,7 @@ public static class SshSharedCommand
 {
     /// <summary>Asks the master of the host whether it is there: exit code 0 and "Master running", or "Control socket connect" and 255.</summary>
     public static IReadOnlyList<string> Check(string host, IReadOnlyList<string> client) =>
-        [.. client, "-O", "check", "--", host];
+        SshAlias.Prepare([.. client, "-O", "check", "--", host]);
 
     /// <summary>
     /// Makes the master listen for the tunnel. Asked twice for the same forward it answers twice with success and keeps
@@ -20,14 +20,14 @@ public static class SshSharedCommand
     /// the host does not give).
     /// </summary>
     public static IReadOnlyList<string> Forward(string host, TunnelSpec spec, IReadOnlyList<string> client) =>
-        [.. client, "-O", "forward", SshTunnelCommand.Flag(spec), SshTunnelCommand.Forward(spec), "--", host];
+        SshAlias.Prepare([.. client, "-O", "forward", SshTunnelCommand.Flag(spec), SshTunnelCommand.Forward(spec), "--", host]);
 
     /// <summary>
     /// Takes the forward away, given the same spec it was added with. A forward that is not there is no error for the
     /// caller, but <b>the exit code is 0 either way</b>: "port not forwarded" is on the error output.
     /// </summary>
     public static IReadOnlyList<string> Cancel(string host, TunnelSpec spec, IReadOnlyList<string> client) =>
-        [.. client, "-O", "cancel", SshTunnelCommand.Flag(spec), SshTunnelCommand.Forward(spec), "--", host];
+        SshAlias.Prepare([.. client, "-O", "cancel", SshTunnelCommand.Flag(spec), SshTunnelCommand.Forward(spec), "--", host]);
 
     /// <summary>
     /// A session on the master that does nothing but wait: <c>cat</c> on the host, with its input held open by the
@@ -39,5 +39,5 @@ public static class SshSharedCommand
     /// connection of its own, which must not ask for anything.
     /// </summary>
     public static IReadOnlyList<string> Anchor(string host, IReadOnlyList<string> client) =>
-        [.. client, "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-T", "--", host, "cat"];
+        SshAlias.Prepare([.. client, "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-T", "--", host, "cat"]);
 }

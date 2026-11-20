@@ -26,6 +26,7 @@ trimmed to the artwork plus about 6% margin. Agents without a file here (and cus
 | kiro.json | Kiro | `@lobehub/icons-static-svg`, `icons/kiro-color.svg` | MIT (package) |
 | goose.json | Goose | `@lobehub/icons-static-svg`, `icons/goose.svg` (mono) | MIT (package) |
 | kimi.json | Kimi CLI | `@lobehub/icons-static-svg`, `icons/kimi-color.svg` | MIT (package) |
+| agy.json | Antigravity CLI | `@lobehub/icons-static-svg` 1.102.0, `icons/antigravity.svg` (mono; the color version relies on blur filters and cannot be expressed as plain paths) | MIT (package) |
 | (none) | Crush | no reliable SVG found (the repository only ships raster art) | letter tile fallback |
 
 All logos are trademarks of their respective owners and are used here only to identify the corresponding product.

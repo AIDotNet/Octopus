@@ -50,7 +50,7 @@ public static class SshTunnelCommand
     /// <c>ExitOnForwardFailure</c> makes it end when the forward cannot be made, instead of staying up without it.
     /// </summary>
     public static IReadOnlyList<string> Arguments(string host, TunnelSpec spec) =>
-    [
+    SshAlias.Prepare([
         "-N",
         "-o", "ExitOnForwardFailure=yes",
         .. SshCommands.Unattended,
@@ -61,7 +61,7 @@ public static class SshTunnelCommand
         Flag(spec),
         Forward(spec),
         "--", host,
-    ];
+    ]);
 
     /// <summary><c>-L</c> for a local tunnel, <c>-R</c> for a remote one.</summary>
     public static string Flag(TunnelSpec spec) => spec.Kind == TunnelKind.Local ? "-L" : "-R";
