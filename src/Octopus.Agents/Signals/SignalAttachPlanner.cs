@@ -132,7 +132,7 @@ public sealed class SignalAttachPlanner : ISignalAttachPlanner
     private sealed class Context(SignalAttachPlanner planner, SignalAttachRequest request)
     {
         private static readonly string[] Placeholders =
-            ["{signalSettings}", "{signalPluginDir}", "{signalConfig}", "{signalNotify}", "{forwarder}"];
+            ["{signalSettings}", "{signalPluginDir}", "{signalConfig}", "{signalNotify}", "{signalHooks}", "{forwarder}"];
 
         private readonly AgentDefinition _definition = request.Definition;
         private readonly AgentSignals _signals = request.Definition.Signals!;
@@ -252,6 +252,7 @@ public sealed class SignalAttachPlanner : ISignalAttachPlanner
                 _ => null,
             },
             "{signalNotify}" => Notify(),
+            "{signalHooks}" => Dialect == "agy" ? AgyHooks() : null,
             _ => null,
         };
 
@@ -340,6 +341,50 @@ public sealed class SignalAttachPlanner : ISignalAttachPlanner
                 return null;
             }
             return Path.GetDirectoryName(Path.GetDirectoryName(hooksPath));
+        }
+
+        /// <summary>
+        /// agy reads its hooks from <c>hooks.json</c> files only, so Octopus keeps an entry of its own in the shared one
+        /// (<c>~/.gemini/config/hooks.json</c>). The entry's commands name no path: they run the forwarder that the
+        /// session's <c>OCTOPUS_SIGNAL_FORWARDER</c> points at, and print <c>{}</c> in a session that is not Octopus'. The
+        /// user's own entries are kept; a file that cannot be read as a JSON object is left alone. Returns the file's path.
+        /// </summary>
+        private string? AgyHooks()
+        {
+            var hooks = new List<GeneratedHook>();
+            foreach (var (name, channel) in _signals.Channels.OrderBy(c => c.Key, StringComparer.Ordinal))
+            {
+                if (channel.Via == SignalVia.Hook && !string.IsNullOrEmpty(channel.Event))
+                {
+                    hooks.Add(new GeneratedHook(channel.Event, SignalAttachContent.AgyHookCommand(_definition.Id, name, _windows)));
+                }
+            }
+            if (hooks.Count == 0)
+            {
+                return null;
+            }
+            var entry = SignalAttachContent.AgyHookEntry(hooks, HookTimeoutSeconds);
+            var path = Path.Combine(SignalAccounts.HomeOf(request.AgentEnvironment), ".gemini", "config", "hooks.json");
+            try
+            {
+                var existing = File.Exists(path) ? File.ReadAllText(path) : null;
+                if (SignalAttachContent.MergeAgyHooks(existing, entry) is not { } merged)
+                {
+                    return null;
+                }
+                if (merged != existing)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                    File.WriteAllText(temp, merged, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    File.Move(temp, path, overwrite: true);
+                }
+                return path;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
         }
 
         private string? GrokOverlay()

@@ -6,10 +6,10 @@ namespace Octopus.Agents.Tests;
 
 public class SignalSchemaTests
 {
-    private static readonly string[] SignalAgents = ["claude", "codex", "grok", "cursor", "opencode"];
+    private static readonly string[] SignalAgents = ["claude", "codex", "grok", "cursor", "opencode", "agy"];
 
     [Fact]
-    public void The_five_agents_declare_signals_and_the_others_do_not()
+    public void The_signal_agents_declare_signals_and_the_others_do_not()
     {
         foreach (var definition in Builtins.All.Definitions)
         {

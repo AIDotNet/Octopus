@@ -57,6 +57,70 @@ public sealed class SignalAttachPlannerTests : IDisposable
         Assert.False(Directory.Exists(AttachDirectory));
     }
 
+    // ---- Antigravity (agy) ----
+
+    private string AgyHooksPath => Path.Combine(_home, ".gemini", "config", "hooks.json");
+
+    [Fact]
+    public void Agy_gets_an_octopus_entry_in_the_shared_hooks_file_and_the_forwarder_in_its_environment()
+    {
+        var attachment = Plan(Builtins.Get("agy"), "1.5.12");
+
+        Assert.Empty(attachment.Arguments);
+        Assert.Equal(Forwarder, attachment.Environment["OCTOPUS_SIGNAL_FORWARDER"]);
+        Assert.Equal(AgyHooksPath, attachment.Environment["OCTOPUS_SIGNAL_HOOKS"]);
+        Assert.Equal("tok123", attachment.Environment[SignalAttachPlanner.TokenVariable]);
+
+        var entry = ReadJson(AgyHooksPath).GetProperty("octopus");
+        foreach (var (eventName, channel) in new[] { ("SessionStart", "session-start"), ("PreInvocation", "invocation"), ("Stop", "stop") })
+        {
+            var handler = entry.GetProperty(eventName)[0];
+            Assert.Equal("command", handler.GetProperty("type").GetString());
+            var command = handler.GetProperty("command").GetString()!;
+            Assert.Contains($"--agent agy --channel {channel}", command);
+            // No path in it: the file stays right when the app moves.
+            Assert.DoesNotContain(Forwarder, command);
+            Assert.DoesNotContain("tok123", command);
+        }
+    }
+
+    [Fact]
+    public void Agy_keeps_the_users_own_hooks_and_rewrites_nothing_when_the_entry_is_already_there()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(AgyHooksPath)!);
+        File.WriteAllText(AgyHooksPath, "{\"lint\":{\"PostToolUse\":[{\"matcher\":\"run_command\",\"hooks\":[{\"command\":\"./lint.sh\"}]}]}}");
+
+        Plan(Builtins.Get("agy"), "1.5.12");
+        var first = File.ReadAllText(AgyHooksPath);
+        var root = ReadJson(AgyHooksPath);
+        Assert.Equal("./lint.sh", root.GetProperty("lint").GetProperty("PostToolUse")[0].GetProperty("hooks")[0].GetProperty("command").GetString());
+        Assert.True(root.TryGetProperty("octopus", out _));
+
+        var stamp = File.GetLastWriteTimeUtc(AgyHooksPath);
+        Thread.Sleep(20);
+        Plan(Builtins.Get("agy"), "1.5.12");
+        Assert.Equal(first, File.ReadAllText(AgyHooksPath));
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(AgyHooksPath));
+    }
+
+    [Fact]
+    public void Agy_leaves_a_hooks_file_it_cannot_read_alone_and_attaches_nothing()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(AgyHooksPath)!);
+        File.WriteAllText(AgyHooksPath, "{ not json");
+
+        Assert.True(Plan(Builtins.Get("agy"), "1.5.12").IsEmpty);
+        Assert.Equal("{ not json", File.ReadAllText(AgyHooksPath));
+    }
+
+    [Fact]
+    public void Agy_is_not_attached_below_the_checked_version_or_when_disabled()
+    {
+        Assert.True(Plan(Builtins.Get("agy"), "1.5.11").IsEmpty);
+        Assert.True(Plan(Builtins.Get("agy"), "1.5.12", enabled: false).IsEmpty);
+        Assert.False(File.Exists(AgyHooksPath));
+    }
+
     // ---- Claude ----
 
     [Fact]

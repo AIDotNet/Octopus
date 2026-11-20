@@ -2,10 +2,15 @@
 
 版本号规则与发布流程见 `.agents/skills/publish-release/SKILL.md`。每个版本的说明会同步到对应的 GitHub Release。
 
-## 1.0.1127 — 2026-11-19
+## 1.0.1127 — 2026-11-20
+
+### 新功能
+
+- **Antigravity CLI 显示运行状态**：在 Octopus 里启动的 `agy` 会话现在会像 Claude Code 一样，在侧栏和标签页上显示“运行中 / 已完成”。agy 只能从 `hooks.json` 文件读取 hooks，没有按会话传入的方式，所以 Octopus 会在 `~/.gemini/config/hooks.json` 里维护一个名为 `octopus` 的条目（只增改这一项，你自己的 hooks 保持原样；文件不是合法 JSON 时不会改动，也就不显示状态）。这个条目只在 Octopus 启动的会话里转发事件，在别处启动 `agy` 时什么也不做。需要 agy 1.5.12 或更高版本，下次启动 agy 时生效。
 
 ### 修复
 
+- **SSH 主机别名含中文时连接失败**：`~/.ssh/config` 里的别名是中文（例如 `Host 香港主服务器`）时，终端、文件树和隧道都会以“连接在完成前结束（退出码 255）”失败，终端里能看到 `hostname contains invalid characters`。原因是 OpenSSH 在读配置之前就拒绝命令行里的非 ASCII 主机名。现在 Octopus 会为这类别名生成一份 ASCII 名称的配置（放在 `~/.octopus/ssh/`，沿用别名下的全部选项，再引入你原来的 `~/.ssh/config`）再去连接。注意：Mosh 主机暂不支持中文别名。
 - **Antigravity CLI 没有图标**：智能体列表和标签页里的 Antigravity CLI 显示为字母方块，现在显示它的标志。
 
 ## 1.0.1126 — 2026-11-19

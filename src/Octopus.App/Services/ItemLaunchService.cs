@@ -53,7 +53,7 @@ public sealed class ItemLaunchService(
             {
                 Octopus.Ssh.SshHostProtocol.Mosh => planner.PlanMoshShell(host, cwd),
                 Octopus.Ssh.SshHostProtocol.Telnet => planner.PlanTelnet(known.HostName, known.Port),
-                _ => planner.PlanRemoteShell(host, cwd, current.Terminal.Shell, remote is null ? null : [.. remote.TerminalOptions, .. remote.StartConnectLog(item.Id)]),
+                _ => WithAsciiAlias(planner.PlanRemoteShell(host, cwd, current.Terminal.Shell, remote is null ? null : [.. remote.TerminalOptions, .. remote.StartConnectLog(item.Id)])),
             };
         }
 
@@ -91,6 +91,9 @@ public sealed class ItemLaunchService(
         }
         return planner.PlanAgent(UseSystemProxy(command, current.Agents.UseSystemProxy), cwd, current.Terminal.Shell);
     }
+
+    /// <summary>ssh does not take an alias like <c>香港主服务器</c> on its command line; it is given an ASCII name for it (see <see cref="Octopus.Ssh.SshAlias"/>).</summary>
+    private static LaunchSpec WithAsciiAlias(LaunchSpec spec) => spec with { Arguments = [.. Octopus.Ssh.SshAlias.Prepare(spec.Arguments)] };
 
     /// <summary>
     /// Adds the system proxy as <c>HTTP_PROXY</c>, <c>HTTPS_PROXY</c> and <c>NO_PROXY</c> (command-line agents read the
