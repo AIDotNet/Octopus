@@ -1,3 +1,4 @@
+using Octopus.Agents.Signals;
 using Octopus.Core.Agents;
 
 namespace Octopus.Agents.Tests;
@@ -181,6 +182,16 @@ public class CompilerTests
         Assert.Equal(["--", "hello"], Run("hello").Arguments);
         Assert.Empty(Run("  \n ").Arguments);
         Assert.Empty(Run(null).Arguments);
+    }
+
+    [Fact]
+    public void CodeBuddy_prompt_needs_the_separator_because_plugin_dir_takes_several_directories()
+    {
+        // "codebuddy --plugin-dir <dirs...>" would take a bare prompt after it as another directory (2.185.0).
+        var signals = new SignalAttachment(["--plugin-dir", "/plugins/x"], new Dictionary<string, string>());
+        var cmd = Compiler.Compile(new AgentCompileRequest(
+            Builtins.Get("codebuddy"), new AgentProfile(), new AgentLaunchOptions { Prompt = "hello" }, PermissionModes.Default, null, signals));
+        Assert.Equal(["--plugin-dir", "/plugins/x", "--", "hello"], cmd.Arguments);
     }
 
     [Fact]

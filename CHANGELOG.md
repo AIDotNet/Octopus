@@ -2,6 +2,12 @@
 
 版本号规则与发布流程见 `.agents/skills/publish-release/SKILL.md`。每个版本的说明会同步到对应的 GitHub Release。
 
+## 1.0.1128 — 2026-11-20
+
+### 修复
+
+- **CodeBuddy Code 不显示运行状态**：用 `/goal` 让它自己跑任务时，侧栏和标签页一直没有“运行中”的转圈，看不出它还在干活。CodeBuddy 在 goal 模式下会把终端标题一直停在静止的记号上（这里没有轮转的帧），Octopus 靠标题就判断不出它是否在运行。现在像 Claude Code 那样从 hooks 读取运行状态：启动 CodeBuddy 时用 `--plugin-dir` 加载一个只有 hooks 的插件（不改你的配置文件），提交提示词和每次工具调用都算“运行中”，一轮结束算“已完成”，权限询问算“等待你”。需要 CodeBuddy Code 2.185.0 或更高版本，下次启动 CodeBuddy 时生效。
+
 ## 1.0.1127 — 2026-11-20
 
 ### 新功能

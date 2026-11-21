@@ -27,11 +27,45 @@
       }
     },
     "prompt": {
-      "mode": "positional"
+      "mode": "positional",
+      // --plugin-dir takes several directories ("<dirs...>"), so it would take a prompt that follows it as one too;
+      // "--" keeps the prompt an operand. Checked against 2.185.0.
+      "separator": true
     },
     "resume": {
       "continueLatest": ["--continue"]
     },
     "extraArgs": true
+  },
+  // CodeBuddy Code is a Claude Code compatible CLI: hooks and plugins use its formats, and --plugin-dir loads a
+  // plugin of ours whose hooks report the run state. Checked against 2.185.0 on Windows: a plugin written as
+  // .claude-plugin/plugin.json + hooks/hooks.json ran UserPromptSubmit, PreToolUse, Notification and Stop, with the
+  // commands quoted for a POSIX shell. The terminal title is not enough on its own: in /goal mode the CLI keeps
+  // writing the idle mark while the goal's turns run, so Octopus would show no loading state.
+  "signals": {
+    "minVersion": "2.185.0",
+    "dialect": "claude",
+    "attach": [
+      {
+        "args": ["--plugin-dir", "{signalPluginDir}"],
+        "verified": false,
+        "note": "a .claude-plugin/plugin.json with hooks/hooks.json under --plugin-dir; run by hand in 2.185.0 with the hook commands quoted for a POSIX shell, also from a path with a space: UserPromptSubmit, PreToolUse and Stop all fired. Launching it from Octopus is still to be run"
+      }
+    ],
+    "channels": {
+      "prompt-submit": { "via": "hook", "event": "UserPromptSubmit" },
+      // A goal's turns are not prompts: the tool calls are what keeps the state on while it works.
+      "tool-call": { "via": "hook", "event": "PreToolUse" },
+      // Notification also fires for an authentication refresh, which is no reason to ask for the user.
+      "permission-request": { "via": "hook", "event": "PermissionRequest" },
+      "stop": { "via": "hook", "event": "Stop" },
+      // The end of a whole run: a /goal keeps going after a turn's Stop, so this is the one that ends it.
+      "final-stop": { "via": "hook", "event": "FinalStop" }
+    },
+    "status": {
+      "working": ["prompt-submit", "tool-call"],
+      "waiting": ["permission-request"],
+      "done": ["stop", "final-stop"]
+    }
   }
 }

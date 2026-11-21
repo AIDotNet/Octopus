@@ -188,6 +188,29 @@ public sealed class SignalAttachPlannerTests : IDisposable
     }
 
     [Fact]
+    public void CodeBuddy_gets_only_a_plugin_directory_with_a_hook_for_each_of_its_channels()
+    {
+        var codebuddy = Builtins.Get("codebuddy");
+        Assert.True(Plan(codebuddy, "2.184.9").IsEmpty);
+
+        var attachment = Plan(codebuddy, "2.185.0");
+        Assert.Equal(2, attachment.Arguments.Count);
+        Assert.Equal("--plugin-dir", attachment.Arguments[0]);
+        Assert.StartsWith(AttachDirectory, attachment.Arguments[1]);
+        Assert.False(attachment.Environment.ContainsKey(SignalAttachPlanner.AccountVariable));
+
+        var hooks = ReadJson(Path.Combine(attachment.Arguments[1], "hooks", "hooks.json")).GetProperty("hooks");
+        Assert.Equal(
+            ["FinalStop", "PermissionRequest", "PreToolUse", "Stop", "UserPromptSubmit"],
+            hooks.EnumerateObject().Select(p => p.Name).Order().ToList());
+
+        // Every tool call: a goal's turns are not prompts, so this is what shows it is working.
+        var toolCall = hooks.GetProperty("PreToolUse").EnumerateArray().Single();
+        Assert.False(toolCall.TryGetProperty("matcher", out _));
+        Assert.Equal($"{Forwarder} hook --agent codebuddy --channel tool-call", toolCall.GetProperty("hooks")[0].GetProperty("command").GetString());
+    }
+
+    [Fact]
     public void Forwarder_paths_with_spaces_are_quoted_for_the_shell()
     {
         var attachment = _planner.Plan(new SignalAttachRequest(Builtins.Get("claude"), "i", "/Users/x/My Apps/octo's/octopus-signal", Endpoint, "2.1.322"));

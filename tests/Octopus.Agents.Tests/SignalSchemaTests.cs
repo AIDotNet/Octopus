@@ -6,7 +6,7 @@ namespace Octopus.Agents.Tests;
 
 public class SignalSchemaTests
 {
-    private static readonly string[] SignalAgents = ["claude", "codex", "grok", "cursor", "opencode", "agy"];
+    private static readonly string[] SignalAgents = ["claude", "codebuddy", "codex", "grok", "cursor", "opencode", "agy"];
 
     [Fact]
     public void The_signal_agents_declare_signals_and_the_others_do_not()
@@ -70,6 +70,23 @@ public class SignalSchemaTests
         Assert.Equal("PermissionRequest", signals.Channels["permission-request"].Event);
         Assert.Equal(["permission-request", "notification"], signals.Status!.Waiting);
         Assert.Equal([".credentials.json"], signals.CredentialFiles);
+    }
+
+    [Fact]
+    public void CodeBuddy_reports_its_run_state_through_claude_style_plugin_hooks()
+    {
+        var signals = Builtins.Get("codebuddy").Signals!;
+        Assert.Equal("2.185.0", signals.MinVersion);
+        Assert.Equal("claude", signals.Dialect);
+        Assert.Equal(["--plugin-dir", "{signalPluginDir}"], signals.Attach.Single().Args);
+        Assert.Null(signals.Account);
+        Assert.Equal("PreToolUse", signals.Channels["tool-call"].Event);
+        // A goal's turns are not prompts: the tool calls are what keeps the loading state on while it works.
+        Assert.Equal(["prompt-submit", "tool-call"], signals.Status!.Working);
+        Assert.Equal(["permission-request"], signals.Status.Waiting);
+        Assert.Equal(["stop", "final-stop"], signals.Status.Done);
+        // Notification also fires for an authentication refresh, which must not ask for the user.
+        Assert.DoesNotContain("notification", signals.Channels.Keys);
     }
 
     [Fact]
