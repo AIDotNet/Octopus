@@ -862,6 +862,15 @@
     <unit id="AccountLoginDialogDescription"><segment><source>Complete the sign-in flow in the terminal below. This dialog closes automatically when the login command finishes, or click Done once signed in.</source></segment></unit>
     <unit id="AccountLoginAgyDescription"><segment><source>Complete the sign-in flow in the terminal below, then click Done (or exit the CLI) so Octopus can save the new keychain snapshot.</source></segment></unit>
     <unit id="AccountLoginDone"><segment><source>Done</source></segment></unit>
+    <unit id="AccountLoginStatusRunning"><segment><source>Waiting for sign-in…</source></segment></unit>
+    <unit id="AccountLoginStatusSuccess"><segment><source>Sign-in command finished</source></segment></unit>
+    <unit id="AccountLoginStatusExited"><segment><source>Command exited (code {0})</source></segment></unit>
+    <unit id="AccountLoginOpenLink"><segment><source>Open sign-in link</source></segment></unit>
+    <unit id="AccountLoginCopyLink"><segment><source>Copy sign-in link</source></segment></unit>
+    <unit id="AccountLoginCopiedLink"><segment><source>Link copied</source></segment></unit>
+    <unit id="AccountLoginRestart"><segment><source>Restart login command</source></segment></unit>
+    <unit id="AccountLoginRetry"><segment><source>Retry</source></segment></unit>
+    <unit id="AccountLoginTerminalHint"><segment><source>{0}-click links to open · Type or paste directly in the terminal</source></segment></unit>
     <unit id="AccountSetDefault"><segment><source>Set default</source></segment></unit>
     <unit id="AccountClearDefault"><segment><source>Use default</source></segment></unit>
     <unit id="AccountRename"><segment><source>Rename</source></segment></unit>

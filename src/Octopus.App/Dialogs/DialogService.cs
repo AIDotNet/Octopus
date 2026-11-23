@@ -1,7 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Threading;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Remote;
@@ -10,6 +12,7 @@ using Octopus.Core.Projects;
 using Octopus.FileSystem;
 using Octopus.Ssh;
 using TKCode.Arc;
+using TKCode.Arc.DesignTokens;
 
 namespace Octopus.App.Dialogs;
 
@@ -328,6 +331,33 @@ public sealed class DialogService(
         return choice;
     }
 
+    /// <summary>Maximum panel width of the interactive account login dialog (leaves room for 80+ terminal columns).</summary>
+    internal const double AccountLoginDialogMaxWidth = 760.0;
+
+    internal static Dialog CreateAccountLoginDialog(string title, string description, AccountLoginTerminalView view)
+    {
+        var dialog = new Dialog
+        {
+            Size = ControlSize.Large,
+            Title = title,
+            Description = description,
+            Content = view,
+            Actions = Dialog.BuildActions(
+            [
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.AccountLoginDone), true, ButtonVariant.Primary),
+            ]),
+            // Switching to the browser for OAuth and clicking back on the window, or pressing Esc inside a CLI TUI,
+            // must not accidentally abort the in-progress login session.
+            CloseOnOutsidePress = false,
+            CloseOnEscape = false,
+        };
+        dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthLG)] = AccountLoginDialogMaxWidth;
+        dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.ActionsMargin)] = new Thickness(0, 16, 0, 0);
+        dialog.Opened += (_, _) => Dispatcher.UIThread.Post(view.FocusTerminal, DispatcherPriority.Input);
+        return dialog;
+    }
+
     public async Task<bool> RunAccountLoginAsync(string title, string description, Octopus.Core.Terminals.LaunchSpec spec, bool autoCloseOnSuccess = true)
     {
         if (windows.Window is null)
@@ -340,25 +370,14 @@ public sealed class DialogService(
         var view = new AccountLoginTerminalView(spec, factory, settings);
         var completedByExit = false;
 
-        var dialog = new Dialog
-        {
-            Size = ControlSize.Large,
-            Title = title,
-            Description = description,
-            Content = view,
-            Actions = Dialog.BuildActions(
-            [
-                new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
-                new DialogAction(AppLangResources.Get(AppLangResourceKind.AccountLoginDone), true, ButtonVariant.Primary),
-            ]),
-        };
+        var dialog = CreateAccountLoginDialog(title, description, view);
 
         view.Exited += (_, code) =>
         {
             if (autoCloseOnSuccess && code == 0)
             {
                 completedByExit = true;
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => dialog.Close(true));
+                Dispatcher.UIThread.Post(() => dialog.Close(true));
             }
         };
 

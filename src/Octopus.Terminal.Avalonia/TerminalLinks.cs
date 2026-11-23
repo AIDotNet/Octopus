@@ -180,6 +180,70 @@ public static partial class TerminalLinks
     }
 
     /// <summary>
+    /// Extracts all distinct http/https URLs visible in <paramref name="frame"/>, preserving appearance order and
+    /// rejoining URLs that soft-wrapped across consecutive rows. Also includes any OSC 8 web hyperlinks.
+    /// </summary>
+    public static IReadOnlyList<string> ExtractWebUrls(FrameSnapshot frame)
+    {
+        var rows = new LinkRow?[frame.Rows.Length];
+        return ExtractWebUrls(frame.Rows.Length, i => rows[i] ??= RowOf(frame.Rows[i]), frame.Links);
+    }
+
+    /// <summary>
+    /// Extracts all distinct http/https URLs across <paramref name="rowCount"/> screen rows, joining soft-wrapped
+    /// lines before matching, followed by any valid web URLs in <paramref name="osc8Links"/>.
+    /// </summary>
+    public static IReadOnlyList<string> ExtractWebUrls(int rowCount, Func<int, LinkRow> getRow, IReadOnlyList<string>? osc8Links = null)
+    {
+        var urls = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var line = new StringBuilder();
+        var r = 0;
+        while (r < rowCount)
+        {
+            var first = r;
+            var last = r;
+            while (last + 1 < rowCount && (getRow(last).WrapsToNext || getRow(last + 1).IsContinuation)) last++;
+
+            line.Clear();
+            for (var i = first; i <= last; i++)
+            {
+                var cells = getRow(i).Cells;
+                for (var c = 0; c < cells.Length; c++)
+                {
+                    var cell = cells[c];
+                    if (cell is { Length: 0 }) continue;
+                    line.Append(cell ?? " ");
+                }
+            }
+
+            foreach (Match match in UrlPattern().Matches(line.ToString()))
+            {
+                var url = TrimTrailing(match.Value);
+                if (IsWebUrl(url) && seen.Add(url))
+                {
+                    urls.Add(url);
+                }
+            }
+
+            r = last + 1;
+        }
+
+        if (osc8Links is not null)
+        {
+            foreach (var link in osc8Links)
+            {
+                if (IsWebUrl(link) && seen.Add(link))
+                {
+                    urls.Add(link);
+                }
+            }
+        }
+
+        return urls;
+    }
+
+    /// <summary>
     /// The link under a cell of <paramref name="frame"/>: the program's own hyperlink (OSC 8) when the cell has one that
     /// can be opened, otherwise a link or path found in the text.
     /// </summary>

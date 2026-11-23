@@ -218,6 +218,9 @@ public sealed class TerminalControl : Decorator
     /// <summary>The program rang the bell.</summary>
     public event EventHandler? Bell;
 
+    /// <summary>A new frame was rendered in the terminal viewport.</summary>
+    public event EventHandler? FrameUpdated;
+
     /// <summary>
     /// Runs <paramref name="spec"/>. Safe to call before the control has been laid out: the process starts once the
     /// control has a size, because a pty needs its initial rows and columns. A start failure is shown in the control.
@@ -342,6 +345,10 @@ public sealed class TerminalControl : Decorator
 
     /// <summary>Screen and scrollback as plain text. Empty when nothing runs.</summary>
     public string ReadScreenText() => _session?.ReadText() ?? string.Empty;
+
+    /// <summary>All distinct http/https URLs visible in the current viewport (rejoining soft-wrapped URLs).</summary>
+    public IReadOnlyList<string> ExtractVisibleWebUrls() =>
+        _frame is { } frame ? TerminalLinks.ExtractWebUrls(frame) : [];
 
     /// <summary>The last non-empty lines currently rendered in the viewport, without exporting scrollback history.</summary>
     public string ReadVisibleTailText(int maxLines = 16)
@@ -604,6 +611,7 @@ public sealed class TerminalControl : Decorator
                 SearchChanged?.Invoke(this, EventArgs.Empty);
             }
         }
+        FrameUpdated?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnTitle(string title)

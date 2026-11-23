@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:term="using:Octopus.Terminal.Avalonia"
+             x:Class="Octopus.App.Dialogs.AccountLoginTerminalView"
+             HorizontalAlignment="Stretch">
+    <StackPanel Spacing="8" HorizontalAlignment="Stretch">
+        <Border BorderBrush="{arc:ArcDesignTokenResource Border}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                ClipToBounds="True"
+                HorizontalAlignment="Stretch">
+            <Grid RowDefinitions="Auto,*">
+                <!-- Status and quick actions bar above the embedded terminal. -->
+                <Border Grid.Row="0"
+                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                        BorderThickness="0,0,0,1"
+                        Padding="10,6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <arc:ArcSpinner x:Name="RunningSpinner"
+                                            Width="13" Height="13"
+                                            VerticalAlignment="Center"
+                                            Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                            <lucide:LucideIcon x:Name="SuccessIcon"
+                                               Kind="CircleCheck" Size="14"
+                                               VerticalAlignment="Center"
+                                               Foreground="{arc:ArcDesignTokenResource Success}"
+                                               IsVisible="False" />
+                            <lucide:LucideIcon x:Name="ErrorIcon"
+                                               Kind="CircleAlert" Size="14"
+                                               VerticalAlignment="Center"
+                                               Foreground="{arc:ArcDesignTokenResource Danger}"
+                                               IsVisible="False" />
+                            <TextBlock x:Name="StatusText"
+                                       Classes="caption"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <StackPanel x:Name="AuthLinkActions"
+                                        Orientation="Horizontal"
+                                        Spacing="4"
+                                        VerticalAlignment="Center"
+                                        IsVisible="False">
+                                <arc:Button x:Name="OpenLinkButton"
+                                            Variant="Secondary"
+                                            Size="Small"
+                                            VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <lucide:LucideIcon Kind="ExternalLink" Size="13" VerticalAlignment="Center" />
+                                        <TextBlock Text="{l:AppLangResource AccountLoginOpenLink}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </arc:Button>
+                                <arc:Button x:Name="CopyLinkButton"
+                                            Classes="icon"
+                                            Variant="Ghost"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="{l:AppLangResource AccountLoginCopyLink}"
+                                            arc:Tooltip.Tip="{l:AppLangResource AccountLoginCopyLink}">
+                                    <Panel>
+                                        <lucide:LucideIcon x:Name="CopyLinkIcon" Kind="Copy" Size="13" />
+                                        <lucide:LucideIcon x:Name="CopiedLinkIcon" Kind="Check" Size="13"
+                                                           Foreground="{arc:ArcDesignTokenResource Success}"
+                                                           IsVisible="False" />
+                                    </Panel>
+                                </arc:Button>
+                            </StackPanel>
+
+                            <arc:Button x:Name="RestartButton"
+                                        Classes="icon"
+                                        Variant="Ghost"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="{l:AppLangResource AccountLoginRestart}"
+                                        arc:Tooltip.Tip="{l:AppLangResource AccountLoginRestart}">
+                                <lucide:LucideIcon Kind="RotateCw" Size="13" />
+                            </arc:Button>
+                            <arc:Button x:Name="RetryButton"
+                                        Variant="Secondary"
+                                        Size="Small"
+                                        VerticalAlignment="Center"
+                                        IsVisible="False">
+                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                    <lucide:LucideIcon Kind="RotateCw" Size="13" VerticalAlignment="Center" />
+                                    <TextBlock Text="{l:AppLangResource AccountLoginRetry}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </arc:Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Real interactive terminal: stretches cleanly to the dialog's inner width so lines never clip. -->
+                <term:TerminalControl x:Name="Terminal"
+                                      Grid.Row="1"
+                                      Height="360"
+                                      HorizontalAlignment="Stretch"
+                                      ConfirmMultilinePaste="False"
+                                      PathLinksEnabled="False" />
+            </Grid>
+        </Border>
+
+        <TextBlock x:Name="TerminalHintText"
+                   Classes="hint"
+                   TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

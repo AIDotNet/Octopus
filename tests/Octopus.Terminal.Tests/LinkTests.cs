@@ -155,4 +155,27 @@ public class LinkTests
         Assert.False(hit!.IsPath);
         Assert.Equal("https://example.com/a/b.html", hit.Url);
     }
+
+    [Fact]
+    public void Extracts_all_distinct_web_urls_including_soft_wrapped_and_osc8_links()
+    {
+        string[] rows =
+        [
+            "Starting local login server on http://localhost:1455.",
+            "Navigate to:",
+            "https://auth.openai.com/oauth/authorize?client_id=app_123\\",
+            "&state=abc&scope=openid.",
+            "Also https://auth.openai.com/oauth/authorize?client_id=app_123\\",
+            "&state=abc&scope=openid",
+        ];
+        var (count, get) = Screen(rows);
+        var urls = TerminalLinks.ExtractWebUrls(count, get, ["https://example.com/osc8", "file:///tmp/x"]);
+        Assert.Equal(
+            [
+                "http://localhost:1455",
+                "https://auth.openai.com/oauth/authorize?client_id=app_123&state=abc&scope=openid",
+                "https://example.com/osc8",
+            ],
+            urls);
+    }
 }
