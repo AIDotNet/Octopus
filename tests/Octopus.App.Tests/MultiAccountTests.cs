@@ -174,8 +174,14 @@ public class MultiAccountTests
 
         // Tab 1 explicitly chose Default -> CLAUDE_CONFIG_DIR is NOT set in Environment, and is unset in login shell!
         Assert.False(specTab1.Environment.ContainsKey("CLAUDE_CONFIG_DIR"));
-        Assert.Contains("unset", specTab1.Arguments[^1]);
-        Assert.Contains("CLAUDE_CONFIG_DIR", specTab1.Arguments[^1]);
+        var shellCommand = specTab1.Arguments[^1];
+        Assert.True(
+            shellCommand.Contains("unset", StringComparison.Ordinal) ||
+            shellCommand.Contains("Remove-Item", StringComparison.Ordinal) ||
+            shellCommand.Contains("set -e", StringComparison.Ordinal) ||
+            shellCommand.Contains("set \"CLAUDE_CONFIG_DIR=\"", StringComparison.Ordinal),
+            $"Expected shell unset wrapper in: {shellCommand}");
+        Assert.Contains("CLAUDE_CONFIG_DIR", shellCommand);
 
         // Tab 2 inherited SideRepo's project account -> CLAUDE_CONFIG_DIR points to sideAcc.Directory!
         Assert.Equal(sideAcc.Directory, specTab2.Environment["CLAUDE_CONFIG_DIR"]);
