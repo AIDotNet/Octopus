@@ -318,6 +318,7 @@ public class WorkspaceBranchTests
             new("/tmp/Octopus", "abc1234", "main", false, false, false, false, IsMain: true),
         };
 
+        var customDir = Path.Combine(Path.GetTempPath(), "octopus-custom-worktrees");
         var vm = new CreateWorkspaceViewModel(
             project,
             project.Path,
@@ -327,7 +328,7 @@ public class WorkspaceBranchTests
             branch => WorkspacePaths.BuildWorkspacePath(project.Name, project.Path, branch, "/home/u", _ => false),
             "/home/u",
             "Claude",
-            pickFolder: () => Task.FromResult<string?>("/Volumes/SSD/worktrees"));
+            pickFolder: () => Task.FromResult<string?>(customDir));
 
         // Empty branch name fails validation.
         Assert.Null(vm.BuildRequest());
@@ -351,8 +352,8 @@ public class WorkspaceBranchTests
         Assert.True(vm.CanChangeDirectory);
         await vm.ChangeDirectoryCommand.ExecuteAsync(null);
         Assert.True(vm.HasCustomBaseDirectory);
-        Assert.Equal(Path.Combine("/Volumes/SSD/worktrees", "feat-148-add-worktree-hooks"), vm.PreviewPath);
-        Assert.Equal("/Volumes/SSD/worktrees", vm.BuildRequest()?.CustomBaseDirectory);
+        Assert.Equal(Path.Combine(customDir, "feat-148-add-worktree-hooks"), vm.PreviewPath);
+        Assert.Equal(customDir, vm.BuildRequest()?.CustomBaseDirectory);
 
         vm.ResetDirectoryCommand.Execute(null);
         Assert.False(vm.HasCustomBaseDirectory);

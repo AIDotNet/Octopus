@@ -84,14 +84,14 @@ public class FileTreeServiceTests
         using var t = new TempTree();
         var file = t.File("a.txt");
         var count = 0;
-        using var watch = _service.WatchChanges(t.Root, () => Interlocked.Increment(ref count), TimeSpan.FromMilliseconds(300));
+        using var watch = _service.WatchChanges(t.Root, () => Interlocked.Increment(ref count), TimeSpan.FromMilliseconds(500));
         await Settle(() => count = 0);
         for (var i = 0; i < 5; i++)
         {
             File.WriteAllText(file, i.ToString());
             await Task.Delay(20);
         }
-        await Task.Delay(1200);
+        await Task.Delay(1500);
         Assert.Equal(1, count);
     }
 

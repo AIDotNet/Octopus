@@ -197,6 +197,7 @@ public class AgentGuiTests
         {
             vm.Dispose();
             window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         }
     }
 
@@ -248,37 +249,51 @@ public class AgentGuiTests
     }
 
     [AvaloniaFact]
-    public void Tab_registry_routes_acp_gui_to_AgentGuiTabView_and_forces_non_acp_to_TerminalTabView()
+    public async Task Tab_registry_routes_acp_gui_to_AgentGuiTabView_and_forces_non_acp_to_TerminalTabView()
     {
-        var settings = AppHost.Get<ISettingsStore>();
-        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-route-").FullName;
+        try
+        {
+            var settings = AppHost.Get<ISettingsStore>();
+            settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
 
-        var projects = AppHost.Get<IProjectService>();
-        var project = projects.AddProject(Path.GetTempPath(), "acp-route-test");
-        var opener = AppHost.Get<IItemOpener>();
-        var registry = AppHost.Get<ITabContentRegistry>();
+            var projects = AppHost.Get<IProjectService>();
+            var project = projects.AddProject(tempDir, "acp-route-test");
+            var opener = AppHost.Get<IItemOpener>();
+            var registry = AppHost.Get<ITabContentRegistry>();
 
-        var opencodeItem = opener.OpenAgent("opencode")!;
-        Assert.Equal(AgentSurface.Gui, opencodeItem.Surface);
-        var opencodeControl = registry.GetOrCreate(project, opencodeItem);
-        Assert.IsType<AgentGuiTabView>(opencodeControl);
+            var opencodeItem = opener.OpenAgent("opencode")!;
+            Assert.Equal(AgentSurface.Gui, opencodeItem.Surface);
+            var opencodeControl = registry.GetOrCreate(project, opencodeItem);
+            var guiTab = Assert.IsType<AgentGuiTabView>(opencodeControl);
 
-        // Even with DefaultSurface=Gui and explicit Gui override, aider MUST open in Terminal.
-        var aiderItem = opener.OpenAgent("aider", new AgentLaunchOptions { Surface = AgentSurface.Gui })!;
-        Assert.Equal(AgentSurface.Terminal, aiderItem.Surface);
-        var aiderControl = registry.GetOrCreate(project, aiderItem);
-        Assert.IsType<TerminalTabView>(aiderControl);
+            // Even with DefaultSurface=Gui and explicit Gui override, aider MUST open in Terminal.
+            var aiderItem = opener.OpenAgent("aider", new AgentLaunchOptions { Surface = AgentSurface.Gui })!;
+            Assert.Equal(AgentSurface.Terminal, aiderItem.Surface);
+            var aiderControl = registry.GetOrCreate(project, aiderItem);
+            var termTab = Assert.IsType<TerminalTabView>(aiderControl);
+
+            await guiTab.CloseAsync();
+            (guiTab.DataContext as IDisposable)?.Dispose();
+            await termTab.CloseAsync();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
     }
 
     [AvaloniaFact]
     public async Task StyleA_agent_gui_streams_thought_diff_markdown_permission_question_and_adapts_composer_per_agent()
     {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-stream-").FullName;
         var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
         var settings = AppHost.Get<ISettingsStore>();
         settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
 
         var projects = AppHost.Get<IProjectService>();
-        var project = projects.AddProject(Path.GetTempPath(), "acp-gui-stream");
+        var project = projects.AddProject(tempDir, "acp-gui-stream");
         var opener = AppHost.Get<IItemOpener>();
         var registry = AppHost.Get<ITabContentRegistry>();
 
@@ -545,18 +560,21 @@ public class AgentGuiTests
             await vm.CloseAsync();
             vm.Dispose();
             window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
         }
     }
 
     [AvaloniaFact]
     public async Task Compact_gui_supports_history_picker_navigation_smart_scroll_queuing_and_image_gating()
     {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-ux-").FullName;
         var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
         var settings = AppHost.Get<ISettingsStore>();
         settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
 
         var projects = AppHost.Get<IProjectService>();
-        var project = projects.AddProject(Path.GetTempPath(), "acp-gui-ux");
+        var project = projects.AddProject(tempDir, "acp-gui-ux");
         var opener = AppHost.Get<IItemOpener>();
         var registry = AppHost.Get<ITabContentRegistry>();
 
@@ -701,14 +719,19 @@ public class AgentGuiTests
             await vm.CloseAsync();
             vm.Dispose();
             window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
         }
     }
 
     [AvaloniaFact]
     public async Task Sessions_panel_tracks_live_acp_sessions_and_offers_gui_resume_only_for_acp_agents()
     {
-        var projects = AppHost.Get<IProjectService>();
-        var project = projects.AddProject(Path.GetTempPath(), "acp-sessions-test");
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-sess-").FullName;
+        try
+        {
+            var projects = AppHost.Get<IProjectService>();
+            var project = projects.AddProject(tempDir, "acp-sessions-test");
         var sessionsService = AppHost.Get<FakeAgentSessionService>();
         var catalog = AppHost.Get<IAgentCatalog>();
 
@@ -774,8 +797,13 @@ public class AgentGuiTests
         panel.BackCommand.Execute(null);
         var aiderAgentRow = Assert.Single(panel.Agents, a => a.AgentId == "aider");
         aiderAgentRow.OpenCommand.Execute(null);
-        var aiderRow = Assert.Single(panel.Groups.SelectMany(g => g.Rows));
-        Assert.False(aiderRow.CanContinueInAlternateSurface);
+            var aiderRow = Assert.Single(panel.Groups.SelectMany(g => g.Rows));
+            Assert.False(aiderRow.CanContinueInAlternateSurface);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
     }
 
     private sealed class DummyMigrationDialog : Octopus.App.Explorer.Sessions.ISessionMigrationDialog
