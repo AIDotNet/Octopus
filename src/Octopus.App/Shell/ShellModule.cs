@@ -32,6 +32,9 @@ internal static class ShellModule
         services.AddSingleton<Octopus.App.Activity.IItemActivityService, Octopus.App.Activity.ItemActivityService>();
         services.AddSingleton<Octopus.App.Activity.ISubagentService, Octopus.App.Activity.SubagentService>();
         services.AddSingleton<IItemOpener, ItemOpener>();
+        services.AddSingleton<Octopus.App.Services.Workspaces.IGitHubTaskProvider, Octopus.App.Services.Workspaces.GhCliTaskProvider>();
+        services.AddSingleton<Octopus.App.Services.Workspaces.IWorkspaceManager, Octopus.App.Services.Workspaces.WorkspaceManager>();
+        services.AddSingleton<Octopus.App.Services.Workspaces.IWorkspaceCleanupService, Octopus.App.Services.Workspaces.WorkspaceCleanupService>();
         // Terminal sessions by item id: they live apart from the tabs that show them (design/12-远程操作.md §4.1).
         services.AddSingleton<Octopus.Terminal.Avalonia.TerminalSessionRegistry>();
         services.AddSingleton<ITabContentRegistry, TabContentRegistry>();

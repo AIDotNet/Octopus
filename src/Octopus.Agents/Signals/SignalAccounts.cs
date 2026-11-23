@@ -16,6 +16,23 @@ public static class SignalAccounts
     public const int KeyLength = 12;
 
     /// <summary>
+    /// The environment variable that selects the agent's account directory, from <c>signals.account.env</c> or
+    /// <c>accounts.env</c> (for <c>envDir</c> agents); null when the agent has a single account.
+    /// </summary>
+    public static string? AccountEnv(AgentDefinition definition)
+    {
+        if (definition.Signals?.Account is { Env.Length: > 0 } signalAccount)
+        {
+            return signalAccount.Env;
+        }
+        if (definition.Accounts is { Mode: AccountModes.EnvDir, Env.Length: > 0 } accounts)
+        {
+            return accounts.Env;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// The account directory: <paramref name="value"/> when set, else the definition's default; <c>~</c> expanded,
     /// made absolute, without a trailing separator. Empty when the agent has no account variable or default.
     /// </summary>
@@ -34,6 +51,22 @@ public static class SignalAccounts
         }
         var raw = string.IsNullOrWhiteSpace(value) ? defaultDir : value;
         return string.IsNullOrWhiteSpace(raw) ? "" : NormalizeDirectory(raw, home);
+    }
+
+    /// <summary>
+    /// The agent's default local data directory, including single-account agents that declare
+    /// <c>signals.account.default</c> without an environment variable (e.g. Antigravity CLI's
+    /// <c>~/.gemini/antigravity-cli</c>). Empty when none is declared.
+    /// </summary>
+    public static string DefaultDataDirectory(AgentDefinition definition, string? home = null)
+    {
+        var resolved = ResolveDirectory(definition, null, home);
+        if (resolved.Length > 0)
+        {
+            return resolved;
+        }
+        var fallback = definition.Signals?.Account?.Default;
+        return string.IsNullOrWhiteSpace(fallback) ? "" : NormalizeDirectory(fallback, home);
     }
 
     /// <summary>The account key for a raw variable value; empty for agents with a single account.</summary>

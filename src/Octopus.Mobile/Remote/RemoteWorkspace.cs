@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 using Avalonia.Threading;
 using Octopus.Core.Terminals;
+using Octopus.Mobile.Localization;
 using Octopus.Mobile.Workspace;
 using Octopus.Remote.Client;
 using Octopus.Remote.Protocol;
@@ -12,17 +13,23 @@ using Octopus.Terminal;
 namespace Octopus.Mobile.Remote;
 
 /// <summary>
-/// The account's computers as the pages show them, kept in step with the real ones: the service says which computers
-/// the account has, each paired one is connected to (through the relay) and says its projects, items and what they are
-/// doing. Everything the pages bind to changes on the UI thread; the network happens elsewhere.
+/// The computers as the pages show them, kept in step with the real ones. Signed in, the service says which computers
+/// the account has; with or without an account, each computer this phone is paired with is connected to (directly at
+/// the addresses it was reached at before, else through the relay when signed in) and says its projects, items and
+/// what they are doing. Everything the pages bind to changes on the UI thread; the network happens elsewhere.
 /// </summary>
 internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
 {
+    /// <summary>How long a computer named by its address has to answer before it counts as out of reach.</summary>
+    private static readonly TimeSpan ReachLimit = TimeSpan.FromSeconds(15);
+
     private readonly RelaySession _session;
     private readonly RemoteHostConnections _connections;
+    private readonly MobileSettings _settings;
     // UI thread only.
     private readonly Dictionary<string, HostState> _states = new(StringComparer.Ordinal);
     private int _refreshing;
+    private int _refreshAgain;
     private bool _disposed;
 
     /// <summary>What is known of one computer beyond what the pages show.</summary>
@@ -40,33 +47,63 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         public int Loads;
     }
 
-    public RemoteWorkspace(RelaySession session, RemoteHostConnections connections)
+    public RemoteWorkspace(RelaySession session, RemoteHostConnections connections, MobileSettings settings)
     {
-        (_session, _connections) = (session, connections);
+        (_session, _connections, _settings) = (session, connections, settings);
         connections.StateChanged += OnStateChanged;
         connections.WorkspaceChanged += OnWorkspaceChanged;
         connections.ItemChanged += OnItemChanged;
         session.Changed += OnAccountChanged;
+        settings.LocalOnlyChanged += OnModeChanged;
     }
 
     public ObservableCollection<RemoteHost> Hosts { get; } = [];
     public bool MirrorsTerminals => true;
+    public bool HasPairedHosts => _connections.Hosts.Peers.Count > 0;
 
     public async Task RefreshAsync()
     {
-        // One at a time: the page asks on a timer and whenever it comes back into view.
-        if (_disposed || Interlocked.Exchange(ref _refreshing, 1) == 1) return;
+        // One at a time: the page asks on a timer and whenever it comes back into view. What is asked for while one
+        // runs is not dropped (a computer was just paired, the account just changed): it runs once more afterwards.
+        if (_disposed) return;
+        if (Interlocked.Exchange(ref _refreshing, 1) == 1)
+        {
+            Volatile.Write(ref _refreshAgain, 1);
+            return;
+        }
         try
         {
-            IReadOnlyList<RelayDevice>? devices = null;
-            try
+            do
             {
-                var relay = await _session.GetAsync().ConfigureAwait(false);
-                if (relay is null)
+                Volatile.Write(ref _refreshAgain, 0);
+                await RefreshOnceAsync().ConfigureAwait(false);
+            }
+            while (!_disposed && Volatile.Read(ref _refreshAgain) == 1);
+        }
+        finally
+        {
+            Volatile.Write(ref _refreshing, 0);
+        }
+    }
+
+    private async Task RefreshOnceAsync()
+    {
+        IReadOnlyList<RelayDevice>? devices = null;
+        try
+        {
+            var relay = await _session.GetAsync().ConfigureAwait(false);
+            if (relay is null)
+            {
+                if (!_settings.LocalOnly)
                 {
-                    Ui(Clear);
+                    Ui(ClearUnlessShown);
                     return;
                 }
+                // No account: the service is not asked anything, and the list is what this phone paired with itself.
+                devices = [];
+            }
+            else
+            {
                 try
                 {
                     devices = await RelayAccountClient.ListDevicesAsync(relay).ConfigureAwait(false);
@@ -79,20 +116,18 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
                     devices = await RelayAccountClient.ListDevicesAsync(relay).ConfigureAwait(false);
                 }
             }
-            catch (RelayException)
-            {
-                // The service cannot be reached: what is shown stays, and the paired hosts are still tried.
-            }
-            var paired = _connections.Hosts.Peers;
-            await UiAsync(() => Merge(paired, devices)).ConfigureAwait(false);
-            foreach (var peer in paired)
-            {
-                if (devices is null || devices.Any(device => device.Id == peer.Id && device.Online)) _ = ConnectQuietlyAsync(peer.Id);
-            }
         }
-        finally
+        catch (RelayException)
         {
-            Volatile.Write(ref _refreshing, 0);
+            // The service cannot be reached: what is shown stays, and the paired hosts are still tried.
+        }
+        var paired = _connections.Hosts.Peers;
+        await UiAsync(() => Merge(paired, devices)).ConfigureAwait(false);
+        foreach (var peer in paired)
+        {
+            // A computer that was reached directly before is tried there whatever the service says (it may not be in
+            // the account at all); one only known through the relay is tried when the service says it is there.
+            if (devices is null || peer.Addresses.Count > 0 || devices.Any(device => device.Id == peer.Id && device.Online)) _ = ConnectQuietlyAsync(peer.Id);
         }
     }
 
@@ -113,6 +148,8 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 Model = agent?.Models.FirstOrDefault(model => model.Label == request.Model)?.Id,
                 Effort = agent?.Efforts.FirstOrDefault(effort => effort.Label == request.Effort)?.Id,
                 Prompt = agent is null ? null : request.Prompt,
+                WorkspaceId = request.WorkspaceId,
+                InjectTaskPrompt = request.InjectTaskPrompt,
             }, cancellationToken).ConfigureAwait(false);
             return await UiAsync(() =>
             {
@@ -121,6 +158,66 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 var session = NewSession(_states.GetValueOrDefault(hostId), project, item);
                 project.Sessions.Add(session);
                 return session;
+            }).ConfigureAwait(false);
+        }
+        catch (RemoteException e)
+        {
+            throw new IOException(e.Message, e);
+        }
+    }
+
+    public async Task<RemoteWorkspaceOptions> GetWorkspaceOptionsAsync(RemoteProject project, CancellationToken cancellationToken = default)
+    {
+        var hostId = project.Host.Id;
+        try
+        {
+            var client = _connections.ClientOf(hostId) ?? await _connections.ConnectAsync(hostId).ConfigureAwait(false);
+            if (!client.SupportsWorkspaces) return RemoteWorkspaceOptions.Empty;
+            var options = await client.GetWorkspaceOptionsAsync(project.Id, cancellationToken).ConfigureAwait(false);
+            return new RemoteWorkspaceOptions(
+                options.IsGitRepository,
+                options.DefaultBranch,
+                [.. options.Branches.Select(b => new RemoteBranchOption(b.Name, b.IsRemote, b.IsCurrent, b.OccupiedBy))],
+                options.GhAvailable,
+                [.. options.Issues.Select(t => new RemoteTaskOption(t.Kind, t.Key, t.Title, t.Url, t.Body, t.SuggestedBranch, t.HeadBranch))],
+                [.. options.PullRequests.Select(t => new RemoteTaskOption(t.Kind, t.Key, t.Title, t.Url, t.Body, t.SuggestedBranch, t.HeadBranch))],
+                options.WorkspacesDirectory);
+        }
+        catch (RemoteException e)
+        {
+            throw new IOException(e.Message, e);
+        }
+    }
+
+    public async Task<RemoteBranchWorkspace> CreateWorkspaceAsync(RemoteProject project, CreateBranchWorkspaceRequest request, CancellationToken cancellationToken = default)
+    {
+        var hostId = project.Host.Id;
+        try
+        {
+            var client = _connections.ClientOf(hostId) ?? await _connections.ConnectAsync(hostId).ConfigureAwait(false);
+            if (!client.SupportsWorkspaces)
+            {
+                throw new IOException(MobileLangResources.Get(MobileLangResourceKind.WorkspaceUnsupportedHost));
+            }
+            var created = await client.CreateWorkspaceAsync(new CreateWorkspaceMessage
+            {
+                ProjectId = project.Id,
+                CreateBranch = request.CreateBranch,
+                BranchName = request.BranchName,
+                BaseRef = request.BaseRef,
+                IsRemoteBranch = request.IsRemoteBranch,
+                TaskKind = request.TaskKind,
+                TaskKey = request.TaskKey,
+                TaskTitle = request.TaskTitle,
+                TaskUrl = request.TaskUrl,
+                TaskBody = request.TaskBody,
+            }, cancellationToken).ConfigureAwait(false);
+            var mapped = MapWorkspace(created);
+            return await UiAsync(() =>
+            {
+                if (project.Workspaces.FirstOrDefault(ws => ws.Id == mapped.Id) is { } existing) return existing;
+                project.Workspaces.Add(mapped);
+                return mapped;
             }).ConfigureAwait(false);
         }
         catch (RemoteException e)
@@ -167,6 +264,13 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         return new PairingAttempt(code.Task, PairAsync(host, code, cancel.Token), cancel.Cancel);
     }
 
+    public PairingAttempt AddHost(string target)
+    {
+        var cancel = new CancellationTokenSource();
+        var code = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        return new PairingAttempt(code.Task, AddAsync(target, code, cancel.Token), cancel.Cancel);
+    }
+
     public void Dispose()
     {
         _disposed = true;
@@ -174,6 +278,48 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         _connections.WorkspaceChanged -= OnWorkspaceChanged;
         _connections.ItemChanged -= OnItemChanged;
         _session.Changed -= OnAccountChanged;
+        _settings.LocalOnlyChanged -= OnModeChanged;
+    }
+
+    // The same pairing as the desktop's "add a host": to an address the person typed (then both sides show a number),
+    // or by a pairing link (then the link's token stands for the number). No service has a part in it.
+    private async Task<PairingOutcome> AddAsync(string target, TaskCompletionSource<string> code, CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        // An address nothing answers at is given up on after a while. Once the computer answered, the person there
+        // takes as long as they take to allow.
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(ReachLimit);
+        try
+        {
+            await _connections.PairAsync(target, shown =>
+            {
+                limit.CancelAfter(Timeout.InfiniteTimeSpan);
+                code.TrySetResult(shown);
+            }, limit.Token).ConfigureAwait(false);
+            _ = RefreshAsync();
+            return PairingOutcome.Paired;
+        }
+        catch (FormatException)
+        {
+            return PairingOutcome.NotAnAddress;
+        }
+        catch (HandshakeException e)
+        {
+            return e.Status == HandshakeStatus.PairingClosed ? PairingOutcome.NotPairing : PairingOutcome.Refused;
+        }
+        catch (OperationCanceledException)
+        {
+            return cancellationToken.IsCancellationRequested ? PairingOutcome.Cancelled : PairingOutcome.Unreachable;
+        }
+        catch (Exception e) when (e is IOException or RemoteException or System.Net.WebSockets.WebSocketException or System.Net.Sockets.SocketException)
+        {
+            return PairingOutcome.Unreachable;
+        }
+        finally
+        {
+            code.TrySetCanceled();
+        }
     }
 
     private async Task<PairingOutcome> PairAsync(RemoteHost host, TaskCompletionSource<string> code, CancellationToken cancellationToken)
@@ -266,12 +412,16 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
             state.Host.IsPaired = isPaired;
             state.Host.LastSeen = seen;
             if (devices is not null) state.AccountOnline = online;
-            UpdateLink(state);
+            // A computer paired a moment ago is connected already, before it had a row here.
+            Sync(state);
         }
     }
 
-    private void Clear()
+    // Decided when it runs, not when it was asked for: by then the person may have signed in, or chosen to use the app
+    // without an account (a computer was just added), and the list may already be the one to show.
+    private void ClearUnlessShown()
     {
+        if (_session.Account is not null || _settings.LocalOnly) return;
         Hosts.Clear();
         _states.Clear();
     }
@@ -289,7 +439,13 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
 
     private void OnStateChanged(string hostId) => Ui(() =>
     {
-        if (!_states.TryGetValue(hostId, out var state)) return;
+        if (_states.TryGetValue(hostId, out var state)) Sync(state);
+    });
+
+    // The row in step with the connection: how the computer is reached, and its projects read from a connection that is new.
+    private void Sync(HostState state)
+    {
+        var hostId = state.Host.Id;
         UpdateLink(state);
         var client = _connections.ClientOf(hostId);
         if (client is null)
@@ -303,7 +459,7 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
             state.Loaded = client;
             _ = LoadAsync(hostId, client, state);
         }
-    });
+    }
 
     private void OnWorkspaceChanged(string hostId) => Ui(() =>
     {
@@ -335,7 +491,23 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         }
         // Signed out: nothing of the account stays on the screen, and no connection stays open. Who is paired is kept.
         _ = _connections.DisconnectAllAsync();
-        Ui(Clear);
+        // Used without an account before signing in: back to the computers this phone can reach by itself (reading
+        // them takes the account's other computers off the list).
+        if (_settings.LocalOnly) _ = RefreshAsync();
+        else Ui(ClearUnlessShown);
+    }
+
+    // The person chose to use the app without an account, or went back to choosing.
+    private void OnModeChanged()
+    {
+        if (_session.Account is not null) return;
+        if (_settings.LocalOnly)
+        {
+            _ = RefreshAsync();
+            return;
+        }
+        _ = _connections.DisconnectAllAsync();
+        Ui(ClearUnlessShown);
     }
 
     private async Task LoadAsync(string hostId, RemoteHostClient client, HostState state)
@@ -374,19 +546,25 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
     private void Apply(HostState state, IReadOnlyList<ProjectMessage> projects, Dictionary<string, IReadOnlyList<ItemMessage>> items)
     {
         var host = state.Host;
-        var target = projects.Select(message =>
-            host.Projects.FirstOrDefault(known => known.Id == message.Id && known.Name == message.Name && known.Path == message.Path)
-            ?? new RemoteProject(host, message.Id, message.Name, message.Path)).ToList();
-        foreach (var project in target)
+        var target = new List<RemoteProject>(projects.Count);
+        foreach (var message in projects)
         {
+            var project = host.Projects.FirstOrDefault(known => known.Id == message.Id && known.Name == message.Name && known.Path == message.Path)
+                ?? new RemoteProject(host, message.Id, message.Name, message.Path);
+            project.IsGitRepository = message.IsGitRepository;
+            project.DefaultBranch = message.DefaultBranch;
+            var workspaces = (message.Workspaces ?? []).Select(MapWorkspace).ToList();
+            ReplaceValues(project.Workspaces, workspaces);
             var sessions = items.GetValueOrDefault(project.Id, []).Select(item =>
             {
                 if (project.Sessions.FirstOrDefault(known => known.Id == item.Id) is not { } session) return NewSession(state, project, item);
                 session.Title = item.Title;
                 session.Activity = ActivityOf(item.Activity);
+                UpdateSessionWorkspace(project, session, item);
                 return session;
             }).ToList();
             Replace(project.Sessions, sessions);
+            target.Add(project);
         }
         Replace(host.Projects, target);
     }
@@ -398,13 +576,35 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         foreach (var item in target) collection.Add(item);
     }
 
+    private static void ReplaceValues<T>(ObservableCollection<T> collection, List<T> target)
+    {
+        if (collection.SequenceEqual(target)) return;
+        collection.Clear();
+        foreach (var item in target) collection.Add(item);
+    }
+
+    private static RemoteBranchWorkspace MapWorkspace(WorkspaceMessage ws) =>
+        new(ws.Id, ws.Name, ws.Branch, ws.Path, ws.TaskKind, ws.TaskKey, ws.TaskTitle, ws.TaskUrl);
+
+    private static void UpdateSessionWorkspace(RemoteProject project, RemoteSession session, ItemMessage item)
+    {
+        var ws = string.IsNullOrEmpty(item.WorkspaceId) ? null : project.Workspaces.FirstOrDefault(w => w.Id == item.WorkspaceId);
+        session.WorkspaceId = item.WorkspaceId;
+        session.WorkspaceBranch = item.WorkspaceBranch ?? ws?.DisplayName;
+        session.WorkspaceTaskKey = ws?.TaskKey;
+    }
+
     private static RemoteSession NewSession(HostState? state, RemoteProject project, ItemMessage item)
     {
         var agent = item.AgentId is null ? null : state?.Agents.GetValueOrDefault(item.AgentId);
         var isAgent = item.Kind == ItemKinds.Agent;
+        var ws = string.IsNullOrEmpty(item.WorkspaceId) ? null : project.Workspaces.FirstOrDefault(w => w.Id == item.WorkspaceId);
         return new RemoteSession(project, item.Id, isAgent ? SessionKind.Agent : SessionKind.Terminal, item.Title)
         {
             AgentId = item.AgentId,
+            WorkspaceId = item.WorkspaceId,
+            WorkspaceBranch = item.WorkspaceBranch ?? ws?.DisplayName,
+            WorkspaceTaskKey = ws?.TaskKey,
             // Model and effort as the host labels them; the agent's name when neither was chosen.
             Detail = !isAgent ? null : string.Join(" · ", new[]
             {

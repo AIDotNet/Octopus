@@ -2,7 +2,8 @@
 //   { account?, plan?, windows: [{ id, label, usedPercent, resetsAt?, durationMs?, tag? }], credits?, session?, source, unavailable? }
 // durationMs (the window's length) lets the popover tell how much of the window has passed and whether, at the current
 // pace, it runs out before it resets; tag is a qualifier kept in the short label ("7d Opus").
-// Only official sources: Claude's status line, Codex's app-server, Cursor's `about`.
+// Only official sources: Claude's status line, Codex's app-server, Antigravity CLI's /usage, Copilot CLI's
+// account.getQuota and Cursor's `about`.
 // Nothing here reads another tool's credentials (design 12 §9 is still undecided).
 
 import { env } from 'octopus';
@@ -76,6 +77,132 @@ export function codexFromRateLimits(data, account) {
     snapshot.unavailable = { reason: 'loginHasNoQuota', hint: t('当前登录方式没有订阅额度（API 密钥或自定义服务商）。', 'The current sign-in has no subscription quota (an API key or a custom provider).') };
   }
   return snapshot;
+}
+
+// ───────────────────────── Antigravity CLI: `agy --print /usage --output-format json` ─────────────────────────
+
+function agyWindowMinutes(windowText) {
+  if (typeof windowText !== 'string') return undefined;
+  const s = windowText.trim().toLowerCase();
+  if (s === '5h') return 300;
+  if (s === 'weekly' || s === '7d') return 10080;
+  if (s === 'daily' || s === '1d') return 1440;
+  let m = /^(\d+)h$/.exec(s);
+  if (m) return Number(m[1]) * 60;
+  m = /^(\d+)d$/.exec(s);
+  if (m) return Number(m[1]) * 1440;
+  m = /^(\d+)m$/.exec(s);
+  if (m) return Number(m[1]);
+  return undefined;
+}
+
+function agyGroupTag(name) {
+  if (typeof name !== 'string' || name.trim().length === 0) return undefined;
+  if (/gemini/i.test(name)) return 'Gemini';
+  if (/claude/i.test(name) && /gpt/i.test(name)) return 'Claude/GPT';
+  return name.replace(/\s+models?$/i, '').trim() || undefined;
+}
+
+export function agyFromUsage(data) {
+  const groups = Array.isArray(data?.command?.data?.groups) ? data.command.data.groups : [];
+  const multiple = groups.length > 1;
+  const windows = [];
+  for (const group of groups) {
+    const tag = multiple ? agyGroupTag(group?.name) : undefined;
+    const buckets = (Array.isArray(group?.buckets) ? group.buckets : [])
+      .map((b, i) => ({ b, i, minutes: agyWindowMinutes(b?.window) }))
+      .sort((a, b) => (a.minutes ?? Infinity) - (b.minutes ?? Infinity) || a.i - b.i);
+    for (const { b, minutes } of buckets) {
+      const remaining = num(b?.remaining_fraction);
+      if (remaining === undefined) continue;
+      const usedPercent = Math.max(0, Math.min(100, (1 - remaining) * 100));
+      const base = minutes ? windowLabel(minutes) : (typeof b.name === 'string' && b.name.length > 0 ? b.name : t('窗口', 'Window'));
+      windows.push({
+        id: String(b.id ?? `${tag ?? 'agy'}-${b.window ?? windows.length}`),
+        label: tag ? `${base} · ${tag}` : base,
+        usedPercent,
+        resetsAt: when(b.reset_time),
+        durationMs: minutes ? minutes * 60_000 : undefined,
+        tag,
+      });
+    }
+  }
+  const snapshot = { windows, source: 'official' };
+  if (windows.length === 0) {
+    snapshot.unavailable = {
+      reason: 'loginHasNoQuota',
+      hint: t('当前登录方式没有订阅额度（未登录或使用 API 密钥）。', 'The current sign-in has no subscription quota (not signed in or using an API key).'),
+    };
+  }
+  return snapshot;
+}
+
+// ───────────────────────── GitHub Copilot CLI: `account.getQuota` ─────────────────────────
+
+const COPILOT_ORDER = ['premium_interactions', 'chat', 'completions'];
+const copilotLabel = key => ({
+  premium_interactions: t('高级请求', 'Premium'),
+  chat: t('对话', 'Chat'),
+  completions: t('补全', 'Completions'),
+}[key] ?? key.replaceAll('_', ' '));
+
+export function copilotFromQuota(data, account) {
+  const raw = data?.quotaSnapshots;
+  const entries = Array.isArray(raw)
+    ? raw.map((snap, i) => [String(snap?.type ?? snap?.quotaId ?? `q${i}`), snap])
+    : raw && typeof raw === 'object' ? Object.entries(raw) : [];
+  entries.sort(([a], [b]) => {
+    const ia = COPILOT_ORDER.indexOf(a);
+    const ib = COPILOT_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  const windows = [];
+  let hasUnlimited = false;
+  for (const [key, snap] of entries) {
+    if (!snap || typeof snap !== 'object') continue;
+    if (snap.isUnlimitedEntitlement === true || snap.unlimited === true) {
+      hasUnlimited = true;
+      continue;
+    }
+    const remaining = num(snap.remainingPercentage ?? snap.remaining_percentage);
+    const entitlement = num(snap.entitlementRequests ?? snap.entitlement_requests ?? snap.entitlement);
+    const used = num(snap.usedRequests ?? snap.used_requests);
+    let usedPercent;
+    if (remaining !== undefined) usedPercent = Math.max(0, Math.min(100, 100 - remaining));
+    else if (entitlement > 0 && used !== undefined) usedPercent = Math.max(0, (used / entitlement) * 100);
+    if (usedPercent === undefined) continue;
+    windows.push({
+      id: key,
+      label: copilotLabel(key),
+      usedPercent,
+      resetsAt: when(snap.resetDate ?? snap.reset_date),
+    });
+  }
+  const snapshot = { account, windows, source: 'official' };
+  if (windows.length === 0 && hasUnlimited) {
+    snapshot.credits = { unlimited: true };
+  } else if (windows.length === 0) {
+    snapshot.unavailable = {
+      reason: 'loginHasNoQuota',
+      hint: t('当前登录方式没有可显示的 Copilot 额度；也可以在 GitHub 网页查看。', 'No Copilot quota is available for this sign-in; you can also view it on GitHub.'),
+      action: { label: t('打开设置', 'Open settings'), url: 'https://github.com/settings/copilot/features' },
+    };
+  }
+  return snapshot;
+}
+
+export function copilotUnavailable(account) {
+  return {
+    account,
+    windows: [],
+    source: 'official',
+    retry: true,
+    unavailable: {
+      reason: 'noOfficialSource',
+      hint: t('当前 Copilot CLI 未返回额度数据；可在 GitHub 网页查看。', 'Copilot CLI did not return quota data; view it on GitHub.'),
+      action: { label: t('打开设置', 'Open settings'), url: 'https://github.com/settings/copilot/features' },
+    },
+  };
 }
 
 // ───────────────────────── Grok: no official quota source ─────────────────────────

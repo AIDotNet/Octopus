@@ -9,7 +9,8 @@ public class CatalogTests
         ["claude", "codex", "grok", "opencode", "cursor", "muse", "gemini", "copilot",
          "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi",
          "cline", "kilo", "auggie", "codebuddy", "qoder", "vibe", "pi", "openhands",
-         "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp", "agy"];
+         "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp", "agy",
+         "devin", "hermes", "autohand", "mimo", "vtcode", "bob", "stakpak", "minimax"];
 
     [Fact]
     public void Builtins_load_in_fixed_order_without_errors()
@@ -226,5 +227,51 @@ public class CatalogTests
         Assert.Equal("全部", def.Capabilities.Permission!.Modes["full"].LabelFor("zh-CN"));
         var again = JsonSerializer.Deserialize(JsonSerializer.Serialize(def, AgentJsonContext.Default.AgentDefinition), AgentJsonContext.Default.AgentDefinition)!;
         Assert.Equal("标签", again.Capabilities.Features[0].LabelFor("zh-CN"));
+    }
+
+    [Fact]
+    public void Acp_catalog_coverage_and_surface_resolver_enforce_terminal_only_for_non_acp()
+    {
+        var acpAgents = Builtins.All.Definitions.Where(d => d.SupportsAcp).ToList();
+        var terminalOnly = Builtins.All.Definitions.Where(d => !d.SupportsAcp).Select(d => d.Id).Order().ToList();
+
+        Assert.Equal(32, acpAgents.Count);
+        Assert.Equal(
+            ["aider", "codebuff", "continue", "crush", "jules", "letta", "nanocoder", "openhands"],
+            terminalOnly);
+
+        // Native and adapter specs are well-formed.
+        foreach (var def in acpAgents)
+        {
+            var acp = def.Acp!;
+            Assert.Contains(acp.Mode, new[] { "native", "adapter" });
+            if (acp.Mode == "native") Assert.NotEmpty(acp.Args);
+            if (acp.Mode == "adapter") Assert.NotNull(acp.Adapter);
+        }
+
+        // Round-trip ACP metadata through source-generated JSON context.
+        var agy = Builtins.Get("agy");
+        var back = JsonSerializer.Deserialize(
+            JsonSerializer.Serialize(agy, AgentJsonContext.Default.AgentDefinition),
+            AgentJsonContext.Default.AgentDefinition)!;
+        Assert.True(back.SupportsAcp);
+        Assert.Equal("antigravity", back.Acp!.Dialect);
+        Assert.Equal(AcpPermissionStrategy.AgentMode, back.Acp.PermissionStrategy);
+        Assert.Contains("--dangerously-skip-permissions", back.Acp.FullAccessArgs);
+        Assert.Equal("accept-edits", back.Acp.PermissionModes!["acceptEdits"]);
+        Assert.Equal("auto", back.Acp.PermissionModes!["full"]);
+
+        // Surface resolver enforces hard constraint: non-ACP agents ALWAYS resolve to Terminal.
+        var settings = new Octopus.Core.Settings.AgentSettings { DefaultSurface = AgentSurface.Gui };
+        var aider = Builtins.Get("aider");
+        var opencode = Builtins.Get("opencode");
+        Assert.Equal(AgentSurface.Terminal, AgentSurfaceResolver.Resolve(aider, settings));
+        Assert.Equal(AgentSurface.Terminal, AgentSurfaceResolver.Resolve(aider, settings, explicitOverride: AgentSurface.Gui));
+        Assert.Equal(AgentSurface.Gui, AgentSurfaceResolver.Resolve(opencode, settings));
+        Assert.Equal(AgentSurface.Terminal, AgentSurfaceResolver.Resolve(opencode, settings, explicitOverride: AgentSurface.Terminal));
+        Assert.Equal(AgentSurface.Terminal, AgentSurfaceResolver.Resolve(opencode, settings, acpAvailable: false));
+
+        settings.Profiles["opencode"] = new AgentProfile { Surface = AgentSurface.Terminal };
+        Assert.Equal(AgentSurface.Terminal, AgentSurfaceResolver.Resolve(opencode, settings));
     }
 }

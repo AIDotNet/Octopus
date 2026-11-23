@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Sidebar"
+             x:Class="Octopus.App.Sidebar.WorkspaceGroupView"
+             x:DataType="vm:WorkspaceGroupViewModel">
+    <StackPanel Spacing="1" Margin="0,2,0,4">
+        <!-- Workspace group header: expand chevron, folder/branch icon, name, linked issue pill, and per-workspace "+" button -->
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,2,0">
+            <Button x:Name="HeaderButton" Classes="row" Height="28"
+                    Command="{Binding ToggleCommand}"
+                    arc:Tooltip.Tip="{Binding HeaderTip}" arc:Tooltip.Side="Right"
+                    AutomationProperties.Name="{Binding DisplayName}">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="5" Margin="4,0,4,0">
+                    <Panel VerticalAlignment="Center" Width="12">
+                        <lucide:LucideIcon Kind="ChevronDown" Size="12" IsVisible="{Binding IsExpanded}"
+                                           Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                        <lucide:LucideIcon Kind="ChevronRight" Size="12" IsVisible="{Binding !IsExpanded}"
+                                           Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                    </Panel>
+                    <Panel Grid.Column="1" VerticalAlignment="Center">
+                        <lucide:LucideIcon Kind="Folder" Size="13" IsVisible="{Binding IsDefault}"
+                                           Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                        <lucide:LucideIcon Kind="GitBranch" Size="13" IsVisible="{Binding IsWorktree}"
+                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                    </Panel>
+                    <TextBlock Grid.Column="2" Classes="caption" FontWeight="SemiBold" VerticalAlignment="Center"
+                               Foreground="{arc:ArcDesignTokenResource Foreground}"
+                               Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                    <lucide:LucideIcon Grid.Column="3" Kind="Pin" Size="11" VerticalAlignment="Center"
+                                       IsVisible="{Binding IsPinned}"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                       arc:Tooltip.Tip="{l:AppLangResource WorkspacePinnedTip}" />
+                    <Border Grid.Column="4" IsVisible="{Binding HasTask}" VerticalAlignment="Center"
+                            Padding="5,0" CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                            Background="{arc:ArcDesignTokenResource AccentSubtle}">
+                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                   Text="{Binding TaskKey}" />
+                    </Border>
+                </Grid>
+            </Button>
+
+            <arc:Button x:Name="AddButton" Grid.Column="1" Classes="icon" Variant="Ghost" VerticalAlignment="Center"
+                        Click="OnAddClick"
+                        AutomationProperties.Name="{Binding AddItemTip}"
+                        arc:Tooltip.Tip="{Binding AddItemTip}">
+                <lucide:LucideIcon Kind="Plus" Size="13" />
+            </arc:Button>
+        </Grid>
+
+        <!-- Items inside this workspace -->
+        <Border IsVisible="{Binding IsExpanded}" Margin="10,0,0,0" Padding="6,0,0,0"
+                BorderThickness="1,0,0,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}">
+            <StackPanel Spacing="1">
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="1" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ItemRowViewModel"><vm:ItemRowView /></DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Classes="hint" Margin="8,3" Text="{l:AppLangResource WorkspaceEmpty}" IsVisible="{Binding IsEmpty}" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

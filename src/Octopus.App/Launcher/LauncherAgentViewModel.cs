@@ -9,11 +9,13 @@ public sealed partial class LauncherAgentViewModel(
     string name,
     bool isDefault,
     Action<LauncherAgentViewModel> launch,
-    Action<LauncherAgentViewModel> expand) : ObservableObject
+    Action<LauncherAgentViewModel> expand,
+    bool supportsAcp = false) : ObservableObject
 {
     public string Id { get; } = id;
     public string Name { get; } = name;
     public bool IsDefault { get; } = isDefault;
+    public bool SupportsAcp { get; } = supportsAcp;
 
     [ObservableProperty] public partial bool IsExpanded { get; set; }
 

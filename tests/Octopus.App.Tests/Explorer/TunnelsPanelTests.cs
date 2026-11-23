@@ -49,7 +49,7 @@ public class TunnelsPanelTests : IDisposable
 
     private readonly FakeProcessHost _host = new();
     private readonly FakeLocalPorts _ports = new();
-    private readonly ProjectService _projects = new(new InMemoryProjectStore(), new PathComparer(ignoreCase: false), new InMemorySettingsStore());
+    private readonly ProjectService _projects = new(new InMemoryProjectStore(), new PathComparer(ignoreCase: false));
     private readonly FakeDialogService _dialogs = new();
     private readonly RecordingOpener _opener = new();
     private readonly string _ledger = Directory.CreateTempSubdirectory("octopus-ledger-").FullName;

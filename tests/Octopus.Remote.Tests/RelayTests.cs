@@ -182,6 +182,11 @@ public class RelayTests
         Assert.Matches("^[B-Z]{4}-[B-Z]{4}$", login.UserCode);
         Assert.Equal($"{relay.Url}/device?code={login.UserCode}", login.VerificationUriComplete.ToString());
         Assert.Equal(["Ada's Mac"], relay.LoginNames);
+        // The device also says what it runs on and which version of the app it is: the account page lists that.
+        var (platform, appVersion) = Assert.Single(relay.LoginClients);
+        Assert.Equal(RelayClientInfo.Platform, platform);
+        Assert.Contains(platform, new[] { "macOS", "Windows", "Linux" });
+        Assert.Equal(RelayClientInfo.AppVersion, appVersion);
         Assert.Equal((RelayLoginStatus.Pending, null), await RelayAccountClient.PollLoginAsync(url, login, device).WaitAsync(Limit));
         // Who saw the device code but holds another key gets nothing, confirmed or not.
         Assert.True(relay.Approve(login.UserCode));
@@ -210,6 +215,17 @@ public class RelayTests
         Assert.Equal(RelayFailure.Unreachable, (await Assert.ThrowsAsync<RelayException>(() => RelayAccountClient.StartLoginAsync(nowhere, device, "x"))).Failure);
         Assert.Equal(RelayFailure.Unreachable, (await Assert.ThrowsAsync<RelayException>(() => RelayAccountClient.RefreshAsync(nowhere, "or1.x"))).Failure);
         await RelayAccountClient.RevokeAsync(nowhere, "or1.x").WaitAsync(Limit);
+    }
+
+    [Fact]
+    public void The_version_a_device_reports_is_the_apps_without_the_commit()
+    {
+        Assert.Equal("1.0.1128", RelayClientInfo.VersionOf("1.0.1128+3f9c2ab71d"));
+        Assert.Equal("1.1.0-preview.2", RelayClientInfo.VersionOf(" 1.1.0-preview.2 "));
+        // Nothing to say is said by leaving the field out, not by an empty or absurd one.
+        Assert.Null(RelayClientInfo.VersionOf(null));
+        Assert.Null(RelayClientInfo.VersionOf("+3f9c2ab71d"));
+        Assert.Null(RelayClientInfo.VersionOf(new string('1', 65)));
     }
 
     [Fact]
@@ -335,12 +351,12 @@ public class RelayTests
     {
         var login = await RelayAccountClient.StartLoginAsync(url, device, "Test device").WaitAsync(Limit);
         using var browser = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer(), AllowAutoRedirect = false }) { BaseAddress = url };
-        browser.DefaultRequestHeaders.Add("X-Octopus-Request", "1");
-        using (var signedIn = await browser.GetAsync($"v1/auth/login/dev?name={account}").WaitAsync(Limit))
+        // The person's part is the website's own API (Octopus-Server, design/server/05): sign in, then confirm the code.
+        using (var signedIn = await browser.PostAsync("api/auth/dev", new StringContent($$"""{"name":"{{account}}"}""", Encoding.UTF8, "application/json")).WaitAsync(Limit))
         {
-            Assert.Equal(HttpStatusCode.Redirect, signedIn.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, signedIn.StatusCode);
         }
-        using (var approved = await browser.PostAsync($"v1/auth/device/{login.UserCode}", new StringContent("""{"approve":true}""", Encoding.UTF8, "application/json")).WaitAsync(Limit))
+        using (var approved = await browser.PostAsync("api/device-login/approve", new StringContent($$"""{"code":"{{login.UserCode}}"}""", Encoding.UTF8, "application/json")).WaitAsync(Limit))
         {
             Assert.Equal(HttpStatusCode.NoContent, approved.StatusCode);
         }

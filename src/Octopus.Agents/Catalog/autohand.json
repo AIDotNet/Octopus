@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "id": "autohand",
+  "name": "Autohand Code",
+  "icon": "autohand",
+  "homepage": "https://github.com/autohandai/code-cli",
+  "verified": false,
+  "detect": {
+    "executables": ["autohand"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://autohand.ai/install.sh | bash" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "auto": { "args": ["--auto"] },
+        "full": { "args": ["--yolo"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "native",
+    "args": ["--acp"],
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "autohand"
+    }
+  }
+}

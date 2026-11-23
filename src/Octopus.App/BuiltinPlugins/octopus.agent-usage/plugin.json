@@ -11,8 +11,9 @@
   "builtin": true,
 
   "activation": [
-    "onAgentInstalled:claude", "onAgentInstalled:codex", "onAgentInstalled:grok",
-    "onAgentInstalled:cursor", "onAgentInstalled:opencode"
+    "onAgentInstalled:claude", "onAgentInstalled:codex", "onAgentInstalled:agy",
+    "onAgentInstalled:copilot", "onAgentInstalled:grok", "onAgentInstalled:cursor",
+    "onAgentInstalled:opencode"
   ],
 
   "permissions": {
@@ -23,6 +24,8 @@
       "probes": {
         "claude": ["account"],
         "codex": ["rateLimits"],
+        "agy": ["usage"],
+        "copilot": ["quota"],
         "cursor": ["account"]
       }
     },
@@ -33,7 +36,16 @@
           "localized": { "zh-CN": { "reason": "用量历史：只读每次回复的时间、模型和 token 数，不读对话内容。" } } },
         { "agent": "codex", "include": ["sessions/**/*.jsonl"], "access": "read", "optional": true,
           "reason": "Usage history: time, model and token counts of each turn (never the conversation).",
-          "localized": { "zh-CN": { "reason": "用量历史：只读每轮的时间、模型和 token 数，不读对话内容。" } } }
+          "localized": { "zh-CN": { "reason": "用量历史：只读每轮的时间、模型和 token 数，不读对话内容。" } } },
+        { "agent": "agy", "include": ["brain/*/.system_generated/logs/transcript.jsonl"], "access": "read", "optional": true,
+          "reason": "Usage history: time, model and token counts of each reply (never the conversation).",
+          "localized": { "zh-CN": { "reason": "用量历史：只读每次回复的时间、模型和 token 数，不读对话内容。" } } },
+        { "agent": "copilot", "include": ["session-state/**/events.jsonl"], "access": "read", "optional": true,
+          "reason": "Usage history: time, model and token counts of each turn (never the conversation).",
+          "localized": { "zh-CN": { "reason": "用量历史：只读每轮的时间、模型和 token 数，不读对话内容。" } } },
+        { "agent": "grok", "include": ["sessions/**/usage.json"], "access": "read", "optional": true,
+          "reason": "Usage history: time, model, token counts and cost of each turn (never the conversation).",
+          "localized": { "zh-CN": { "reason": "用量历史：只读每轮的时间、模型、token 数和费用，不读对话内容。" } } }
       ]
     },
     "projects": "read",
@@ -45,7 +57,7 @@
       "optional": true
     },
     "secrets": { "optional": true },
-    "shell": { "open": ["cursor.com", "platform.deepseek.com", "platform.moonshot.cn", "openrouter.ai", "cloud.siliconflow.cn", "bigmodel.cn"] },
+    "shell": { "open": ["cursor.com", "github.com", "platform.deepseek.com", "platform.moonshot.cn", "openrouter.ai", "cloud.siliconflow.cn", "bigmodel.cn"] },
     "notifications": { "optional": true }
   },
 
@@ -53,6 +65,8 @@
     "usageProviders": [
       { "id": "octopus.agent-usage.claude", "agent": "claude" },
       { "id": "octopus.agent-usage.codex", "agent": "codex" },
+      { "id": "octopus.agent-usage.agy", "agent": "agy" },
+      { "id": "octopus.agent-usage.copilot", "agent": "copilot" },
       { "id": "octopus.agent-usage.grok", "agent": "grok" },
       { "id": "octopus.agent-usage.cursor", "agent": "cursor" },
       { "id": "octopus.agent-usage.opencode", "agent": "opencode" }

@@ -40,6 +40,21 @@
       "allowCustom": true
     }
   },
+  // Read-only quota query through Copilot CLI's headless JSON-RPC server (Content-Length framing, same protocol as @github/copilot-sdk).
+  "probes": {
+    "quota": {
+      "kind": "jsonRpcStdio",
+      "framing": "contentLength",
+      "args": ["--headless", "--stdio", "--no-auto-update"],
+      "requests": [
+        { "method": "account.getQuota", "params": {}, "result": true }
+      ],
+      "select": ["quotaSnapshots"],
+      "timeoutMs": 20000,
+      "minIntervalSec": 120,
+      "exclusivePer": "account"
+    }
+  },
   "accounts": {
     "mode": "envDir",
     "env": "COPILOT_HOME",
@@ -51,5 +66,13 @@
       "kind": "jsonPaths",
       "jsonPaths": ["last_logged_in_user.login", "user.login"]
     }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "--acp"
+    ],
+    "dialect": "copilot",
+    "minVersion": "1.0.88"
   }
 }

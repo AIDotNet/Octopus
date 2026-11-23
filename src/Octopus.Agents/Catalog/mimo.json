@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "mimo",
+  "name": "MiMo Code",
+  "icon": "mimo",
+  "homepage": "https://github.com/XiaomiMiMo/mimo-code",
+  "verified": false,
+  "detect": {
+    "executables": ["mimo"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @xiaomi/mimo-code" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "plan": { "args": ["--agent", "plan"] },
+        "auto": { "args": ["--auto"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "flag", "args": ["--prompt", "{value}"] },
+    "resume": { "continueLatest": ["--continue"] },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "native",
+    "args": ["acp"],
+    "env": {
+      "MIMOCODE_ENABLE_QUESTION_TOOL": "false"
+    },
+    "dialect": "opencode"
+  }
+}

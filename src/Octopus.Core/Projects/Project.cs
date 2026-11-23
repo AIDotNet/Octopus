@@ -36,6 +36,8 @@ public sealed class Project
     /// <summary>The workspace's dock layout (tab groups and splits) as saved by the dock control; null is the default layout.</summary>
     public string? DockLayout { get; set; }
     public List<ProjectItem> Items { get; set; } = [];
+    /// <summary>Git worktree workspaces created under ~/.octopus/workspaces/&lt;project&gt;/&lt;branch&gt;; empty when operating only on the project root.</summary>
+    public List<ProjectWorkspace> Workspaces { get; set; } = [];
     /// <summary>The port forwards of a project on an SSH host (design/11-SSH隧道.md); empty for any other project.</summary>
     public List<TunnelSpec> Tunnels { get; set; } = [];
     /// <summary>Project-level default account id per agent id (design/13-多账户切换.md §4.3); empty follows global profile defaults.</summary>
@@ -65,11 +67,17 @@ public sealed class ProjectItem
 
     /// <summary>Terminal and agent: the working directory; null means the project directory.</summary>
     public string? WorkingDirectory { get; set; }
+    /// <summary>The <see cref="ProjectWorkspace.Id"/> this item belongs to; null means the project's default directory.</summary>
+    public string? WorkspaceId { get; set; }
 
     /// <summary>Agent: the id of the agent definition.</summary>
     public string? AgentId { get; set; }
     /// <summary>Agent: what was chosen when it was created.</summary>
     public Agents.AgentLaunchOptions? Launch { get; set; }
+    /// <summary>Agent: whether this tab runs as an ACP GUI or as a native terminal; null defaults to Terminal for legacy items.</summary>
+    public Agents.AgentSurface? Surface { get; set; }
+    /// <summary>Agent (GUI): the ACP session id reported by <c>session/new</c> so the session can be resumed or continued in a terminal.</summary>
+    public string? AcpSessionId { get; set; }
 
     /// <summary>File: absolute path. For a file on an SSH host, the read-only copy kept on this computer.</summary>
     public string? FilePath { get; set; }

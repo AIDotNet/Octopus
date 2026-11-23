@@ -115,6 +115,9 @@ public sealed class AgentProbe
     /// <summary>One of <see cref="ProbeKinds"/>.</summary>
     public string Kind { get; set; } = ProbeKinds.Command;
 
+    /// <summary><c>jsonRpcStdio</c>: wire framing, <c>line</c> (default, newline-delimited) or <c>contentLength</c> (LSP-style <c>Content-Length</c> headers).</summary>
+    public string? Framing { get; set; }
+
     /// <summary>Arguments after the executable. Placeholders such as <c>{sessionId}</c> are filled from the request.</summary>
     public List<string> Args { get; set; } = [];
 
@@ -156,6 +159,16 @@ public static class ProbeKinds
     /// <summary>Run the executable and read its standard output.</summary>
     public const string Command = "command";
 
-    /// <summary>Start the executable and speak newline-delimited JSON-RPC 2.0 over its standard input and output.</summary>
+    /// <summary>Start the executable and speak JSON-RPC 2.0 over its standard input and output.</summary>
     public const string JsonRpcStdio = "jsonRpcStdio";
+}
+
+/// <summary>The <c>framing</c> values of a <see cref="ProbeKinds.JsonRpcStdio"/> probe.</summary>
+public static class ProbeFramings
+{
+    /// <summary>One JSON-RPC object per line (default, e.g. <c>codex app-server</c>).</summary>
+    public const string Line = "line";
+
+    /// <summary>HTTP-style <c>Content-Length: N\r\n\r\n</c> framing (e.g. <c>copilot --headless --stdio</c>).</summary>
+    public const string ContentLength = "contentLength";
 }

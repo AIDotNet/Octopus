@@ -32,8 +32,13 @@ public class NavigationTests
         Assert.False(hosts.Offline[0].OpenCommand.CanExecute(null));
         Assert.Equal("配对", hosts.Unpaired[0].PillText);
 
-        // Every host is a row on screen.
-        Assert.Equal(4, phone.Shell.GetVisualDescendants().OfType<ListItem>().Count());
+        // Every host is a row on screen, and after them the way to add one by hand.
+        Assert.Equal(5, phone.Shell.GetVisualDescendants().OfType<ListItem>().Count());
+        Assert.False(hosts.IsEmpty);
+        Assert.Equal("Demo", hosts.AccountName);
+        hosts.OpenAccountCommand.Execute(null);
+        Assert.True(hosts.IsAccountOpen);
+        Assert.False(hosts.IsLocalOpen);
     }
 
     [AvaloniaFact]
@@ -179,21 +184,32 @@ public class NavigationTests
     }
 
     [AvaloniaFact]
-    public void Signed_out_there_is_only_the_sign_in_page_and_signing_in_brings_the_hosts()
+    public void Signed_out_the_first_page_is_the_welcome_page_and_sign_in_goes_to_the_official_service()
     {
         using var phone = new Phone(signedIn: false);
-        var signIn = (SignInViewModel)phone.Top<SignInPage>().DataContext!;
-        Assert.Null(phone.Shell.Stack);
-        // First the service's address and "Sign in"; then the code, and the service's page in the browser.
-        Assert.Equal("octopus.example", signIn.Server);
-        Assert.True(signIn.IsEntering);
-        signIn.StartCommand.Execute(null);
+        var page = phone.Top<WelcomePage>();
+        var welcome = (WelcomeViewModel)page.DataContext!;
+        var signIn = welcome.SignIn;
+        Assert.Equal(1, phone.Shell.Stack!.Depth);
+        // "Sign in", and the two other ways: nothing to type, no address in sight.
+        Assert.True(welcome.IsChoosing);
+        Assert.True(welcome.HasOfficialServer);
+        Assert.False(welcome.IsOnTop);
+        Assert.Null(page.Header);
+        Assert.Equal(["LocalRow", "CustomRow"], page.GetVisualDescendants().OfType<ListItem>().Where(row => row.IsVisible).Select(row => row.Name));
+        Assert.Empty(page.GetVisualDescendants().OfType<TextField>());
+
+        // "Sign in": the code at once, and the official service's page in the browser.
+        welcome.SignInCommand.Execute(null);
         Assert.True(Phone.Until(() => signIn.HasCode));
+        Assert.False(welcome.IsChoosing);
         Assert.Equal("WDJB-MJHT", signIn.UserCode);
         Assert.Equal("octopus.example", phone.Opened?.Host);
         phone.Opened = null;
         signIn.BrowseCommand.Execute(null);
         Assert.Equal("octopus.example", phone.Opened?.Host);
+        // The official service is not an address the person typed: the custom-service page stays empty.
+        Assert.Equal("", phone.Account.Server);
 
         // The made-up browser confirmation arrives after a moment.
         Assert.True(Phone.Until(() => phone.Shell.Top is HostsPage));
@@ -201,9 +217,143 @@ public class NavigationTests
     }
 
     [AvaloniaFact]
+    public void A_sign_in_that_is_given_up_brings_the_choices_back()
+    {
+        using var phone = new Phone(signedIn: false, signInDelay: TimeSpan.FromMinutes(1));
+        var welcome = (WelcomeViewModel)phone.Top<WelcomePage>().DataContext!;
+
+        welcome.SignInCommand.Execute(null);
+        Assert.True(Phone.Until(() => welcome.SignIn.HasCode));
+        Assert.False(welcome.SignInCommand.CanExecute(null));
+        welcome.SignIn.CancelCommand.Execute(null);
+
+        Assert.True(welcome.IsChoosing);
+        Assert.False(welcome.SignIn.HasError);
+        Assert.True(welcome.SignInCommand.CanExecute(null));
+        Assert.False(phone.Account.IsSignedIn);
+    }
+
+    [AvaloniaFact]
+    public void Custom_service_asks_for_the_address_and_signs_in_there()
+    {
+        using var phone = new Phone(signedIn: false);
+        var welcome = (WelcomeViewModel)phone.Top<WelcomePage>().DataContext!;
+
+        welcome.UseCustomCommand.Execute(null);
+        var page = (CustomServerViewModel)phone.Top<CustomServerPage>().DataContext!;
+        Assert.Equal(2, phone.Shell.Stack!.Depth);
+        Assert.Equal("", page.Server);
+        Assert.True(page.IsEntering);
+        Assert.False(page.StartCommand.CanExecute(null));
+
+        page.Server = "my.octopus.test";
+        page.StartCommand.Execute(null);
+        Assert.True(Phone.Until(() => page.SignIn.HasCode));
+        Assert.False(page.IsEntering);
+        Assert.Equal("my.octopus.test", phone.Opened?.Host);
+        Assert.Equal("my.octopus.test", phone.Account.Server);
+
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostsPage));
+        Assert.Equal(1, phone.Shell.Stack!.Depth);
+    }
+
+    [AvaloniaFact]
+    public void Without_an_official_service_sign_in_opens_the_address_page_and_there_is_no_row_for_it()
+    {
+        using var phone = new Phone(signedIn: false, official: false);
+        var page = phone.Top<WelcomePage>();
+        var welcome = (WelcomeViewModel)page.DataContext!;
+        Assert.False(welcome.HasOfficialServer);
+        Assert.Equal(["LocalRow"], page.GetVisualDescendants().OfType<ListItem>().Where(row => row.IsVisible).Select(row => row.Name));
+
+        welcome.SignInCommand.Execute(null);
+
+        phone.Top<CustomServerPage>();
+        Assert.False(welcome.SignIn.HasCode);
+        Assert.Null(phone.Opened);
+    }
+
+    [AvaloniaFact]
+    public void Without_an_account_the_list_says_so_and_offers_to_sign_in_to_leave_and_to_add_a_computer()
+    {
+        using var phone = new Phone(localOnly: true, pairingDelay: TimeSpan.FromSeconds(1));
+        var page = phone.Top<HostsPage>();
+        var hosts = (HostsViewModel)page.DataContext!;
+        Assert.Equal("未登录", hosts.AccountName);
+        Assert.True(hosts.IsSignedOut);
+        // Only what the phone paired with itself: reached directly, or offline. No group of the account's other computers.
+        Assert.Equal(["MacBook Pro"], hosts.Online.Select(row => row.Name));
+        Assert.Equal(["Mac mini"], hosts.Offline.Select(row => row.Name));
+        Assert.Empty(hosts.Unpaired);
+        Assert.StartsWith("局域网", hosts.Online[0].Summary);
+        Assert.True(page.FindControl<Control>("SignedOutButton")!.IsVisible);
+        Assert.False(page.FindControl<Control>("AccountButton")!.IsVisible);
+
+        // The entry opens "Sign in" and "Leave local network mode", not "Sign out".
+        hosts.OpenAccountCommand.Execute(null);
+        Assert.True(hosts.IsLocalOpen);
+        Assert.False(hosts.IsAccountOpen);
+        Assert.Equal(2, page.FindControl<ActionSheet>("LocalSheet")!.Actions.Count);
+        hosts.IsLocalOpen = false;
+
+        // "Add a computer": the address, the number on the page every pairing has, and the list again with one more.
+        hosts.AddHostCommand.Execute(null);
+        var add = (AddHostViewModel)phone.Top<AddHostPage>().DataContext!;
+        add.Target = "192.168.1.20:7420";
+        add.ConnectCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is PairingPage));
+        var pairing = (PairingViewModel)phone.Top<PairingPage>().DataContext!;
+        Assert.True(Phone.Until(() => pairing.HasCode));
+        Assert.Equal(("192.168.1.20:7420", "482 913"), (pairing.HostName, pairing.Code));
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostsPage));
+        Assert.Same(page, phone.Shell.Top);
+        Assert.Contains(hosts.Online, row => row.Name == "192.168.1.20");
+
+        // Signing in from here is the welcome page's "Sign in", on top of the list.
+        hosts.SignInCommand.Execute(null);
+        var welcome = (WelcomeViewModel)phone.Top<WelcomePage>().DataContext!;
+        Assert.True(welcome.IsOnTop);
+        Assert.NotNull(phone.Top<WelcomePage>().Header);
+        Assert.False(welcome.ShowsLocal);
+        welcome.BackCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostsPage));
+
+        // Leaving: the welcome page is the first page again.
+        hosts.LeaveLocalCommand.Execute(null);
+        Phone.Pump();
+        phone.Top<WelcomePage>();
+        Assert.Equal(1, phone.Shell.Stack!.Depth);
+        Assert.False(phone.Account.IsLocalOnly);
+    }
+
+    [AvaloniaFact]
+    public void An_empty_list_says_what_is_missing_and_offers_to_add_a_computer()
+    {
+        using var phone = new Phone(localOnly: true);
+        phone.Workspace.Hosts.Clear();
+        Phone.Pump();
+        var page = phone.Top<HostsPage>();
+        var hosts = (HostsViewModel)page.DataContext!;
+
+        Assert.True(hosts.IsEmpty);
+        Assert.Equal("还没有添加电脑。", hosts.EmptyText);
+        Assert.True(page.FindControl<Control>("AddHostButton")!.IsEffectivelyVisible);
+        // One way to add, not two: the row under the list is for a list that has something in it.
+        Assert.False(page.FindControl<Control>("AddGroup")!.IsVisible);
+
+        // Signed in, the same place says that nothing of the account has remote access on, and still offers to add one.
+        using var signedIn = new Phone();
+        signedIn.Workspace.Hosts.Clear();
+        Phone.Pump();
+        var account = (HostsViewModel)signedIn.Top<HostsPage>().DataContext!;
+        Assert.Equal("这个账号下还没有开启远程访问的电脑。", account.EmptyText);
+        Assert.True(signedIn.Top<HostsPage>().FindControl<Control>("AddHostButton")!.IsEffectivelyVisible);
+    }
+
+    [AvaloniaFact]
     public void Signing_out_closes_every_page()
     {
-        // The made-up account confirms a new sign-in by itself: slowly here, so the sign-in page is still there to see.
+        // The made-up account confirms a new sign-in by itself: slowly here, so the welcome page is still there to see.
         using var phone = new Phone(signInDelay: TimeSpan.FromMinutes(1));
         var session = phone.Workspace.Hosts[0].Projects[0].Sessions[0];
         phone.Shell.ShowHost(session.Project.Host);
@@ -214,7 +364,8 @@ public class NavigationTests
         phone.Account.SignOut();
         Phone.Pump();
 
-        Assert.IsType<SignInPage>(phone.Shell.Content);
+        phone.Top<WelcomePage>();
+        Assert.Equal(1, phone.Shell.Stack!.Depth);
         Assert.True(Phone.Until(() => connection.Exited.IsCompleted));
     }
 }

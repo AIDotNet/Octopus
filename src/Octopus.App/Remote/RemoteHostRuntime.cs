@@ -69,7 +69,7 @@ public sealed class RemoteHostRuntime : IDisposable
     public static HelloMessage Hello { get; } = new()
     {
         AppVersion = HostWorkspace.AppVersion,
-        Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityBrowse],
+        Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityBrowse, RemoteMethods.CapabilityWorkspaces],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
     };
 

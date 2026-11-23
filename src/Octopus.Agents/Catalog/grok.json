@@ -92,5 +92,16 @@
       "select": ["sessionId", "updatedAt", "session"],
       "minIntervalSec": 10
     }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "agent",
+      "stdio"
+    ],
+    "fullAccessArgs": [
+      "--always-approve"
+    ],
+    "dialect": "grok"
   }
 }

@@ -7,16 +7,20 @@ using Octopus.Agents.Accounts;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
+using Octopus.App.Services.Workspaces;
 using Octopus.App.Settings;
+using Octopus.App.Shell;
 using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
+using Octopus.Git;
+using Octopus.Platform;
 using Octopus.Storage;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Sidebar;
 
-/// <summary>The 230 px panel: project name and path, a filter, and the agents, terminals and files of the project.</summary>
+/// <summary>The 230 px panel: project name and path, a filter, and the agents and terminals grouped by workspace when worktrees exist.</summary>
 public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient<RenameProjectRequested>
 {
     private readonly IProjectService _projects;
@@ -27,10 +31,17 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     private readonly Activity.ISubagentService? _subagents;
     private readonly IAgentAccountService? _accounts;
     private readonly ISettingsStore? _settings;
+    private readonly IGitService? _git;
+    private readonly IWorkspaceManager? _workspaces;
+    private readonly IFileOpener? _fileOpener;
+    private readonly ISettingsNavigator? _settingsNavigator;
     /// <summary>Per item, outliving the rows: a rebuild (a filter, a new tab) keeps what the user opened.</summary>
     private readonly Dictionary<string, SubagentListViewModel> _subagentLists = [];
+    private readonly Dictionary<string, bool> _defaultCollapsed = [];
     private bool _updatingName;
     private bool _moving;
+    private int _gitCheckVersion;
+    private string? _gitCheckedProjectId;
 
     public ProjectPanelViewModel(
         IProjectService projects,
@@ -40,11 +51,19 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         Activity.IItemActivityService activity,
         Activity.ISubagentService? subagents = null,
         IAgentAccountService? accounts = null,
-        ISettingsStore? settings = null)
+        ISettingsStore? settings = null,
+        IGitService? git = null,
+        IWorkspaceManager? workspaces = null,
+        IFileOpener? fileOpener = null,
+        ISettingsNavigator? settingsNavigator = null)
     {
         _subagents = subagents;
         _accounts = accounts;
         _settings = settings;
+        _git = git;
+        _workspaces = workspaces;
+        _fileOpener = fileOpener;
+        _settingsNavigator = settingsNavigator;
         if (_accounts is not null) _accounts.Changed += (_, _) => UiContext.Run(Rebuild);
         if (_settings is not null) _settings.Changed += (_, _) => UiContext.Run(Rebuild);
         if (_subagents is not null)
@@ -75,7 +94,11 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     /// <summary>The project's terminals and agents in one list, in the order the user arranged them.</summary>
     public ObservableCollection<ItemRowViewModel> Items { get; } = [];
 
+    /// <summary>Workspace groups (default folder + git worktrees) shown when the project has branch workspaces.</summary>
+    public ObservableCollection<WorkspaceGroupViewModel> WorkspaceGroups { get; } = [];
+
     [ObservableProperty] public partial bool HasProject { get; private set; }
+    [ObservableProperty] public partial string? ProjectId { get; private set; }
     [ObservableProperty] public partial string ProjectName { get; set; } = "";
     [ObservableProperty] public partial string ProjectPath { get; private set; } = "";
     [ObservableProperty] public partial string Filter { get; set; } = "";
@@ -83,10 +106,23 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     [ObservableProperty] public partial string GroupName { get; private set; } = "";
     /// <summary>True when the project is local and shares working directories with at least one other local project in its group.</summary>
     [ObservableProperty] public partial bool IsGroupMerged { get; private set; }
+    /// <summary>True when the current project is a local git repository (shows the "+ New branch" button).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanCreateWorkspace))]
+    public partial bool IsGitProject { get; private set; }
+    /// <summary>Current branch checked out in the project's default directory; null when unknown or not git.</summary>
+    [ObservableProperty] public partial string? DefaultBranchName { get; private set; }
+    /// <summary>True when the project has at least one branch workspace: the sidebar switches to the workspace grouping tree.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowFlatList), nameof(SectionHeaderText))]
+    public partial bool HasWorkspaces { get; private set; }
 
     public bool HasNoProject => !HasProject;
     public bool HasGroup => GroupName.Length > 0;
-    public bool NoItems => Items.Count == 0;
+    public bool NoItems => !HasWorkspaces && Items.Count == 0;
+    public bool ShowFlatList => !HasWorkspaces;
+    public bool CanCreateWorkspace => HasProject && IsGitProject && _workspaces is not null;
+    public string SectionHeaderText => AppLangResources.Get(HasWorkspaces ? AppLangResourceKind.WorkspaceSectionHeader : AppLangResourceKind.ItemList);
 
     /// <summary>Asks the view to put the project name into editing.</summary>
     public event EventHandler? RenameRequested;
@@ -101,9 +137,36 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     {
         if (!_updatingName && _projects.Current is { } project)
         {
-            _projects.RenameProject(project.Id, value);
+            CommitProjectRename(project.Id, value);
         }
     }
+
+    /// <summary>Normalizes single-line whitespace and renames the targeted project when non-empty and changed.</summary>
+    public bool CommitProjectRename(string? projectId, string? draft)
+    {
+        if (string.IsNullOrEmpty(projectId))
+        {
+            return false;
+        }
+        var normalized = NormalizeProjectName(draft);
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+        var target = _projects.Projects.FirstOrDefault(p => p.Id == projectId);
+        if (target is null || string.Equals(target.Name, normalized, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        _projects.RenameProject(projectId, normalized);
+        return true;
+    }
+
+    /// <summary>Trims and collapses whitespace/newlines so pasted multi-line text stays a single clean project name.</summary>
+    public static string NormalizeProjectName(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? ""
+            : string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     public void Receive(RenameProjectRequested message) => RenameRequested?.Invoke(this, EventArgs.Empty);
 
@@ -126,6 +189,10 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             {
                 item.IsActive = item.Id == active;
             }
+            foreach (var group in WorkspaceGroups)
+            {
+                group.RefreshActive();
+            }
             return;
         }
         if (e.Kind is not (ProjectChangeKind.Layout or ProjectChangeKind.GroupExpanded or ProjectChangeKind.Tunnels) && !_moving)
@@ -136,6 +203,18 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
 
     [RelayCommand]
     private Task NewProjectAsync() => _opener.PickAndAddProjectAsync();
+
+    [RelayCommand]
+    private async Task NewBranchWorkspaceAsync()
+    {
+        if (_workspaces is not null && _projects.Current is { } project)
+        {
+            await _workspaces.PromptAndCreateAsync(project);
+        }
+    }
+
+    [RelayCommand]
+    private void OpenWorkspaceCleanup() => _settingsNavigator?.OpenSettings("workspace-cleanup");
 
     /// <summary>
     /// Saves a move the list already made in <see cref="Items"/>: the row now at <paramref name="newIndex"/> came from
@@ -164,6 +243,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     {
         var project = _projects.Current;
         HasProject = project is not null;
+        ProjectId = project?.Id;
         _updatingName = true;
         ProjectName = project?.Name ?? "";
         _updatingName = false;
@@ -175,6 +255,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             && ProjectLocation.IsOnThisComputer(project)
             && _projects.Projects.Any(p => p.Id != project.Id && p.GroupId == group.Id && ProjectLocation.IsOnThisComputer(p));
         Items.Clear();
+        WorkspaceGroups.Clear();
+        HasWorkspaces = project is not null && ProjectLocation.IsOnThisComputer(project) && project.Workspaces.Count > 0;
         if (project is not null)
         {
             var filter = Filter.Trim();
@@ -185,7 +267,10 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
                 {
                     continue;
                 }
-                if (filter.Length > 0 && !item.DisplayTitle.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                var wsBranch = item.WorkspaceId is { } wid ? _projects.FindWorkspace(project, wid)?.Branch : null;
+                if (filter.Length > 0
+                    && !item.DisplayTitle.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    && (wsBranch is null || !wsBranch.Contains(filter, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
@@ -202,12 +287,117 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
                 row.Subagents = _subagentLists.GetValueOrDefault(item.Id);
                 Items.Add(row);
             }
+
+            if (HasWorkspaces)
+            {
+                BuildWorkspaceGroups(project, filter);
+            }
         }
         OnPropertyChanged(nameof(NoItems));
+        OnPropertyChanged(nameof(CanCreateWorkspace));
+        OnPropertyChanged(nameof(SectionHeaderText));
         // Lists of items that are gone (closed, or another project's) go with them; a project switch builds them anew.
         foreach (var id in _subagentLists.Keys.Where(id => _projects.FindItem(id) is null).ToList())
         {
             _subagentLists.Remove(id);
+        }
+
+        if (project?.Id != _gitCheckedProjectId)
+        {
+            _gitCheckedProjectId = project?.Id;
+            _ = RefreshGitStateAsync(project);
+        }
+    }
+
+    private void BuildWorkspaceGroups(Project project, string filter)
+    {
+        var home = _workspaces?.HomeDirectory;
+        var defaultTitle = string.IsNullOrWhiteSpace(DefaultBranchName)
+            ? AppLangResources.Get(AppLangResourceKind.WorkspaceDefaultName)
+            : AppLangResources.Format(AppLangResourceKind.WorkspaceDefaultWithBranch, DefaultBranchName);
+        var defaultItems = Items.Where(r => string.IsNullOrEmpty(r.Item.WorkspaceId)).ToList();
+        var defaultExpanded = !_defaultCollapsed.GetValueOrDefault(project.Id, false);
+        WorkspaceGroups.Add(new WorkspaceGroupViewModel(
+            workspace: null,
+            displayName: defaultTitle,
+            fullPath: project.Path,
+            shortPath: WorkspacePaths.FormatHomePath(project.Path, home),
+            isExpanded: defaultExpanded,
+            items: defaultItems,
+            onCollapsedChanged: (_, collapsed) => _defaultCollapsed[project.Id] = collapsed,
+            reveal: g => _fileOpener?.Reveal(g.FullPath)));
+
+        foreach (var ws in project.Workspaces)
+        {
+            var groupItems = Items.Where(r => r.Item.WorkspaceId == ws.Id).ToList();
+            if (filter.Length > 0
+                && groupItems.Count == 0
+                && !ws.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                && (ws.Task?.Key is null || !ws.Task.Key.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+            WorkspaceGroups.Add(new WorkspaceGroupViewModel(
+                workspace: ws,
+                displayName: ws.DisplayName,
+                fullPath: ws.Path,
+                shortPath: WorkspacePaths.FormatHomePath(ws.Path, home),
+                isExpanded: !ws.IsCollapsed,
+                items: groupItems,
+                onCollapsedChanged: (g, collapsed) =>
+                {
+                    if (g.Workspace is not null) _projects.SetWorkspaceCollapsed(project, g.Workspace.Id, collapsed);
+                },
+                reveal: g => _fileOpener?.Reveal(g.FullPath),
+                openTask: g =>
+                {
+                    if (!string.IsNullOrWhiteSpace(g.TaskUrl)) _fileOpener?.OpenUrl(g.TaskUrl);
+                },
+                remove: g => _workspaces is not null && g.Workspace is not null
+                    ? _workspaces.RemoveWithConfirmAsync(project, g.Workspace)
+                    : Task.CompletedTask,
+                togglePin: (g, pinned) =>
+                {
+                    if (g.Workspace is not null) _projects.SetWorkspacePinned(project, g.Workspace.Id, pinned);
+                }));
+        }
+    }
+
+    private async Task RefreshGitStateAsync(Project? project)
+    {
+        var version = ++_gitCheckVersion;
+        if (project is null || !ProjectLocation.IsOnThisComputer(project) || _git is null || !Directory.Exists(project.Path))
+        {
+            IsGitProject = false;
+            DefaultBranchName = null;
+            return;
+        }
+        var root = await _git.FindRepositoryRootAsync(project.Path).ConfigureAwait(false);
+        if (version != _gitCheckVersion) return;
+        if (root is null)
+        {
+            UiContext.PostToUi(() =>
+            {
+                if (version != _gitCheckVersion) return;
+                IsGitProject = false;
+                DefaultBranchName = null;
+            });
+            return;
+        }
+        var status = await _git.GetStatusAsync(root).ConfigureAwait(false);
+        if (version != _gitCheckVersion) return;
+        UiContext.PostToUi(() =>
+        {
+            if (version != _gitCheckVersion) return;
+            IsGitProject = true;
+            var newBranch = status?.Branch;
+            var branchChanged = DefaultBranchName != newBranch;
+            DefaultBranchName = newBranch;
+            if (branchChanged && HasWorkspaces) Rebuild();
+        });
+        if (_workspaces is not null)
+        {
+            await _workspaces.SyncAsync(project).ConfigureAwait(false);
         }
     }
 

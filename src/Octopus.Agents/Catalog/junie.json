@@ -17,5 +17,12 @@
       "modes": { "default": {"args": []}, "full": {"args": ["--brave"], "danger": true} }
     },
     "extraArgs": true
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "--acp=true"
+    ],
+    "dialect": "generic"
   }
 }

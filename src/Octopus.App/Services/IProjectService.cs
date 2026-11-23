@@ -39,6 +39,21 @@ public interface IProjectService
     void UpdateTunnel(Project project, TunnelSpec tunnel);
     void RemoveTunnel(Project project, string tunnelId);
 
+    /// <summary>Finds one of a project's git worktree workspaces by id; null when not found or <paramref name="workspaceId"/> is null/empty.</summary>
+    ProjectWorkspace? FindWorkspace(Project project, string? workspaceId);
+    /// <summary>Adds a git worktree workspace to a project; returns existing when the same path is already tracked.</summary>
+    ProjectWorkspace AddWorkspace(Project project, ProjectWorkspace workspace);
+    /// <summary>Updates branch name, task link or path of a tracked workspace.</summary>
+    void UpdateWorkspace(Project project, ProjectWorkspace workspace);
+    /// <summary>Removes a workspace record from the project (does not touch disk).</summary>
+    void RemoveWorkspace(Project project, string workspaceId);
+    /// <summary>Persists whether a workspace group is collapsed in the sidebar tree.</summary>
+    void SetWorkspaceCollapsed(Project project, string workspaceId, bool collapsed);
+    /// <summary>Pins or unpins a workspace (pinned workspaces are always protected from automatic cleanup).</summary>
+    void SetWorkspacePinned(Project project, string workspaceId, bool pinned);
+    /// <summary>Records the latest user or agent activity timestamp for a workspace (throttled, persisted silently).</summary>
+    void TouchWorkspaceActivity(Project project, string workspaceId, DateTimeOffset timestamp);
+
     /// <summary>The groups of the rail, in order.</summary>
     IReadOnlyList<ProjectGroup> Groups { get; }
     /// <summary>The one open group; null when all are closed.</summary>

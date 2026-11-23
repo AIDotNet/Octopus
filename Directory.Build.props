@@ -6,5 +6,9 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+        <!-- The address of the official Octopus service (https://…), compiled into the phone app: its "Sign in" goes
+             straight there. Empty until there is one: the phone app then asks for an address instead
+             (~/code/Octopus/design/mobile/01-登录与连接方式.md §3). Set it here, or with -p:OctopusServiceUrl=… -->
+        <OctopusServiceUrl Condition="'$(OctopusServiceUrl)' == ''"></OctopusServiceUrl>
     </PropertyGroup>
 </Project>

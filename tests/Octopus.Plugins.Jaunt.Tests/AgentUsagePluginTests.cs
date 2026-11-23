@@ -1,9 +1,16 @@
 using Xunit;
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json.Nodes;
+using Octopus.Agents;
 using Octopus.Core.Plugins;
+using Octopus.FileSystem;
+using Octopus.Platform;
+using Octopus.Plugins.Catalog;
 using Octopus.Plugins.Manifests;
 using Octopus.Plugins.Runtime;
+using Octopus.Plugins.Runtime.Modules;
+using Octopus.Plugins.Security;
 
 namespace Octopus.Plugins.Jaunt.Tests;
 
@@ -26,7 +33,14 @@ public sealed class AgentUsagePluginTests
         Assert.True(result.IsValid, string.Join("\n", result.Issues));
         Assert.Empty(result.Issues);
         var manifest = result.Manifest!;
-        Assert.Equal(5, manifest.Contributes.UsageProviders.Count);
+        Assert.Equal(7, manifest.Contributes.UsageProviders.Count);
+        Assert.Contains(manifest.Contributes.UsageProviders, p => p.Agent == "agy");
+        Assert.Contains(manifest.Contributes.UsageProviders, p => p.Agent == "copilot");
+        Assert.Contains(manifest.Permissions.Requests, r => r.Key == "agents.probes.agy.usage");
+        Assert.Contains(manifest.Permissions.Requests, r => r.Key == "agents.probes.copilot.quota");
+        Assert.Contains(manifest.Permissions.FsAgentData, d => d.Agent == "agy" && d.Include.Contains("brain/*/.system_generated/logs/transcript.jsonl"));
+        Assert.Contains(manifest.Permissions.FsAgentData, d => d.Agent == "copilot" && d.Include.Contains("session-state/**/events.jsonl"));
+        Assert.Contains(manifest.Permissions.FsAgentData, d => d.Agent == "grok" && d.Include.Contains("sessions/**/usage.json"));
         // No process and no credential files of other tools (design 12 §9 is undecided). The network is optional and
         // only reaches the API hosts of the providers the user gives a key for (design 12 §9.3, the "paste a key" path).
         Assert.DoesNotContain(manifest.Permissions.Requests, r => r.Key is "process.run" or "fs.external");
@@ -102,6 +116,8 @@ public sealed class AgentUsagePluginTests
         // One tab per installed agent, the tightest window in its title; Claude (92%) is open.
         Assert.Contains("Claude 92%", titles);
         Assert.Contains("Codex", titles[1]);
+        Assert.Contains(titles, title => title.StartsWith("Antigravity"));
+        Assert.Contains(titles, title => title.StartsWith("Copilot"));
         Assert.Contains(titles, title => title.StartsWith("Cursor"));
         Assert.Contains(titles, title => title.StartsWith("Grok"));
         Assert.Equal("claude", tabs["p"]!["selected"]!.GetValue<string>());
@@ -282,9 +298,12 @@ public sealed class AgentUsagePluginTests
         {
             a.Accounts["codex"] = [("c0dex0000001", "work/codex")];
             a.Accounts["claude"] = [("a1b2c3d4e5f6", "55232/config")];
+            a.Accounts["copilot"] = [("c0p110700001", "work/copilot")];
             // Minutes old at most: the host's cache from the last run (usage-cache.json).
             h.Usage.Update("codex", Id, Cached("c0dex0000001", 77, "plus"));
             h.Usage.Update("claude", Id, Cached("a1b2c3d4e5f6", 0, "Max 20x", withWindow: false));
+            h.Usage.Update("agy", Id, Cached(null, 24));
+            h.Usage.Update("copilot", Id, Cached("c0p110700001", 20));
             h.Usage.Update("cursor", Id, new JsonObject { ["plan"] = "pro", ["windows"] = new JsonArray(), ["source"] = "official" });
         });
         await using var _ = harness;
@@ -293,13 +312,18 @@ public sealed class AgentUsagePluginTests
         await Harness.WaitUntil(() => agents.Indicator?["text"]?.GetValue<string>() == "77%");
         Assert.Empty(agents.Probes);
 
-        // The start-up queries (Codex at 3 s, Claude's plan at 4 s, Cursor at 5 s) find fresh readings and stay quiet.
+        // The start-up queries (Codex at 3 s, Agy at 3.5 s, Claude's plan at 4 s, Copilot at 4.5 s, Cursor at 5 s) find fresh readings and stay quiet.
         await Task.Delay(6_000);
         Assert.Empty(agents.Probes);
 
         // The refresh button asks anyway.
         await manager.ExecuteCommandAsync("octopus.agent-usage.refresh");
-        await Harness.WaitUntil(() => agents.Probes.Contains("codex:c0dex0000001") && agents.Probes.Contains("cursor:") && agents.Probes.Contains("claude:a1b2c3d4e5f6"));
+        await Harness.WaitUntil(() =>
+            agents.Probes.Contains("codex:c0dex0000001")
+            && agents.Probes.Contains("agy:")
+            && agents.Probes.Contains("copilot:c0p110700001")
+            && agents.Probes.Contains("cursor:")
+            && agents.Probes.Contains("claude:a1b2c3d4e5f6"));
     }
 
     [Fact]
@@ -353,6 +377,260 @@ public sealed class AgentUsagePluginTests
     }
 
     [Fact]
+    public async Task Agy_And_Copilot_ProbeResults_BecomeQuotaSnapshots()
+    {
+        var (harness, _, _) = await StartAsync((_, a) =>
+        {
+            a.Accounts["copilot"] = [("c0p110700001", "work/copilot"), ("c0p110700002", "unlimited/copilot")];
+        });
+        await using var __ = harness;
+
+        await Harness.WaitUntil(() =>
+            harness.Usage.Get("agy") is not null
+            && harness.Usage.Get("copilot", "c0p110700001") is not null
+            && harness.Usage.Get("copilot", "c0p110700002") is not null, 10_000);
+
+        // Antigravity CLI: four buckets across two groups, 5h sorted before weekly within each group.
+        var agy = harness.Usage.Get("agy")!.Snapshot;
+        var agyWindows = agy["windows"]!.AsArray();
+        Assert.Equal(4, agyWindows.Count);
+        Assert.Equal("gemini-5h", agyWindows[0]!["id"]!.GetValue<string>());
+        Assert.Equal(24, Math.Round(agyWindows[0]!["usedPercent"]!.GetValue<double>()));
+        Assert.Equal("Gemini", agyWindows[0]!["tag"]!.GetValue<string>());
+        Assert.Equal("gemini-weekly", agyWindows[1]!["id"]!.GetValue<string>());
+        Assert.Equal(8, Math.Round(agyWindows[1]!["usedPercent"]!.GetValue<double>()));
+        Assert.Equal("3p-5h", agyWindows[2]!["id"]!.GetValue<string>());
+        Assert.Equal("Claude/GPT", agyWindows[2]!["tag"]!.GetValue<string>());
+        Assert.Equal(0, Math.Round(agyWindows[2]!["usedPercent"]!.GetValue<double>()));
+
+        // Copilot CLI: premium_interactions remainingPercentage=80 -> 20% used; unlimited entitlement -> credits.unlimited.
+        var copilot = harness.Usage.Get("copilot", "c0p110700001")!.Snapshot;
+        var copilotWindows = copilot["windows"]!.AsArray();
+        Assert.Single(copilotWindows);
+        Assert.Equal("premium_interactions", copilotWindows[0]!["id"]!.GetValue<string>());
+        Assert.Equal(20, Math.Round(copilotWindows[0]!["usedPercent"]!.GetValue<double>()));
+
+        var unlimited = harness.Usage.Get("copilot", "c0p110700002")!.Snapshot;
+        Assert.Empty(unlimited["windows"]!.AsArray());
+        Assert.True(unlimited["credits"]!["unlimited"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task HistoryView_Scans_Agy_Copilot_And_Grok_SessionRecords_EndToEnd()
+    {
+        var home = Directory.CreateTempSubdirectory("octopus-usage-home-").FullName;
+        try
+        {
+            var today = DateTimeOffset.UtcNow;
+            var iso = today.ToString("O");
+
+            // 1. Antigravity CLI: PLANNER_RESPONSE + CHECKPOINT (inherits model, non-cached input separate from cache_read).
+            var agyLog = Path.Combine(home, ".gemini", "antigravity-cli", "brain", "conv-1", ".system_generated", "logs", "transcript.jsonl");
+            Directory.CreateDirectory(Path.GetDirectoryName(agyLog)!);
+            File.WriteAllLines(agyLog, [
+                $$"""{"step_index":1,"type":"USER_INPUT","created_at":"{{iso}}","content":"secret prompt"}""",
+                $$"""{"step_index":2,"type":"PLANNER_RESPONSE","created_at":"{{iso}}","model":"gemini-4-neon-xhigh","status":"DONE","input_tokens":10000,"output_tokens":500,"cache_read_tokens":20000}""",
+                $$"""{"step_index":3,"type":"CHECKPOINT","created_at":"{{iso}}","status":"DONE","input_tokens":2000,"output_tokens":100,"cache_read_tokens":40000}""",
+            ]);
+
+            // 2. Copilot CLI:
+            //    sess-1: per-call session.usage_record + cumulative session.shutdown (must NOT double-count shutdown; inputTokens includes cacheRead+cacheWrite).
+            //    sess-2: session.shutdown ONLY (must fall back to modelMetrics).
+            //    sess-3: legacy assistant.usage per-call event.
+            var copilot1 = Path.Combine(home, ".copilot", "session-state", "sess-1", "events.jsonl");
+            Directory.CreateDirectory(Path.GetDirectoryName(copilot1)!);
+            File.WriteAllLines(copilot1, [
+                $$"""{"type":"session.usage_record","timestamp":"{{iso}}","id":"e1","data":{"usage":{"model":"gpt-6-luna","inputTokens":15000,"outputTokens":400,"cacheReadTokens":10000,"cacheWriteTokens":2000,"serviceRequestId":"req-1"} } }""",
+                $$"""{"type":"session.shutdown","timestamp":"{{iso}}","id":"e2","data":{"modelMetrics":{"gpt-6-luna":{"requests":{"count":1},"usage":{"inputTokens":15000,"outputTokens":400,"cacheReadTokens":10000,"cacheWriteTokens":2000} } } } }""",
+            ]);
+            var copilot2 = Path.Combine(home, ".copilot", "session-state", "sess-2", "events.jsonl");
+            Directory.CreateDirectory(Path.GetDirectoryName(copilot2)!);
+            File.WriteAllLines(copilot2, [
+                $$"""{"type":"session.shutdown","timestamp":"{{iso}}","id":"e3","data":{"modelMetrics":{"Astra/deepseek-flash":{"requests":{"count":2},"usage":{"inputTokens":5000,"outputTokens":200,"cacheReadTokens":1000,"cacheWriteTokens":0} } } } }""",
+            ]);
+            var copilot3 = Path.Combine(home, ".copilot", "session-state", "sess-3", "events.jsonl");
+            Directory.CreateDirectory(Path.GetDirectoryName(copilot3)!);
+            File.WriteAllLines(copilot3, [
+                $$"""{"type":"assistant.usage","timestamp":"{{iso}}","id":"e4","data":{"model":"gpt-6-luna","inputTokens":6000,"outputTokens":100,"cacheReadTokens":4000,"cacheWriteTokens":0} }""",
+            ]);
+
+            // 3. Grok CLI: sessions/<encoded-cwd>/<id>/usage.json (with exact costUsdTicks = 10^10 ticks/USD).
+            var grokUsage = Path.Combine(home, ".grok", "sessions", "%2Ftmp%2Fdemo", "sess-g1", "usage.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(grokUsage)!);
+            File.WriteAllText(grokUsage, $$"""
+                {
+                  "sessionId": "sess-g1",
+                  "updatedAt": "{{iso}}",
+                  "session": { "inputTokens": 20000, "outputTokens": 1000, "cachedReadTokens": 5000, "cacheCreationTokens": 0, "totalTokens": 21000, "modelCalls": 2, "costUsdTicks": 5000000000, "primaryModelId": "grok-4.7-build" },
+                  "turns": [
+                    {
+                      "turnNumber": 1,
+                      "endedAt": "{{iso}}",
+                      "primaryModelId": "grok-4.7-build",
+                      "modelUsage": {
+                        "grok-4.7-build": { "inputTokens": 20000, "outputTokens": 1000, "cachedReadTokens": 5000, "cacheCreationTokens": 0, "totalTokens": 21000, "modelCalls": 2, "costUsdTicks": 5000000000 }
+                      }
+                    }
+                  ]
+                }
+                """);
+
+            const string priceJson = """
+                {
+                  "google": { "models": { "gemini-4-neon": { "cost": { "input": 3, "output": 15, "cache_read": 0.15 } } } },
+                  "openai": { "models": { "gpt-6-luna": { "cost": { "input": 2, "output": 10, "cache_read": 0.2, "cache_write": 2.5 } } } },
+                  "deepseek": { "models": { "deepseek-flash": { "cost": { "input": 1, "output": 2, "cache_read": 0.1 } } } },
+                  "xai": { "models": { "grok-4-7": { "cost": { "input": 2, "output": 6, "cache_read": 0.5 } } } }
+                }
+                """;
+
+            await using var harness = new Harness
+            {
+                PriceCatalog = _ => Task.FromResult<Stream>(new MemoryStream(Encoding.UTF8.GetBytes(priceJson))),
+            };
+            CopyDirectory(PackageSource(), Path.Combine(harness.BuiltinRoot, Id));
+            var pluginCatalog = new PluginCatalog(harness.Paths, harness.State, PluginHostInfo.Current(new SemanticVersion(1, 0, 0)),
+                new PluginCatalogOptions { BuiltinRoots = [harness.BuiltinRoot] });
+            var agentCatalog = new AgentCatalog(harness);
+            harness.ExtraModules.Add(new FakeAgents(includeFsScopes: false));
+            harness.ExtraModules.Add(new FsModule(
+                new FileAccessService(), new PluginAccessPolicy(), new NoTrashService(), harness.Paths, harness,
+                new EmptyProjectContext(), agentCatalog, pluginCatalog, home: new UserHome(home)));
+
+            var manager = await harness.StartAsync();
+            await manager.FireAsync("onAgentInstalled:agy");
+            await Harness.WaitUntil(() => manager.Find(Id)?.State is PluginHostState.Running or PluginHostState.Failed);
+            var plugin = manager.Find(Id)!;
+            Assert.True(plugin.State == PluginHostState.Running, plugin.LastError);
+
+            var context = new JsonObject { ["instanceId"] = "tab:history", ["visible"] = true };
+            await plugin.InvokeAsync("view.open", ["view", "octopus.agent-usage.history", context], TimeSpan.FromSeconds(5));
+
+            // Wait for the scan to populate the Table with all three agents' models.
+            JsonNode? table = null;
+            await Harness.WaitUntil(() =>
+            {
+                var rendered = plugin.InvokeAsync("view.render", ["tab:history"], TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+                table = Find(JsonNode.Parse(rendered), "Table");
+                return table is not null && table["p"]!["rows"]!.AsArray().Count >= 4;
+            }, 10_000);
+
+            var rows = table!["p"]!["rows"]!.AsArray().ToDictionary(
+                r => r!["id"]!.GetValue<string>(),
+                r => r!["cells"]!.AsArray());
+
+            // agy|gemini-4-neon-xhigh: input=12000, output=600, cache=60000, total=72600.
+            // Cost: (12000*3 + 600*15 + 60000*0.15) / 1e6 = (36000 + 9000 + 9000) / 1e6 = $0.054 -> 0.05.
+            Assert.True(rows.ContainsKey("agy|gemini-4-neon-xhigh"), string.Join(", ", rows.Keys));
+            var agyCells = rows["agy|gemini-4-neon-xhigh"];
+            Assert.Equal("agy", agyCells[1]!.GetValue<string>());
+            Assert.Equal(0.05, agyCells[2]!.GetValue<double>());
+            Assert.Equal(12000, agyCells[4]!.GetValue<long>());
+            Assert.Equal(600, agyCells[5]!.GetValue<long>());
+            Assert.Equal(60000, agyCells[6]!.GetValue<long>());
+            Assert.Equal(72600, agyCells[7]!.GetValue<long>());
+
+            // copilot|gpt-6-luna: sess-1 (3000 in, 400 out, 12000 cache; shutdown skipped!) + sess-3 (2000 in, 100 out, 4000 cache)
+            // => input=5000, output=500, cache=16000, total=21500.
+            Assert.True(rows.ContainsKey("copilot|gpt-6-luna"), string.Join(", ", rows.Keys));
+            var copilotCells = rows["copilot|gpt-6-luna"];
+            Assert.Equal("copilot", copilotCells[1]!.GetValue<string>());
+            Assert.Equal(5000, copilotCells[4]!.GetValue<long>());
+            Assert.Equal(500, copilotCells[5]!.GetValue<long>());
+            Assert.Equal(16000, copilotCells[6]!.GetValue<long>());
+            Assert.Equal(21500, copilotCells[7]!.GetValue<long>());
+
+            // copilot|Astra/deepseek-flash (shutdown-only fallback): input=4000, output=200, cache=1000, total=5200.
+            Assert.True(rows.ContainsKey("copilot|Astra/deepseek-flash"), string.Join(", ", rows.Keys));
+            var deepseekCells = rows["copilot|Astra/deepseek-flash"];
+            Assert.Equal(4000, deepseekCells[4]!.GetValue<long>());
+            Assert.Equal(200, deepseekCells[5]!.GetValue<long>());
+            Assert.Equal(1000, deepseekCells[6]!.GetValue<long>());
+            Assert.Equal(5200, deepseekCells[7]!.GetValue<long>());
+
+            // grok|grok-4.7-build: input=15000, output=1000, cache=5000, total=21000, directCost=$0.50 (5e9 / 1e10).
+            Assert.True(rows.ContainsKey("grok|grok-4.7-build"), string.Join(", ", rows.Keys));
+            var grokCells = rows["grok|grok-4.7-build"];
+            Assert.Equal("grok", grokCells[1]!.GetValue<string>());
+            Assert.Equal(0.5, grokCells[2]!.GetValue<double>());
+            Assert.Equal(15000, grokCells[4]!.GetValue<long>());
+            Assert.Equal(1000, grokCells[5]!.GetValue<long>());
+            Assert.Equal(5000, grokCells[6]!.GetValue<long>());
+            Assert.Equal(21000, grokCells[7]!.GetValue<long>());
+
+            // Append turn 2 to Grok usage.json and trigger Rescan: turn 1 must NOT be double-counted.
+            File.WriteAllText(grokUsage, $$"""
+                {
+                  "sessionId": "sess-g1",
+                  "updatedAt": "{{iso}}",
+                  "turns": [
+                    {
+                      "turnNumber": 1,
+                      "endedAt": "{{iso}}",
+                      "primaryModelId": "grok-4.7-build",
+                      "modelUsage": {
+                        "grok-4.7-build": { "inputTokens": 20000, "outputTokens": 1000, "cachedReadTokens": 5000, "cacheCreationTokens": 0, "totalTokens": 21000, "modelCalls": 2, "costUsdTicks": 5000000000 }
+                      }
+                    },
+                    {
+                      "turnNumber": 2,
+                      "endedAt": "{{iso}}",
+                      "primaryModelId": "grok-4.7-build",
+                      "modelUsage": {
+                        "grok-4.7-build": { "inputTokens": 10000, "outputTokens": 500, "cachedReadTokens": 2000, "cacheCreationTokens": 0, "totalTokens": 10500, "modelCalls": 1, "costUsdTicks": 2500000000 }
+                      }
+                    }
+                  ]
+                }
+                """);
+            var renderedBeforeRescan = JsonNode.Parse(await plugin.InvokeAsync("view.render", ["tab:history"], TimeSpan.FromSeconds(5)))!;
+            var rescanButton = FindButtonByIcon(renderedBeforeRescan, "lucide:refresh-cw")!;
+            var onClick = rescanButton["p"]!["onClick"]!["$h"]!.GetValue<string>();
+            await plugin.InvokeAsync("view.event", ["tab:history", onClick, new JsonArray()], TimeSpan.FromSeconds(5));
+
+            await Harness.WaitUntil(() =>
+            {
+                var r = JsonNode.Parse(plugin.InvokeAsync("view.render", ["tab:history"], TimeSpan.FromSeconds(5)).GetAwaiter().GetResult());
+                var t = Find(r, "Table");
+                var grokRow = t?["p"]?["rows"]?.AsArray().FirstOrDefault(x => x?["id"]?.GetValue<string>() == "grok|grok-4.7-build");
+                return grokRow?["cells"]?[7]?.GetValue<long>() == 31500;
+            }, 10_000);
+
+            var finalTree = JsonNode.Parse(await plugin.InvokeAsync("view.render", ["tab:history"], TimeSpan.FromSeconds(5)))!;
+            var finalGrok = Find(finalTree, "Table")!["p"]!["rows"]!.AsArray().First(x => x!["id"]!.GetValue<string>() == "grok|grok-4.7-build")!["cells"]!.AsArray();
+            Assert.Equal(0.75, finalGrok[2]!.GetValue<double>());
+            Assert.Equal(23000, finalGrok[4]!.GetValue<long>());
+            Assert.Equal(1500, finalGrok[5]!.GetValue<long>());
+            Assert.Equal(7000, finalGrok[6]!.GetValue<long>());
+            Assert.Equal(31500, finalGrok[7]!.GetValue<long>());
+
+            await plugin.InvokeAsync("view.close", ["tab:history"], TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            try { Directory.Delete(home, true); } catch (IOException) { }
+        }
+    }
+
+    private static JsonNode? FindButtonByIcon(JsonNode? node, string icon)
+    {
+        if (node is not JsonObject obj) return null;
+        if (obj["t"]?.GetValue<string>() == "Button" && obj["p"]?["icon"]?.GetValue<string>() == icon) return obj;
+        foreach (var child in obj["c"]?.AsArray() ?? [])
+        {
+            if (FindButtonByIcon(child, icon) is { } found) return found;
+        }
+        return null;
+    }
+
+    private sealed class EmptyProjectContext : IPluginProjectContext
+    {
+        public PluginProjectInfo? Current => null;
+        public IReadOnlyList<PluginProjectInfo> All => [];
+        public event EventHandler? CurrentChanged { add { } remove { } }
+    }
+
+    [Fact]
     public async Task HistoryView_OpensAndRenders_WithoutSessionRecords()
     {
         var (harness, manager, _) = await StartAsync();
@@ -378,7 +656,7 @@ public sealed class AgentUsagePluginTests
     }
 
     /// <summary>The app's agent, workspace and indicator modules, answering with fixed data.</summary>
-    private sealed class FakeAgents : IPluginApiModule
+    private sealed class FakeAgents(bool includeFsScopes = true) : IPluginApiModule
     {
         private readonly ConcurrentDictionary<string, (PluginHost Plugin, PluginSubscription Subscription)> _signals = new();
 
@@ -405,7 +683,11 @@ public sealed class AgentUsagePluginTests
             router.Request("agents.list", (_, _) =>
             {
                 var list = new JsonArray();
-                foreach (var (id, name) in new[] { ("claude", "Claude"), ("codex", "Codex"), ("grok", "Grok"), ("cursor", "Cursor"), ("opencode", "OpenCode") })
+                foreach (var (id, name) in new[]
+                {
+                    ("claude", "Claude Code"), ("codex", "Codex CLI"), ("agy", "Antigravity CLI"),
+                    ("copilot", "GitHub Copilot CLI"), ("grok", "Grok CLI"), ("cursor", "Cursor"), ("opencode", "OpenCode"),
+                })
                 {
                     list.Add((JsonNode)new JsonObject { ["id"] = id, ["name"] = name, ["installed"] = true });
                 }
@@ -414,22 +696,49 @@ public sealed class AgentUsagePluginTests
             router.Request("agents.runProbe", (call, _) =>
             {
                 Probes.Enqueue($"{call.String("agentId")}:{call.String("account")}");
+                var futureIso = DateTimeOffset.UtcNow.AddHours(3).ToString("O");
+                var futureWeekIso = DateTimeOffset.UtcNow.AddDays(5).ToString("O");
                 return Task.FromResult(PluginReply.Of(call.String("agentId") switch
-            {
-                // As this machine's codex app-server answered in P0 (design 13 §3), with a weekly window added.
-                "codex" => new JsonObject
                 {
-                    ["ok"] = true, ["account"] = call.String("account") ?? "", ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    ["data"] = JsonNode.Parse("""
-                        { "rateLimits": { "planType": "plus",
-                          "primary": { "usedPercent": 43, "windowDurationMins": 43200, "resetsAt": 4102444800 },
-                          "secondary": { "usedPercent": 61, "windowDurationMins": 10080, "resetsAt": 4102444800 } } }
-                        """),
-                },
-                "cursor" => new JsonObject { ["ok"] = true, ["account"] = "", ["data"] = new JsonObject { ["subscriptionTier"] = "pro" } },
-                // claude auth status --json, as this machine answered (the e-mail is not selected by the probe).
-                "claude" => new JsonObject { ["ok"] = true, ["account"] = call.String("account") ?? "", ["data"] = JsonNode.Parse("""{ "loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty", "subscriptionType": "max", "planTier": "max_20x" }""") },
-                _ => new JsonObject { ["ok"] = false, ["error"] = "NotDeclared" },
+                    // As this machine's codex app-server answered in P0 (design 13 §3), with a weekly window added.
+                    "codex" => new JsonObject
+                    {
+                        ["ok"] = true, ["account"] = call.String("account") ?? "", ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        ["data"] = JsonNode.Parse("""
+                            { "rateLimits": { "planType": "plus",
+                              "primary": { "usedPercent": 43, "windowDurationMins": 43200, "resetsAt": 4102444800 },
+                              "secondary": { "usedPercent": 61, "windowDurationMins": 10080, "resetsAt": 4102444800 } } }
+                            """),
+                    },
+                    // As agy 1.5.15 answered for `agy --print /usage --output-format json`.
+                    "agy" => new JsonObject
+                    {
+                        ["ok"] = true, ["account"] = "", ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        ["data"] = JsonNode.Parse($$"""
+                            { "status": "SUCCESS", "command": { "data": { "groups": [
+                              { "name": "Gemini Models", "buckets": [
+                                { "id": "gemini-weekly", "name": "Weekly Limit Remaining", "window": "weekly", "remaining_fraction": 0.92, "reset_time": "{{futureWeekIso}}" },
+                                { "id": "gemini-5h", "name": "Five Hour Limit Remaining", "window": "5h", "remaining_fraction": 0.76, "reset_time": "{{futureIso}}" }
+                              ] },
+                              { "name": "Claude and GPT models", "buckets": [
+                                { "id": "3p-weekly", "name": "Weekly Limit Remaining", "window": "weekly", "remaining_fraction": 1, "reset_time": "{{futureWeekIso}}" },
+                                { "id": "3p-5h", "name": "Five Hour Limit Remaining", "window": "5h", "remaining_fraction": 1, "reset_time": "{{futureIso}}" }
+                              ] }
+                            ] } } }
+                            """),
+                    },
+                    // As Copilot CLI's headless JSON-RPC server answers for `account.getQuota`.
+                    "copilot" => new JsonObject
+                    {
+                        ["ok"] = true, ["account"] = call.String("account") ?? "", ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        ["data"] = call.String("account") == "c0p110700002"
+                            ? JsonNode.Parse("""{ "quotaSnapshots": { "premium_interactions": { "isUnlimitedEntitlement": true } } }""")
+                            : JsonNode.Parse($$"""{ "quotaSnapshots": { "premium_interactions": { "entitlementRequests": 300, "usedRequests": 60, "remainingPercentage": 80, "resetDate": "{{futureWeekIso}}" } } }"""),
+                    },
+                    "cursor" => new JsonObject { ["ok"] = true, ["account"] = "", ["data"] = new JsonObject { ["subscriptionTier"] = "pro" } },
+                    // claude auth status --json, as this machine answered (the e-mail is not selected by the probe).
+                    "claude" => new JsonObject { ["ok"] = true, ["account"] = call.String("account") ?? "", ["data"] = JsonNode.Parse("""{ "loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty", "subscriptionType": "max", "planTier": "max_20x" }""") },
+                    _ => new JsonObject { ["ok"] = false, ["error"] = "NotDeclared" },
                 }));
             });
             router.Sync("agents.accounts", call => AccountsOf(call.RequiredString("agentId")).ToJsonString());
@@ -437,7 +746,7 @@ public sealed class AgentUsagePluginTests
             router.Sync("agents.lastSignal", _ => "null");
             router.Sync("workspace.activeItem", _ => "null");
             router.Sync("app.state", _ => """{ "focused": true, "visible": true, "idleSeconds": 0 }""");
-            router.Sync("fs.scopes", _ => "[]");
+            if (includeFsScopes) router.Sync("fs.scopes", _ => "[]");
 
             router.Notify("indicators.create", _ => { });
             router.Notify("indicators.update", call => Indicator = call["state"]?.DeepClone() as JsonObject);

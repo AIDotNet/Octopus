@@ -38,5 +38,12 @@
     },
     "prompt": { "mode": "positional" },
     "extraArgs": true
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "acp"
+    ],
+    "dialect": "generic"
   }
 }

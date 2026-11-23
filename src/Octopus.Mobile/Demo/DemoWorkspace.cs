@@ -1,13 +1,18 @@
 using System.Collections.ObjectModel;
 using Avalonia.Threading;
+using Octopus.Core.Projects;
 using Octopus.Mobile.Workspace;
+using Octopus.Remote.Client;
+using Octopus.Remote.Relay;
+using Octopus.Remote.Security;
 using Octopus.Terminal;
 
 namespace Octopus.Mobile.Demo;
 
 /// <summary>
 /// Hosts, projects and sessions made up for the preview and the tests: three paired computers, one that is not paired
-/// yet, and six sessions of which one waits for the user. Nothing here talks to a network.
+/// yet, and six sessions of which one waits for the user. Without an account (<c>localOnly</c>) only the two that need
+/// no service are there. Nothing here talks to a network.
 /// </summary>
 public sealed class DemoWorkspace : IRemoteWorkspace
 {
@@ -21,7 +26,8 @@ public sealed class DemoWorkspace : IRemoteWorkspace
     /// <summary>How long the made-up host takes to allow a pairing request.</summary>
     public TimeSpan PairingDelay { get; init; } = TimeSpan.FromSeconds(3);
 
-    public DemoWorkspace()
+    /// <param name="localOnly">Only the computers a phone without an account has: paired, and reached directly or not at all.</param>
+    public DemoWorkspace(bool localOnly = false)
     {
         var mac = new RemoteHost("mac", "MacBook Pro", HostLink.Lan, isPaired: true) { Agents = [Claude, Codex] };
         var octopus = Add(mac, "Octopus", "~/code/Octopus");
@@ -60,7 +66,7 @@ public sealed class DemoWorkspace : IRemoteWorkspace
         };
         var linux = new RemoteHost("linux", "Linux 服务器", HostLink.Relay, isPaired: false);
 
-        Hosts = [mac, station, mini, linux];
+        Hosts = localOnly ? [mac, mini] : [mac, station, mini, linux];
     }
 
     public ObservableCollection<RemoteHost> Hosts { get; }
@@ -68,18 +74,68 @@ public sealed class DemoWorkspace : IRemoteWorkspace
     public Task<RemoteSession> CreateSessionAsync(RemoteProject project, NewSessionRequest request, CancellationToken cancellationToken = default)
     {
         var agent = request.AgentId is null ? null : project.Host.Agents.FirstOrDefault(a => a.Id == request.AgentId);
+        var workspace = string.IsNullOrEmpty(request.WorkspaceId) ? null : project.Workspaces.FirstOrDefault(w => w.Id == request.WorkspaceId);
         var prompt = string.IsNullOrWhiteSpace(request.Prompt) ? null : request.Prompt.Trim();
+        if (agent is not null && request.InjectTaskPrompt && workspace is { HasTask: true })
+        {
+            var taskHeader = $"{workspace.TaskKey}: {workspace.TaskTitle}".Trim();
+            prompt = prompt is null ? taskHeader : $"{taskHeader}\n\n{prompt}";
+        }
         var title = agent is null ? "zsh" : prompt is null ? agent.Name : FirstLine(prompt, 40);
         var detail = agent is null
             ? "zsh"
             : string.Join(" · ", new[] { request.Model ?? agent.Models.FirstOrDefault(), request.Effort }.Where(part => !string.IsNullOrEmpty(part)));
-        var session = Add(project, title, agent, detail, agent is not null && prompt is not null ? SessionActivity.Working : SessionActivity.Idle, prompt is null ? null : "正在读代码");
-        var folder = project.Name;
+        var session = Add(project, title, agent, detail, agent is not null && prompt is not null ? SessionActivity.Working : SessionActivity.Idle, prompt is null ? null : "正在读代码", workspace);
+        var folder = workspace is not null ? $"{project.Name} ({workspace.DisplayName})" : project.Name;
         _screens[session.Id] = agent is null
             ? () => new DemoTerminalConnection(DemoScreens.Prompt(folder), input => Shell(folder, input))
             : () => new DemoTerminalConnection(
                 prompt is null ? "> " : DemoScreens.Working(folder, prompt, "正在读代码"), Echo);
         return Task.FromResult(session);
+    }
+
+    public Task<RemoteWorkspaceOptions> GetWorkspaceOptionsAsync(RemoteProject project, CancellationToken cancellationToken = default)
+    {
+        if (!project.IsGitRepository) return Task.FromResult(RemoteWorkspaceOptions.Empty);
+        var occupied = project.Workspaces.ToDictionary(w => w.Branch, w => w.DisplayName, StringComparer.Ordinal);
+        var def = project.DefaultBranch ?? "main";
+        occupied.TryAdd(def, project.Name);
+        var branches = new List<RemoteBranchOption>
+        {
+            new(def, IsRemote: false, IsCurrent: true, OccupiedBy: occupied.GetValueOrDefault(def)),
+            new("feat/mobile-workspaces", IsRemote: false, IsCurrent: false, OccupiedBy: occupied.GetValueOrDefault("feat/mobile-workspaces")),
+            new("origin/release/v1.2", IsRemote: true, IsCurrent: false, OccupiedBy: occupied.GetValueOrDefault("release/v1.2")),
+        };
+        var issues = new List<RemoteTaskOption>
+        {
+            new("issue", "#142", "Support git worktree branch workspaces", "https://github.com/AIDotNet/Octopus/issues/142", "Create isolated worktrees under ~/.octopus/workspaces.", "feat/142-support-git-worktree-branch-workspaces", null),
+            new("issue", "#156", "Fix terminal resize race on mobile reconnect", "https://github.com/AIDotNet/Octopus/issues/156", "Ensure ClaimSize applies cleanly after reconnect.", "fix/156-fix-terminal-resize-race", null),
+        };
+        var prs = new List<RemoteTaskOption>
+        {
+            new("pr", "PR #138", "feat: mobile remote workspace sync", "https://github.com/AIDotNet/Octopus/pull/138", "Sync host workspaces over remote protocol.", "feat/mobile-workspace-sync", "feat/mobile-workspace-sync"),
+        };
+        return Task.FromResult(new RemoteWorkspaceOptions(true, def, branches, true, issues, prs));
+    }
+
+    public Task<RemoteBranchWorkspace> CreateWorkspaceAsync(RemoteProject project, CreateBranchWorkspaceRequest request, CancellationToken cancellationToken = default)
+    {
+        var raw = request.BranchName.Trim();
+        var localBranch = !request.CreateBranch && request.IsRemoteBranch && raw.IndexOf('/') is var slash and >= 0
+            ? raw[(slash + 1)..]
+            : raw;
+        var path = $"~/.octopus/workspaces/{WorkspacePaths.SanitizeSegment(project.Name)}/{WorkspacePaths.SanitizeSegment(localBranch)}";
+        var workspace = new RemoteBranchWorkspace(
+            "w" + _nextId++,
+            localBranch,
+            localBranch,
+            path,
+            request.TaskKind,
+            request.TaskKey,
+            request.TaskTitle,
+            request.TaskUrl);
+        project.Workspaces.Add(workspace);
+        return Task.FromResult(workspace);
     }
 
     public ITerminalConnectionFactory OpenTerminal(RemoteSession session)
@@ -117,6 +173,23 @@ public sealed class DemoWorkspace : IRemoteWorkspace
         return new PairingAttempt(Task.FromResult("482913"), AllowAsync(host, cancel.Token), cancel.Cancel);
     }
 
+    // A made-up computer at whatever address was typed: a number first, as a real one shows, unless it is a pairing link.
+    public PairingAttempt AddHost(string target)
+    {
+        var cancel = new CancellationTokenSource();
+        var code = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var isLink = target.Trim().StartsWith(PairingLink.Scheme + "://pair?", StringComparison.OrdinalIgnoreCase);
+        var address = isLink ? null : RemoteHostConnections.ParseAddress(target);
+        if (!isLink && address is null)
+        {
+            code.SetCanceled();
+            return new PairingAttempt(code.Task, Task.FromResult(PairingOutcome.NotAnAddress), cancel.Cancel);
+        }
+        if (!isLink) code.SetResult("482913");
+        var host = new RemoteHost("added" + _nextId++, address?.Host ?? "Studio", HostLink.Lan, isPaired: false);
+        return new PairingAttempt(code.Task, AddAsync(host, code, cancel.Token), cancel.Cancel);
+    }
+
     public Task RefreshAsync() => Task.CompletedTask;
 
     // The made-up terminals are this app's own: nothing to mirror.
@@ -135,18 +208,34 @@ public sealed class DemoWorkspace : IRemoteWorkspace
         return PairingOutcome.Paired;
     }
 
+    private async Task<PairingOutcome> AddAsync(RemoteHost host, TaskCompletionSource<string> code, CancellationToken cancellationToken)
+    {
+        var outcome = await AllowAsync(host, cancellationToken).ConfigureAwait(false);
+        if (outcome == PairingOutcome.Paired) await Dispatcher.UIThread.InvokeAsync(() => Hosts.Add(host));
+        // A link never shows a number.
+        code.TrySetCanceled();
+        return outcome;
+    }
+
     private static RemoteProject Add(RemoteHost host, string name, string path)
     {
-        var project = new RemoteProject(host, host.Id + "/" + name, name, path);
+        var project = new RemoteProject(host, host.Id + "/" + name, name, path)
+        {
+            IsGitRepository = true,
+            DefaultBranch = "main",
+        };
         host.Projects.Add(project);
         return project;
     }
 
-    private RemoteSession Add(RemoteProject project, string title, AgentOption? agent, string detail, SessionActivity activity, string? preview)
+    private RemoteSession Add(RemoteProject project, string title, AgentOption? agent, string detail, SessionActivity activity, string? preview, RemoteBranchWorkspace? workspace = null)
     {
         var session = new RemoteSession(project, "s" + _nextId++, agent is null ? SessionKind.Terminal : SessionKind.Agent, title)
         {
             AgentId = agent?.Id,
+            WorkspaceId = workspace?.Id,
+            WorkspaceBranch = workspace?.DisplayName,
+            WorkspaceTaskKey = workspace?.TaskKey,
             Detail = detail,
             Activity = activity,
             Preview = preview,
@@ -208,28 +297,49 @@ public sealed class DemoWorkspace : IRemoteWorkspace
     }
 }
 
-/// <summary>An account that is signed in from the start; signing in again takes a moment and always works.</summary>
+/// <summary>
+/// An account that is signed in from the start; signing in again takes a moment and always works. It has an official
+/// service unless told otherwise, and can be used without an account like the real one.
+/// </summary>
 public sealed class DemoAccount : IAccountSession
 {
     /// <summary>How long the made-up browser confirmation takes.</summary>
     public TimeSpan SignInDelay { get; init; } = TimeSpan.FromSeconds(3);
 
     public bool IsSignedIn { get; private set; } = true;
+    public bool IsLocalOnly => !IsSignedIn && _localOnly;
     public string? Name => IsSignedIn ? "Demo" : null;
-    public string Server => "octopus.example";
+    public string? OfficialServer { get; init; } = "https://octopus.example";
+    public string Server { get; private set; } = "";
     public bool SignInEnded => false;
     public event EventHandler? Changed;
 
+    private bool _localOnly;
+
     public Task<SignInChallenge> BeginSignInAsync(string server, CancellationToken cancellationToken = default)
     {
+        if (RelayAccountClient.ParseUrl(server) is not { } url) throw new IOException("That is not an address.");
+        // Anything but the official service is one of the person's own, remembered for next time.
+        if (url != RelayAccountClient.ParseUrl(OfficialServer)) Server = server.Trim();
         var cancel = new CancellationTokenSource();
-        return Task.FromResult(new SignInChallenge("WDJB-MJHT", new Uri("https://octopus.example/device?code=WDJB-MJHT"), ConfirmAsync(cancel.Token), cancel.Cancel));
+        return Task.FromResult(new SignInChallenge("WDJB-MJHT", new Uri(url, "device?code=WDJB-MJHT"), ConfirmAsync(cancel.Token), cancel.Cancel));
     }
 
     public void SignOut()
     {
         if (!IsSignedIn) return;
         IsSignedIn = false;
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void UseLocalOnly() => SetLocalOnly(true);
+
+    public void LeaveLocalOnly() => SetLocalOnly(false);
+
+    private void SetLocalOnly(bool value)
+    {
+        if (_localOnly == value) return;
+        _localOnly = value;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 

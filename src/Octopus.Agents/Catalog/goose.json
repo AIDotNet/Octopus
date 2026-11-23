@@ -29,5 +29,19 @@
       { "id": "provider", "type": "string", "label": "Provider", "env": "GOOSE_PROVIDER", "localized": { "zh-CN": { "label": "提供商" } } },
       { "id": "model", "type": "string", "label": "Model", "env": "GOOSE_MODEL", "localized": { "zh-CN": { "label": "模型" } } }
     ]
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "acp"
+    ],
+    "dialect": "goose",
+    "minVersion": "1.42.0",
+    "permissionStrategy": "agentMode",
+    "permissionModes": {
+      "default": "approve",
+      "auto": "smart_approve",
+      "full": "auto"
+    }
   }
 }

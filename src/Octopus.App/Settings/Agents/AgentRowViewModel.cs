@@ -78,6 +78,57 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
 
     public bool IsUnverified => !Definition.Verified;
 
+    public bool SupportsAcp => Definition.SupportsAcp;
+
+    public string AcpBadgeText => Definition.Acp switch
+    {
+        null => AppLangResources.Get(AppLangResourceKind.SettingsAcpBadgeTerminalOnly),
+        { Mode: "adapter" } => AppLangResources.Get(AppLangResourceKind.SettingsAcpBadgeAdapter),
+        _ => AppLangResources.Get(AppLangResourceKind.SettingsAcpBadgeNative),
+    };
+
+    public string AcpCommandPreview
+    {
+        get
+        {
+            if (Definition.Acp is not { } acp) return "";
+            if (string.Equals(acp.Mode, "adapter", StringComparison.OrdinalIgnoreCase) && acp.Adapter is { } adapter)
+            {
+                var bin = adapter.Executables.FirstOrDefault() ?? adapter.NpxPackage ?? adapter.UvxPackage ?? adapter.RegistryId ?? Definition.Id;
+                var fallback = !string.IsNullOrWhiteSpace(adapter.NpxPackage) ? $" / npx {adapter.NpxPackage}" : "";
+                return $"{bin}{fallback} (dialect: {acp.Dialect})";
+            }
+            return $"{DefaultCommandName} {string.Join(' ', acp.Args)} (dialect: {acp.Dialect})".Trim();
+        }
+    }
+
+    /// <summary><c>follow</c>, <c>gui</c>, or <c>terminal</c>; per-agent surface override for ACP-capable agents.</summary>
+    public string SurfaceKey
+    {
+        get => !SupportsAcp
+            ? "terminal"
+            : Profile.Surface switch
+            {
+                AgentSurface.Gui => "gui",
+                AgentSurface.Terminal => "terminal",
+                _ => "follow",
+            };
+        set
+        {
+            if (!SupportsAcp) return;
+            AgentSurface? next = value switch
+            {
+                "gui" => AgentSurface.Gui,
+                "terminal" => AgentSurface.Terminal,
+                _ => null,
+            };
+            if (next != Profile.Surface)
+            {
+                Mutate(p => p.Surface = next);
+            }
+        }
+    }
+
     public bool HasHomepage => !string.IsNullOrWhiteSpace(Definition.Homepage);
 
     public string DefaultButtonText => AppLangResources.Get(IsDefault ? AppLangResourceKind.SettingsClearDefault : AppLangResourceKind.SettingsSetDefault);
@@ -104,7 +155,7 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary><c>on</c> or <c>off</c>; the value of the enable switch.</summary>
+    /// <summary><c>on</c> or <c>off</c>; the value of the enable switch (kept for API & test compatibility).</summary>
     public string EnabledKey
     {
         get => Profile.Enabled ? "on" : "off";
@@ -114,6 +165,19 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
             if (enabled != Profile.Enabled)
             {
                 Mutate(p => p.Enabled = enabled);
+            }
+        }
+    }
+
+    /// <summary>Whether this agent is enabled in the launcher and workspace.</summary>
+    public bool IsEnabled
+    {
+        get => Profile.Enabled;
+        set
+        {
+            if (value != Profile.Enabled)
+            {
+                Mutate(p => p.Enabled = value);
             }
         }
     }
@@ -159,6 +223,9 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         IsDefault = agents.DefaultAgentId == Id;
         IsCommandOverridden = !string.IsNullOrWhiteSpace(agents.ProfileOf(Id).Command);
         OnPropertyChanged(nameof(EnabledKey));
+        OnPropertyChanged(nameof(IsEnabled));
+        OnPropertyChanged(nameof(SurfaceKey));
+        OnPropertyChanged(nameof(AcpCommandPreview));
     }
 
     /// <summary>Writes every edit that is still waiting for typing to pause.</summary>

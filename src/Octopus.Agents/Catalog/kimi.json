@@ -38,5 +38,19 @@
       ],
       "allowCustom": true
     }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "acp"
+    ],
+    "dialect": "kimi",
+    "minVersion": "2.5.0",
+    "permissionStrategy": "agentMode",
+    "permissionModes": {
+      "default": "default",
+      "auto": "yolo",
+      "full": "auto"
+    }
   }
 }

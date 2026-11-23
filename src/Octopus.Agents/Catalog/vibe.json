@@ -40,5 +40,15 @@
       "allowCustom": true
     },
     "extraArgs": true
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "mistral-vibe",
+      "executables": [
+        "vibe-acp"
+      ]
+    }
   }
 }

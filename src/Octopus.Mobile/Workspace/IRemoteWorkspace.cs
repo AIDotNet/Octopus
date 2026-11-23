@@ -4,17 +4,31 @@ using Octopus.Terminal;
 namespace Octopus.Mobile.Workspace;
 
 /// <summary>
-/// The hosts of the account and what runs on them: the one seam between the phone's pages and the remote protocol
-/// (design/12-远程操作.md §6). The pages only use this; <see cref="Demo.DemoWorkspace"/> stands in until the protocol
-/// client exists. Every collection and property changes on the UI thread.
+/// The hosts this phone knows and what runs on them: the one seam between the phone's pages and the remote protocol
+/// (design/12-远程操作.md §6). The pages only use this; <see cref="Demo.DemoWorkspace"/> stands in for the preview and
+/// the layout tests. Every collection and property changes on the UI thread.
 /// </summary>
 public interface IRemoteWorkspace
 {
-    /// <summary>Paired hosts, and the account's other computers that are not paired yet.</summary>
+    /// <summary>
+    /// Paired hosts, and while signed in the account's other computers that are not paired yet. Without an account
+    /// (<see cref="IAccountSession.IsLocalOnly"/>) only the hosts this phone paired with itself.
+    /// </summary>
     ObservableCollection<RemoteHost> Hosts { get; }
+
+    /// <summary>True when this phone is paired with a computer already, whether or not <see cref="Hosts"/> shows it right now.</summary>
+    bool HasPairedHosts => Hosts.Any(host => host.IsPaired);
 
     /// <summary>Starts a terminal or agent in a project on its host; the new session is also added to the project.</summary>
     Task<RemoteSession> CreateSessionAsync(RemoteProject project, NewSessionRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Loads git branches and optional GitHub issues/PRs from the host for creating a new branch workspace.</summary>
+    Task<RemoteWorkspaceOptions> GetWorkspaceOptionsAsync(RemoteProject project, CancellationToken cancellationToken = default) =>
+        Task.FromResult(RemoteWorkspaceOptions.Empty);
+
+    /// <summary>Creates a new isolated git worktree workspace on the host and adds it to the project.</summary>
+    Task<RemoteBranchWorkspace> CreateWorkspaceAsync(RemoteProject project, CreateBranchWorkspaceRequest request, CancellationToken cancellationToken = default) =>
+        throw new IOException("Branch workspaces are not supported.");
 
     /// <summary>
     /// What the terminal page starts its control with: a factory whose connection is the session on the host (its
@@ -43,7 +57,15 @@ public interface IRemoteWorkspace
     /// </summary>
     PairingAttempt BeginPairing(RemoteHost host);
 
-    /// <summary>Reads the account's computers again and connects to the paired ones that are there. Cheap enough to call whenever the list is looked at.</summary>
+    /// <summary>
+    /// Pairs with a computer the person names, with or without an account: its address on the local network
+    /// (<c>192.168.1.20:7420</c>; both sides then show the same number, as with <see cref="BeginPairing"/>), or a
+    /// pairing link copied from the computer (<c>octopus://pair?…</c>; no number, <see cref="PairingAttempt.Code"/>
+    /// never completes). The computer joins <see cref="Hosts"/> once it is paired.
+    /// </summary>
+    PairingAttempt AddHost(string target);
+
+    /// <summary>Reads the computers again (the account's, when signed in) and connects to the paired ones that are there. Cheap enough to call whenever the list is looked at.</summary>
     Task RefreshAsync();
 }
 
@@ -57,6 +79,8 @@ public enum PairingOutcome
     /// <summary>The host could not be reached.</summary>
     Unreachable,
     Cancelled,
+    /// <summary>What was typed is neither an address nor a pairing link (<see cref="IRemoteWorkspace.AddHost"/> only).</summary>
+    NotAnAddress,
 }
 
 /// <summary>One request to pair with a host.</summary>
@@ -76,17 +100,27 @@ public enum SignInOutcome
     Failed,
 }
 
-/// <summary>The signed-in account. The phone app is only usable signed in (design/12 §9.3).</summary>
+/// <summary>
+/// How this phone is used: signed in to a service (the official one, or one of the person's own), or without an
+/// account, with the computers it paired with on the local network (~/code/Octopus/design/mobile/01-登录与连接方式.md).
+/// </summary>
 public interface IAccountSession
 {
     bool IsSignedIn { get; }
+    /// <summary>
+    /// Not signed in, and the person chose to use the app without an account: the host list shows the computers this
+    /// phone paired with itself. Kept across restarts until <see cref="LeaveLocalOnly"/>.
+    /// </summary>
+    bool IsLocalOnly { get; }
     /// <summary>The account's name; null while signed out.</summary>
     string? Name { get; }
-    /// <summary>The service's address as last used (what the sign-in page starts with); empty when there is none yet.</summary>
+    /// <summary>The official service's address; null when this build has none (then "Sign in" asks for an address).</summary>
+    string? OfficialServer { get; }
+    /// <summary>The address of a service of the person's own, as they last typed it (what that page starts with); empty when they typed none.</summary>
     string Server { get; }
     /// <summary>The service ended this phone's sign-in (removed from the account, signed out everywhere) and nobody signed in since.</summary>
     bool SignInEnded { get; }
-    /// <summary>Raised when <see cref="IsSignedIn"/> changed, on any thread.</summary>
+    /// <summary>Raised when <see cref="IsSignedIn"/> or <see cref="IsLocalOnly"/> changed, on any thread.</summary>
     event EventHandler? Changed;
     /// <summary>
     /// Starts the device-code sign-in at a service: the app shows the code, the person confirms it in the browser.
@@ -94,6 +128,10 @@ public interface IAccountSession
     /// </summary>
     Task<SignInChallenge> BeginSignInAsync(string server, CancellationToken cancellationToken = default);
     void SignOut();
+    /// <summary>From now on the app is used without an account (until someone signs in, and again after they sign out).</summary>
+    void UseLocalOnly();
+    /// <summary>Back to choosing how to connect. The computers this phone is paired with stay paired.</summary>
+    void LeaveLocalOnly();
 }
 
 /// <param name="UserCode">The code to confirm in the browser.</param>

@@ -7,7 +7,7 @@ using TKCode.Arc.Localization;
 
 namespace Octopus.App.Settings.General;
 
-/// <summary>The general page: the language, whether agent sessions continue after a restart, and updates.</summary>
+/// <summary>The general page: the language, system tray, and updates.</summary>
 public sealed partial class GeneralSettingsViewModel : ObservableObject
 {
     private readonly ISettingsStore _settings;
@@ -40,34 +40,6 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject
             }
             ArcLanguage.Set(tag);
             _settings.Update(s => s.Appearance.Language = tag.ToString());
-            OnPropertyChanged();
-        }
-    }
-
-    public bool RestoreItemsOnStartup
-    {
-        get => _settings.Current.Terminal.RestoreItemsOnStartup;
-        set
-        {
-            if (value == RestoreItemsOnStartup)
-            {
-                return;
-            }
-            _settings.Update(s => s.Terminal.RestoreItemsOnStartup = value);
-            OnPropertyChanged();
-        }
-    }
-
-    public bool ResumeAgentsOnRestart
-    {
-        get => _settings.Current.Terminal.ResumeAgentsOnRestart;
-        set
-        {
-            if (value == ResumeAgentsOnRestart)
-            {
-                return;
-            }
-            _settings.Update(s => s.Terminal.ResumeAgentsOnRestart = value);
             OnPropertyChanged();
         }
     }

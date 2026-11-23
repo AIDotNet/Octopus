@@ -224,7 +224,7 @@ internal static class PermissionText
 
     private static string Probe(string probe) => probe switch
     {
-        "rateLimits" => PluginText.Get("额度", "its quota"),
+        "rateLimits" or "usage" or "quota" => PluginText.Get("额度", "its quota"),
         "account" => PluginText.Get("订阅档位", "its plan"),
         "sessionUsage" => PluginText.Get("会话用量", "session usage"),
         _ => probe,

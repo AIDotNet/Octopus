@@ -323,6 +323,38 @@ public sealed class AgySessionSourceTests : IDisposable
         Assert.Equal([SessionMigrationKind.Handoff], service.MigrationKinds("claude", agy));
     }
 
+    [Fact]
+    public void ReadConversationTitle_reads_title_and_preview_from_db_and_falls_back_to_transcript()
+    {
+        AddSummary("conv-titled", title: "Anti-Gravity Label Missing", preview: "反重力的标签没有拿到会话标题");
+        var titledTranscript = WriteTranscript("conv-titled", [UserStep(0, "2026-11-23T01:00:00Z", "反重力的标签没有拿到会话标题")]);
+        var titledArtifacts = Path.Combine(_account, "brain", "conv-titled");
+
+        Assert.Equal(("Anti-Gravity Label Missing", "反重力的标签没有拿到会话标题"),
+            AgySessionSource.ReadConversationTitle("conv-titled", titledTranscript, titledArtifacts, ""));
+        // Infers conversationId from .../brain/<id>/... when omitted, and finds the DB from artifactDirectoryPath alone.
+        Assert.Equal(("Anti-Gravity Label Missing", "反重力的标签没有拿到会话标题"),
+            AgySessionSource.ReadConversationTitle(null, null, titledArtifacts, ""));
+        // Uses defaultDirectory when paths do not point near the DB.
+        Assert.Equal(("Anti-Gravity Label Missing", "反重力的标签没有拿到会话标题"),
+            AgySessionSource.ReadConversationTitle("conv-titled", null, null, _account));
+
+        // Blank title still yields the preview from DB.
+        AddSummary("conv-preview", title: "", preview: "登陆的弹窗需要优化一下");
+        var previewTranscript = WriteTranscript("conv-preview", [UserStep(0, "2026-11-23T01:00:00Z", "登陆的弹窗需要优化一下")]);
+        Assert.Equal((null, "登陆的弹窗需要优化一下"),
+            AgySessionSource.ReadConversationTitle("conv-preview", previewTranscript, null, ""));
+
+        // Both title and preview blank in DB: falls back to the first USER_INPUT in transcript.jsonl.
+        AddSummary("conv-empty-db", title: "", preview: "");
+        var fallbackTranscript = WriteTranscript("conv-empty-db", [UserStep(0, "2026-11-23T01:00:00Z", "从 transcript 读取首条提问")]);
+        Assert.Equal((null, "从 transcript 读取首条提问"),
+            AgySessionSource.ReadConversationTitle("conv-empty-db", fallbackTranscript, null, ""));
+
+        // Missing conversation returns nulls cleanly.
+        Assert.Equal((null, null), AgySessionSource.ReadConversationTitle("missing", null, null, _account));
+    }
+
     private sealed class EmptyAccounts : IAgentAccountDiscovery
     {
         public Task<IReadOnlyList<AgentAccount>> DiscoverAsync(string agentId, CancellationToken cancellationToken = default) =>

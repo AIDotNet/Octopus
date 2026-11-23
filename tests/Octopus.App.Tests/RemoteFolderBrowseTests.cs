@@ -47,7 +47,7 @@ public class RemoteFolderBrowseTests
             Directory.CreateDirectory(OutsideFolder);
             File.WriteAllText(Path.Combine(Root, "secret.txt"), "should not appear in browse");
 
-            Projects = new ProjectService(new InMemoryProjectStore(), AppHost.Get<PathComparer>(), new InMemorySettingsStore());
+            Projects = new ProjectService(new InMemoryProjectStore(), AppHost.Get<PathComparer>());
             Workspace = new HostWorkspace(Projects, AppHost.Get<IItemLaunchService>(), AppHost.Get<ITerminalConnectionFactory>(), Sessions, AppHost.Get<ITabContentRegistry>(),
                 AppHost.Get<IItemActivityService>(), AppHost.Get<IAgentCatalog>(), AppHost.Get<IAgentScanner>(), AppHost.Get<ISettingsStore>(), AppHost.Get<IShellResolver>(),
                 AppHost.Get<IFileTreeService>(), AppHost.Get<IGitService>(), AppHost.Get<PathComparer>());

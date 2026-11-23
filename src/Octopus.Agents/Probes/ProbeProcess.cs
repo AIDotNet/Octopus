@@ -165,14 +165,15 @@ internal static class ProbeProcess
         {
             return ProbeOutcome.Fail(ProbeErrorKind.NotDeclared, "the probe declares no requests");
         }
+        var contentLength = string.Equals(probe.Framing, ProbeFramings.ContentLength, StringComparison.OrdinalIgnoreCase);
         var pending = new Dictionary<long, TaskCompletionSource<JsonElement>>();
         var gate = new object();
-        var reading = ReadLinesAsync(process.StandardOutput.BaseStream, maxOutputBytes, line =>
+        void OnMessage(ReadOnlyMemory<byte> messageBytes)
         {
             JsonElement message;
             try
             {
-                using var document = JsonDocument.Parse(line);
+                using var document = JsonDocument.Parse(messageBytes);
                 message = document.RootElement.Clone();
             }
             catch (JsonException)
@@ -194,7 +195,10 @@ internal static class ProbeProcess
                 pending.Remove(id, out waiter);
             }
             waiter?.TrySetResult(message);
-        }, token);
+        }
+        var reading = contentLength
+            ? ReadContentLengthMessagesAsync(process.StandardOutput.BaseStream, maxOutputBytes, OnMessage, token)
+            : ReadLinesAsync(process.StandardOutput.BaseStream, maxOutputBytes, OnMessage, token);
         var ended = false;
         void FailWaiters(Exception exception)
         {
@@ -250,7 +254,7 @@ internal static class ProbeProcess
                     }
                     pending[id] = waiter;
                 }
-                await input.WriteAsync(BuildRequest(id, request, fillPlaceholders), token).ConfigureAwait(false);
+                await input.WriteAsync(BuildRequest(id, request, fillPlaceholders, contentLength), token).ConfigureAwait(false);
                 await input.FlushAsync(token).ConfigureAwait(false);
 
                 var response = await waiter.Task.WaitAsync(token).ConfigureAwait(false);
@@ -281,8 +285,8 @@ internal static class ProbeProcess
         return ProbeOutcome.Fail(ProbeErrorKind.InvalidOutput, "no result");
     }
 
-    /// <summary>One newline-terminated JSON-RPC 2.0 request; <c>params</c> is left out when the definition has none.</summary>
-    internal static byte[] BuildRequest(long id, ProbeRpcRequest request, Func<string, string> fillPlaceholders)
+    /// <summary>One JSON-RPC 2.0 request, newline-terminated or <c>Content-Length</c> framed; <c>params</c> is left out when the definition has none.</summary>
+    internal static byte[] BuildRequest(long id, ProbeRpcRequest request, Func<string, string> fillPlaceholders, bool contentLength = false)
     {
         var buffer = new ArrayBufferWriter<byte>();
         using (var writer = new Utf8JsonWriter(buffer))
@@ -297,6 +301,15 @@ internal static class ProbeProcess
                 WriteFilled(writer, parameters, fillPlaceholders);
             }
             writer.WriteEndObject();
+        }
+        if (contentLength)
+        {
+            var payload = buffer.WrittenSpan;
+            var header = Encoding.ASCII.GetBytes($"Content-Length: {payload.Length}\r\n\r\n");
+            var framed = new byte[header.Length + payload.Length];
+            header.CopyTo(framed, 0);
+            payload.CopyTo(framed.AsSpan(header.Length));
+            return framed;
         }
         buffer.Write("\n"u8);
         return buffer.WrittenSpan.ToArray();
@@ -381,6 +394,94 @@ internal static class ProbeProcess
             onLine(line.GetBuffer().AsMemory(0, (int)line.Length));
         }
         return false;
+    }
+
+    /// <summary>
+    /// Reads HTTP-style <c>Content-Length</c> framed JSON-RPC messages from standard output, counting every byte
+    /// against <paramref name="cap"/>. Returns true when the cap was passed, false at EOF.
+    /// </summary>
+    private static async Task<bool> ReadContentLengthMessagesAsync(Stream stream, int cap, Action<ReadOnlyMemory<byte>> onMessage, CancellationToken token)
+    {
+        var chunk = new byte[64 * 1024];
+        var pos = 0;
+        var len = 0;
+        long total = 0;
+        var line = new MemoryStream();
+
+        async ValueTask<int> ReadByteAsync()
+        {
+            if (pos >= len)
+            {
+                len = await stream.ReadAsync(chunk, token).ConfigureAwait(false);
+                pos = 0;
+                if (len == 0) return -1;
+                total += len;
+                if (total > cap) throw new ProbeOutputTooLargeException();
+            }
+            return chunk[pos++];
+        }
+
+        try
+        {
+            while (true)
+            {
+                var contentLength = -1;
+                while (true)
+                {
+                    line.SetLength(0);
+                    int b;
+                    while ((b = await ReadByteAsync().ConfigureAwait(false)) >= 0)
+                    {
+                        if (b == (byte)'\n') break;
+                        if (line.Length < 8192) line.WriteByte((byte)b);
+                    }
+                    if (b < 0 && line.Length == 0) return false;
+                    var span = line.GetBuffer().AsSpan(0, (int)line.Length);
+                    if (span.Length > 0 && span[^1] == (byte)'\r') span = span[..^1];
+                    if (span.Length == 0)
+                    {
+                        if (contentLength >= 0) break;
+                        if (b < 0) return false;
+                        continue;
+                    }
+                    var header = Encoding.ASCII.GetString(span);
+                    const string prefix = "Content-Length:";
+                    if (header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                        && int.TryParse(header[prefix.Length..].Trim(), out var parsed)
+                        && parsed >= 0)
+                    {
+                        contentLength = parsed;
+                    }
+                    if (b < 0) return false;
+                }
+                if (contentLength > cap) return true;
+                var payload = new byte[contentLength];
+                var filled = 0;
+                while (filled < contentLength)
+                {
+                    if (pos < len)
+                    {
+                        var take = Math.Min(len - pos, contentLength - filled);
+                        Buffer.BlockCopy(chunk, pos, payload, filled, take);
+                        pos += take;
+                        filled += take;
+                    }
+                    else
+                    {
+                        len = await stream.ReadAsync(chunk, token).ConfigureAwait(false);
+                        pos = 0;
+                        if (len == 0) return false;
+                        total += len;
+                        if (total > cap) return true;
+                    }
+                }
+                onMessage(payload);
+            }
+        }
+        catch (ProbeOutputTooLargeException)
+        {
+            return true;
+        }
     }
 
     private static async Task DrainAsync(Stream stream)

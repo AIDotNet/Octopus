@@ -36,6 +36,9 @@ public interface IItemActivityService
     /// </summary>
     void ReportRemote(string itemId, ItemActivity activity);
 
+    /// <summary>Reports activity state directly from a structured local session such as an ACP GUI tab. Call on the UI thread.</summary>
+    void ReportStatus(string itemId, ItemActivity activity);
+
     /// <summary>The user looked at the item: a finished-turn mark goes away. Call on the UI thread.</summary>
     void MarkSeen(string itemId);
 

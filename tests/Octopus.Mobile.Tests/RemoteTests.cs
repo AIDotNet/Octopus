@@ -23,98 +23,6 @@ namespace Octopus.Mobile.Tests;
 /// </summary>
 public class RemoteTests
 {
-    /// <summary>A computer of the account: a host service with a made-up workspace, signed in and registered at the relay.</summary>
-    private sealed class Computer : IAsyncDisposable
-    {
-        public DeviceIdentity Identity { get; }
-        public FakeHostWorkspace Workspace { get; } = new();
-        public RemoteHostService Service { get; }
-        public RelayHostLink Link { get; }
-
-        private Computer(FakeRelay relay, DeviceIdentity identity, RelayTokens tokens, string name)
-        {
-            Identity = identity;
-            Service = new RemoteHostService(identity, () => new DeviceDescription(name, DeviceKind.Desktop), new PairedPeerStore(null), Workspace,
-                new HelloMessage { AppVersion = "1.0", Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilitySizeRelease] });
-            Link = new RelayHostLink(new RelayEndpoint(new Uri(relay.Url), tokens.AccessToken), identity, () => name, transport => Service.ServeAsync(transport));
-            Link.Start();
-        }
-
-        public static async Task<Computer> StartAsync(FakeRelay relay, string name = "Studio", string account = "ada")
-        {
-            var identity = DeviceIdentity.Create();
-            var url = new Uri(relay.Url);
-            var login = await RelayAccountClient.StartLoginAsync(url, identity, name);
-            Assert.True(relay.Approve(login.UserCode, account));
-            var (_, tokens) = await RelayAccountClient.PollLoginAsync(url, login, identity);
-            var computer = new Computer(relay, identity, tokens!, name);
-            Assert.True(Phone.Until(() => computer.Link.State == RelayLinkState.Online), "the computer registers at the relay: " + computer.Link.Error);
-            return computer;
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await Link.DisposeAsync();
-            await Service.DisposeAsync();
-            Identity.Dispose();
-        }
-    }
-
-    /// <summary>A phone with nothing made up: its own folder, key and sign-in, and the app's pages on top.</summary>
-    private sealed class RealPhone : IDisposable
-    {
-        public RealPhone(FakeRelay relay, string? folder = null)
-        {
-            Folder = folder ?? Directory.CreateTempSubdirectory("octopus-phone-").FullName;
-            Remote = new MobileRemote(new FileMobileStore(Folder), "Ada 的 iPhone", relay.Url);
-            Remote.Session.PollInterval = TimeSpan.FromMilliseconds(30);
-            Remote.Load();
-            Shell = new MobileShell(Remote.Workspace, Remote.Account, uri => Opened = uri);
-            Window = new Window { Width = MobileApp.PreviewWidth, Height = MobileApp.PreviewHeight, Content = Shell };
-            Window.Show();
-            Phone.Pump();
-        }
-
-        public string Folder { get; }
-        public MobileRemote Remote { get; }
-        public MobileShell Shell { get; }
-        public Window Window { get; }
-        public Uri? Opened { get; private set; }
-
-        public T Top<T>() where T : class => Assert.IsType<T>(Shell.Top);
-        public T Model<T>() where T : class => Assert.IsType<T>(Shell.Top!.DataContext);
-
-        /// <summary>Signs in on the page: "Sign in", the code, the browser's part played by the test.</summary>
-        public void SignIn(FakeRelay relay, string account = "ada")
-        {
-            var page = Model<SignInViewModel>();
-            page.StartCommand.Execute(null);
-            Assert.True(Phone.Until(() => page.HasCode || page.HasError), "the page shows a code");
-            Assert.True(page.ErrorText is null, "signing in could not start: " + page.ErrorText);
-            Assert.True(relay.Approve(page.UserCode!, account));
-            Assert.True(Phone.Until(() => Shell.Top is HostsPage), "the host list replaces the sign-in page");
-        }
-
-        /// <summary>Pairs with a computer the way a person does: its row, the number, "Allow" on the computer.</summary>
-        public void Pair(Computer computer)
-        {
-            var hosts = Model<HostsViewModel>();
-            Assert.True(Phone.Until(() => hosts.Unpaired.Any(row => row.Host.Id == computer.Identity.Id && row.IsPairAction)), "the computer is listed as one to pair with");
-            computer.Service.OpenPairing(TimeSpan.FromMinutes(1));
-            hosts.Unpaired.Single(row => row.Host.Id == computer.Identity.Id).OpenCommand.Execute(null);
-            Assert.True(Phone.Until(() => Shell.Top is PairingPage && computer.Service.PairingRequests.Count == 1), "the computer is asked");
-            computer.Service.PairingRequests[0].Allow();
-            Assert.True(Phone.Until(() => Shell.Top is HostsPage && hosts.Online.Any(row => row.Host.Id == computer.Identity.Id)), "the computer is paired and connected");
-            computer.Service.ClosePairing();
-        }
-
-        public void Dispose()
-        {
-            Window.Close();
-            Remote.Dispose();
-        }
-    }
-
     [AvaloniaFact]
     public async Task Signing_in_shows_the_accounts_computers_and_only_those()
     {
@@ -123,19 +31,28 @@ public class RemoteTests
         await using var stranger = await Computer.StartAsync(relay, "Someone else's", account: "bob");
         using var phone = new RealPhone(relay);
 
-        // Signed out: the service's address (as the head set it) and "Sign in"; nothing of anyone's computers.
-        var page = phone.Model<SignInViewModel>();
-        Assert.Equal(relay.Url, page.Server);
-        Assert.True(page.IsEntering);
+        // Signed out: the welcome page. "Sign in" goes to the official service (as the head set it) without asking for
+        // anything; nothing of anyone's computers is there.
+        phone.Top<WelcomePage>();
+        var welcome = phone.Model<WelcomeViewModel>();
+        var page = welcome.SignIn;
+        Assert.True(welcome.HasOfficialServer);
+        Assert.True(welcome.IsChoosing);
         Assert.False(page.HasError);
+        Assert.Empty(phone.Remote.Workspace.Hosts);
 
-        page.StartCommand.Execute(null);
+        welcome.SignInCommand.Execute(null);
         Assert.True(Phone.Until(() => page.HasCode), "the page shows a code");
         Assert.Matches("^[B-Z]{4}-[B-Z]{4}$", page.UserCode!);
-        // The service's page is opened with the code in it, and the service was told this is a phone, by its name.
+        // The service's page is opened with the code in it, and the service was told this is a phone, by its name,
+        // what it runs on and which version of the app it is.
         Assert.Equal($"{relay.Url}/device?code={page.UserCode}", phone.Opened!.ToString());
         Assert.Contains("Ada 的 iPhone", relay.LoginNames);
-        Assert.False(page.StartCommand.CanExecute(null));
+        Assert.Contains((RelayClientInfo.Platform, RelayClientInfo.AppVersion), relay.LoginClients);
+        Assert.NotNull(RelayClientInfo.AppVersion);
+        Assert.DoesNotContain('+', RelayClientInfo.AppVersion);
+        Assert.False(welcome.SignInCommand.CanExecute(null));
+        Assert.False(welcome.IsChoosing);
 
         Assert.True(relay.Approve(page.UserCode!));
         Assert.True(Phone.Until(() => phone.Shell.Top is HostsPage), "the host list replaces the sign-in page");
@@ -156,36 +73,47 @@ public class RemoteTests
     {
         await using var relay = new FakeRelay();
         using var phone = new RealPhone(relay);
-        var page = phone.Model<SignInViewModel>();
+        // A service of the person's own: the page with the address.
+        phone.Model<WelcomeViewModel>().UseCustomCommand.Execute(null);
+        phone.Top<CustomServerPage>();
+        var page = phone.Model<CustomServerViewModel>();
+        var flow = page.SignIn;
+        Assert.Equal("", page.Server);
+        Assert.False(page.StartCommand.CanExecute(null));
 
         // Not an address, and an address nothing answers at.
         page.Server = "two words";
         page.StartCommand.Execute(null);
-        Assert.True(Phone.Until(() => page.HasError && !page.IsStarting));
-        Assert.StartsWith("没能开始登录：", page.ErrorText);
+        Assert.True(Phone.Until(() => flow.HasError && !flow.IsStarting));
+        Assert.StartsWith("没能开始登录：", flow.ErrorText);
         page.Server = "http://127.0.0.1:9";
         page.StartCommand.Execute(null);
-        Assert.True(Phone.Until(() => page.HasError && !page.IsStarting));
-        Assert.StartsWith("没能开始登录：", page.ErrorText);
+        Assert.True(Phone.Until(() => flow.HasError && !flow.IsStarting));
+        Assert.StartsWith("没能开始登录：", flow.ErrorText);
         Assert.True(page.IsEntering);
 
         // Refused in the browser: back to the address, with the reason.
         page.Server = relay.Url;
         page.StartCommand.Execute(null);
-        Assert.True(Phone.Until(() => page.HasCode));
-        Assert.False(page.HasError);
-        Assert.True(relay.Deny(page.UserCode!));
-        Assert.True(Phone.Until(() => page.HasError));
-        Assert.Equal("登录在浏览器里被拒绝了。", page.ErrorText);
+        Assert.True(Phone.Until(() => flow.HasCode));
+        Assert.False(flow.HasError);
+        Assert.False(page.IsEntering);
+        Assert.True(relay.Deny(flow.UserCode!));
+        Assert.True(Phone.Until(() => flow.HasError));
+        Assert.Equal("登录在浏览器里被拒绝了。", flow.ErrorText);
         Assert.True(page.IsEntering);
 
-        // Given up on the phone: no complaint. Then it works.
+        // Given up on the phone: no complaint. Then it works, from this page as from the welcome page.
         page.StartCommand.Execute(null);
-        Assert.True(Phone.Until(() => page.HasCode));
-        page.CancelCommand.Execute(null);
+        Assert.True(Phone.Until(() => flow.HasCode));
+        flow.CancelCommand.Execute(null);
         Assert.True(page.IsEntering);
-        Assert.False(page.HasError);
-        phone.SignIn(relay);
+        Assert.False(flow.HasError);
+        page.StartCommand.Execute(null);
+        Assert.True(Phone.Until(() => flow.HasCode));
+        Assert.True(relay.Approve(flow.UserCode!));
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostsPage), "the host list replaces the sign-in pages");
+        Assert.Equal(1, phone.Shell.Stack!.Depth);
     }
 
     [AvaloniaFact]
@@ -402,7 +330,7 @@ public class RemoteTests
         }
         Assert.True(Phone.Until(() => studio.Service.Connections.Count == 0), "the phone that was closed is gone from the computer");
 
-        // The app starts again: no sign-in page, the paired computer is connected to by itself.
+        // The app starts again: no welcome page, the paired computer is connected to by itself.
         using (var phone = new RealPhone(relay, folder))
         {
             var hosts = phone.Model<HostsViewModel>();
@@ -410,12 +338,12 @@ public class RemoteTests
             Assert.True(Phone.Until(() => hosts.Online.Count == 1 && hosts.Online[0].Host.Projects.Count == 1), "the paired computer is back with its projects");
             Assert.Empty(hosts.Unpaired);
 
-            // Signed out: the sign-in page, nothing of the account on screen, no connection left open.
+            // Signed out: the welcome page, nothing of the account on screen, no connection left open.
             hosts.SignOutCommand.Execute(null);
-            Assert.True(Phone.Until(() => phone.Shell.Top is SignInPage), "the sign-in page is back");
+            Assert.True(Phone.Until(() => phone.Shell.Top is WelcomePage), "the welcome page is back");
             Assert.True(Phone.Until(() => studio.Service.Connections.Count == 0), "the connection to the computer ended");
             Assert.Empty(phone.Remote.Workspace.Hosts);
-            Assert.False(phone.Model<SignInViewModel>().HasError);
+            Assert.False(phone.Model<WelcomeViewModel>().SignIn.HasError);
             // Who is paired is the phone's own matter, not the account's: signing in again needs no second pairing.
             phone.SignIn(relay);
             var again = phone.Model<HostsViewModel>();
@@ -425,7 +353,7 @@ public class RemoteTests
     }
 
     [AvaloniaFact]
-    public async Task A_phone_removed_from_the_account_is_back_at_the_sign_in_page_and_told_why()
+    public async Task A_phone_removed_from_the_account_is_back_at_the_welcome_page_and_told_why()
     {
         await using var relay = new FakeRelay();
         await using var studio = await Computer.StartAsync(relay);
@@ -439,8 +367,8 @@ public class RemoteTests
         relay.ExpireAccessTokens();
         await phone.Remote.Workspace.RefreshAsync();
 
-        Assert.True(Phone.Until(() => phone.Shell.Top is SignInPage), "the sign-in page is back");
-        Assert.Contains("登录已经失效", phone.Model<SignInViewModel>().ErrorText);
+        Assert.True(Phone.Until(() => phone.Shell.Top is WelcomePage), "the welcome page is back");
+        Assert.Contains("登录已经失效", phone.Model<WelcomeViewModel>().SignIn.ErrorText);
         Assert.True(Phone.Until(() => studio.Service.Connections.Count == 0), "the connection to the computer ended");
     }
 }

@@ -58,6 +58,30 @@
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
             <Setter Property="LineHeight" Value="16" />
         </Style>
+        <Style Selector="Border.ses-ws-wt">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+            <Setter Property="Padding" Value="5,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.ses-ws-def">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+            <Setter Property="Padding" Value="5,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.ses-fchip">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ses-fchip.selected">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        </Style>
         <Style Selector="lucide|LucideIcon.ses-chevron">
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
         </Style>
@@ -154,7 +178,7 @@
         </Grid>
 
         <!-- ============ Page 2: one agent's sessions, by account ============ -->
-        <Grid RowDefinitions="Auto,Auto,*" IsVisible="{Binding IsSessionsPage}">
+        <Grid RowDefinitions="Auto,Auto,Auto,*" IsVisible="{Binding IsSessionsPage}">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6" Margin="6,0,8,2" Height="{DynamicResource OctopusExplorerHeaderHeight}">
                 <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding BackCommand}"
                             AutomationProperties.Name="{l:AppLangResource SessionsBack}"
@@ -176,7 +200,33 @@
                              Label="{l:AppLangResource SessionsSearch}" Placeholder="{l:AppLangResource SessionsSearch}"
                              Text="{Binding Filter, Mode=TwoWay}" />
 
-            <arc:ScrollArea Grid.Row="2" FadeLength="0" HorizontalScrollBarVisibility="Disabled">
+            <!-- Workspace filter chips: shown when the project has branch worktrees (Default vs Workspaces). -->
+            <ScrollViewer Grid.Row="2" IsVisible="{Binding HasWorkspaceFilters}"
+                          HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                          Margin="8,0,8,6">
+                <ItemsControl ItemsSource="{Binding WorkspaceFilters}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="4" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="s:SessionWorkspaceFilterChip">
+                            <Button Classes="ses-fchip" Classes.selected="{Binding IsSelected}" Command="{Binding SelectCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <lucide:LucideIcon Kind="GitBranch" Size="11" VerticalAlignment="Center"
+                                                       IsVisible="{Binding IsWorktree}"
+                                                       Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                    <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" VerticalAlignment="Center"
+                                               Text="{Binding Label}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <arc:ScrollArea Grid.Row="3" FadeLength="0" HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="6,0,6,12">
                     <TextBlock Classes="ex-hint" Margin="10,8" IsVisible="{Binding IsListEmpty}" Text="{l:AppLangResource SessionsNoMatch}" />
                     <ItemsControl ItemsSource="{Binding Groups}">
@@ -222,13 +272,41 @@
                                                                     <lucide:LucideIcon Kind="SquareTerminal" Size="12" IsVisible="{Binding IsLive}" />
                                                                 </Panel>
                                                             </arc:Button>
+                                                            <arc:Button Classes="ses-act" Variant="Secondary"
+                                                                        IsVisible="{Binding CanContinueInAlternateSurface}"
+                                                                        Command="{Binding ContinueAlternateCommand}"
+                                                                        AutomationProperties.Name="{Binding AlternateSurfaceTip}"
+                                                                        arc:Tooltip.Tip="{Binding AlternateSurfaceTip}">
+                                                                <Panel>
+                                                                    <lucide:LucideIcon Kind="MessageSquareCode" Size="12" IsVisible="{Binding AlternateSurfaceIsGui}" />
+                                                                    <lucide:LucideIcon Kind="SquareTerminal" Size="12" IsVisible="{Binding !AlternateSurfaceIsGui}" />
+                                                                </Panel>
+                                                            </arc:Button>
                                                             <arc:Button Classes="ses-act" Variant="Secondary" Command="{Binding MigrateCommand}"
                                                                         AutomationProperties.Name="{l:AppLangResource SessionsMigrate}"
                                                                         arc:Tooltip.Tip="{l:AppLangResource SessionsMigrate}">
                                                                 <lucide:LucideIcon Kind="ArrowLeftRight" Size="12" />
                                                             </arc:Button>
                                                         </StackPanel>
-                                                        <TextBlock Grid.Row="1" Classes="ex-hint" Margin="0,1,0,0" Text="{Binding MetaText}" TextTrimming="CharacterEllipsis" />
+                                                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="5" Margin="0,2,0,0">
+                                                            <Border Classes="ses-ws-wt" IsVisible="{Binding ShowWorkspaceBadge}">
+                                                                <Panel>
+                                                                    <StackPanel Orientation="Horizontal" Spacing="3" IsVisible="{Binding IsWorktree}">
+                                                                        <lucide:LucideIcon Kind="GitBranch" Size="10" VerticalAlignment="Center"
+                                                                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" FontWeight="SemiBold"
+                                                                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                                                   Text="{Binding WorkspaceLabel}" MaxWidth="110"
+                                                                                   TextTrimming="CharacterEllipsis" />
+                                                                    </StackPanel>
+                                                                    <TextBlock IsVisible="{Binding IsDefaultWorkspace}"
+                                                                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                                               Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                                               Text="{Binding WorkspaceLabel}" />
+                                                                </Panel>
+                                                            </Border>
+                                                            <TextBlock Classes="ex-hint" VerticalAlignment="Center" Text="{Binding MetaText}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
                                                     </Grid>
                                                 </Border>
                                             </DataTemplate>

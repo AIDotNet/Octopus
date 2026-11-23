@@ -23,8 +23,14 @@ public sealed class AgentDefinition
     public AgentSignals? Signals { get; set; }
     /// <summary>How Octopus isolates or switches subscription accounts for this agent; null when unsupported.</summary>
     public AgentAccountsCapability? Accounts { get; set; }
+    /// <summary>How this agent runs via the Agent Client Protocol (ACP) for GUI mode; null when unsupported (terminal only).</summary>
+    public AgentAcpDefinition? Acp { get; set; }
     /// <summary>Probe name to the fixed query Octopus may run with the agent's executable; null when there are none.</summary>
     public Dictionary<string, AgentProbe>? Probes { get; set; }
+
+    /// <summary>True when this agent definition declares ACP support for graphical chat mode.</summary>
+    [JsonIgnore]
+    public bool SupportsAcp => Acp is not null;
 
     /// <summary>True for a definition loaded from the user's agents folder.</summary>
     [JsonIgnore]

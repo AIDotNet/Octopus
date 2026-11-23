@@ -27,4 +27,6 @@ public enum ProjectChangeKind
     Tunnels,
     /// <summary>A project's per-agent subscription account binding changed.</summary>
     ProjectAccounts,
+    /// <summary>A project's git worktree workspaces changed (added, updated, collapsed or removed).</summary>
+    Workspaces,
 }

@@ -15,8 +15,10 @@ public sealed class GitCallArguments
     public string? Message { get; set; }
     public string? Name { get; set; }
     public string? Commit { get; set; }
+    public string? BaseRef { get; set; }
     public int Count { get; set; }
     public bool Flag { get; set; }
+    public bool Flag2 { get; set; }
 }
 
 /// <summary>The result of any call of <see cref="IGitService"/>: the one member the method fills.</summary>
@@ -32,6 +34,7 @@ public sealed class GitCallReply
     public List<GitCommit>? Commits { get; set; }
     public List<GitBranch>? Branches { get; set; }
     public List<GitCommitFile>? Files { get; set; }
+    public List<GitWorktree>? Worktrees { get; set; }
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
@@ -140,6 +143,28 @@ public sealed class RemoteGitService(RemoteClientRuntime runtime, string hostId)
 
     public async Task<GitFileDiff?> GetCommitFileDiffAsync(string repositoryRoot, string commit, string path, string? originalPath = null, CancellationToken cancellationToken = default) =>
         (await ReadAsync(nameof(GetCommitFileDiffAsync), new GitCallArguments { Root = repositoryRoot, Commit = commit, Path = path, OriginalPath = originalPath }, cancellationToken).ConfigureAwait(false))?.Diff;
+
+    public async Task<IReadOnlyList<GitWorktree>> GetWorktreesAsync(string repositoryRoot, CancellationToken cancellationToken = default) =>
+        (await ReadAsync(nameof(GetWorktreesAsync), new GitCallArguments { Root = repositoryRoot }, cancellationToken).ConfigureAwait(false))?.Worktrees ?? [];
+
+    public Task<GitCommandResult> AddWorktreeAsync(string repositoryRoot, string path, string branch, string? baseRef = null, bool createBranch = true, bool isRemote = false, CancellationToken cancellationToken = default) =>
+        RunAsync(nameof(AddWorktreeAsync), new GitCallArguments { Root = repositoryRoot, Path = path, Name = branch, BaseRef = baseRef, Flag = createBranch, Flag2 = isRemote }, cancellationToken);
+
+    public Task<GitCommandResult> RemoveWorktreeAsync(string repositoryRoot, string path, bool force = false, CancellationToken cancellationToken = default) =>
+        RunAsync(nameof(RemoveWorktreeAsync), new GitCallArguments { Root = repositoryRoot, Path = path, Flag = force }, cancellationToken);
+
+    public Task<GitCommandResult> PruneWorktreesAsync(string repositoryRoot, CancellationToken cancellationToken = default) =>
+        RunAsync(nameof(PruneWorktreesAsync), new GitCallArguments { Root = repositoryRoot }, cancellationToken);
+
+    public Task<string?> GetHeadHashAsync(string repositoryRoot, CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
+
+    public Task<GitWorkspaceCleanupProbe> ProbeWorkspaceCleanupAsync(
+        string repositoryRoot,
+        string worktreePath,
+        string? baseRef = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new GitWorkspaceCleanupProbe(null, null, null, 0, false, false, false, false, 0, null, false, 0, StatusUnavailable: true));
 }
 
 /// <summary>The host's end of <see cref="RemoteGitService"/>: one call of this computer's git service, by its method's name.</summary>
@@ -179,6 +204,10 @@ internal static class RemoteGitDispatcher
             nameof(IGitService.GetStashCountAsync) => new GitCallReply { Number = await git.GetStashCountAsync(a.Root) },
             nameof(IGitService.GetCommitFilesAsync) => new GitCallReply { Files = [.. await git.GetCommitFilesAsync(a.Root, Need(a.Commit))] },
             nameof(IGitService.GetCommitFileDiffAsync) => new GitCallReply { Diff = await git.GetCommitFileDiffAsync(a.Root, Need(a.Commit), Need(a.Path), a.OriginalPath) },
+            nameof(IGitService.GetWorktreesAsync) => new GitCallReply { Worktrees = [.. await git.GetWorktreesAsync(a.Root)] },
+            nameof(IGitService.AddWorktreeAsync) => new GitCallReply { Result = await git.AddWorktreeAsync(a.Root, Need(a.Path), Need(a.Name), a.BaseRef, a.Flag, a.Flag2) },
+            nameof(IGitService.RemoveWorktreeAsync) => new GitCallReply { Result = await git.RemoveWorktreeAsync(a.Root, Need(a.Path), a.Flag) },
+            nameof(IGitService.PruneWorktreesAsync) => new GitCallReply { Result = await git.PruneWorktreesAsync(a.Root) },
             _ => throw new RemoteException(RemoteProtocol.MethodNotFound, $"Unknown git call '{method}'."),
         };
         return JsonSerializer.Serialize(reply, RemoteGitJsonContext.Default.GitCallReply);

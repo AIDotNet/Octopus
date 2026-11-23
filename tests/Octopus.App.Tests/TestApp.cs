@@ -52,9 +52,15 @@ public static class TestApp
             services.Replace(ServiceDescriptor.Singleton<ISecretStore, MemorySecretStore>());
             // Plugins' agent data scopes (~/.claude, ~/.codex…) resolve under the temporary folder, never the real home.
             services.Replace(ServiceDescriptor.Singleton(p => new Octopus.Plugins.Security.UserHome(((TempAppPaths)p.GetRequiredService<IAppPaths>()).Home)));
+            // Managed git worktrees (~/.octopus/workspaces) resolve under the temporary folder in tests, never the real home.
+            services.Replace(ServiceDescriptor.Singleton(p => new Octopus.App.Services.Workspaces.WorkspaceRootOptions(((TempAppPaths)p.GetRequiredService<IAppPaths>()).Home)));
+            // Scheduled automatic workspace cleanup stays off by default in tests unless explicitly started.
+            services.Replace(ServiceDescriptor.Singleton(new Octopus.App.Services.Workspaces.WorkspaceCleanupOptions { AutoStart = false }));
             // No real process, no scan of the machine, no system dialogs.
             services.Replace(ServiceDescriptor.Singleton<ITerminalConnectionFactory, FakeTerminalConnectionFactory>());
             services.AddSingleton(p => (FakeTerminalConnectionFactory)p.GetRequiredService<ITerminalConnectionFactory>());
+            services.Replace(ServiceDescriptor.Singleton<Octopus.Acp.Process.IAcpSessionFactory, FakeAcpSessionFactory>());
+            services.AddSingleton(p => (FakeAcpSessionFactory)p.GetRequiredService<Octopus.Acp.Process.IAcpSessionFactory>());
             services.Replace(ServiceDescriptor.Singleton<IAgentScanner>(new FakeAgentScanner("claude", "opencode", "codex")));
             services.Replace(ServiceDescriptor.Singleton<Octopus.Agents.Sessions.IAgentSessionService, FakeAgentSessionService>());
             services.AddSingleton(p => (FakeAgentSessionService)p.GetRequiredService<Octopus.Agents.Sessions.IAgentSessionService>());

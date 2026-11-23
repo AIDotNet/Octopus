@@ -280,6 +280,74 @@ public class ProtocolTests
         await Assert.ThrowsAnyAsync<Exception>(() => WebSocketTransport.ConnectAsync(new Uri($"ws://127.0.0.1:{listener.Port}")).WaitAsync(Limit));
     }
 
+    [Fact]
+    public async Task Workspace_messages_round_trip_with_source_generated_json_and_stay_compatible_with_older_payloads()
+    {
+        var (device, host) = await Pair();
+        await using var _ = device;
+        await using var __ = host;
+        var json = RemoteJsonContext.Default;
+
+        host.Handle(RemoteMethods.WorkspaceOptions, json.ProjectRefMessage, json.WorkspaceOptionsMessage,
+            (req, _) => Task.FromResult(new WorkspaceOptionsMessage
+            {
+                IsGitRepository = true,
+                DefaultBranch = "main",
+                GhAvailable = true,
+                Branches =
+                [
+                    new WorkspaceBranchMessage { Name = "main", IsCurrent = true, OccupiedBy = "Octopus" },
+                    new WorkspaceBranchMessage { Name = "feat/mobile", IsRemote = false },
+                ],
+                Issues =
+                [
+                    new WorkspaceTaskOptionMessage
+                    {
+                        Kind = "issue", Key = "#142", Title = "Worktree support",
+                        Url = "https://github.com/org/repo/issues/142", SuggestedBranch = "feat/142-worktree-support",
+                    },
+                ],
+            }));
+        host.Handle(RemoteMethods.WorkspaceCreate, json.CreateWorkspaceMessage, json.WorkspaceMessage,
+            (req, _) => Task.FromResult(new WorkspaceMessage
+            {
+                Id = "ws-1", Name = req.BranchName, Branch = req.BranchName,
+                Path = "/home/ada/.octopus/workspaces/Octopus/feat-142",
+                TaskKind = req.TaskKind, TaskKey = req.TaskKey, TaskTitle = req.TaskTitle, TaskUrl = req.TaskUrl,
+            }));
+        device.Start();
+        host.Start();
+
+        var options = await device.RequestAsync(RemoteMethods.WorkspaceOptions, new ProjectRefMessage { ProjectId = "p1" },
+            json.ProjectRefMessage, json.WorkspaceOptionsMessage).WaitAsync(Limit);
+        Assert.True(options.IsGitRepository);
+        Assert.Equal("main", options.DefaultBranch);
+        Assert.True(options.GhAvailable);
+        Assert.Equal(2, options.Branches.Count);
+        Assert.Equal("#142", Assert.Single(options.Issues).Key);
+
+        var created = await device.RequestAsync(RemoteMethods.WorkspaceCreate, new CreateWorkspaceMessage
+        {
+            ProjectId = "p1",
+            CreateBranch = true,
+            BranchName = "feat/142",
+            BaseRef = "main",
+            TaskKind = "issue",
+            TaskKey = "#142",
+            TaskTitle = "Worktree support",
+            TaskUrl = "https://github.com/org/repo/issues/142",
+        }, json.CreateWorkspaceMessage, json.WorkspaceMessage).WaitAsync(Limit);
+        Assert.Equal(("ws-1", "feat/142", "#142"), (created.Id, created.Branch, created.TaskKey));
+
+        // Older host payloads lacking workspace fields deserialize cleanly to defaults.
+        var legacyProject = System.Text.Json.JsonSerializer.Deserialize("""{"id":"p1","name":"App","path":"/app"}""", json.ProjectMessage)!;
+        Assert.False(legacyProject.IsGitRepository);
+        Assert.Null(legacyProject.Workspaces);
+        var legacyItem = System.Text.Json.JsonSerializer.Deserialize("""{"id":"i1","projectId":"p1","kind":"terminal","title":"zsh","activity":"idle","isRunning":false}""", json.ItemMessage)!;
+        Assert.Null(legacyItem.WorkspaceId);
+        Assert.Null(legacyItem.WorkspaceBranch);
+    }
+
     private sealed class ClientProbe
     {
         public async Task ConnectAsync(Uri address)

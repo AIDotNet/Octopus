@@ -1,9 +1,16 @@
 using Avalonia.Controls;
 using Microsoft.Extensions.DependencyInjection;
+using Octopus.Acp.Dialects;
+using Octopus.Acp.Process;
+using Octopus.Agents;
+using Octopus.Agents.Accounts;
+using Octopus.App.Activity;
+using Octopus.App.AgentGui;
 using Octopus.App.Files;
 using Octopus.App.Plugins;
 using Octopus.App.Services;
 using Octopus.App.Terminals;
+using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.FileSystem;
 using Octopus.Git;
@@ -41,10 +48,62 @@ public sealed class TabContentRegistry(
             // A project on another computer: the tab mirrors the terminal that computer runs, and owns nothing here.
             _ when ProjectLocation.IsOnRemoteHost(project) && remote is not null =>
                 new TerminalTabView { DataContext = new TerminalTabViewModel(project, item, launcher, remote.TerminalFactory(project, item), settings) { IsMirror = true } },
-            _ => new TerminalTabView { DataContext = new TerminalTabViewModel(project, item, launcher, factory, settings, sessions) },
+            // Local ACP-capable agent opened in GUI surface: structured Style A conversation view.
+            ProjectItemKind.Agent when TryCreateAgentGui(project, item) is { } guiTab => guiTab,
+            _ => new TerminalTabView
+            {
+                DataContext = new TerminalTabViewModel(
+                    project,
+                    item,
+                    launcher,
+                    factory,
+                    settings,
+                    sessions,
+                    services.GetService<Octopus.Platform.IFileOpener>(),
+                    services.GetService<Octopus.App.Services.Workspaces.IWorkspaceManager>()?.HomeDirectory),
+            },
         };
         _controls[item.Id] = control;
         return control;
+    }
+
+    private Control? TryCreateAgentGui(Project project, ProjectItem item)
+    {
+        if (item.Surface != AgentSurface.Gui || string.IsNullOrWhiteSpace(item.AgentId))
+        {
+            return null;
+        }
+        var catalog = services.GetService<IAgentCatalog>();
+        var definition = catalog?.Find(item.AgentId);
+        // Hard constraint: any agent without ACP support always opens in a terminal.
+        if (definition is null || !definition.SupportsAcp)
+        {
+            return null;
+        }
+        var launchResolver = services.GetService<AcpLaunchResolver>();
+        var sessionFactory = services.GetService<IAcpSessionFactory>();
+        var dialects = services.GetService<AcpDialectRegistry>();
+        if (launchResolver is null || sessionFactory is null || dialects is null)
+        {
+            return null;
+        }
+        var vm = new AgentGuiTabViewModel(
+            project,
+            item,
+            definition,
+            settings,
+            services.GetRequiredService<IAgentScanner>(),
+            services.GetRequiredService<IAgentCommandCompiler>(),
+            launchResolver,
+            sessionFactory,
+            dialects,
+            services.GetRequiredService<IProjectService>(),
+            services.GetRequiredService<IItemOpener>(),
+            services.GetService<IPickerService>(),
+            services.GetService<IItemActivityService>(),
+            services.GetService<IAgentAccountService>(),
+            () => services.GetService<IWorkspaceCommands>());
+        return new AgentGuiTabView { DataContext = vm };
     }
 
     public Control GetOrCreateDiff(DiffTabRequest request)

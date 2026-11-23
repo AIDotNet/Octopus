@@ -11,6 +11,7 @@
              xmlns:remote="using:Octopus.App.Settings.Remote"
              xmlns:appearance="using:Octopus.App.Settings.Appearance"
              xmlns:shortcuts="using:Octopus.App.Settings.Shortcuts"
+             xmlns:workspaces="using:Octopus.App.Settings.Workspaces"
              xmlns:pluginSettings="using:Octopus.App.Plugins.Settings"
              x:Class="Octopus.App.Settings.SettingsView"
              x:DataType="local:SettingsViewModel"
@@ -60,6 +61,9 @@
         <DataTemplate DataType="general:GeneralSettingsViewModel">
             <general:GeneralPageView />
         </DataTemplate>
+        <DataTemplate DataType="workspaces:WorkspaceCleanupSettingsViewModel">
+            <workspaces:WorkspaceCleanupPageView />
+        </DataTemplate>
         <DataTemplate DataType="terminal:TerminalSettingsViewModel">
             <terminal:TerminalPageView />
         </DataTemplate>
@@ -107,7 +111,8 @@
         </arc:Sidebar>
 
         <arc:ScrollArea x:Name="ContentScroll" Grid.Column="1">
-            <Border MaxWidth="820" Margin="34,26,34,60">
+            <Border MaxWidth="{DynamicResource OctopusSettingsContentMaxWidth}"
+                    Margin="{DynamicResource OctopusSettingsContentMargin}">
                 <ContentControl Content="{Binding Page}" />
             </Border>
         </arc:ScrollArea>

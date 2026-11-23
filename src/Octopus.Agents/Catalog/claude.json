@@ -132,5 +132,18 @@
       "kind": "jsonPaths",
       "jsonPaths": ["oauthAccount.emailAddress", "oauthAccount.displayName", "oauthAccount.organizationName"]
     }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "claude-acp",
+    "adapter": {
+      "registryId": "claude-acp",
+      "executables": [
+        "claude-agent-acp"
+      ],
+      "npxPackage": "@agentclientprotocol/claude-agent-acp",
+      "npxOmitOptionalWhenInstalled": true,
+      "nativeExecutableEnvVar": "CLAUDE_CODE_EXECUTABLE"
+    }
   }
 }

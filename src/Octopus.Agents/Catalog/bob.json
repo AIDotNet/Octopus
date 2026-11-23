@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "id": "bob",
+  "name": "IBM Bob",
+  "icon": "bob",
+  "homepage": "https://www.ibm.com/products/bob",
+  "verified": false,
+  "detect": {
+    "executables": ["bob"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @ibm/bob" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "auto": { "args": ["--auto-approve"] }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "native",
+    "args": ["acp"],
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "bob",
+      "executables": ["bob"],
+      "args": ["acp"],
+      "npxPackage": "@ibm/bob",
+      "npxArgs": ["acp"]
+    }
+  }
+}

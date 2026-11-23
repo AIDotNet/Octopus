@@ -14,7 +14,8 @@ public sealed class AgentCatalog : IAgentCatalog
         "claude", "codex", "grok", "opencode", "cursor", "muse", "gemini", "copilot",
         "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi",
         "cline", "kilo", "auggie", "codebuddy", "qoder", "vibe", "pi", "openhands",
-        "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp", "agy"
+        "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp", "agy",
+        "devin", "hermes", "autohand", "mimo", "vtcode", "bob", "stakpak", "minimax"
     ];
 
     private readonly IAppPaths _paths;

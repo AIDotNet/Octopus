@@ -10,6 +10,13 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Octopus.Mobile.Tests" />
+        <!-- The official service's address (Directory.Build.props), read by MobileBuild. Left out while there is none. -->
+        <AssemblyMetadata Include="OctopusServiceUrl" Value="$(OctopusServiceUrl)" Condition="'$(OctopusServiceUrl)' != ''" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The logo of the welcome page: the desktop app's icon, not a second copy of it. -->
+        <AvaloniaResource Include="../Octopus.App/Assets/Icon/octopus.png" Link="Assets/logo.png" />
     </ItemGroup>
 
     <ItemGroup>

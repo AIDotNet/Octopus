@@ -1,9 +1,11 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Composition;
 using Octopus.App.Services;
 using Octopus.Core.Projects;
 using Octopus.Core.Terminals;
+using Octopus.Platform;
 using Octopus.Ssh;
 using Octopus.Storage;
 using Octopus.Terminal;
@@ -16,6 +18,7 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IDisposable
     private readonly Project _project;
     private readonly IItemLaunchService _launcher;
     private readonly ISettingsStore _settings;
+    private readonly IFileOpener? _fileOpener;
 
     public TerminalTabViewModel(
         Project project,
@@ -23,7 +26,9 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IDisposable
         IItemLaunchService launcher,
         ITerminalConnectionFactory factory,
         ISettingsStore settings,
-        Octopus.Terminal.Avalonia.TerminalSessionRegistry? sessions = null)
+        Octopus.Terminal.Avalonia.TerminalSessionRegistry? sessions = null,
+        IFileOpener? fileOpener = null,
+        string? homeDirectory = null)
     {
         Sessions = sessions;
         _project = project;
@@ -31,13 +36,46 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IDisposable
         _launcher = launcher;
         Factory = factory;
         _settings = settings;
+        _fileOpener = fileOpener;
         // A terminal on an SSH host shows how its connection is made, from the log ssh writes (see RemoteFiles). Only ssh
         // writes it: a host that connects with mosh or telnet shows its terminal at once.
         Connect = project.SshHost is { } host && ProtocolOf(host) == SshHostProtocol.Ssh
             ? new SshConnectProgress(host, AppHost.Get<RemoteFiles>().ConnectLogPath(item.Id))
             : null;
+        Workspace = !string.IsNullOrEmpty(item.WorkspaceId)
+            ? project.Workspaces.FirstOrDefault(w => w.Id == item.WorkspaceId)
+            : null;
+        WorkspaceShortPath = Workspace is not null ? WorkspacePaths.FormatHomePath(Workspace.Path, homeDirectory) : "";
         ReadSettings();
         _settings.Changed += OnSettingsChanged;
+    }
+
+    public ProjectWorkspace? Workspace { get; }
+    public bool HasWorkspaceContext => Workspace is not null;
+    public string WorkspaceBranch => Workspace?.DisplayName ?? "";
+    public string WorkspaceShortPath { get; }
+    public bool HasTask => Workspace?.Task is not null && (!string.IsNullOrEmpty(Workspace.Task.Key) || !string.IsNullOrEmpty(Workspace.Task.Title));
+    public string TaskKey => Workspace?.Task?.Key ?? "";
+    public string TaskTitle => Workspace?.Task?.Title ?? "";
+    public string? TaskUrl => Workspace?.Task?.Url;
+    public bool HasTaskUrl => !string.IsNullOrWhiteSpace(TaskUrl);
+
+    [RelayCommand]
+    private void OpenTaskUrl()
+    {
+        if (!string.IsNullOrWhiteSpace(TaskUrl))
+        {
+            _fileOpener?.OpenUrl(TaskUrl);
+        }
+    }
+
+    [RelayCommand]
+    private void RevealWorkspace()
+    {
+        if (Workspace is not null)
+        {
+            _fileOpener?.Reveal(Workspace.Path);
+        }
     }
 
     private static SshHostProtocol ProtocolOf(string alias) =>

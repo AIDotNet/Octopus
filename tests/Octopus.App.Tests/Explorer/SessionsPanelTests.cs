@@ -120,6 +120,7 @@ public class SessionsPanelTests
         await row.ContinueCommand.ExecuteAsync(null);
         var item = Assert.Single(project.Items, i => i.Kind == ProjectItemKind.Agent);
         Assert.Equal("claude", item.AgentId);
+        Assert.Equal("自动更新签名", item.Title);
         Assert.Equal("ccc", item.Launch!.SessionId);
         Assert.Equal(Pro, item.Launch.Env!["CLAUDE_CONFIG_DIR"]);
         Assert.True(row.IsLive);

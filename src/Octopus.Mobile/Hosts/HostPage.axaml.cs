@@ -15,18 +15,30 @@ public partial class HostPage : Page, IClosablePage
         _viewModel = viewModel;
         InitializeComponent();
         DataContext = viewModel;
-        // An action sheet takes its rows as controls, not from a list of data: rebuilt when the chosen agent changes.
+        // ActionSheets take their rows as controls, not from an ItemsSource: rebuilt when options change.
         viewModel.NewSession.Models.CollectionChanged += OnModelsChanged;
+        viewModel.NewSession.BaseBranches.CollectionChanged += OnBaseBranchesChanged;
+        viewModel.NewSession.AvailableExistingBranches.CollectionChanged += OnExistingBranchesChanged;
+        viewModel.NewSession.CurrentTaskOptions.CollectionChanged += OnTaskOptionsChanged;
         FillModels();
+        FillBaseBranches();
+        FillExistingBranches();
+        FillTaskOptions();
     }
 
     public void OnClosed()
     {
         _viewModel.NewSession.Models.CollectionChanged -= OnModelsChanged;
+        _viewModel.NewSession.BaseBranches.CollectionChanged -= OnBaseBranchesChanged;
+        _viewModel.NewSession.AvailableExistingBranches.CollectionChanged -= OnExistingBranchesChanged;
+        _viewModel.NewSession.CurrentTaskOptions.CollectionChanged -= OnTaskOptionsChanged;
         _viewModel.Dispose();
     }
 
     private void OnModelsChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillModels();
+    private void OnBaseBranchesChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillBaseBranches();
+    private void OnExistingBranchesChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillExistingBranches();
+    private void OnTaskOptionsChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillTaskOptions();
 
     private void FillModels()
     {
@@ -41,6 +53,51 @@ public partial class HostPage : Page, IClosablePage
         foreach (var model in choice.Models)
         {
             ModelSheet.Actions.Add(new ActionSheetItem { Content = model, Command = choice.SelectModelCommand, CommandParameter = model });
+        }
+    }
+
+    private void FillBaseBranches()
+    {
+        var choice = _viewModel.NewSession;
+        BaseBranchSheet.Actions.Clear();
+        foreach (var branch in choice.BaseBranches)
+        {
+            BaseBranchSheet.Actions.Add(new ActionSheetItem
+            {
+                Content = branch.Name,
+                Command = choice.SelectBaseBranchCommand,
+                CommandParameter = branch.Name,
+            });
+        }
+    }
+
+    private void FillExistingBranches()
+    {
+        var choice = _viewModel.NewSession;
+        ExistingBranchSheet.Actions.Clear();
+        foreach (var branch in choice.AvailableExistingBranches)
+        {
+            ExistingBranchSheet.Actions.Add(new ActionSheetItem
+            {
+                Content = branch.Name,
+                Command = choice.SelectExistingBranchCommand,
+                CommandParameter = branch,
+            });
+        }
+    }
+
+    private void FillTaskOptions()
+    {
+        var choice = _viewModel.NewSession;
+        TaskSheet.Actions.Clear();
+        foreach (var task in choice.CurrentTaskOptions)
+        {
+            TaskSheet.Actions.Add(new ActionSheetItem
+            {
+                Content = $"{task.Key} · {task.Title}",
+                Command = choice.SelectTaskCommand,
+                CommandParameter = task,
+            });
         }
     }
 }

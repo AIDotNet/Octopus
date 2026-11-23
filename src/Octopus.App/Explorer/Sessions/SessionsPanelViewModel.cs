@@ -8,6 +8,7 @@ using Octopus.Agents.Signals;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
+using Octopus.App.Services.Workspaces;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Platform;
@@ -15,10 +16,28 @@ using Octopus.Storage;
 
 namespace Octopus.App.Explorer.Sessions;
 
+public sealed record SessionWorkspaceScope(string? WorkspaceId, string Path, string Label, bool IsDefault)
+{
+    public string FilterKey => IsDefault ? "default" : (WorkspaceId ?? Path);
+}
+
+public sealed partial class SessionWorkspaceFilterChip(string key, string label, bool isWorktree, Action<string> select) : ObservableObject
+{
+    public string Key { get; } = key;
+    public string Label { get; } = label;
+    public bool IsWorktree { get; } = isWorktree;
+
+    [ObservableProperty] public partial bool IsSelected { get; set; }
+
+    [RelayCommand]
+    private void Select() => select(Key);
+}
+
 /// <summary>
 /// The sessions tab of the right panel (design/ui/会话管理方案.html, layout A): first the installed agents with how many
-/// sessions each saved for this folder, then one agent's sessions grouped by account. A session is continued in a new
-/// tab (in its own account) or moved to another agent.
+/// sessions each saved for this project (default folder + git worktree workspaces), then one agent's sessions grouped by
+/// account with workspace filter chips and badges. A session is continued in its original workspace directory or moved to
+/// another agent.
 /// </summary>
 public sealed partial class SessionsPanelViewModel : ObservableObject
 {
@@ -39,7 +58,10 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
     private readonly IAppPaths _paths;
     private readonly ISignalHub? _hub;
     private readonly ILoginEnvironment? _login;
+    private readonly IWorkspaceManager? _workspaces;
     private readonly TimeProvider _time;
+    private readonly Dictionary<(string AgentId, string AccountDirectory, string SessionId), SessionWorkspaceScope> _sessionScopes = [];
+    private List<SessionWorkspaceScope> _scopes = [];
     private string? _projectPath;
     private int _version;
     /// <summary>The project the list was read for; a tab shown again for the same one keeps what it has.</summary>
@@ -59,7 +81,8 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
         IAppPaths paths,
         ISignalHub? hub = null,
         ILoginEnvironment? login = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        IWorkspaceManager? workspaces = null)
     {
         _sessions = sessions;
         _catalog = catalog;
@@ -73,6 +96,14 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
         _hub = hub;
         _login = login;
         _time = time ?? TimeProvider.System;
+        _workspaces = workspaces;
+        _projects.Changed += (_, e) =>
+        {
+            if (e.Kind == ProjectChangeKind.Workspaces && _isActive && _projectPath is not null)
+            {
+                UiContext.PostToUi(() => _ = LoadAsync());
+            }
+        };
     }
 
     /// <summary>Agents with sessions in this folder, the most recently used first.</summary>
@@ -113,14 +144,25 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
         ? ""
         : AppLangResources.Format(AppLangResourceKind.SessionsHeaderSummary, Current.Group.Count, Current.Group.Accounts.Count);
 
-    /// <summary>The account groups of <see cref="Current"/>, filtered by <see cref="Filter"/>.</summary>
+    /// <summary>The account groups of <see cref="Current"/>, filtered by <see cref="Filter"/> and <see cref="WorkspaceFilter"/>.</summary>
     public ObservableCollection<SessionAccountGroupViewModel> Groups { get; } = [];
+
+    /// <summary>Workspace filter chips shown when the project has branch workspaces (<c>All / Default / Workspaces / each branch</c>).</summary>
+    public ObservableCollection<SessionWorkspaceFilterChip> WorkspaceFilters { get; } = [];
+    public bool HasWorkspaceFilters => WorkspaceFilters.Count > 0;
 
     public bool IsListEmpty => IsSessionsPage && !IsLoading && Groups.Count == 0;
 
     [ObservableProperty] public partial string Filter { get; set; } = "";
+    /// <summary><c>"all"</c>, <c>"default"</c>, <c>"workspaces"</c>, or a specific workspace filter key.</summary>
+    [ObservableProperty] public partial string WorkspaceFilter { get; set; } = "all";
 
     partial void OnFilterChanged(string value) => BuildGroups();
+    partial void OnWorkspaceFilterChanged(string value)
+    {
+        foreach (var chip in WorkspaceFilters) chip.IsSelected = chip.Key == value;
+        BuildGroups();
+    }
 
     /// <summary>Whether the tab shows: a hidden tab reads nothing.</summary>
     public bool IsActive
@@ -142,6 +184,7 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
         Current = null;
         _openAgentId = null;
         Filter = "";
+        WorkspaceFilter = "all";
         if (_isActive) _ = LoadAsync();
         else Clear();
     }
@@ -177,13 +220,17 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
     private void Clear()
     {
         _loadedFor = null;
+        _scopes = [];
+        _sessionScopes.Clear();
+        WorkspaceFilters.Clear();
         Agents.Clear();
         QuietAgents.Clear();
         Groups.Clear();
+        OnPropertyChanged(nameof(HasWorkspaceFilters));
         NotifyLists();
     }
 
-    /// <summary>Reads every installed agent's sessions for the folder; a newer read makes an older one's result void.</summary>
+    /// <summary>Reads every installed agent's sessions for the project (default folder + all its worktrees); a newer read makes an older one's result void.</summary>
     public async Task LoadAsync()
     {
         var version = ++_version;
@@ -197,18 +244,91 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
         try
         {
             var installed = Installed();
+            var scopes = ResolveScopes(path);
+            var scopeMap = new Dictionary<(string AgentId, string AccountDirectory, string SessionId), SessionWorkspaceScope>();
+
             var groups = await Task.WhenAll(installed.Select(async agent =>
             {
-                try
+                if (scopes.Count <= 1)
                 {
-                    return await _sessions.ListAsync(agent, path);
+                    try
+                    {
+                        var single = await _sessions.ListAsync(agent, path);
+                        lock (scopeMap)
+                        {
+                            foreach (var acc in single.Accounts)
+                            {
+                                foreach (var s in acc.Sessions)
+                                {
+                                    scopeMap[(agent.Id, s.AccountDirectory, s.SessionId)] = scopes[0];
+                                }
+                            }
+                        }
+                        return single;
+                    }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+                    {
+                        return new AgentSessionGroup(agent, _sessions.CanRead(agent.Id), []);
+                    }
                 }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+
+                // Multi-workspace project: scan default folder + every worktree folder and merge per account.
+                var perScope = await Task.WhenAll(scopes.Select(async scope =>
                 {
-                    return new AgentSessionGroup(agent, _sessions.CanRead(agent.Id), []);
+                    try
+                    {
+                        return (Scope: scope, Group: await _sessions.ListAsync(agent, scope.Path));
+                    }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+                    {
+                        return (Scope: scope, Group: new AgentSessionGroup(agent, _sessions.CanRead(agent.Id), []));
+                    }
+                }));
+
+                var isSupported = perScope.Any(x => x.Group.IsSupported);
+                var mergedAccounts = new Dictionary<string, (AgentSessionAccount Meta, List<AgentSessionInfo> Sessions)>(
+                    OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+
+                foreach (var (scope, group) in perScope)
+                {
+                    foreach (var account in group.Accounts)
+                    {
+                        if (!mergedAccounts.TryGetValue(account.Directory, out var bucket))
+                        {
+                            bucket = (account, []);
+                            mergedAccounts[account.Directory] = bucket;
+                        }
+                        foreach (var session in account.Sessions)
+                        {
+                            var key = (agent.Id, session.AccountDirectory, session.SessionId);
+                            lock (scopeMap)
+                            {
+                                if (scopeMap.ContainsKey(key)) continue;
+                                scopeMap[key] = scope;
+                            }
+                            bucket.Sessions.Add(session);
+                        }
+                    }
                 }
+
+                var finalAccounts = mergedAccounts.Values
+                    .Where(b => b.Sessions.Count > 0)
+                    .Select(b => new AgentSessionAccount(
+                        b.Meta.Directory,
+                        b.Meta.Label,
+                        b.Meta.IsDefault,
+                        [.. b.Sessions.OrderByDescending(s => s.UpdatedAt)]))
+                    .OrderByDescending(a => a.Sessions.Max(s => s.UpdatedAt))
+                    .ToList();
+                return new AgentSessionGroup(agent, isSupported, finalAccounts);
             }));
+
             if (version != _version) return;
+            _scopes = scopes;
+            _sessionScopes.Clear();
+            foreach (var (k, v) in scopeMap) _sessionScopes[k] = v;
+            RebuildWorkspaceFilters();
+
             var now = _time.GetUtcNow();
             Agents.Clear();
             QuietAgents.Clear();
@@ -233,6 +353,82 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
             if (version == _version) IsLoading = false;
             NotifyLists();
         }
+    }
+
+    private List<SessionWorkspaceScope> ResolveScopes(string projectPath)
+    {
+        var scopes = new List<SessionWorkspaceScope>
+        {
+            new(null, projectPath, AppLangResources.Get(AppLangResourceKind.WorkspaceDefaultName), IsDefault: true),
+        };
+        var project = _projects.Projects.FirstOrDefault(p => ProjectLocation.IsOnThisComputer(p) && SamePath(p.Path, projectPath));
+        if (project is null) return scopes;
+
+        foreach (var ws in project.Workspaces)
+        {
+            if (string.IsNullOrWhiteSpace(ws.Path) || scopes.Any(s => SamePath(s.Path, ws.Path))) continue;
+            scopes.Add(new SessionWorkspaceScope(ws.Id, ws.Path, ws.DisplayName, IsDefault: false));
+        }
+
+        // Also include unmanaged directories under the configured (and default) workspaces directory so historical sessions stay discoverable.
+        var managedDirs = new List<string>();
+        if (_workspaces?.ProjectWorkspacesDirectory(project) is { Length: > 0 } managedDir)
+        {
+            managedDirs.Add(managedDir);
+        }
+        var defaultManagedDir = WorkspacePaths.ProjectWorkspacesDirectory(project.Name, project.Path, _workspaces?.HomeDirectory);
+        if (!managedDirs.Any(d => SamePath(d, defaultManagedDir)))
+        {
+            managedDirs.Add(defaultManagedDir);
+        }
+        foreach (var scanDir in managedDirs)
+        {
+            if (!Directory.Exists(scanDir)) continue;
+            try
+            {
+                foreach (var dir in Directory.EnumerateDirectories(scanDir))
+                {
+                    if (scopes.Any(s => SamePath(s.Path, dir))) continue;
+                    var label = Path.GetFileName(dir.TrimEnd('/', '\\'));
+                    scopes.Add(new SessionWorkspaceScope(null, dir, label, IsDefault: false));
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+        return scopes;
+    }
+
+    private void RebuildWorkspaceFilters()
+    {
+        WorkspaceFilters.Clear();
+        if (_scopes.Count > 1)
+        {
+            void Add(string key, string label, bool isWorktree = false)
+            {
+                WorkspaceFilters.Add(new SessionWorkspaceFilterChip(key, label, isWorktree, k => WorkspaceFilter = k)
+                {
+                    IsSelected = WorkspaceFilter == key,
+                });
+            }
+            Add("all", AppLangResources.Get(AppLangResourceKind.SessionsFilterAll));
+            Add("default", AppLangResources.Get(AppLangResourceKind.SessionsFilterDefault));
+            Add("workspaces", AppLangResources.Get(AppLangResourceKind.SessionsFilterWorkspaces), isWorktree: true);
+            foreach (var scope in _scopes.Where(s => !s.IsDefault))
+            {
+                Add(scope.FilterKey, scope.Label, isWorktree: true);
+            }
+            if (WorkspaceFilters.All(c => c.Key != WorkspaceFilter))
+            {
+                WorkspaceFilter = "all";
+            }
+        }
+        else
+        {
+            WorkspaceFilter = "all";
+        }
+        OnPropertyChanged(nameof(HasWorkspaceFilters));
     }
 
     private void NotifyLists()
@@ -261,17 +457,52 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
             var now = _time.GetUtcNow();
             var live = LiveSessions();
             var filter = Filter.Trim();
+            var showBadges = _scopes.Count > 1;
+            var defaultScope = _scopes.FirstOrDefault(s => s.IsDefault);
             foreach (var account in agent.Group.Accounts)
             {
-                var rows = account.Sessions
-                    .Where(s => filter.Length == 0 || s.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase) || s.SessionId.StartsWith(filter, StringComparison.OrdinalIgnoreCase))
-                    .Select(s => new SessionRowViewModel(s, now, live.GetValueOrDefault(s.SessionId), ContinueAsync, MigrateAsync))
-                    .ToList();
+                var rows = new List<SessionRowViewModel>();
+                foreach (var s in account.Sessions)
+                {
+                    var scope = _sessionScopes.GetValueOrDefault((agent.AgentId, s.AccountDirectory, s.SessionId)) ?? defaultScope;
+                    if (!MatchesWorkspaceFilter(scope)) continue;
+                    if (filter.Length > 0
+                        && !s.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase)
+                        && !s.SessionId.StartsWith(filter, StringComparison.OrdinalIgnoreCase)
+                        && (scope is null || !scope.Label.Contains(filter, StringComparison.CurrentCultureIgnoreCase)))
+                    {
+                        continue;
+                    }
+                    var supportsAcp = agent.Group.Agent.SupportsAcp;
+                    var defaultSurface = AgentSurfaceResolver.Resolve(agent.Group.Agent, _settings.Current.Agents);
+                    rows.Add(new SessionRowViewModel(
+                        s,
+                        now,
+                        live.GetValueOrDefault(s.SessionId),
+                        ContinueAsync,
+                        MigrateAsync,
+                        workspaceId: scope?.WorkspaceId,
+                        workspacePath: scope?.Path,
+                        workspaceLabel: scope?.Label,
+                        isWorktree: scope is { IsDefault: false },
+                        showWorkspaceBadge: showBadges,
+                        supportsAcp: supportsAcp,
+                        defaultSurface: defaultSurface,
+                        resumeWithSurface: ContinueWithSurfaceAsync));
+                }
                 if (rows.Count > 0) Groups.Add(new SessionAccountGroupViewModel(account, rows));
             }
         }
         OnPropertyChanged(nameof(IsListEmpty));
     }
+
+    private bool MatchesWorkspaceFilter(SessionWorkspaceScope? scope) => WorkspaceFilter switch
+    {
+        "all" or "" => true,
+        "default" => scope is null || scope.IsDefault,
+        "workspaces" => scope is { IsDefault: false },
+        var key => scope is not null && scope.FilterKey == key,
+    };
 
     /// <summary>
     /// Session id to tab: what the project's agent tabs were opened with, and what their signals last said they run
@@ -297,6 +528,7 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
                     continue;
                 }
             }
+            if (item.AcpSessionId is { Length: > 0 } acpId) live.TryAdd(acpId, item.Id);
             if (item.Launch?.SessionId is { Length: > 0 } chosen) live.TryAdd(chosen, item.Id);
         }
         return live;
@@ -320,7 +552,12 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
         }
     }
 
-    private async Task ContinueAsync(SessionRowViewModel row)
+    private Task ContinueAsync(SessionRowViewModel row) => ContinueWithSurfaceAsync(row, surfaceOverride: null);
+
+    private Task ContinueWithSurfaceAsync(SessionRowViewModel row, AgentSurface surface) =>
+        ContinueWithSurfaceAsync(row, (AgentSurface?)surface);
+
+    private async Task ContinueWithSurfaceAsync(SessionRowViewModel row, AgentSurface? surfaceOverride)
     {
         if (row.LiveItemId is { } itemId && _projects.FindItem(itemId) is not null)
         {
@@ -328,14 +565,47 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
             return;
         }
         if (_catalog.Find(row.Info.AgentId) is not { } agent) return;
+
+        string? targetWorkspaceId = row.IsWorktree ? row.WorkspaceId : IItemOpener.DefaultWorkspaceId;
+        string? targetWorkingDir = row.IsWorktree ? row.WorkspacePath : null;
+        if (row.IsWorktree && !string.IsNullOrEmpty(row.WorkspacePath) && !Directory.Exists(row.WorkspacePath))
+        {
+            var fallback = await _dialogs.ConfirmAsync(
+                AppLangResources.Get(AppLangResourceKind.SessionsWorkspaceMissingTitle),
+                AppLangResources.Format(AppLangResourceKind.SessionsWorkspaceMissingBody, row.WorkspaceLabel),
+                AppLangResources.Get(AppLangResourceKind.SessionsWorkspaceMissingConfirm));
+            if (!fallback) return;
+            targetWorkspaceId = IItemOpener.DefaultWorkspaceId;
+            targetWorkingDir = null;
+        }
+
         var env = _sessions.AccountEnvironment(agent, row.Info.AccountDirectory, await InheritedAsync(agent));
-        var item = _opener.OpenAgent(agent.Id, new AgentLaunchOptions { SessionId = row.Info.SessionId, Env = env });
-        if (item is not null) row.LiveItemId = item.Id;
+        var item = _opener.OpenAgent(
+            agent.Id,
+            new AgentLaunchOptions
+            {
+                SessionId = row.Info.SessionId,
+                Env = env,
+                Surface = surfaceOverride,
+            },
+            targetWorkspaceId,
+            targetWorkingDir);
+        if (item is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(row.Info.Title) && !string.Equals(row.Info.Title, row.Info.SessionId, StringComparison.OrdinalIgnoreCase))
+            {
+                _projects.SetItemTitle(item.Id, row.Info.Title);
+            }
+            row.LiveItemId = item.Id;
+        }
     }
 
     private async Task MigrateAsync(SessionRowViewModel row)
     {
         if (_projectPath is not { } project || _catalog.Find(row.Info.AgentId) is not { } source) return;
+        var targetDirectory = row.IsWorktree && !string.IsNullOrEmpty(row.WorkspacePath) && Directory.Exists(row.WorkspacePath)
+            ? row.WorkspacePath
+            : project;
         var targets = new List<SessionMigrationTarget>();
         foreach (var agent in Installed())
         {
@@ -360,7 +630,7 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
             var result = await _sessions.MigrateAsync(row.Info, choice.Kind, new SessionMigrationRequest(
                 choice.Target.Id,
                 choice.AccountDirectory,
-                project,
+                targetDirectory,
                 choice.IncludeToolOutput,
                 choice.RecentOnly ? RecentTurns : null,
                 Path.Combine(_paths.DataDirectory, "handoffs"),
@@ -369,7 +639,9 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
             var launch = result.Kind == SessionMigrationKind.Native
                 ? new AgentLaunchOptions { SessionId = result.ResumeSessionId, Env = env }
                 : new AgentLaunchOptions { Prompt = result.Prompt, Env = env };
-            _opener.OpenAgent(choice.Target.Id, launch);
+            var wsId = row.IsWorktree && targetDirectory == row.WorkspacePath ? row.WorkspaceId : IItemOpener.DefaultWorkspaceId;
+            var cwd = row.IsWorktree && targetDirectory == row.WorkspacePath ? row.WorkspacePath : null;
+            _opener.OpenAgent(choice.Target.Id, launch, wsId, cwd);
             // A copy into another account adds a session there.
             if (result.Kind == SessionMigrationKind.Native) _ = LoadAsync();
         }

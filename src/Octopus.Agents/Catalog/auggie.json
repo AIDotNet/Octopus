@@ -21,5 +21,13 @@
       "continueLatest": ["--continue"]
     },
     "extraArgs": true
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "--acp"
+    ],
+    "dialect": "auggie",
+    "minVersion": "1.2.0"
   }
 }

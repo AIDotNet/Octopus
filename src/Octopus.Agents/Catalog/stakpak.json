@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "id": "stakpak",
+  "name": "Stakpak",
+  "icon": "stakpak",
+  "homepage": "https://github.com/stakpak/agent",
+  "verified": false,
+  "detect": {
+    "executables": ["stakpak"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://stakpak.dev/install.sh | bash" },
+      { "kind": "brew", "command": "brew install stakpak/tap/stakpak" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "auto": { "args": ["--auto-approve"] }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "native",
+    "args": ["acp"],
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "stakpak"
+    }
+  }
+}

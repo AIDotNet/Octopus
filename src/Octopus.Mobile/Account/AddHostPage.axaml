@@ -1,0 +1,53 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Account"
+           x:Class="Octopus.Mobile.Account.AddHostPage"
+           x:DataType="vm:AddHostViewModel">
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource AddHost}"
+                     ShowBack="True"
+                     BackText="{l:MobileLangResource Back}"
+                     BackCommand="{Binding BackCommand}" />
+    </arcm:Page.Header>
+
+    <StackPanel Margin="32,24,32,0" Spacing="18">
+        <TextBlock Classes="secondary"
+                   Text="{l:MobileLangResource AddHostHint}"
+                   TextWrapping="Wrap"
+                   TextTrimming="None" />
+
+        <StackPanel Spacing="8">
+            <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource AddHostTarget}" />
+            <arcm:TextField Name="TargetInput"
+                            Text="{Binding Target, Mode=TwoWay}"
+                            PlaceholderText="192.168.1.20:7420"
+                            AutomationProperties.Name="{l:MobileLangResource AddHostTarget}" />
+        </StackPanel>
+
+        <arcm:Button Name="ConnectButton"
+                     Variant="Filled"
+                     HorizontalAlignment="Stretch"
+                     HorizontalContentAlignment="Center"
+                     Content="{l:MobileLangResource AddHostConnect}"
+                     Command="{Binding ConnectCommand}" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" IsVisible="{Binding IsConnecting}">
+            <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" Text="{l:MobileLangResource PairingContacting}" />
+        </StackPanel>
+
+        <TextBlock Name="Error"
+                   Text="{Binding ErrorText}"
+                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding HasError}" />
+
+        <!-- A link carries the computer's fingerprint and a one-time token: nothing to compare. -->
+        <TextBlock Classes="muted"
+                   Text="{l:MobileLangResource AddHostLinkHint}"
+                   TextWrapping="Wrap" />
+    </StackPanel>
+</arcm:Page>

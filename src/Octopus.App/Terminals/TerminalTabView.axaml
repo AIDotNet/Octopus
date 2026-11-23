@@ -7,7 +7,59 @@
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              x:Class="Octopus.App.Terminals.TerminalTabView"
              x:DataType="vm:TerminalTabViewModel">
-    <Grid>
+    <Grid RowDefinitions="Auto,*">
+        <!-- Shown only for worktree workspace tabs: branch, directory path, and optional linked Issue/PR context. -->
+        <Border Grid.Row="0" IsVisible="{Binding HasWorkspaceContext}"
+                Padding="10,4"
+                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                BorderThickness="0,0,0,1"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+                <Border CornerRadius="{arc:ArcDesignTokenResource RadiusPill}" Padding="7,1"
+                        Background="{arc:ArcDesignTokenResource AccentSubtle}" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <lucide:LucideIcon Kind="GitBranch" Size="12" VerticalAlignment="Center"
+                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                        <TextBlock FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                   FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                   Text="{Binding WorkspaceBranch}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+                <Button Grid.Column="1" Classes="row" Padding="4,1" VerticalAlignment="Center"
+                        Command="{Binding RevealWorkspaceCommand}"
+                        arc:Tooltip.Tip="{Binding WorkspaceShortPath}">
+                    <TextBlock FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               Text="{Binding WorkspaceShortPath}" MaxWidth="260"
+                               TextTrimming="CharacterEllipsis" />
+                </Button>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                            IsVisible="{Binding HasTask}">
+                    <Border CornerRadius="{arc:ArcDesignTokenResource RadiusPill}" Padding="6,1"
+                            Background="{arc:ArcDesignTokenResource Surface}"
+                            BorderThickness="1" BorderBrush="{arc:ArcDesignTokenResource Border}">
+                        <TextBlock FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                   FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding TaskKey}" />
+                    </Border>
+                    <TextBlock Classes="hint" VerticalAlignment="Center"
+                               Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                               Text="{Binding TaskTitle}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <arc:Button Grid.Column="3" Classes="icon" Variant="Ghost" VerticalAlignment="Center"
+                            IsVisible="{Binding HasTaskUrl}"
+                            Command="{Binding OpenTaskUrlCommand}"
+                            arc:Tooltip.Tip="{Binding TaskUrl}">
+                    <lucide:LucideIcon Kind="ExternalLink" Size="13" />
+                </arc:Button>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
         <term:TerminalControl x:Name="Terminal"
                               FontSize="{Binding TerminalFontSize}"
                               ScrollbackLines="{Binding ScrollbackLines}"
@@ -71,5 +123,6 @@
                    VerticalAlignment="Top"
                    IsOpen="{Binding Error, Mode=OneWay, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    Title="{Binding Error}" />
+        </Grid>
     </Grid>
 </UserControl>

@@ -9,7 +9,7 @@
     <arcm:Page.Header>
         <arcm:Navbar Title="{l:MobileLangResource PairingTitle}"
                      ShowBack="True"
-                     BackText="{l:MobileLangResource Hosts}"
+                     BackText="{Binding BackText}"
                      BackCommand="{Binding CancelCommand}" />
     </arcm:Page.Header>
 

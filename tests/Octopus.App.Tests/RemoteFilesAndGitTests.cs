@@ -46,7 +46,7 @@ public class RemoteFilesAndGitTests
         {
             // The real path: on macOS the temporary folder is reached through a link, and git reports the real one.
             Folder = RealPath.Resolve(Folder);
-            Projects = new ProjectService(new InMemoryProjectStore(), AppHost.Get<PathComparer>(), new InMemorySettingsStore());
+            Projects = new ProjectService(new InMemoryProjectStore(), AppHost.Get<PathComparer>());
             Workspace = new HostWorkspace(Projects, AppHost.Get<IItemLaunchService>(), AppHost.Get<ITerminalConnectionFactory>(), Sessions, AppHost.Get<ITabContentRegistry>(),
                 AppHost.Get<IItemActivityService>(), AppHost.Get<IAgentCatalog>(), AppHost.Get<IAgentScanner>(), AppHost.Get<ISettingsStore>(), AppHost.Get<IShellResolver>(),
                 AppHost.Get<IFileTreeService>(), AppHost.Get<IGitService>(), AppHost.Get<PathComparer>());

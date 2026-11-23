@@ -8,6 +8,7 @@ using Octopus.App.Settings.General;
 using Octopus.App.Settings.Shortcuts;
 using Octopus.App.Settings.Ssh;
 using Octopus.App.Settings.Terminal;
+using Octopus.App.Settings.Workspaces;
 using TKCode.Arc.Localization;
 using TKCode.Arc.Icons.Lucide;
 
@@ -25,6 +26,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         General =
         [
             new("general", LucideIconKind.SlidersHorizontal, AppLangResourceKind.SettingsNavGeneral, () => ActivatorUtilities.CreateInstance<GeneralSettingsViewModel>(services)),
+            new("workspace-cleanup", LucideIconKind.FolderGit2, AppLangResourceKind.SettingsNavWorkspaces, () => ActivatorUtilities.CreateInstance<WorkspaceCleanupSettingsViewModel>(services)),
             new("terminal", LucideIconKind.SquareTerminal, AppLangResourceKind.SettingsNavTerminal, () => ActivatorUtilities.CreateInstance<TerminalSettingsViewModel>(services)),
             new("ssh", LucideIconKind.Server, AppLangResourceKind.SettingsNavSsh, () => ActivatorUtilities.CreateInstance<SshSettingsViewModel>(services)),
             new("remote", LucideIconKind.MonitorSmartphone, AppLangResourceKind.SettingsNavRemote, () => ActivatorUtilities.CreateInstance<Remote.RemoteAccessSettingsViewModel>(services)),
@@ -75,7 +77,11 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public object Page => Selected.Page;
 
     /// <summary>Opens the section with this key; an unknown key opens the agents page.</summary>
-    public void Show(string? key) => Selected = All.FirstOrDefault(s => s.Key == key) ?? Ai[0];
+    public void Show(string? key)
+    {
+        var resolved = key == "workspaces" ? "workspace-cleanup" : key;
+        Selected = All.FirstOrDefault(s => s.Key == resolved) ?? Ai[0];
+    }
 
     [RelayCommand]
     private void Select(SettingsSectionViewModel? section)
@@ -114,6 +120,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             {
                 case AgentsSettingsViewModel agents:
                     agents.FlushPending();
+                    break;
+                case WorkspaceCleanupSettingsViewModel workspaces:
+                    workspaces.FlushPending();
                     break;
                 case TerminalSettingsViewModel terminal:
                     terminal.FlushPending();

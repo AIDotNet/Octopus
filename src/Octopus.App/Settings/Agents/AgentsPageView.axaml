@@ -7,6 +7,42 @@
              xmlns:agents="using:Octopus.App.Settings.Agents"
              x:Class="Octopus.App.Settings.Agents.AgentsPageView"
              x:DataType="agents:AgentsSettingsViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.surfaceCard">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="{DynamicResource OctopusSettingsSurfaceCardPadding}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Card"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#PART_Card">
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            </Style>
+            <Style Selector="^.selected /template/ Border#PART_Card">
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            </Style>
+        </Style>
+    </UserControl.Styles>
     <UserControl.DataTemplates>
         <DataTemplate DataType="agents:CommandFieldViewModel">
             <agents:FieldRow Label="{Binding Label}">
@@ -196,6 +232,134 @@
             </arc:Button>
         </Grid>
 
+        <!-- Default open mode: two compact preview cards (GUI via ACP vs Terminal CLI) directly at top of Agents settings -->
+        <StackPanel Spacing="6">
+            <StackPanel Spacing="1">
+                <TextBlock Classes="group" Margin="2,0,0,0" Text="{l:AppLangResource SettingsSurfaceSectionTitle}" />
+                <TextBlock Classes="hint" Margin="2,0,0,0" Text="{l:AppLangResource SettingsSurfaceSectionHint}" TextWrapping="Wrap" />
+            </StackPanel>
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                <!-- Card 1: GUI (ACP) -->
+                <Button x:Name="GuiSurfaceCard"
+                        Grid.Column="0"
+                        Classes="surfaceCard"
+                        Classes.selected="{Binding IsGuiDefault}"
+                        Command="{Binding SelectGuiSurfaceCommand}"
+                        AutomationProperties.Name="{l:AppLangResource SettingsSurfaceGuiTitle}">
+                    <StackPanel Spacing="8">
+                        <!-- Miniature GUI (ACP) visual preview -->
+                        <Border Height="{DynamicResource OctopusSettingsSurfacePreviewHeight}"
+                                Background="{arc:ArcDesignTokenResource Background}"
+                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="8"
+                                ClipToBounds="True">
+                            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="4">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="5">
+                                    <Border Width="6" Height="6" CornerRadius="3" Background="#22C55E" VerticalAlignment="Center" />
+                                    <Border Grid.Column="1" Width="56" Height="5" CornerRadius="2.5" Background="{arc:ArcDesignTokenResource Border}" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                                    <Border Grid.Column="2" Padding="4,0" CornerRadius="3" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                                        <TextBlock Text="ACP" FontSize="8.5" FontWeight="SemiBold" Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                    </Border>
+                                </Grid>
+                                <StackPanel Grid.Row="1" Spacing="4" VerticalAlignment="Center">
+                                    <Border HorizontalAlignment="Right" Padding="6,2" CornerRadius="6" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                                        <Border Width="64" Height="4" CornerRadius="2" Background="{arc:ArcDesignTokenResource TextSecondary}" Opacity="0.55" />
+                                    </Border>
+                                    <Border Padding="6,3" CornerRadius="5"
+                                            Background="{arc:ArcDesignTokenResource Surface}"
+                                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <lucide:LucideIcon Kind="FileDiff" Size="9" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                                            <TextBlock Text="Edit Program.cs" FontSize="8.5" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                            <TextBlock Text="+14" FontSize="8.5" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Foreground="#16A34A" />
+                                            <TextBlock Text="-3" FontSize="8.5" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Foreground="#DC2626" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                                <Border Grid.Row="2" Padding="6,2.5" CornerRadius="5"
+                                        Background="{arc:ArcDesignTokenResource Surface}"
+                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="5">
+                                        <TextBlock Text="/ @" FontSize="8.5" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                        <Border Grid.Column="1" Height="3.5" Width="48" HorizontalAlignment="Left" CornerRadius="2" Background="{arc:ArcDesignTokenResource Border}" VerticalAlignment="Center" />
+                                        <Border Grid.Column="2" Width="12" Height="12" CornerRadius="3" Background="{arc:ArcDesignTokenResource AccentStrong}">
+                                            <lucide:LucideIcon Kind="ArrowUp" Size="8" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <!-- Card Footer -->
+                        <StackPanel Spacing="2">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                                <lucide:LucideIcon Kind="MessageSquareCode" Size="14" VerticalAlignment="Center" Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsSurfaceGuiTitle}" VerticalAlignment="Center" />
+                                    <arc:Badge Size="Small" Tone="Info" Content="{l:AppLangResource SettingsSurfaceGuiBadge}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <arc:Badge Grid.Column="2" Size="Small" Tone="Success"
+                                           Content="{l:AppLangResource SettingsSurfaceSelectedBadge}"
+                                           IsVisible="{Binding IsGuiDefault}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Classes="hint" Text="{l:AppLangResource SettingsSurfaceGuiDesc}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+
+                <!-- Card 2: Terminal (CLI) -->
+                <Button x:Name="TerminalSurfaceCard"
+                        Grid.Column="1"
+                        Classes="surfaceCard"
+                        Classes.selected="{Binding IsTerminalDefault}"
+                        Command="{Binding SelectTerminalSurfaceCommand}"
+                        AutomationProperties.Name="{l:AppLangResource SettingsSurfaceTerminalTitle}">
+                    <StackPanel Spacing="8">
+                        <!-- Miniature Terminal (CLI) dark preview -->
+                        <Border Height="{DynamicResource OctopusSettingsSurfacePreviewHeight}"
+                                Background="#13151A"
+                                BorderBrush="#262A34"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="8"
+                                ClipToBounds="True">
+                            <StackPanel Spacing="3">
+                                <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,2">
+                                    <Border Width="6" Height="6" CornerRadius="3" Background="#EF4444" Opacity="0.8" />
+                                    <Border Width="6" Height="6" CornerRadius="3" Background="#F59E0B" Opacity="0.8" />
+                                    <Border Width="6" Height="6" CornerRadius="3" Background="#22C55E" Opacity="0.8" />
+                                    <TextBlock Text="zsh — 80×24" Margin="4,0,0,0" FontSize="8.5" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Foreground="#6B7280" />
+                                </StackPanel>
+                                <TextBlock Text="$ claude --model sonnet" FontSize="9.5" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Foreground="#E5E7EB" />
+                                <TextBlock Text="❯ Refactoring auth middleware..." FontSize="9.5" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Foreground="#60A5FA" />
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <TextBlock Text="  ✓ Updated src/Auth.cs (+14 -3)" FontSize="9.5" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Foreground="#4ADE80" />
+                                    <Border Width="5" Height="10" Background="#E5E7EB" Opacity="0.75" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <!-- Card Footer -->
+                        <StackPanel Spacing="2">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                                <lucide:LucideIcon Kind="SquareTerminal" Size="14" VerticalAlignment="Center" Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsSurfaceTerminalTitle}" VerticalAlignment="Center" />
+                                    <arc:Badge Size="Small" Tone="Neutral" Content="{l:AppLangResource SettingsSurfaceTerminalBadge}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <arc:Badge Grid.Column="2" Size="Small" Tone="Success"
+                                           Content="{l:AppLangResource SettingsSurfaceSelectedBadge}"
+                                           IsVisible="{Binding IsTerminalDefault}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Classes="hint" Text="{l:AppLangResource SettingsSurfaceTerminalDesc}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </StackPanel>
+
         <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                 BorderThickness="1"
                 CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
@@ -230,16 +394,43 @@
                 BorderThickness="1"
                 CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
                 Padding="14,10">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsUseSystemProxy}" />
-                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsUseSystemProxyHint}" />
-                </StackPanel>
-                <arc:Switch Grid.Column="1"
-                            VerticalAlignment="Center"
-                            AutomationProperties.Name="{l:AppLangResource SettingsUseSystemProxy}"
-                            IsChecked="{Binding UseSystemProxy, Mode=TwoWay}" />
-            </Grid>
+            <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpAdapterPolicy}" />
+                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpAdapterPolicyHint}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <arc:Select AutoScrollToSelectedItem="False" Grid.Column="1"
+                                Size="Small"
+                                MinWidth="240"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsAcpAdapterPolicy}"
+                                ItemsSource="{Binding AcpAdapterPolicyOptions}"
+                                SelectedValue="{Binding AcpAdapterPolicyKey, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpFormElicitation}" />
+                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpFormElicitationHint}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <arc:Switch Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsAcpFormElicitation}"
+                                IsChecked="{Binding AcpEnableFormElicitation, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsUseSystemProxy}" />
+                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsUseSystemProxyHint}" />
+                    </StackPanel>
+                    <arc:Switch Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsUseSystemProxy}"
+                                IsChecked="{Binding UseSystemProxy, Mode=TwoWay}" />
+                </Grid>
+            </StackPanel>
         </Border>
 
         <arc:Alert Tone="Warning"
@@ -283,6 +474,10 @@
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <TextBlock Classes="label" Text="{Binding Name}" FontWeight="Medium" VerticalAlignment="Center" />
+                                            <arc:Badge Size="Small" Tone="Info" Content="{Binding AcpBadgeText}" IsVisible="{Binding SupportsAcp}"
+                                                       VerticalAlignment="Center" />
+                                            <arc:Badge Size="Small" Tone="Neutral" Content="{Binding AcpBadgeText}" IsVisible="{Binding !SupportsAcp}"
+                                                       VerticalAlignment="Center" />
                                             <arc:Badge Size="Small" Tone="Neutral" Content="{Binding OriginBadge}" IsVisible="{Binding HasOriginBadge}"
                                                        VerticalAlignment="Center" />
                                         </StackPanel>

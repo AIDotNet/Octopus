@@ -157,6 +157,8 @@ public partial class ExplorerPanelView : UserControl
 
     /// <summary>The device id of the Octopus host the current project lives on; null otherwise.</summary>
     public string? ProjectRemoteHost { get; private set; }
+    private string? _projectRootPath;
+    private string? _workspaceBranch;
 
     public double TrailingInset
     {
@@ -175,17 +177,20 @@ public partial class ExplorerPanelView : UserControl
     private void ApplyTrailingInset() => TopBar.ColumnDefinitions[2].Width = new GridLength(TrailingInset);
 
     /// <summary>
-    /// Points the panel at a project. The folder is read again only when the folder or the host changed: a rename keeps
-    /// what is open in the tree.
+    /// Points the panel at a project (or its active worktree). The folder is read again only when the folder, host or
+    /// workspace changed: a rename keeps what is open in the tree.
     /// </summary>
-    public void SetProject(string? path, string? name, string? sshHost, string? remoteHost = null)
+    public void SetProject(string? path, string? name, string? sshHost, string? remoteHost = null, string? rootPath = null, string? workspaceBranch = null)
     {
-        var changed = path != ProjectPath || sshHost != ProjectSshHost || remoteHost != ProjectRemoteHost;
+        var changed = path != ProjectPath || sshHost != ProjectSshHost || remoteHost != ProjectRemoteHost
+            || rootPath != _projectRootPath || workspaceBranch != _workspaceBranch;
         _settingProject = true;
         try
         {
             ProjectRemoteHost = remoteHost;
             ProjectSshHost = sshHost;
+            _projectRootPath = rootPath;
+            _workspaceBranch = workspaceBranch;
             ProjectName = name;
             ProjectPath = path;
         }
@@ -198,7 +203,7 @@ public partial class ExplorerPanelView : UserControl
 
     private void OnProjectChanged()
     {
-        if (!_settingProject) _ = Model.SetProjectAsync(ProjectPath, ProjectName, ProjectSshHost, ProjectRemoteHost);
+        if (!_settingProject) _ = Model.SetProjectAsync(ProjectPath, ProjectName, ProjectSshHost, ProjectRemoteHost, _projectRootPath, _workspaceBranch);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)

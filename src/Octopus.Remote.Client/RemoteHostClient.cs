@@ -88,6 +88,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public bool SupportsBrowse =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityBrowse);
 
+    /// <summary>The host supports branch workspaces (<see cref="RemoteMethods.WorkspaceOptions"/> and <see cref="RemoteMethods.WorkspaceCreate"/>).</summary>
+    public bool SupportsWorkspaces =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityWorkspaces);
+
     /// <summary>Projects or their items changed on the host. Raised on the receiving thread.</summary>
     public event Action? WorkspaceChanged;
     /// <summary>One item's title or activity changed. Raised on the receiving thread.</summary>
@@ -113,6 +117,12 @@ public sealed class RemoteHostClient : IAsyncDisposable
 
     public Task RenameItemAsync(string itemId, string? title, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.ItemRename, new RenameItemMessage { ItemId = itemId, Title = title }, RemoteJsonContext.Default.RenameItemMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task<WorkspaceOptionsMessage> GetWorkspaceOptionsAsync(string projectId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.WorkspaceOptions, new ProjectRefMessage { ProjectId = projectId }, RemoteJsonContext.Default.ProjectRefMessage, RemoteJsonContext.Default.WorkspaceOptionsMessage, cancellationToken);
+
+    public Task<WorkspaceMessage> CreateWorkspaceAsync(CreateWorkspaceMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.WorkspaceCreate, request, RemoteJsonContext.Default.CreateWorkspaceMessage, RemoteJsonContext.Default.WorkspaceMessage, cancellationToken);
 
     public async Task<IReadOnlyList<AgentMessage>> ListAgentsAsync(CancellationToken cancellationToken = default) =>
         (await CallAsync(RemoteMethods.AgentCatalog, new Nothing(), RemoteJsonContext.Default.Nothing, RemoteJsonContext.Default.AgentListMessage, cancellationToken).ConfigureAwait(false)).Agents;

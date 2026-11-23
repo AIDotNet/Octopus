@@ -4,7 +4,7 @@ using Octopus.Storage;
 
 namespace Octopus.App.Services;
 
-public sealed class ProjectService(IProjectStore store, PathComparer paths, ISettingsStore settings) : IProjectService
+public sealed class ProjectService(IProjectStore store, PathComparer paths) : IProjectService
 {
     /// <summary>Project colors are data: new projects take them in turn.</summary>
     public static readonly string[] Palette =
@@ -29,7 +29,7 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
     {
         _document = await store.LoadAsync();
         _restored.Clear();
-        var dropped = !settings.Current.Terminal.RestoreItemsOnStartup && DropRunnableItems();
+        var dropped = DropRunnableItems();
         foreach (var project in _document.Projects)
         {
             foreach (var item in project.Items)
@@ -46,15 +46,15 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
     }
 
     /// <summary>
-    /// "Restore on startup" is off: the terminals and agents of the last run are not brought back (their processes
-    /// ended with the app anyway). Files stay. A layout that named the removed tabs is dropped with them.
+    /// Open terminals and agents are not remembered across restarts (their processes end with the app). Files and
+    /// plugin tabs stay. A saved layout that named any dropped tab is cleared with them.
     /// </summary>
     private bool DropRunnableItems()
     {
         var any = false;
         foreach (var project in _document.Projects)
         {
-            if (project.Items.RemoveAll(i => i.Kind is ProjectItemKind.Terminal or ProjectItemKind.Agent) > 0)
+            if (project.Items.RemoveAll(IsTransientItem) > 0)
             {
                 project.DockLayout = null;
                 any = true;
@@ -62,6 +62,9 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
         }
         return any;
     }
+
+    private static bool IsTransientItem(ProjectItem item) =>
+        item.Kind is ProjectItemKind.Terminal or ProjectItemKind.Agent;
 
     public Task FlushAsync()
     {
@@ -78,7 +81,7 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
     private async Task FlushCoreAsync(Task previous)
     {
         try { await previous; } catch { /* a failed earlier save is retried below */ }
-        await store.SaveAsync(_document);
+        await store.SaveAsync(SnapshotForSave());
     }
 
     // ---- projects ----
@@ -267,6 +270,79 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
         {
             Raise(ProjectChangeKind.Tunnels, project);
         }
+    }
+
+    public ProjectWorkspace? FindWorkspace(Project project, string? workspaceId) =>
+        string.IsNullOrEmpty(workspaceId) ? null : project.Workspaces.FirstOrDefault(w => w.Id == workspaceId);
+
+    public ProjectWorkspace AddWorkspace(Project project, ProjectWorkspace workspace)
+    {
+        var full = Path.GetFullPath(workspace.Path);
+        var existing = project.Workspaces.FirstOrDefault(w => paths.Equals(w.Path, full));
+        if (existing is not null)
+        {
+            var changed = false;
+            if (!string.IsNullOrWhiteSpace(workspace.Branch) && existing.Branch != workspace.Branch)
+            {
+                existing.Branch = workspace.Branch;
+                changed = true;
+            }
+            if (workspace.Task is not null)
+            {
+                existing.Task = workspace.Task;
+                changed = true;
+            }
+            if (changed) Raise(ProjectChangeKind.Workspaces, project);
+            return existing;
+        }
+        workspace.Path = full;
+        if (string.IsNullOrWhiteSpace(workspace.Name)) workspace.Name = workspace.Branch;
+        project.Workspaces.Add(workspace);
+        Raise(ProjectChangeKind.Workspaces, project);
+        return workspace;
+    }
+
+    public void UpdateWorkspace(Project project, ProjectWorkspace workspace)
+    {
+        var index = project.Workspaces.FindIndex(w => w.Id == workspace.Id);
+        if (index < 0) return;
+        project.Workspaces[index] = workspace;
+        Raise(ProjectChangeKind.Workspaces, project);
+    }
+
+    public void RemoveWorkspace(Project project, string workspaceId)
+    {
+        if (project.Workspaces.RemoveAll(w => w.Id == workspaceId) == 0) return;
+        foreach (var item in project.Items.Where(i => i.WorkspaceId == workspaceId))
+        {
+            item.WorkspaceId = null;
+        }
+        Raise(ProjectChangeKind.Workspaces, project);
+    }
+
+    public void SetWorkspaceCollapsed(Project project, string workspaceId, bool collapsed)
+    {
+        var workspace = FindWorkspace(project, workspaceId);
+        if (workspace is null || workspace.IsCollapsed == collapsed) return;
+        workspace.IsCollapsed = collapsed;
+        Raise(ProjectChangeKind.Workspaces, project);
+    }
+
+    public void SetWorkspacePinned(Project project, string workspaceId, bool pinned)
+    {
+        var workspace = FindWorkspace(project, workspaceId);
+        if (workspace is null || workspace.IsPinned == pinned) return;
+        workspace.IsPinned = pinned;
+        Raise(ProjectChangeKind.Workspaces, project);
+    }
+
+    public void TouchWorkspaceActivity(Project project, string workspaceId, DateTimeOffset timestamp)
+    {
+        var workspace = FindWorkspace(project, workspaceId);
+        if (workspace is null) return;
+        if (workspace.LastActivityAt is { } previous && timestamp - previous < TimeSpan.FromMinutes(5)) return;
+        workspace.LastActivityAt = timestamp;
+        ScheduleSave();
     }
 
     public ProjectGroup AddGroup(string name, IEnumerable<string>? projectIds = null)
@@ -578,7 +654,7 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
         try
         {
             await Task.Delay(SaveDelay, token);
-            await store.SaveAsync(_document, CancellationToken.None);
+            await store.SaveAsync(SnapshotForSave(), CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -587,5 +663,48 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
         {
             // A failed background save is retried by the next change and by FlushAsync.
         }
+    }
+
+    /// <summary>
+    /// Builds the document written to disk: open terminals and agents are omitted so restarts begin without them,
+    /// while projects, groups, workspaces, tunnels and open files/plugin tabs are preserved.
+    /// </summary>
+    private ProjectsDocument SnapshotForSave() => new()
+    {
+        Version = _document.Version,
+        ActiveProjectId = _document.ActiveProjectId,
+        ExpandedGroupId = _document.ExpandedGroupId,
+        Groups = [.. _document.Groups],
+        Projects = [.. _document.Projects.Select(SnapshotProject)],
+    };
+
+    private static Project SnapshotProject(Project project)
+    {
+        var hasTransient = project.Items.Any(IsTransientItem);
+        var items = hasTransient ? project.Items.Where(i => !IsTransientItem(i)).ToList() : [.. project.Items];
+        var activeItemId = project.ActiveItemId is { } active && items.Any(i => i.Id == active)
+            ? active
+            : items.FirstOrDefault()?.Id;
+        return new Project
+        {
+            Id = project.Id,
+            Name = project.Name,
+            Path = project.Path,
+            SshHost = project.SshHost,
+            RemoteHost = project.RemoteHost,
+            RemoteId = project.RemoteId,
+            Color = project.Color,
+            Icon = project.Icon,
+            Image = project.Image,
+            IsExpanded = project.IsExpanded,
+            GroupId = project.GroupId,
+            ActiveItemId = activeItemId,
+            DockLayout = hasTransient ? null : project.DockLayout,
+            Items = items,
+            Workspaces = [.. project.Workspaces],
+            Tunnels = [.. project.Tunnels],
+            AgentAccounts = new Dictionary<string, string>(project.AgentAccounts, StringComparer.Ordinal),
+            CreatedAt = project.CreatedAt,
+        };
     }
 }

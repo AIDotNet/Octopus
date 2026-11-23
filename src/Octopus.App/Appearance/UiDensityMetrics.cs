@@ -46,6 +46,9 @@ public sealed record UiDensityMetrics
     // ---- Left project panel & items ----
     public required Thickness PanelGroupMargin { get; init; }
     public required Thickness PanelNameMargin { get; init; }
+    public required double PanelNameHeight { get; init; }
+    public required Thickness PanelNamePadding { get; init; }
+    public required double PanelNameActionSize { get; init; }
     public required Thickness PanelPathMargin { get; init; }
     public required Thickness PanelSearchMargin { get; init; }
     public required Thickness PanelListMargin { get; init; }
@@ -104,6 +107,16 @@ public sealed record UiDensityMetrics
     public required Thickness SettingsAgentDetailMargin { get; init; }
     public required double SettingsAgentDetailSpacing { get; init; }
     public required double SettingsFieldSpacing { get; init; }
+    public required Thickness SettingsSurfaceCardPadding { get; init; }
+    public required double SettingsSurfacePreviewHeight { get; init; }
+
+    // ---- Agent GUI (ACP) ----
+    public required double AgentGuiHeaderHeight { get; init; }
+    public required Thickness AgentGuiStreamMargin { get; init; }
+    public required double AgentGuiTurnSpacing { get; init; }
+    public required Thickness AgentGuiComposerMargin { get; init; }
+    public required Thickness AgentGuiComposerPadding { get; init; }
+    public required double AgentGuiComposerMinHeight { get; init; }
 
     // ---- Arc design & control tokens ----
     public required double ControlSizeSM { get; init; }
@@ -143,7 +156,10 @@ public sealed record UiDensityMetrics
     public required double SearchClearSlotSize { get; init; }
     public required double SearchClearIconSize { get; init; }
     public required double InlineEditSlotMinHeight { get; init; }
+    public required double InlineEditActionSize { get; init; }
+    public required string InlineEditLinePadding { get; init; }
     public required string InlineEditBodyPadding { get; init; }
+    public required string InlineEditBodyEditingPadding { get; init; }
     public required string SettingsRowInset { get; init; }
     public required double SettingsRowTextGap { get; init; }
     public required string SettingsRowControlMargin { get; init; }
@@ -186,9 +202,12 @@ public sealed record UiDensityMetrics
         StatusBadgeSize = 14,
         StatusBadgeCorner = new CornerRadius(7),
 
-        PanelGroupMargin = new Thickness(10, 5, 10, -4),
-        PanelNameMargin = new Thickness(4, 4, 6, 0),
-        PanelPathMargin = new Thickness(10, 0, 10, 4),
+        PanelGroupMargin = new Thickness(11, 5, 10, -2),
+        PanelNameMargin = new Thickness(6, 5, 6, 1),
+        PanelNameHeight = 26,
+        PanelNamePadding = new Thickness(4, 0, 3, 0),
+        PanelNameActionSize = 20,
+        PanelPathMargin = new Thickness(11, 1, 10, 5),
         PanelSearchMargin = new Thickness(6, 0, 6, 4),
         PanelListMargin = new Thickness(4, 0, 4, 6),
         PanelHeaderMargin = new Thickness(6, 2, 0, 0),
@@ -243,6 +262,15 @@ public sealed record UiDensityMetrics
         SettingsAgentDetailMargin = new Thickness(44, 2, 12, 10),
         SettingsAgentDetailSpacing = 7,
         SettingsFieldSpacing = 6,
+        SettingsSurfaceCardPadding = new Thickness(10, 9),
+        SettingsSurfacePreviewHeight = 82,
+
+        AgentGuiHeaderHeight = 28,
+        AgentGuiStreamMargin = new Thickness(14, 8, 14, 10),
+        AgentGuiTurnSpacing = 5,
+        AgentGuiComposerMargin = new Thickness(12, 4, 12, 8),
+        AgentGuiComposerPadding = new Thickness(8, 6, 8, 5),
+        AgentGuiComposerMinHeight = 32,
 
         ControlSizeSM = 28,
         ControlSizeMD = 32,
@@ -281,7 +309,10 @@ public sealed record UiDensityMetrics
         SearchClearSlotSize = 20,
         SearchClearIconSize = 13,
         InlineEditSlotMinHeight = 24,
+        InlineEditActionSize = 22,
+        InlineEditLinePadding = "0,0,54,0",
         InlineEditBodyPadding = "6,2",
+        InlineEditBodyEditingPadding = "6,2,20,2",
         SettingsRowInset = "0,9",
         SettingsRowTextGap = 2,
         SettingsRowControlMargin = "12,0,0,0",
@@ -325,9 +356,12 @@ public sealed record UiDensityMetrics
         StatusBadgeSize = 16,
         StatusBadgeCorner = new CornerRadius(8),
 
-        PanelGroupMargin = new Thickness(16, 10, 14, -8),
-        PanelNameMargin = new Thickness(8, 10, 8, 0),
-        PanelPathMargin = new Thickness(16, 0, 14, 8),
+        PanelGroupMargin = new Thickness(16, 10, 14, -4),
+        PanelNameMargin = new Thickness(10, 9, 10, 2),
+        PanelNameHeight = 30,
+        PanelNamePadding = new Thickness(5, 0, 4, 0),
+        PanelNameActionSize = 22,
+        PanelPathMargin = new Thickness(16, 1, 14, 8),
         PanelSearchMargin = new Thickness(10, 0, 10, 6),
         PanelListMargin = new Thickness(6, 0, 6, 8),
         PanelHeaderMargin = new Thickness(8, 6, 0, 0),
@@ -382,6 +416,15 @@ public sealed record UiDensityMetrics
         SettingsAgentDetailMargin = new Thickness(52, 2, 16, 16),
         SettingsAgentDetailSpacing = 12,
         SettingsFieldSpacing = 10,
+        SettingsSurfaceCardPadding = new Thickness(13, 12),
+        SettingsSurfacePreviewHeight = 104,
+
+        AgentGuiHeaderHeight = 34,
+        AgentGuiStreamMargin = new Thickness(20, 12, 20, 16),
+        AgentGuiTurnSpacing = 8,
+        AgentGuiComposerMargin = new Thickness(18, 6, 18, 12),
+        AgentGuiComposerPadding = new Thickness(10, 8, 10, 7),
+        AgentGuiComposerMinHeight = 40,
 
         ControlSizeSM = 36,
         ControlSizeMD = 40,
@@ -420,7 +463,10 @@ public sealed record UiDensityMetrics
         SearchClearSlotSize = 24,
         SearchClearIconSize = 15,
         InlineEditSlotMinHeight = 30,
+        InlineEditActionSize = 26,
+        InlineEditLinePadding = "0,0,62,0",
         InlineEditBodyPadding = "8,4",
+        InlineEditBodyEditingPadding = "8,4,24,4",
         SettingsRowInset = "0,16",
         SettingsRowTextGap = 4,
         SettingsRowControlMargin = "16,0,0,0",
@@ -502,7 +548,10 @@ public sealed record UiDensityMetrics
          .Token("SearchField", "ClearSlotSize", Num(SearchClearSlotSize))
          .Token("SearchField", "ClearIconSize", Num(SearchClearIconSize))
          .Token("InlineEdit", "SlotMinHeight", Num(InlineEditSlotMinHeight))
+         .Token("InlineEdit", "ActionSize", Num(InlineEditActionSize))
+         .Token("InlineEdit", "LinePadding", InlineEditLinePadding)
          .Token("InlineEdit", "BodyPadding", InlineEditBodyPadding)
+         .Token("InlineEdit", "BodyEditingPadding", InlineEditBodyEditingPadding)
          .Token("SettingsRow", "RowInset", SettingsRowInset)
          .Token("SettingsRow", "TextGap", Num(SettingsRowTextGap))
          .Token("SettingsRow", "ControlMargin", SettingsRowControlMargin)
@@ -545,6 +594,9 @@ public sealed record UiDensityMetrics
 
         resources["OctopusPanelGroupMargin"] = PanelGroupMargin;
         resources["OctopusPanelNameMargin"] = PanelNameMargin;
+        resources["OctopusPanelNameHeight"] = PanelNameHeight;
+        resources["OctopusPanelNamePadding"] = PanelNamePadding;
+        resources["OctopusPanelNameActionSize"] = PanelNameActionSize;
         resources["OctopusPanelPathMargin"] = PanelPathMargin;
         resources["OctopusPanelSearchMargin"] = PanelSearchMargin;
         resources["OctopusPanelListMargin"] = PanelListMargin;
@@ -600,6 +652,15 @@ public sealed record UiDensityMetrics
         resources["OctopusSettingsAgentDetailMargin"] = SettingsAgentDetailMargin;
         resources["OctopusSettingsAgentDetailSpacing"] = SettingsAgentDetailSpacing;
         resources["OctopusSettingsFieldSpacing"] = SettingsFieldSpacing;
+        resources["OctopusSettingsSurfaceCardPadding"] = SettingsSurfaceCardPadding;
+        resources["OctopusSettingsSurfacePreviewHeight"] = SettingsSurfacePreviewHeight;
+
+        resources["OctopusAgentGuiHeaderHeight"] = AgentGuiHeaderHeight;
+        resources["OctopusAgentGuiStreamMargin"] = AgentGuiStreamMargin;
+        resources["OctopusAgentGuiTurnSpacing"] = AgentGuiTurnSpacing;
+        resources["OctopusAgentGuiComposerMargin"] = AgentGuiComposerMargin;
+        resources["OctopusAgentGuiComposerPadding"] = AgentGuiComposerPadding;
+        resources["OctopusAgentGuiComposerMinHeight"] = AgentGuiComposerMinHeight;
     }
 
     private static string Num(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);

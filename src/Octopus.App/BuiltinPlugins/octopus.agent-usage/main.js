@@ -9,12 +9,16 @@ import { API_TAB, renderPopover } from './popover.js';
 import { PROVIDERS, providerById } from './providers.js';
 import { HistoryView } from './history.js';
 
-const AGENTS = ['claude', 'codex', 'grok', 'cursor', 'opencode'];
+const AGENTS = ['claude', 'codex', 'agy', 'copilot', 'grok', 'cursor', 'opencode'];
 const CODEX_INTERVAL = 5 * 60_000;
+const AGY_INTERVAL = 5 * 60_000;
+const COPILOT_INTERVAL = 5 * 60_000;
 const CURSOR_INTERVAL = 24 * 60 * 60_000;
 // A cached reading younger than this is used as it is: opening the app does not ask again. Slightly under the
 // refresh interval, so a scheduled run (which may come a little early) still finds the reading stale.
 const CODEX_FRESH = 3 * 60_000;
+const AGY_FRESH = 3 * 60_000;
+const COPILOT_FRESH = 3 * 60_000;
 const CURSOR_FRESH = 20 * 60 * 60_000;
 // API providers: every 10 minutes while the window is visible; a reading younger than 8 minutes is not asked again.
 const API_INTERVAL = 10 * 60_000;
@@ -116,6 +120,18 @@ export async function activate(ctx) {
     ctx.subscriptions.push(scheduler.every(CODEX_INTERVAL, () => refreshCodex(), { whenVisible: true, runOnWake: true, jitter: 0.2, backoff: true }));
   }
 
+  // Antigravity CLI: `agy --print /usage --output-format json`, soon after start, then every 5 minutes while visible.
+  if (state.get('agy')?.installed) {
+    setTimeout(() => refreshAgy(), 3_500);
+    ctx.subscriptions.push(scheduler.every(AGY_INTERVAL, () => refreshAgy(), { whenVisible: true, runOnWake: true, jitter: 0.2, backoff: true }));
+  }
+
+  // GitHub Copilot CLI: `account.getQuota` over headless stdio, soon after start, then every 5 minutes while visible.
+  if (state.get('copilot')?.installed) {
+    setTimeout(() => refreshCopilot(), 4_500);
+    ctx.subscriptions.push(scheduler.every(COPILOT_INTERVAL, () => refreshCopilot(), { whenVisible: true, runOnWake: true, jitter: 0.2, backoff: true }));
+  }
+
   // Cursor: only the plan, once a day.
   if (state.get('cursor')?.installed) {
     setTimeout(() => refreshCursor(), 5_000);
@@ -168,7 +184,7 @@ function isFresh(agentId, account, maxAge) {
 
 /** Brings back the last reading of every account from the host's cache (`usage-cache.json`), with its own age. */
 function restoreCache() {
-  for (const id of ['claude', 'codex', 'cursor']) {
+  for (const id of ['claude', 'codex', 'agy', 'copilot', 'cursor']) {
     const entry = state.get(id);
     if (!entry?.installed) continue;
     let cached;
@@ -204,6 +220,39 @@ async function refreshCodex({ force = false } = {}) {
     } else {
       entry.error = result.message ?? result.error;
       refreshViews();
+    }
+  }
+}
+
+async function refreshAgy({ force = false } = {}) {
+  if (!state.get('agy')?.installed || !permissions.has('agents.probes.agy.usage')) return;
+  if (!force && isFresh('agy', '', AGY_FRESH)) return;
+  const result = await agents.runProbe('agy', 'usage');
+  const entry = state.get('agy');
+  if (result.ok) {
+    entry.error = undefined;
+    publish('agy', '', adapters.agyFromUsage(result.data), result.completedAt);
+  } else {
+    entry.error = result.message ?? result.error;
+    refreshViews();
+  }
+}
+
+async function refreshCopilot({ force = false } = {}) {
+  if (!state.get('copilot')?.installed || !permissions.has('agents.probes.copilot.quota')) return;
+  const accounts = await allAccounts('copilot');
+  const keys = accounts.length > 0 ? accounts.map(a => a.key) : [undefined];
+  for (const key of keys) {
+    if (!force && isFresh('copilot', key ?? '', COPILOT_FRESH)) continue;
+    const result = await agents.runProbe('copilot', 'quota', key ? { account: key } : {});
+    const entry = state.get('copilot');
+    if (result.ok) {
+      entry.error = undefined;
+      publish('copilot', result.account ?? key ?? '', adapters.copilotFromQuota(result.data, result.account ?? key), result.completedAt);
+    } else {
+      entry.error = result.message ?? result.error;
+      if (!entry.snapshots.has(key ?? '')) publish('copilot', key ?? '', adapters.copilotUnavailable(key ?? ''));
+      else refreshViews();
     }
   }
 }
@@ -340,7 +389,10 @@ function mergeSession(agentId, session) {
 /** The refresh button and the command: ask everything again, whatever the cache says. */
 async function refreshAll() {
   const force = { force: true };
-  await Promise.all([refreshCodex(force), refreshCursor(force), refreshClaudeCommand(force), refreshClaudePlans(force), refreshProviders(force)]);
+  await Promise.all([
+    refreshCodex(force), refreshAgy(force), refreshCopilot(force), refreshCursor(force),
+    refreshClaudeCommand(force), refreshClaudePlans(force), refreshProviders(force),
+  ]);
   refreshViews();
 }
 
@@ -720,8 +772,8 @@ function apiModel() {
 function popoverModel() {
   const rows = agentRows();
   const api = apiModel();
-  // "Claude Code", "Codex CLI": the product word is dropped in the tab, where width is short.
-  const tabs = rows.map(r => ({ id: r.id, name: r.name.replace(/\s+(Code|CLI)$/i, ''), percent: highest(r.snapshots) }));
+  // "Claude Code", "Codex CLI", "GitHub Copilot CLI": drop vendor/product words in the tab, where width is short.
+  const tabs = rows.map(r => ({ id: r.id, name: r.name.replace(/^GitHub\s+/i, '').replace(/\s+(Code|CLI)$/i, ''), percent: highest(r.snapshots) }));
   if (api.available && !hidden().includes('api')) {
     tabs.push({ id: API_TAB, name: t('API 余额', 'API balance'), percent: highest(api.providers.filter(p => p.snapshot)) });
   }

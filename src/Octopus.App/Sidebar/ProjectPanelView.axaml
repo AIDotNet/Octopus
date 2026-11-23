@@ -23,9 +23,53 @@
                                    Foreground="{arc:ArcDesignTokenResource TextMuted}"
                                    arc:Tooltip.Tip="{l:AppLangResource GroupMergedWorkspacesTag}" />
             </StackPanel>
-            <arc:InlineEdit x:Name="NameEdit" Grid.Row="1" Margin="{DynamicResource OctopusPanelNameMargin}" HeadingLevel="2" Variant="Body" FontWeight="SemiBold"
-                            Label="{l:AppLangResource ProjectName}"
-                            Value="{Binding ProjectName, Mode=TwoWay}" />
+            <Panel Grid.Row="1" Margin="{DynamicResource OctopusPanelNameMargin}">
+                <Button x:Name="NameDisplayButton" Classes="project-name"
+                        Click="OnNameDisplayClick"
+                        AutomationProperties.Name="{l:AppLangResource ProjectName}"
+                        AutomationProperties.HeadingLevel="2"
+                        arc:Tooltip.Tip="{l:AppLangResource RenameProject}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <TextBlock x:Name="NameDisplayText"
+                                   VerticalAlignment="Center"
+                                   FontSize="{arc:ArcDesignTokenResource TypeBase}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                   Text="{Binding ProjectName}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <lucide:LucideIcon x:Name="NameEditIcon" Grid.Column="1"
+                                           Classes="project-name-pencil"
+                                           Kind="Pencil" Size="12"
+                                           Margin="0,0,2,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                    </Grid>
+                </Button>
+                <Border x:Name="NameEditFrame" Classes="project-name-editor" IsVisible="False">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <TextBox x:Name="NameInput" Classes="inline-name"
+                                 FontSize="{arc:ArcDesignTokenResource TypeBase}"
+                                 FontWeight="SemiBold"
+                                 Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                 PlaceholderText="{l:AppLangResource ProjectName}"
+                                 AutomationProperties.Name="{l:AppLangResource ProjectName}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                            <Button x:Name="NameSaveButton" Classes="inline-action primary"
+                                    Click="OnNameSaveClick"
+                                    AutomationProperties.Name="{l:AppLangResource Save}"
+                                    arc:Tooltip.Tip="{l:AppLangResource Save}">
+                                <lucide:LucideIcon Kind="Check" Size="12" />
+                            </Button>
+                            <Button x:Name="NameCancelButton" Classes="inline-action"
+                                    Click="OnNameCancelClick"
+                                    AutomationProperties.Name="{l:AppLangResource Cancel}"
+                                    arc:Tooltip.Tip="{l:AppLangResource Cancel}">
+                                <lucide:LucideIcon Kind="X" Size="12" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Panel>
             <TextBlock Grid.Row="2" Margin="{DynamicResource OctopusPanelPathMargin}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
                        FontSize="{arc:ArcDesignTokenResource TypeXS}" Foreground="{arc:ArcDesignTokenResource TextMuted}"
                        Text="{Binding ProjectPath}" TextTrimming="PathSegmentEllipsis"
@@ -36,17 +80,40 @@
                              Text="{Binding Filter, Mode=TwoWay}" />
             <arc:ScrollArea Grid.Row="4">
                 <StackPanel Margin="{DynamicResource OctopusPanelListMargin}" Spacing="1">
-                    <!-- Terminals and agents, one list the user arranges by dragging. -->
-                    <Grid ColumnDefinitions="*,Auto" Margin="{DynamicResource OctopusPanelHeaderMargin}">
-                        <TextBlock Classes="caption" VerticalAlignment="Center" Text="{l:AppLangResource ItemList}" />
-                        <arc:Button x:Name="AddItemButton" Grid.Column="1" Classes="icon" Variant="Ghost"
+                    <!-- Header: single list when no worktrees exist; workspace tree with "+ New branch" (Scheme C) once a git project has worktrees. -->
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="2" Margin="{DynamicResource OctopusPanelHeaderMargin}">
+                        <TextBlock Classes="caption" VerticalAlignment="Center" Text="{Binding SectionHeaderText}" TextTrimming="CharacterEllipsis" />
+                        <arc:Button x:Name="NewBranchButton" Grid.Column="1" Variant="Ghost" Size="Small"
+                                    IsVisible="{Binding CanCreateWorkspace}"
+                                    Padding="6,0" Height="22" MinHeight="0"
+                                    Command="{Binding NewBranchWorkspaceCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource WorkspaceNewBranch}"
+                                    arc:Tooltip.Tip="{l:AppLangResource WorkspaceNewBranchTip}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <lucide:LucideIcon Kind="GitBranch" Size="12" Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" FontWeight="SemiBold"
+                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                           Text="{l:AppLangResource WorkspaceNewBranch}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </arc:Button>
+                        <arc:Button x:Name="AddItemButton" Grid.Column="2" Classes="icon" Variant="Ghost"
+                                    IsVisible="{Binding ShowFlatList}"
                                     Click="OnAddItemClick"
                                     AutomationProperties.Name="{l:AppLangResource NewItem}"
                                     arc:Tooltip.Tip="{l:AppLangResource NewItem}">
                             <lucide:LucideIcon Kind="Plus" Size="14" />
                         </arc:Button>
+                        <arc:Button x:Name="WorkspaceCleanupButton" Grid.Column="2" Classes="icon" Variant="Ghost"
+                                    IsVisible="{Binding HasWorkspaces}"
+                                    Command="{Binding OpenWorkspaceCleanupCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource WorkspaceCleanupOpenSettingsTip}"
+                                    arc:Tooltip.Tip="{l:AppLangResource WorkspaceCleanupOpenSettingsTip}">
+                            <lucide:LucideIcon Kind="BrushCleaning" Size="13" />
+                        </arc:Button>
                     </Grid>
+                    <!-- No branch workspaces yet: flat reorderable list -->
                     <arc:ReorderableList x:Name="ItemList" ItemsSource="{Binding Items}"
+                                         IsVisible="{Binding ShowFlatList}"
                                          Label="{l:AppLangResource ItemList}" Reordered="OnItemsReordered">
                         <arc:ReorderableList.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -57,6 +124,18 @@
                             <DataTemplate x:DataType="vm:ItemRowViewModel"><vm:ItemRowView /></DataTemplate>
                         </arc:ReorderableList.ItemTemplate>
                     </arc:ReorderableList>
+                    <!-- Has branch workspaces: grouping tree (Default + each worktree, each with its own "+") -->
+                    <ItemsControl x:Name="WorkspaceTree" ItemsSource="{Binding WorkspaceGroups}"
+                                  IsVisible="{Binding HasWorkspaces}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="1" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:WorkspaceGroupViewModel"><vm:WorkspaceGroupView /></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                     <TextBlock Classes="hint" Margin="10,2" Text="{l:AppLangResource GroupEmpty}" IsVisible="{Binding NoItems}" />
                 </StackPanel>
             </arc:ScrollArea>

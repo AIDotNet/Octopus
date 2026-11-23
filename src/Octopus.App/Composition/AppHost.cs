@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Octopus.Acp;
 using Octopus.Agents;
 using Octopus.Ssh;
 using Octopus.Storage;
@@ -34,6 +35,7 @@ public static class AppHost
         services.AddCurrentPlatform();     // shell, environment, paths: the only OS switch in the app
         services.AddOctopusStorage();      // projects.json, settings.json
         services.AddOctopusAgents();       // catalog, scanner, command compiler
+        services.AddOctopusAcp();          // ACP protocol runtime, dialects, launch resolver
         services.AddOctopusTerminal();     // launch planner
         services.AddSingleton<ISshHostCatalog>(_ => new SshHostCatalog(SshHostCatalog.UserHome)); // hosts of ~/.ssh/config
         services.AddSingleton<ISshHostTester, SshHostTester>(); // the test button of the host form

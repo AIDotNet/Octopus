@@ -1,7 +1,8 @@
 // The usage history tab (design/plugins/12 §10): tokens per day, per agent and per model, from the local session
-// records of Claude and Codex. Only time, model and token counts are read (fs.scanJsonLines projects them in the
-// host); conversation text never reaches the plugin. Files are scanned incrementally and the result is kept for
-// the rest of the session.
+// records of Claude, Codex, Antigravity CLI, GitHub Copilot CLI and Grok CLI. Only time, model, token counts and
+// cost numbers are read (fs.scanJsonLines projects them in the host; Grok's usage.json holds only usage figures);
+// conversation text never reaches the plugin. Files are scanned incrementally and the result is kept for the rest
+// of the session.
 
 import { env, fs, permissions, ui } from 'octopus';
 import { costOf, ensurePrices, priceSource } from './pricing.js';
@@ -12,8 +13,9 @@ const t = (zh, en) => ((env.language ?? '').startsWith('zh') ? zh : en);
 const DAY = 24 * 60 * 60_000;
 // The tab charts up to 30 days; the bill export reaches back as far as this (a quarter, or a month and a half more).
 const MAX_DAYS = 92;
+const num0 = v => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
 
-/** path → { size, mtime, offset, lastTotal, model, seen } */
+/** path → per-file incremental cursor/state */
 const files = new Map();
 /** `${day}|${agent}|${model}` → { requests, input, output, cache, total, cost, unpriced } (cost in USD at API list prices) */
 const totals = new Map();
@@ -28,7 +30,7 @@ const SOURCES = [
     agent: 'claude',
     glob: 'projects/**/*.jsonl',
     where: { type: 'assistant' },
-    modelOf: (file, row) => row[2],
+    modelsOf: (file, rows) => rows.map(row => row[2]),
     select: ['timestamp', 'requestId', 'message.model', 'message.usage.input_tokens', 'message.usage.output_tokens',
       'message.usage.cache_creation_input_tokens', 'message.usage.cache_read_input_tokens',
       'message.usage.cache_creation.ephemeral_1h_input_tokens'],
@@ -52,7 +54,7 @@ const SOURCES = [
     agent: 'codex',
     glob: 'sessions/**/rollout-*.jsonl',
     where: { 'payload.type': 'token_count' },
-    modelOf: file => file.model,
+    modelsOf: file => [file.model],
     select: ['timestamp', 'payload.info.total_token_usage.input_tokens', 'payload.info.total_token_usage.output_tokens',
       'payload.info.total_token_usage.cached_input_tokens', 'payload.info.total_token_usage.total_tokens'],
     async prepare(file, path) {
@@ -71,21 +73,165 @@ const SOURCES = [
       record(timestamp, 'codex', file.model ?? 'unknown', { input: Math.max(0, delta.input - delta.cached), output: delta.output, cacheRead: Math.max(0, delta.cached) });
     },
   },
+  {
+    agent: 'agy',
+    glob: 'brain/*/.system_generated/logs/transcript.jsonl',
+    select: ['type', 'created_at', 'model', 'input_tokens', 'output_tokens', 'cache_read_tokens'],
+    modelsOf: (file, rows) => [file.model, ...rows.map(row => row[2])],
+    add(file, [type, timestamp, model, input, output, cacheRead]) {
+      if (type === 'PLANNER_RESPONSE' && typeof model === 'string' && model.length > 0) file.model = model;
+      if (type !== 'PLANNER_RESPONSE' && type !== 'CHECKPOINT') return;
+      const inp = num0(input);
+      const out = num0(output);
+      const cr = num0(cacheRead);
+      if (inp + out + cr <= 0) return;
+      // Antigravity CLI records non-cached input_tokens separately from cache_read_tokens.
+      record(timestamp, 'agy', model || file.model || 'unknown', { input: inp, output: out, cacheRead: cr });
+    },
+  },
+  {
+    agent: 'copilot',
+    glob: 'session-state/**/events.jsonl',
+    select: [
+      'type', 'timestamp', 'id',
+      'data.usage.model', 'data.usage.inputTokens', 'data.usage.outputTokens', 'data.usage.cacheReadTokens', 'data.usage.cacheWriteTokens', 'data.usage.serviceRequestId',
+      'data.model', 'data.inputTokens', 'data.outputTokens', 'data.cacheReadTokens', 'data.cacheWriteTokens',
+      'data.modelMetrics',
+    ],
+    modelsOf(file, rows) {
+      const models = [];
+      for (const row of rows) {
+        if (row[3]) models.push(row[3]);
+        if (row[9]) models.push(row[9]);
+        if (row[14] && typeof row[14] === 'object') models.push(...Object.keys(row[14]));
+      }
+      return models;
+    },
+    add(file, [type, timestamp, id, uModel, uIn, uOut, uCacheRead, uCacheWrite, uReqId, aModel, aIn, aOut, aCacheRead, aCacheWrite, metrics]) {
+      if (type === 'session.usage_record' || type === 'assistant.usage') {
+        const dedup = type === 'session.usage_record' ? (uReqId || id) : id;
+        if (dedup) {
+          file.seen ??= new Set();
+          if (file.seen.has(dedup)) return;
+          if (file.seen.size >= 64) file.seen.delete(file.seen.values().next().value);
+          file.seen.add(dedup);
+        }
+        const model = type === 'session.usage_record' ? uModel : aModel;
+        const rawIn = num0(type === 'session.usage_record' ? uIn : aIn);
+        const out = num0(type === 'session.usage_record' ? uOut : aOut);
+        const cacheRead = num0(type === 'session.usage_record' ? uCacheRead : aCacheRead);
+        const cacheWrite = num0(type === 'session.usage_record' ? uCacheWrite : aCacheWrite);
+        if (rawIn + out + cacheRead + cacheWrite <= 0) return;
+        file.hasPerCallUsage = true;
+        // Copilot's inputTokens includes cacheReadTokens and cacheWriteTokens (verified against shutdown tokenDetails).
+        record(timestamp, 'copilot', model || 'unknown', {
+          input: Math.max(0, rawIn - cacheRead - cacheWrite), output: out, cacheRead, cacheWrite5m: cacheWrite,
+        });
+        return;
+      }
+      if (type === 'session.shutdown' && !file.hasPerCallUsage && metrics && typeof metrics === 'object') {
+        // Sessions without per-call usage events still summarize totals in session.shutdown.modelMetrics; take deltas across resumes.
+        file.lastShutdown ??= new Map();
+        for (const [model, m] of Object.entries(metrics)) {
+          const u = m?.usage;
+          if (!u || typeof u !== 'object') continue;
+          const cur = {
+            requests: num0(m?.requests?.count),
+            input: num0(u.inputTokens),
+            output: num0(u.outputTokens),
+            cacheRead: num0(u.cacheReadTokens),
+            cacheWrite: num0(u.cacheWriteTokens),
+          };
+          const prev = file.lastShutdown.get(model);
+          const reset = !prev || cur.input < prev.input || cur.output < prev.output;
+          const dIn = reset ? cur.input : cur.input - prev.input;
+          const dOut = reset ? cur.output : cur.output - prev.output;
+          const dCr = reset ? cur.cacheRead : Math.max(0, cur.cacheRead - prev.cacheRead);
+          const dCw = reset ? cur.cacheWrite : Math.max(0, cur.cacheWrite - prev.cacheWrite);
+          const dReq = reset ? cur.requests : Math.max(0, cur.requests - prev.requests);
+          file.lastShutdown.set(model, cur);
+          if (dIn + dOut + dCr + dCw <= 0) continue;
+          record(timestamp, 'copilot', model || 'unknown', {
+            input: Math.max(0, dIn - dCr - dCw), output: dOut, cacheRead: dCr, cacheWrite5m: dCw,
+          }, { requests: Math.max(1, dReq) });
+        }
+      }
+    },
+  },
+  {
+    agent: 'grok',
+    kind: 'json',
+    glob: 'sessions/**/usage.json',
+    async scanFile(file, path) {
+      const text = await fs.readText(path);
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        skipped += 1;
+        return false;
+      }
+      if (!data || typeof data !== 'object') return false;
+      const turns = Array.isArray(data.turns) && data.turns.length > 0 ? data.turns : null;
+      const items = [];
+      if (turns) {
+        file.seenTurns ??= new Set();
+        for (let i = 0; i < turns.length; i++) {
+          const turn = turns[i];
+          if (!turn || typeof turn !== 'object') continue;
+          const key = turn.turnNumber ?? i;
+          if (file.seenTurns.has(key)) continue;
+          items.push({ key, timestamp: turn.endedAt ?? data.updatedAt, turn });
+        }
+      } else if (data.session && typeof data.session === 'object' && !file.recordedSession) {
+        items.push({ key: 'session', timestamp: data.updatedAt, turn: data.session });
+      }
+      if (items.length === 0) return false;
+      const models = [];
+      for (const { turn } of items) {
+        if (turn.modelUsage && typeof turn.modelUsage === 'object') models.push(...Object.keys(turn.modelUsage));
+        if (turn.primaryModelId) models.push(turn.primaryModelId);
+      }
+      if (await ensurePrices(models)) return true;
+      for (const { key, timestamp, turn } of items) {
+        const byModel = turn.modelUsage && typeof turn.modelUsage === 'object' && Object.keys(turn.modelUsage).length > 0
+          ? Object.entries(turn.modelUsage)
+          : [[turn.primaryModelId ?? 'unknown', turn]];
+        for (const [model, u] of byModel) {
+          if (!u || typeof u !== 'object') continue;
+          const rawIn = num0(u.inputTokens);
+          const out = num0(u.outputTokens);
+          const cacheRead = num0(u.cachedReadTokens);
+          const cacheWrite = num0(u.cacheCreationTokens);
+          if (rawIn + out + cacheRead + cacheWrite <= 0) continue;
+          // Grok's inputTokens includes cachedReadTokens and cacheCreationTokens; costUsdTicks is 10^10 ticks per USD.
+          const directCost = typeof u.costUsdTicks === 'number' && Number.isFinite(u.costUsdTicks) && u.costUsdTicks > 0
+            ? u.costUsdTicks / 1e10 : undefined;
+          record(timestamp, 'grok', model || 'unknown', {
+            input: Math.max(0, rawIn - cacheRead - cacheWrite), output: out, cacheRead, cacheWrite5m: cacheWrite,
+          }, { requests: Math.max(1, num0(u.modelCalls)), directCost });
+        }
+        if (turns) file.seenTurns.add(key);
+        else file.recordedSession = true;
+      }
+      return false;
+    },
+  },
 ];
 
-function record(timestamp, agent, model, tokens) {
+function record(timestamp, agent, model, tokens, { requests = 1, directCost } = {}) {
   const ms = Date.parse(timestamp);
   if (!Number.isFinite(ms) || ms < Date.now() - MAX_DAYS * DAY) return;
   const key = `${localDay(ms)}|${agent}|${model}`;
   const row = totals.get(key) ?? { requests: 0, input: 0, output: 0, cache: 0, total: 0, cost: 0, unpriced: 0 };
   const { input = 0, output = 0, cacheRead = 0, cacheWrite5m = 0, cacheWrite1h = 0 } = tokens;
   const cache = cacheRead + cacheWrite5m + cacheWrite1h;
-  row.requests += 1;
+  row.requests += Math.max(1, requests);
   row.input += input;
   row.output += output;
   row.cache += cache;
   row.total += input + output + cache;
-  const cost = costOf(model, tokens);
+  const cost = typeof directCost === 'number' && Number.isFinite(directCost) ? directCost : costOf(model, tokens);
   if (cost === undefined) row.unpriced += input + output + cache;
   else row.cost += cost;
   totals.set(key, row);
@@ -186,26 +332,38 @@ export function scan({ refreshPrices = false } = {}) {
       changed();
       for (const { source, entry } of work) {
         let file = files.get(entry.path);
-        // A file that shrank was replaced: start over (its earlier rows stay counted; good enough for a chart).
-        if (!file || entry.size < file.size) {
+        if (source.kind === 'json') {
+          if (!file) {
+            file = {};
+            files.set(entry.path, file);
+          }
+        } else if (!file || entry.size < file.size) {
+          // A file that shrank was replaced: start over (its earlier rows stay counted; good enough for a chart).
           file = { offset: 0 };
           files.set(entry.path, file);
         }
         try {
-          await source.prepare?.(file, entry.path);
-          for (;;) {
-            const page = await fs.scanJsonLines(entry.path, { fromOffset: file.offset, where: source.where, select: source.select, limit: 5000 });
-            // The prices of the models on this page, before their rows are counted.
-            if (await ensurePrices(page.rows.map(row => source.modelOf(file, row)))) {
+          if (source.kind === 'json') {
+            if (await source.scanFile(file, entry.path)) {
               repriced = true;
               break;
             }
-            for (const row of page.rows) source.add(file, row);
-            skipped += page.skipped;
-            file.offset = page.nextOffset;
-            if (page.done || page.rows.length === 0) break;
+          } else {
+            await source.prepare?.(file, entry.path);
+            for (;;) {
+              const page = await fs.scanJsonLines(entry.path, { fromOffset: file.offset, where: source.where, select: source.select, limit: 5000 });
+              // The prices of the models on this page, before their rows are counted.
+              if (await ensurePrices(source.modelsOf(file, page.rows))) {
+                repriced = true;
+                break;
+              }
+              for (const row of page.rows) source.add(file, row);
+              skipped += page.skipped;
+              file.offset = page.nextOffset;
+              if (page.done || page.rows.length === 0) break;
+            }
+            if (repriced) break;
           }
-          if (repriced) break;
           file.size = entry.size;
           file.mtime = entry.mtime;
         } catch {
@@ -258,7 +416,7 @@ export class HistoryView {
     const header = ui.row({ justify: 'between', align: 'center' }, [
       ui.column({ gap: 0 }, [
         ui.text(t('用量历史', 'Usage history'), { variant: 'title' }),
-        ui.text(t('仅本机记录：Claude 与 Codex 会话记录里的 token 数；费用按 API 公开价格估算', 'This machine only: token counts from Claude and Codex session records; cost estimated at public API prices'), { variant: 'caption', color: 'muted' }),
+        ui.text(t('仅本机记录：Claude、Codex、Antigravity、Copilot 与 Grok 会话记录里的 token 数；费用按 API 公开价格估算', 'This machine only: token counts from Claude, Codex, Antigravity, Copilot and Grok session records; cost estimated at public API prices'), { variant: 'caption', color: 'muted' }),
       ]),
       ui.row({ gap: 2, align: 'center' }, [
         ui.segmented({
@@ -279,7 +437,7 @@ export class HistoryView {
       return ui.column({ gap: 4, padding: 6 }, [header, ui.alert({
         kind: 'info',
         title: t('没有读取会话记录的权限', 'No access to session records'),
-        description: t('在 设置 → 插件 → 智能体用量 里打开“读取 claude/codex 的本地数据”。', 'Turn on “Local data of claude/codex” in Settings → Plugins → Agent Usage.'),
+        description: t('在 设置 → 插件 → 智能体用量 里打开对应智能体的“本地记录”读取权限。', 'Turn on “Local records” for the agents you use in Settings → Plugins → Agent Usage.'),
       })]);
     }
 
@@ -313,7 +471,7 @@ export class HistoryView {
     }
 
     if (sum === 0 && !scanning) {
-      body.push(ui.emptyState({ icon: 'lucide:chart-column', title: t('这段时间没有记录', 'No records in this period'), description: t('用 Claude 或 Codex 工作后，这里会按天显示 token 用量和费用。', 'After working with Claude or Codex, daily tokens and cost show here.') }));
+      body.push(ui.emptyState({ icon: 'lucide:chart-column', title: t('这段时间没有记录', 'No records in this period'), description: t('用 Claude、Codex、Antigravity、Copilot 或 Grok 工作后，这里会按天显示 token 用量和费用。', 'After working with Claude, Codex, Antigravity, Copilot or Grok, daily tokens and cost show here.') }));
     } else {
       const activeDays = costPerDay.filter(c => c > 0).length;
       const todayIndex = days.indexOf(today);

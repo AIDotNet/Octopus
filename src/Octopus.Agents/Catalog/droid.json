@@ -22,5 +22,21 @@
       ],
       "allowCustom": true
     }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "exec",
+      "--output-format",
+      "acp"
+    ],
+    "dialect": "droid",
+    "minVersion": "0.236.0",
+    "permissionStrategy": "agentMode",
+    "permissionModes": {
+      "default": "normal",
+      "auto": "auto-medium",
+      "full": "auto-high"
+    }
   }
 }

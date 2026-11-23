@@ -68,12 +68,27 @@
                           Text="{Binding Prompt, Mode=TwoWay}" />
         </StackPanel>
 
-        <Grid ColumnDefinitions="*,Auto" Margin="{DynamicResource OctopusLauncherFooterMargin}">
-            <TextBlock Classes="hint" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-                <Run Text="{l:AppLangResource PermissionPrefix}" /><Run Text=" " /><Run Text="{Binding PermissionName}" />
-            </TextBlock>
-            <arc:Button Grid.Column="1" Size="Small" Content="{l:AppLangResource LaunchTerminal}"
-                        Command="{Binding LaunchCommand}" />
-        </Grid>
+        <StackPanel Spacing="6" Margin="{DynamicResource OctopusLauncherFooterMargin}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Classes="hint" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <Run Text="{l:AppLangResource PermissionPrefix}" /><Run Text=" " /><Run Text="{Binding PermissionName}" />
+                </TextBlock>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <arc:Button x:Name="SecondaryLaunchButton"
+                                Variant="Secondary"
+                                Size="Small"
+                                IsVisible="{Binding ShowDualLaunchButtons}"
+                                Content="{Binding SecondaryLaunchLabel}"
+                                Command="{Binding LaunchSecondaryCommand}" />
+                    <arc:Button x:Name="PrimaryLaunchButton"
+                                Size="Small"
+                                Content="{Binding PrimaryLaunchLabel}"
+                                Command="{Binding LaunchCommand}" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Classes="hint"
+                       IsVisible="{Binding ShowTerminalOnlyHint}"
+                       Text="{l:AppLangResource LaunchTerminalOnlyHint}" />
+        </StackPanel>
     </StackPanel>
 </UserControl>

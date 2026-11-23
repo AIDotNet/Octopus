@@ -29,7 +29,7 @@ public class TunnelSharedTests : IDisposable
     private readonly FakeProcessHost _host = new();
     private readonly FakeLocalPorts _ports = new();
     private readonly FakeSharedConnection _shared = new();
-    private readonly ProjectService _projects = new(new InMemoryProjectStore(), new PathComparer(ignoreCase: false), new InMemorySettingsStore());
+    private readonly ProjectService _projects = new(new InMemoryProjectStore(), new PathComparer(ignoreCase: false));
     private readonly string _ledger = Directory.CreateTempSubdirectory("octopus-ledger-").FullName;
     private readonly List<TunnelService> _services = [];
 

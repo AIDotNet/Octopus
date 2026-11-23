@@ -47,6 +47,32 @@ public sealed class AgySessionSource : ISessionSource
 
     public string? DefaultDirectory(string home) => Path.Combine(home, ".gemini", "antigravity-cli");
 
+    /// <summary>
+    /// Reads the title and fallback preview Antigravity CLI keeps in <c>conversation_summaries.db</c> for one
+    /// conversation. Locates the database by walking up from <paramref name="transcriptPath"/> or
+    /// <paramref name="artifactDirectoryPath"/>, falling back to <paramref name="defaultDirectory"/> (or
+    /// <c>~/.gemini/antigravity-cli</c> when null). If the database has neither a title nor a preview, falls back to
+    /// the first <c>USER_INPUT</c> step of <paramref name="transcriptPath"/>.
+    /// </summary>
+    public static (string? Title, string? Preview) ReadConversationTitle(
+        string? conversationId,
+        string? transcriptPath = null,
+        string? artifactDirectoryPath = null,
+        string? defaultDirectory = null)
+    {
+        var id = ResolveConversationId(conversationId, transcriptPath, artifactDirectoryPath);
+        string? title = null, preview = null;
+        if (id is not null && FindSummariesDatabase(transcriptPath, artifactDirectoryPath, defaultDirectory) is { } dbPath)
+        {
+            (title, preview) = ReadSummaryTitle(dbPath, id);
+        }
+        if (title is null && preview is null && !string.IsNullOrWhiteSpace(transcriptPath))
+        {
+            preview = ReadFirstUserPrompt(transcriptPath);
+        }
+        return (title, preview);
+    }
+
     public Task<IReadOnlyList<AgentSessionInfo>> ListAsync(string accountDirectory, string projectPath, CancellationToken cancellationToken = default) =>
         Task.Run<IReadOnlyList<AgentSessionInfo>>(() => List(accountDirectory, projectPath, cancellationToken), cancellationToken);
 
@@ -312,7 +338,7 @@ public sealed class AgySessionSource : ISessionSource
         public SessionTurn Build() => new(role, Text, time, ToolName, Output, Files);
     }
 
-    internal static string? ExtractUserRequest(string? content)
+    public static string? ExtractUserRequest(string? content)
     {
         if (string.IsNullOrWhiteSpace(content)) return null;
         var open = content.IndexOf(UserRequestOpen, StringComparison.Ordinal);
@@ -536,6 +562,135 @@ public sealed class AgySessionSource : ISessionSource
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+
+    private static (string? Title, string? Preview) ReadSummaryTitle(string dbPath, string conversationId)
+    {
+        try
+        {
+            var cs = new SqliteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false,
+                DefaultTimeout = 2,
+            }.ToString();
+            using var connection = new SqliteConnection(cs);
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT title, preview
+                FROM conversation_summaries
+                WHERE conversation_id = $id
+                LIMIT 1
+                """;
+            command.Parameters.AddWithValue("$id", conversationId);
+            using var reader = command.ExecuteReader();
+            if (!reader.Read()) return (null, null);
+            var title = reader.IsDBNull(0) ? null : NormalizeTitle(reader.GetString(0), MaxTitleLength * 2);
+            var preview = reader.IsDBNull(1) ? null : ExtractUserRequest(reader.GetString(1));
+            return (title, preview);
+        }
+        catch (Exception e) when (e is SqliteException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return (null, null);
+        }
+    }
+
+    private static string? ReadFirstUserPrompt(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false);
+            for (var i = 0; i < 64 && reader.ReadLine() is { } line; i++)
+            {
+                if (line.Length == 0 || line[0] != '{') continue;
+                var probe = line.Length <= ProbeLength ? line : line[..ProbeLength];
+                if (!probe.Contains("\"USER_INPUT\"", StringComparison.Ordinal)) continue;
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+                    if (Str(root, "type") == "USER_INPUT" && ExtractUserRequest(Str(root, "content")) is { Length: > 0 } text)
+                    {
+                        return text;
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
+            return null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ResolveConversationId(string? conversationId, string? transcriptPath, string? artifactDirectoryPath)
+    {
+        if (!string.IsNullOrWhiteSpace(conversationId)) return conversationId.Trim();
+        return ConversationIdFromPath(transcriptPath) ?? ConversationIdFromPath(artifactDirectoryPath);
+    }
+
+    private static string? ConversationIdFromPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        var parts = path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+        for (var i = parts.Length - 2; i >= 0; i--)
+        {
+            if (string.Equals(parts[i], "brain", PathComparison))
+            {
+                var candidate = parts[i + 1];
+                if (candidate.Length > 0 && candidate != "." && candidate != "..")
+                {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static string? FindSummariesDatabase(string? transcriptPath, string? artifactDirectoryPath, string? defaultDirectory)
+    {
+        if (FindDatabaseUpward(transcriptPath, maxDepth: 6) is { } fromTranscript) return fromTranscript;
+        if (FindDatabaseUpward(artifactDirectoryPath, maxDepth: 4) is { } fromArtifacts) return fromArtifacts;
+        var fallback = defaultDirectory;
+        if (fallback is null)
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            fallback = string.IsNullOrEmpty(home) ? "" : Path.Combine(home, ".gemini", "antigravity-cli");
+        }
+        if (fallback.Length > 0)
+        {
+            var candidate = Path.Combine(fallback, "conversation_summaries.db");
+            if (File.Exists(candidate)) return candidate;
+        }
+        return null;
+    }
+
+    private static string? FindDatabaseUpward(string? path, int maxDepth)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        try
+        {
+            var dir = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
+            for (var i = 0; i <= maxDepth && !string.IsNullOrEmpty(dir); i++)
+            {
+                var candidate = Path.Combine(dir, "conversation_summaries.db");
+                if (File.Exists(candidate)) return candidate;
+                var parent = Path.GetDirectoryName(dir);
+                if (string.Equals(parent, dir, PathComparison)) break;
+                dir = parent;
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+        }
+        return null;
+    }
 
     private sealed record SummaryRow(string Id, string Title, string Preview, string LastModifiedTime, string LastUserInputTime);
 

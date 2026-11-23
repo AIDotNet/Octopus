@@ -25,14 +25,15 @@ internal static class Program
     /// <summary>
     /// The preview as a phone of its own: its key, sign-in and paired hosts live in a folder of this computer
     /// (OCTOPUS_MOBILE_DATA_DIR, else under the user's application data), apart from the desktop app's.
-    /// OCTOPUS_RELAY_URL is the service's address the sign-in page starts with.
+    /// OCTOPUS_RELAY_URL is the official service "Sign in" goes to; it wins over the address the build was given
+    /// (OctopusServiceUrl in Directory.Build.props). With neither, "Sign in" asks for an address.
     /// </summary>
     private static void UseRealHosts()
     {
         var directory = Environment.GetEnvironmentVariable("OCTOPUS_MOBILE_DATA_DIR") is { Length: > 0 } given
             ? given
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Octopus", "mobile-preview");
-        var remote = new MobileRemote(new FileMobileStore(directory), $"{Environment.MachineName} (phone preview)", Environment.GetEnvironmentVariable("OCTOPUS_RELAY_URL"));
+        var remote = new MobileRemote(new FileMobileStore(directory), $"{Environment.MachineName} (phone preview)", Environment.GetEnvironmentVariable("OCTOPUS_RELAY_URL") is { Length: > 0 } official ? official : null);
         remote.Load();
         MobileHost.Workspace = remote.Workspace;
         MobileHost.Account = remote.Account;

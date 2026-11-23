@@ -46,7 +46,7 @@ public sealed partial class ProbeRunner : IProbeRunner, IDisposable
     {
         var definition = request.Definition;
         var environment = BuildEnvironment(request);
-        var accountVariable = definition.Signals?.Account?.Env;
+        var accountVariable = SignalAccounts.AccountEnv(definition);
         var account = SignalAccounts.Key(
             definition,
             !string.IsNullOrEmpty(accountVariable) ? environment.GetValueOrDefault(accountVariable) : null,
@@ -265,9 +265,9 @@ public sealed partial class ProbeRunner : IProbeRunner, IDisposable
         {
             environment.Remove(key);
         }
-        if (request.Definition.Signals?.Account is { Env.Length: > 0 } account && !string.IsNullOrWhiteSpace(request.Account))
+        if (SignalAccounts.AccountEnv(request.Definition) is { Length: > 0 } accountEnv && !string.IsNullOrWhiteSpace(request.Account))
         {
-            environment[account.Env] = request.Account;
+            environment[accountEnv] = request.Account;
         }
         return environment;
     }

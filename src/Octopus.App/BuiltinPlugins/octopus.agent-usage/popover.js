@@ -46,7 +46,7 @@ export function renderPopover(model) {
       ui.emptyState({
         icon: 'lucide:gauge',
         title: t('没有发现智能体', 'No agents found'),
-        description: t('安装 Claude、Codex、Cursor、Grok 或 OpenCode 后，这里会显示它们的用量。', 'Install Claude, Codex, Cursor, Grok or OpenCode to see their usage here.'),
+        description: t('安装 Claude、Codex、Antigravity、Copilot、Cursor、Grok 或 OpenCode 后，这里会显示它们的用量。', 'Install Claude, Codex, Antigravity, Copilot, Cursor, Grok or OpenCode to see their usage here.'),
       }),
     ]);
   }

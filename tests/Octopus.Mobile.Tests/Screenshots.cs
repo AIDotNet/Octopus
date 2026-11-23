@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Octopus.Mobile.Account;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Terminals;
 using TKCode.Arc;
@@ -71,20 +72,63 @@ public class Screenshots
             phone.Save("7-pairing" + suffix);
         }
 
-        using (var phone = new Phone())
+        // Signed out and nothing chosen: the welcome page, then the code to confirm in the browser.
+        using (var phone = new Phone(signedIn: false, signInDelay: TimeSpan.FromMinutes(1)))
         {
-            var account = new Octopus.Mobile.Demo.DemoAccount { SignInDelay = TimeSpan.FromMinutes(1) };
-            account.SignOut();
-            var shell = new Octopus.Mobile.Shell.MobileShell(phone.Workspace, account);
-            phone.Window.Content = shell;
             Phone.Settle(300);
-            // First the service's address, then the code to confirm in the browser.
-            phone.Save("8-sign-in" + suffix);
-            var signIn = (Octopus.Mobile.Account.SignInViewModel)shell.Top!.DataContext!;
-            signIn.StartCommand.Execute(null);
-            Assert.True(Phone.Until(() => signIn.HasCode));
+            phone.Save("8-welcome" + suffix);
+            var welcome = (WelcomeViewModel)phone.Top<WelcomePage>().DataContext!;
+            welcome.SignInCommand.Execute(null);
+            Assert.True(Phone.Until(() => welcome.SignIn.HasCode));
             Phone.Settle(300);
             phone.Save("9-sign-in-code" + suffix);
+            welcome.SignIn.CancelCommand.Execute(null);
+
+            // A service of the person's own: its address.
+            welcome.UseCustomCommand.Execute(null);
+            Phone.Settle();
+            ((CustomServerViewModel)phone.Top<CustomServerPage>().DataContext!).Server = "octopus.example.com";
+            Phone.Settle(300);
+            phone.Save("10-custom-server" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+            // Without an account: the first computer, by its address.
+            phone.Shell.ShowAddHost();
+            Phone.Settle();
+            phone.Top<AddHostPage>();
+            phone.Save("11-add-host" + suffix);
+        }
+
+        // A build that knows no official service: "Sign in" asks for the address, so there is no row for that.
+        using (var phone = new Phone(signedIn: false, official: false))
+        {
+            Phone.Settle(300);
+            phone.Save("12-welcome-no-official" + suffix);
+        }
+
+        // Used without an account: the computers the phone paired with itself, and what the account entry opens.
+        using (var phone = new Phone(localOnly: true))
+        {
+            Phone.Settle(300);
+            phone.Save("13-hosts-local" + suffix);
+            var hosts = (HostsViewModel)phone.Top<HostsPage>().DataContext!;
+            hosts.OpenAccountCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("14-hosts-local-sheet" + suffix);
+            hosts.IsLocalOpen = false;
+            Phone.Settle();
+
+            // "Sign in" from there: the welcome page with a way back.
+            hosts.SignInCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("15-sign-in-from-local" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+            phone.Workspace.Hosts.Clear();
+            Phone.Settle(300);
+            phone.Save("16-hosts-local-empty" + suffix);
         }
     }
 }

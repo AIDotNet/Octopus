@@ -55,6 +55,8 @@ public sealed class ModelPriceCatalogTests
     [InlineData("anthropic/claude-sonnet-5-5")]         // a route in front
     [InlineData("claude-sonnet-5-5[1m]")]               // a variant behind
     [InlineData("claude-sonnet-5-5-20260928")]          // a release date
+    [InlineData("claude-sonnet-5-5-medium")]            // Antigravity CLI effort suffix
+    [InlineData("claude-sonnet-5.5-high")]              // dot spelling + effort suffix
     [InlineData("CLAUDE-SONNET-5-5")]
     public async Task Find_ReadsTheIdsAgentsWrite(string id)
     {
@@ -62,6 +64,29 @@ public sealed class ModelPriceCatalogTests
         using var catalog = new ModelPriceCatalog(new PluginPaths(paths), Serve(Catalog));
         await catalog.EnsureFreshAsync();
         Assert.Equal(2, catalog.Find(id)?.Input);
+    }
+
+    [Fact]
+    public async Task Find_ResolvesAgyEffortAndGrokBuildModelIds()
+    {
+        const string extraCatalog = """
+            {
+              "google": { "models": {
+                "gemini-4-neon": { "cost": { "input": 3, "output": 15, "cache_read": 0.15 } },
+                "gemini-3-8-flash": { "cost": { "input": 0.5, "output": 2, "cache_read": 0.05 } } } },
+              "xai": { "models": {
+                "grok-4-7": { "cost": { "input": 2, "output": 6, "cache_read": 0.5 } } } }
+            }
+            """;
+        using var paths = new TempAppPaths();
+        using var catalog = new ModelPriceCatalog(new PluginPaths(paths), Serve(extraCatalog));
+        await catalog.EnsureFreshAsync();
+
+        Assert.Equal(3, catalog.Find("gemini-4-neon-xhigh")?.Input);
+        Assert.Equal(3, catalog.Find("gemini-4-neon-low")?.Input);
+        Assert.Equal(0.5, catalog.Find("gemini-3.8-flash-high")?.Input);
+        Assert.Equal(2, catalog.Find("grok-4.7-build")?.Input);
+        Assert.Equal(2, catalog.Find("grok-4.7-build-fast")?.Input);
     }
 
     [Fact]

@@ -78,6 +78,7 @@
   // Checked against agy 1.5.12 with a plain hooks.json: SessionStart, PreInvocation and Stop all ran (a 429 included).
   "signals": {
     "minVersion": "1.5.12",
+    "account": { "default": "~/.gemini/antigravity-cli" },
     "attach": [
       {
         "env": { "OCTOPUS_SIGNAL_FORWARDER": "{forwarder}", "OCTOPUS_SIGNAL_HOOKS": "{signalHooks}" },
@@ -95,6 +96,18 @@
       "done": ["stop"]
     }
   },
+  // Verified against agy 1.5.15: `--print /usage --output-format json` queries quota without creating a conversation
+  // or spending tokens (conversation_id is empty, num_turns is 0).
+  "probes": {
+    "usage": {
+      "kind": "command",
+      "args": ["--print", "/usage", "--output-format", "json"],
+      "parse": "json",
+      "select": ["status", "command.data.groups"],
+      "timeoutMs": 30000,
+      "minIntervalSec": 120
+    }
+  },
   "accounts": {
     "mode": "globalKeyring",
     "loginArgs": [],
@@ -104,6 +117,24 @@
       "account": "antigravity",
       "windowsTarget": "gemini:antigravity",
       "linuxUserAttribute": "username"
+    }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "acp"
+    ],
+    "fullAccessArgs": [
+      "--dangerously-skip-permissions"
+    ],
+    "dialect": "antigravity",
+    "permissionStrategy": "agentMode",
+    "permissionModes": {
+      "default": "default",
+      "acceptEdits": "accept-edits",
+      "auto": "auto",
+      "plan": "plan",
+      "full": "auto"
     }
   }
 }

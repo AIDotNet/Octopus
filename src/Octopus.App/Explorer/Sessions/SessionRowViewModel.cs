@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Octopus.Agents.Sessions;
 using Octopus.App.Common;
 using Octopus.App.Localization;
+using Octopus.Core.Agents;
 
 namespace Octopus.App.Explorer.Sessions;
 
@@ -10,13 +11,37 @@ namespace Octopus.App.Explorer.Sessions;
 public sealed partial class SessionRowViewModel : ObservableObject
 {
     private readonly Func<SessionRowViewModel, Task> _continue;
+    private readonly Func<SessionRowViewModel, AgentSurface, Task>? _continueWithSurface;
     private readonly Func<SessionRowViewModel, Task> _migrate;
+    private readonly bool _supportsAcp;
+    private readonly AgentSurface _defaultSurface;
 
-    public SessionRowViewModel(AgentSessionInfo info, DateTimeOffset now, string? liveItemId, Func<SessionRowViewModel, Task> resume, Func<SessionRowViewModel, Task> migrate)
+    public SessionRowViewModel(
+        AgentSessionInfo info,
+        DateTimeOffset now,
+        string? liveItemId,
+        Func<SessionRowViewModel, Task> resume,
+        Func<SessionRowViewModel, Task> migrate,
+        string? workspaceId = null,
+        string? workspacePath = null,
+        string? workspaceLabel = null,
+        bool isWorktree = false,
+        bool showWorkspaceBadge = false,
+        bool supportsAcp = false,
+        AgentSurface defaultSurface = AgentSurface.Terminal,
+        Func<SessionRowViewModel, AgentSurface, Task>? resumeWithSurface = null)
     {
         Info = info;
         LiveItemId = liveItemId;
+        WorkspaceId = workspaceId;
+        WorkspacePath = workspacePath;
+        WorkspaceLabel = workspaceLabel ?? "";
+        IsWorktree = isWorktree;
+        ShowWorkspaceBadge = showWorkspaceBadge && WorkspaceLabel.Length > 0;
+        _supportsAcp = supportsAcp;
+        _defaultSurface = supportsAcp ? defaultSurface : AgentSurface.Terminal;
         _continue = resume;
+        _continueWithSurface = resumeWithSurface;
         _migrate = migrate;
         WhenText = RelativeTime.Format(info.UpdatedAt, now);
         var parts = new List<string> { AppLangResources.Format(AppLangResourceKind.SessionsMessages, info.MessageCount) };
@@ -30,21 +55,42 @@ public sealed partial class SessionRowViewModel : ObservableObject
     public string Title => Info.Title;
     public string WhenText { get; }
     public string MetaText { get; }
+    /// <summary>The <c>ProjectWorkspace.Id</c> this session belongs to; null for default directory or unmanaged worktree.</summary>
+    public string? WorkspaceId { get; }
+    /// <summary>The directory where this session was originally recorded.</summary>
+    public string? WorkspacePath { get; }
+    /// <summary>Short badge label (<c>默认</c> / <c>Default</c> or branch name).</summary>
+    public string WorkspaceLabel { get; }
+    public bool IsWorktree { get; }
+    public bool IsDefaultWorkspace => !IsWorktree;
+    public bool ShowWorkspaceBadge { get; }
 
     /// <summary>The tab the session runs in now; null when no tab of the project runs it.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsLive), nameof(ContinueTip))]
+    [NotifyPropertyChangedFor(nameof(IsLive), nameof(ContinueTip), nameof(CanContinueInAlternateSurface))]
     public partial string? LiveItemId { get; set; }
 
     public bool IsLive => LiveItemId is not null;
 
+    public bool CanContinueInAlternateSurface => !IsLive && _supportsAcp && _continueWithSurface is not null;
+    public bool AlternateSurfaceIsGui => _defaultSurface != AgentSurface.Gui;
+    public string AlternateSurfaceTip => AppLangResources.Get(
+        AlternateSurfaceIsGui ? AppLangResourceKind.SessionsContinueInGui : AppLangResourceKind.SessionsContinueInTerminal);
+
     public string ContinueTip => AppLangResources.Get(IsLive ? AppLangResourceKind.SessionsSwitchTo : AppLangResourceKind.SessionsContinue);
 
-    /// <summary>The tooltip of the row: the full title and the session id, for the long titles the row cuts.</summary>
-    public string Tip => $"{Info.Title}\n{Info.SessionId}";
+    /// <summary>The tooltip of the row: the full title, workspace path (if any) and session id.</summary>
+    public string Tip => string.IsNullOrEmpty(WorkspacePath)
+        ? $"{Info.Title}\n{Info.SessionId}"
+        : $"{Info.Title}\n{WorkspacePath}\n{Info.SessionId}";
 
     [RelayCommand]
     private Task Continue() => _continue(this);
+
+    [RelayCommand]
+    private Task ContinueAlternate() => _continueWithSurface is not null && _supportsAcp
+        ? _continueWithSurface(this, AlternateSurfaceIsGui ? AgentSurface.Gui : AgentSurface.Terminal)
+        : _continue(this);
 
     [RelayCommand]
     private Task Migrate() => _migrate(this);

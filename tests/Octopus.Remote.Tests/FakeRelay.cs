@@ -66,6 +66,10 @@ internal sealed class FakeRelay : IAsyncDisposable
     public IReadOnlyCollection<string> PendingCodes => [.. _logins.Values.Where(l => l.ApprovedBy is null && !l.Denied).Select(l => l.UserCode)];
     /// <summary>The names the devices gave when they started signing in.</summary>
     public ConcurrentQueue<string> LoginNames { get; } = new();
+    /// <summary>What each device said it runs on when it started signing in: its platform and the app's version, as sent (null when left out).</summary>
+    public ConcurrentQueue<(string? Platform, string? AppVersion)> LoginClients { get; } = new();
+    /// <summary>How many requests arrived, of any kind: zero means nothing ever asked this relay for anything.</summary>
+    public int Requests;
     public int Refreshes;
     /// <summary>How long the access tokens say they live.</summary>
     public int AccessSeconds { get; set; } = 900;
@@ -128,6 +132,7 @@ internal sealed class FakeRelay : IAsyncDisposable
 
     private async Task HandleAsync(HttpListenerContext context)
     {
+        Interlocked.Increment(ref Requests);
         var path = context.Request.Url!.AbsolutePath;
         if (path.StartsWith("/v1/auth/", StringComparison.Ordinal) && context.Request.HttpMethod == "POST")
         {
@@ -238,6 +243,7 @@ internal sealed class FakeRelay : IAsyncDisposable
                 var login = new Login { UserCode = $"{letters[..4]}-{letters[4..]}", Key = DevicePublicKey.Parse(Convert.FromBase64String(Text("publicKey")!)), Name = Text("deviceName") ?? "", Kind = Text("kind") == "phone" ? "phone" : "desktop" };
                 _logins[deviceCode] = login;
                 LoginNames.Enqueue(login.Name);
+                LoginClients.Enqueue((Text("platform"), Text("appVersion")));
                 Respond(context, 200, JsonSerializer.Serialize(new Dictionary<string, object>
                 {
                     ["deviceCode"] = deviceCode, ["userCode"] = login.UserCode, ["verificationUri"] = $"{Url}/device",

@@ -8,10 +8,11 @@ using Octopus.Mobile.Workspace;
 namespace Octopus.Mobile.Account;
 
 /// <summary>
-/// The page shown while signed out: the service's address and "Sign in", then a device code to confirm in the browser.
-/// The shell replaces this page with the host list as soon as the account is signed in.
+/// Signing in at one service, from asking it for a code to the answer from the browser: the part the welcome page (the
+/// official service) and the custom-service page (an address the person typed) share. The shell replaces the page with
+/// the host list as soon as the account is signed in.
 /// </summary>
-public sealed partial class SignInViewModel : ObservableObject, IDisposable
+public sealed partial class SignInFlow : ObservableObject, IDisposable
 {
     private readonly IAccountSession _account;
     private readonly Action<Uri> _openBrowser;
@@ -19,16 +20,14 @@ public sealed partial class SignInViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _starting;
     private bool _disposed;
 
-    public SignInViewModel(IAccountSession account, Action<Uri> openBrowser)
+    public SignInFlow(IAccountSession account, Action<Uri> openBrowser)
     {
         _account = account;
         _openBrowser = openBrowser;
-        Server = account.Server;
         // Signed out by the service, not by the person: said once, where they sign in again.
         ErrorText = account.SignInEnded ? MobileLangResources.Get(MobileLangResourceKind.SignInEnded) : null;
     }
 
-    [ObservableProperty] public partial string Server { get; set; }
     /// <summary>The code to confirm in the browser; null until the service gave one.</summary>
     [ObservableProperty] public partial string? UserCode { get; private set; }
     /// <summary>The service is being asked for a code.</summary>
@@ -36,37 +35,29 @@ public sealed partial class SignInViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string? ErrorText { get; private set; }
 
     public bool HasCode => UserCode is not null;
-    public bool IsEntering => !HasCode;
+    /// <summary>Nothing is under way: a sign-in can be started.</summary>
+    public bool IsIdle => !IsStarting && !HasCode;
     public bool HasError => !string.IsNullOrEmpty(ErrorText);
-    public bool CanStart => !IsStarting && !HasCode && !string.IsNullOrWhiteSpace(Server);
 
     partial void OnUserCodeChanged(string? value)
     {
         OnPropertyChanged(nameof(HasCode));
-        OnPropertyChanged(nameof(IsEntering));
-        Notify();
+        OnPropertyChanged(nameof(IsIdle));
     }
 
-    partial void OnIsStartingChanged(bool value) => Notify();
-    partial void OnServerChanged(string value) => Notify();
+    partial void OnIsStartingChanged(bool value) => OnPropertyChanged(nameof(IsIdle));
     partial void OnErrorTextChanged(string? value) => OnPropertyChanged(nameof(HasError));
 
-    private void Notify()
+    /// <summary>Asks the service at <paramref name="server"/> for a code, shows it and opens the service's page in the browser.</summary>
+    public async Task StartAsync(string server)
     {
-        OnPropertyChanged(nameof(CanStart));
-        StartCommand.NotifyCanExecuteChanged();
-    }
-
-    /// <summary>Asks the service for a code, shows it and opens the service's page in the browser.</summary>
-    [RelayCommand(CanExecute = nameof(CanStart))]
-    private async Task StartAsync()
-    {
+        if (!IsIdle || _disposed) return;
         ErrorText = null;
         IsStarting = true;
         var starting = _starting = new CancellationTokenSource();
         try
         {
-            var challenge = await _account.BeginSignInAsync(Server.Trim(), starting.Token);
+            var challenge = await _account.BeginSignInAsync(server.Trim(), starting.Token);
             if (_disposed || starting.IsCancellationRequested)
             {
                 challenge.Cancel();
@@ -97,10 +88,12 @@ public sealed partial class SignInViewModel : ObservableObject, IDisposable
         if (_challenge is { } challenge) _openBrowser(challenge.VerificationUri);
     }
 
-    /// <summary>Gives the code up and goes back to the address.</summary>
+    /// <summary>Gives the code up: the page is back at where the sign-in was started.</summary>
     [RelayCommand]
-    private void Cancel()
+    public void Cancel()
     {
+        try { _starting?.Cancel(); }
+        catch (ObjectDisposedException) { }
         _challenge?.Cancel();
         _challenge = null;
         UserCode = null;
@@ -135,23 +128,272 @@ public sealed partial class SignInViewModel : ObservableObject, IDisposable
     }
 }
 
+/// <summary>
+/// The first page of a phone that is neither signed in nor used without an account: "Sign in" (at the official
+/// service, without asking for anything), and the other two ways to connect. The same page, with a way back and
+/// without the local-network row, is what "Sign in" opens from the host list of a phone used without an account.
+/// </summary>
+public sealed partial class WelcomeViewModel : ObservableObject, IDisposable
+{
+    private readonly IAccountSession _account;
+    private readonly IRemoteWorkspace _workspace;
+    private readonly INavigator _navigator;
+
+    /// <param name="isOnTop">On top of the host list rather than the first page.</param>
+    public WelcomeViewModel(IAccountSession account, IRemoteWorkspace workspace, INavigator navigator, Action<Uri> openBrowser, bool isOnTop = false)
+    {
+        _account = account;
+        _workspace = workspace;
+        _navigator = navigator;
+        IsOnTop = isOnTop;
+        SignIn = new SignInFlow(account, openBrowser);
+        SignIn.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is not (nameof(SignInFlow.IsIdle) or nameof(SignInFlow.HasCode))) return;
+            OnPropertyChanged(nameof(IsChoosing));
+            SignInCommand.NotifyCanExecuteChanged();
+        };
+    }
+
+    public SignInFlow SignIn { get; }
+    public bool IsOnTop { get; }
+    /// <summary>This build knows the official service: "Sign in" goes there. Otherwise it asks for an address.</summary>
+    public bool HasOfficialServer => _account.OfficialServer is not null;
+    /// <summary>"Local network": not where the person already uses the app that way.</summary>
+    public bool ShowsLocal => !IsOnTop;
+    /// <summary>"Custom service" as a row of its own: only when "Sign in" does not lead there anyway.</summary>
+    public bool ShowsCustom => HasOfficialServer;
+    public bool ShowsOtherWays => ShowsLocal || ShowsCustom;
+    /// <summary>The buttons are showing rather than the code.</summary>
+    public bool IsChoosing => !SignIn.HasCode;
+
+    private bool CanSignIn => SignIn.IsIdle;
+
+    [RelayCommand(CanExecute = nameof(CanSignIn))]
+    private async Task SignInAsync()
+    {
+        if (_account.OfficialServer is { } official) await SignIn.StartAsync(official);
+        else _navigator.ShowCustomServer();
+    }
+
+    /// <summary>
+    /// Without an account. A phone that is paired with a computer already goes straight to its list; one that is not
+    /// adds its first computer, and only then counts as used that way.
+    /// </summary>
+    [RelayCommand]
+    private void UseLocal()
+    {
+        SignIn.Cancel();
+        if (_workspace.HasPairedHosts) _account.UseLocalOnly();
+        else _navigator.ShowAddHost();
+    }
+
+    [RelayCommand]
+    private void UseCustom()
+    {
+        SignIn.Cancel();
+        _navigator.ShowCustomServer();
+    }
+
+    [RelayCommand]
+    private void Back()
+    {
+        SignIn.Cancel();
+        _navigator.Back();
+    }
+
+    public void Dispose() => SignIn.Dispose();
+}
+
+/// <summary>Signing in at a service of the person's own: its address and "Sign in", then the code to confirm in the browser.</summary>
+public sealed partial class CustomServerViewModel : ObservableObject, IDisposable
+{
+    private readonly INavigator _navigator;
+
+    public CustomServerViewModel(IAccountSession account, INavigator navigator, Action<Uri> openBrowser)
+    {
+        _navigator = navigator;
+        Server = account.Server;
+        SignIn = new SignInFlow(account, openBrowser);
+        SignIn.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is not (nameof(SignInFlow.IsIdle) or nameof(SignInFlow.HasCode))) return;
+            OnPropertyChanged(nameof(IsEntering));
+            Notify();
+        };
+    }
+
+    public SignInFlow SignIn { get; }
+    /// <summary>The address as typed; the last one used is there to start with.</summary>
+    [ObservableProperty] public partial string Server { get; set; }
+
+    /// <summary>The address is showing rather than the code.</summary>
+    public bool IsEntering => !SignIn.HasCode;
+    public bool CanStart => SignIn.IsIdle && !string.IsNullOrWhiteSpace(Server);
+
+    partial void OnServerChanged(string value) => Notify();
+
+    private void Notify()
+    {
+        OnPropertyChanged(nameof(CanStart));
+        StartCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanStart))]
+    private Task StartAsync() => SignIn.StartAsync(Server);
+
+    [RelayCommand]
+    private void Back()
+    {
+        SignIn.Cancel();
+        _navigator.Back();
+    }
+
+    public void Dispose() => SignIn.Dispose();
+}
+
+/// <summary>
+/// Adding a computer without a service's help: its address on the local network, or a pairing link copied from it
+/// (~/code/Octopus/design/mobile/01-登录与连接方式.md §4). With an address the computer shows a number, which the
+/// pairing page shows too; with a link there is nothing to compare.
+/// </summary>
+public sealed partial class AddHostViewModel : ObservableObject, IDisposable
+{
+    private readonly IRemoteWorkspace _workspace;
+    private readonly IAccountSession _account;
+    private readonly INavigator _navigator;
+    private PairingAttempt? _attempt;
+    private bool _disposed;
+
+    public AddHostViewModel(IRemoteWorkspace workspace, IAccountSession account, INavigator navigator)
+    {
+        _workspace = workspace;
+        _account = account;
+        _navigator = navigator;
+    }
+
+    /// <summary>What the person typed or pasted: an address or a pairing link.</summary>
+    [ObservableProperty] public partial string Target { get; set; } = "";
+    /// <summary>The computer is being reached, or the person there is being waited for.</summary>
+    [ObservableProperty] public partial bool IsConnecting { get; private set; }
+    [ObservableProperty] public partial string? ErrorText { get; private set; }
+
+    public bool HasError => !string.IsNullOrEmpty(ErrorText);
+    public bool CanConnect => !IsConnecting && !string.IsNullOrWhiteSpace(Target);
+
+    partial void OnTargetChanged(string value) => Notify();
+    partial void OnIsConnectingChanged(bool value) => Notify();
+    partial void OnErrorTextChanged(string? value) => OnPropertyChanged(nameof(HasError));
+
+    private void Notify()
+    {
+        OnPropertyChanged(nameof(CanConnect));
+        ConnectCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanConnect))]
+    private async Task ConnectAsync()
+    {
+        var target = Target.Trim();
+        ErrorText = null;
+        IsConnecting = true;
+        var attempt = _attempt = _workspace.AddHost(target);
+        _ = ShowNumberAsync(attempt, target);
+        PairingOutcome outcome;
+        try { outcome = await attempt.Completion; }
+        catch (OperationCanceledException) { outcome = PairingOutcome.Cancelled; }
+        catch (IOException) { outcome = PairingOutcome.Unreachable; }
+        // Left, or tried again meanwhile: this answer is nobody's any more.
+        if (_disposed || !ReferenceEquals(_attempt, attempt)) return;
+        _attempt = null;
+        IsConnecting = false;
+        switch (outcome)
+        {
+            case PairingOutcome.Paired:
+                // The first computer of a phone that had chosen nothing yet: from now on it is used without an account,
+                // and the shell shows its list. Otherwise the list is already under this page.
+                if (!_account.IsSignedIn && !_account.IsLocalOnly) _account.UseLocalOnly();
+                else _navigator.ShowFirst();
+                break;
+            case PairingOutcome.Cancelled:
+                break;
+            default:
+                ErrorText = MobileLangResources.Get(outcome switch
+                {
+                    PairingOutcome.NotAnAddress => MobileLangResourceKind.AddHostNotAnAddress,
+                    PairingOutcome.NotPairing => MobileLangResourceKind.PairingNotOpen,
+                    PairingOutcome.Unreachable => MobileLangResourceKind.PairingUnreachable,
+                    _ => MobileLangResourceKind.PairingFailed,
+                });
+                break;
+        }
+    }
+
+    [RelayCommand]
+    private void Back()
+    {
+        Abandon();
+        _navigator.Back();
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        Abandon();
+    }
+
+    private void Abandon()
+    {
+        var attempt = _attempt;
+        _attempt = null;
+        IsConnecting = false;
+        attempt?.Cancel();
+    }
+
+    // The computer answered with its number: from here on the page is the one every pairing has.
+    private async Task ShowNumberAsync(PairingAttempt attempt, string target)
+    {
+        try { await attempt.Code; }
+        catch (Exception e) when (e is OperationCanceledException or IOException) { return; }
+        if (_disposed || !ReferenceEquals(_attempt, attempt)) return;
+        _navigator.ShowPairing(target, attempt);
+    }
+}
+
 /// <summary>Pairing with one host: the number both sides show, until the host allows this phone or refuses.</summary>
 public sealed partial class PairingViewModel : ObservableObject, IDisposable
 {
     private readonly INavigator _navigator;
     private readonly PairingAttempt _attempt;
+    // The page that started the pairing decides where to go once it worked; this one only leaves when it failed or was given up.
+    private readonly bool _isShared;
     private bool _left;
 
+    /// <summary>Pairs with a computer of the account's list.</summary>
     public PairingViewModel(RemoteHost host, IRemoteWorkspace workspace, INavigator navigator)
+        : this(host.Name, workspace.BeginPairing(host), navigator, isShared: false)
+    {
+    }
+
+    /// <summary>Shows a pairing that is already under way (a computer added by its address), from the number on.</summary>
+    public PairingViewModel(string hostName, PairingAttempt attempt, INavigator navigator)
+        : this(hostName, attempt, navigator, isShared: true)
+    {
+    }
+
+    private PairingViewModel(string hostName, PairingAttempt attempt, INavigator navigator, bool isShared)
     {
         _navigator = navigator;
-        HostName = host.Name;
-        _attempt = workspace.BeginPairing(host);
+        _isShared = isShared;
+        HostName = hostName;
+        _attempt = attempt;
         _ = ShowCodeAsync();
         _ = WaitAsync();
     }
 
     public string HostName { get; }
+    /// <summary>Where "back" leads: the page the computer was added on, or the list.</summary>
+    public string BackText => MobileLangResources.Get(_isShared ? MobileLangResourceKind.Back : MobileLangResourceKind.Hosts);
     /// <summary>The number to compare with the one on the computer; null until the computer answered.</summary>
     [ObservableProperty] public partial string? Code { get; private set; }
     [ObservableProperty] public partial bool IsWaiting { get; private set; } = true;
@@ -203,7 +445,10 @@ public sealed partial class PairingViewModel : ObservableObject, IDisposable
         Dispatcher.UIThread.Post(() =>
         {
             IsWaiting = false;
-            if (outcome == PairingOutcome.Paired) Leave();
+            if (outcome == PairingOutcome.Paired)
+            {
+                if (!_isShared) Leave();
+            }
             else if (!_left && outcome != PairingOutcome.Cancelled)
             {
                 FailureText = MobileLangResources.Get(outcome switch

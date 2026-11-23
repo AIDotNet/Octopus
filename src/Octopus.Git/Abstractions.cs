@@ -41,6 +41,37 @@ public sealed record GitBranch(string Name, bool IsRemote, bool IsCurrent, strin
 /// <summary>A file a commit changed, against its first parent (a root commit: against nothing).</summary>
 public sealed record GitCommitFile(string Path, GitChangeKind Kind, string? OriginalPath = null);
 
+/// <summary>One worktree reported by <c>git worktree list --porcelain</c>.</summary>
+/// <param name="Branch">Short branch name (without <c>refs/heads/</c>); null when detached or bare.</param>
+public sealed record GitWorktree(
+    string Path,
+    string? Head,
+    string? Branch,
+    bool IsBare,
+    bool IsDetached,
+    bool IsLocked,
+    bool IsPrunable,
+    bool IsMain);
+
+/// <summary>
+/// Read-only git snapshot of a linked worktree relative to the repository's default branch and remotes, used to
+/// evaluate automatic and manual workspace cleanup rules safely.
+/// </summary>
+public sealed record GitWorkspaceCleanupProbe(
+    string? DefaultBranch,
+    string? DefaultRef,
+    string? HeadHash,
+    int CommitsAheadOfDefault,
+    bool IsAncestorOfDefault,
+    bool IsMergedByCommitOrPatch,
+    bool IsMergedIntoRemoteDefault,
+    bool HasRemotes,
+    int UnpushedCommitCount,
+    DateTimeOffset? LastCommitDate,
+    bool HasUncommittedChanges,
+    int UncommittedChangeCount,
+    bool StatusUnavailable);
+
 /// <summary>
 /// A git repository, through the user's own <c>git</c>. The <c>Get</c> methods only read; the others change the
 /// repository the way the same git command in a terminal would. Commands that reach a remote use the login shell's
@@ -144,6 +175,42 @@ public interface IGitService
 
     /// <summary>The diff one commit made to one file (against its first parent), ready to show; null when git fails.</summary>
     Task<GitFileDiff?> GetCommitFileDiffAsync(string repositoryRoot, string commit, string path, string? originalPath = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Every worktree linked to the repository (<c>git worktree list --porcelain</c>), main worktree first.</summary>
+    Task<IReadOnlyList<GitWorktree>> GetWorktreesAsync(string repositoryRoot, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates a git worktree at <paramref name="path"/>. When <paramref name="createBranch"/> is true, creates a new
+    /// branch <paramref name="branch"/> starting from <paramref name="baseRef"/> (or HEAD when null). Otherwise checks out
+    /// the existing local or remote branch <paramref name="branch"/>.
+    /// </summary>
+    Task<GitCommandResult> AddWorktreeAsync(
+        string repositoryRoot,
+        string path,
+        string branch,
+        string? baseRef = null,
+        bool createBranch = true,
+        bool isRemote = false,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Removes a linked worktree (<c>git worktree remove</c>); without <paramref name="force"/> git refuses dirty worktrees.</summary>
+    Task<GitCommandResult> RemoveWorktreeAsync(string repositoryRoot, string path, bool force = false, CancellationToken cancellationToken = default);
+
+    /// <summary>Cleans stale administrative files for deleted worktrees (<c>git worktree prune</c>).</summary>
+    Task<GitCommandResult> PruneWorktreesAsync(string repositoryRoot, CancellationToken cancellationToken = default);
+
+    /// <summary>Full 40-character hash of <c>HEAD</c> in <paramref name="repositoryRoot"/>; null when unborn or unavailable.</summary>
+    Task<string?> GetHeadHashAsync(string repositoryRoot, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Probes a linked worktree's git status, merge relationship to the repository's default branch, unpushed commits,
+    /// and last commit timestamp for workspace cleanup evaluation.
+    /// </summary>
+    Task<GitWorkspaceCleanupProbe> ProbeWorkspaceCleanupAsync(
+        string repositoryRoot,
+        string worktreePath,
+        string? baseRef = null,
+        CancellationToken cancellationToken = default);
 }
 
 /// <param name="GitDirectory">Holds HEAD and index (per worktree).</param>

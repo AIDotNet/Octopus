@@ -48,7 +48,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid Background="{arc:ArcDesignTokenResource SurfaceMuted}" RowDefinitions="Auto,*">
+    <Grid Background="{arc:ArcDesignTokenResource SurfaceMuted}" RowDefinitions="Auto,Auto,*">
         <!-- The top row lines up with the window's top row; the right end stays free for the panel switch (and the caption buttons) the window floats there, see TrailingInset. -->
         <Grid x:Name="TopBar" Height="{DynamicResource OctopusTopRowHeight}" Background="Transparent" ColumnDefinitions="Auto,*,44"
               PointerPressed="OnTopBarPointerPressed">
@@ -59,19 +59,34 @@
                              Label="{l:AppLangResource ExplorerTabs}" />
         </Grid>
 
+        <!-- Shown above Files / Git when following a branch worktree tab so the user never confuses worktree vs main. -->
+        <Border Grid.Row="1" IsVisible="{Binding HasWorkspaceBanner}"
+                Margin="8,2,8,4" Padding="8,4"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                arc:Tooltip.Tip="{Binding ProjectPath}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <lucide:LucideIcon Kind="GitBranch" Size="12" VerticalAlignment="Center"
+                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" FontWeight="SemiBold"
+                           Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                           Text="{Binding WorkspaceBannerText}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Border>
+
         <!-- No project -->
-        <arc:EmptyState Grid.Row="1" IsVisible="{Binding HasNoProject}" VerticalAlignment="Top" Margin="12,24"
+        <arc:EmptyState Grid.Row="2" IsVisible="{Binding HasNoProject}" VerticalAlignment="Top" Margin="12,24"
                         Title="{l:AppLangResource ExplorerNoProject}" Description="{l:AppLangResource ExplorerNoProjectHint}"
                         Icon="{x:Static arc:ArcIcons.FileText}" />
 
-        <files:FilesTabView Grid.Row="1" IsVisible="{Binding IsFilesTab}" />
-        <Panel Grid.Row="1" IsVisible="{Binding IsGitTab}">
+        <files:FilesTabView Grid.Row="2" IsVisible="{Binding IsFilesTab}" />
+        <Panel Grid.Row="2" IsVisible="{Binding IsGitTab}">
             <git:GitTabView DataContext="{Binding Git}" />
         </Panel>
-        <Panel Grid.Row="1" IsVisible="{Binding IsTunnelsTab}">
+        <Panel Grid.Row="2" IsVisible="{Binding IsTunnelsTab}">
             <tunnels:TunnelsTabView DataContext="{Binding Tunnels}" />
         </Panel>
-        <Panel Grid.Row="1" IsVisible="{Binding IsSessionsTab}">
+        <Panel Grid.Row="2" IsVisible="{Binding IsSessionsTab}">
             <sessions:SessionsTabView DataContext="{Binding Sessions}" />
         </Panel>
     </Grid>

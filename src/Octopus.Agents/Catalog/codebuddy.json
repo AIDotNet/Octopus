@@ -68,5 +68,20 @@
       "waiting": ["permission-request"],
       "done": ["stop", "final-stop"]
     }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "--acp"
+    ],
+    "dialect": "codebuddy",
+    "minVersion": "2.121.0",
+    "permissionStrategy": "agentMode",
+    "permissionModes": {
+      "default": "default",
+      "acceptEdits": "acceptEdits",
+      "auto": "auto",
+      "full": "fullAccess"
+    }
   }
 }

@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "id": "minimax",
+  "name": "MiniMax Code",
+  "icon": "minimax",
+  "homepage": "https://www.minimax.io",
+  "verified": false,
+  "detect": {
+    "executables": ["minimax-code-acp", "minimax"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @minimax-ai/code-acp" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "auto": { "args": ["--auto"] }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "MINIMAX_API_KEY", "label": "MiniMax API key", "secret": true, "localized": { "zh-CN": { "label": "MiniMax API 密钥" } } }
+      ],
+      "allowCustom": true
+    }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "minimax-code",
+      "executables": ["minimax-code-acp"],
+      "args": ["acp"],
+      "npxPackage": "@minimax-ai/code-acp",
+      "npxArgs": ["acp"]
+    }
+  }
+}

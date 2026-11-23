@@ -34,6 +34,10 @@ public sealed partial class SessionRowViewModel : ObservableObject, IDisposable
     public string? Detail => Session.Detail;
     public string? Preview => Session.Preview;
     public bool HasPreview => !string.IsNullOrEmpty(Session.Preview);
+    public string? WorkspaceBranch => Session.WorkspaceBranch;
+    public bool HasWorkspace => !string.IsNullOrEmpty(Session.WorkspaceBranch);
+    public string? WorkspaceTaskKey => Session.WorkspaceTaskKey;
+    public bool HasWorkspaceTask => !string.IsNullOrEmpty(Session.WorkspaceTaskKey);
     public bool IsWaiting => Session.Activity == SessionActivity.Waiting;
     public bool IsWorking => Session.Activity == SessionActivity.Working;
     public bool IsError => Session.Activity == SessionActivity.Error;

@@ -99,7 +99,7 @@ public class RemoteProjectTests
 
         public OtherComputer()
         {
-            Projects = new ProjectService(new InMemoryProjectStore(), AppHost.Get<PathComparer>(), new InMemorySettingsStore());
+            Projects = new ProjectService(new InMemoryProjectStore(), AppHost.Get<PathComparer>());
             Workspace = new HostWorkspace(Projects, AppHost.Get<IItemLaunchService>(), Programs, Sessions, AppHost.Get<ITabContentRegistry>(),
                 AppHost.Get<IItemActivityService>(), AppHost.Get<IAgentCatalog>(), AppHost.Get<IAgentScanner>(), AppHost.Get<ISettingsStore>(), AppHost.Get<IShellResolver>(),
                 AppHost.Get<Octopus.FileSystem.IFileTreeService>(), AppHost.Get<Octopus.Git.IGitService>(), AppHost.Get<Octopus.App.Common.PathComparer>());

@@ -14,6 +14,20 @@ internal static class SettingsNormalizer
         settings.Updates ??= new();
         settings.Tray ??= new();
         settings.Remote ??= new();
+        settings.Workspaces ??= new();
+        settings.Workspaces.RootDirectory = string.IsNullOrWhiteSpace(settings.Workspaces.RootDirectory)
+            ? null
+            : settings.Workspaces.RootDirectory.Trim();
+        settings.WorkspaceCleanup ??= new();
+        settings.WorkspaceCleanup.InactiveDays = settings.WorkspaceCleanup.InactiveDays <= 0
+            ? WorkspaceCleanupSettings.DefaultInactiveDays
+            : Math.Clamp(settings.WorkspaceCleanup.InactiveDays, WorkspaceCleanupSettings.MinInactiveDays, WorkspaceCleanupSettings.MaxInactiveDays);
+        settings.WorkspaceCleanup.CheckIntervalMinutes = settings.WorkspaceCleanup.CheckIntervalMinutes <= 0
+            ? WorkspaceCleanupSettings.DefaultCheckIntervalMinutes
+            : Math.Clamp(settings.WorkspaceCleanup.CheckIntervalMinutes, WorkspaceCleanupSettings.MinCheckIntervalMinutes, WorkspaceCleanupSettings.MaxCheckIntervalMinutes);
+        settings.WorkspaceCleanup.UnchangedGraceHours = settings.WorkspaceCleanup.UnchangedGraceHours < 0
+            ? WorkspaceCleanupSettings.DefaultUnchangedGraceHours
+            : Math.Clamp(settings.WorkspaceCleanup.UnchangedGraceHours, 0, WorkspaceCleanupSettings.MaxUnchangedGraceHours);
         if (!UiDensityValues.IsKnown(settings.Appearance.Density))
             settings.Appearance.Density = UiDensityValues.Compact;
         // 0 is allowed: the system then picks a free port (tests, and a second instance on one machine).

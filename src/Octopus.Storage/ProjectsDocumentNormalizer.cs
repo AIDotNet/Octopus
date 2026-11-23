@@ -17,6 +17,21 @@ internal static class ProjectsDocumentNormalizer
             project.Items.RemoveAll(i => i is null || !itemIds.Add(i.Id ?? ""));
             if (project.ActiveItemId is not null && project.Items.All(i => i.Id != project.ActiveItemId))
                 project.ActiveItemId = null;
+            project.Workspaces ??= [];
+            var workspaceIds = new HashSet<string>();
+            project.Workspaces.RemoveAll(w => w is null || string.IsNullOrWhiteSpace(w.Id) || string.IsNullOrWhiteSpace(w.Path) || !workspaceIds.Add(w.Id));
+            foreach (var workspace in project.Workspaces)
+            {
+                workspace.Name ??= "";
+                workspace.Branch ??= "";
+            }
+            foreach (var item in project.Items)
+            {
+                if (item.WorkspaceId is not null && !workspaceIds.Contains(item.WorkspaceId))
+                {
+                    item.WorkspaceId = null;
+                }
+            }
             // A tunnel without an id cannot be started or told apart; a repeated id would make two rows one.
             project.Tunnels ??= [];
             var tunnelIds = new HashSet<string>();

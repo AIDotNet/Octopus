@@ -54,9 +54,14 @@ public class SessionNameTests
     [Fact]
     public void The_payload_gives_the_prompt_and_the_transcript()
     {
-        Assert.Equal(("hi", "/t.jsonl"), SessionName.ReadPayload("""{"prompt":"hi","transcript_path":"/t.jsonl","session_id":"x"}"""));
-        Assert.Equal((null, null), SessionName.ReadPayload("not json"));
-        Assert.Equal((null, null), SessionName.ReadPayload("""{"prompt":3}"""));
+        Assert.Equal(
+            new SessionPayload("hi", "/t.jsonl", "x"),
+            SessionName.ReadPayload("""{"prompt":"hi","transcript_path":"/t.jsonl","session_id":"x"}"""));
+        Assert.Equal(
+            new SessionPayload("反重力的标签没有拿到会话标题", "/a/brain/c1/.system_generated/logs/transcript.jsonl", "c1", "/a/brain/c1"),
+            SessionName.ReadPayload("""{"lastUserInput":"反重力的标签没有拿到会话标题","transcriptPath":"/a/brain/c1/.system_generated/logs/transcript.jsonl","conversationId":"c1","artifactDirectoryPath":"/a/brain/c1"}"""));
+        Assert.Equal(default, SessionName.ReadPayload("not json"));
+        Assert.Equal(default, SessionName.ReadPayload("""{"prompt":3}"""));
     }
 
     [Fact]
@@ -267,5 +272,148 @@ public class ItemActivityTests
         // A real terminal title still wins.
         activity.ReportTitle(agent.Id, "✳ Another topic");
         Assert.Equal("Another topic", agent.Title);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public void An_antigravity_session_is_titled_from_lastUserInput_then_conversation_summaries_and_resets_on_session_switch()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-agy-activity-").FullName;
+        var dbPath = Path.Combine(dir, "conversation_summaries.db");
+        void UpsertSummary(string id, string title, string preview)
+        {
+            var cs = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = dbPath, Pooling = false }.ToString();
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection(cs);
+            conn.Open();
+            using var create = conn.CreateCommand();
+            create.CommandText = """
+                CREATE TABLE IF NOT EXISTS conversation_summaries (
+                    conversation_id text PRIMARY KEY,
+                    title text NOT NULL DEFAULT "",
+                    preview text NOT NULL DEFAULT ""
+                );
+                """;
+            create.ExecuteNonQuery();
+            using var upsert = conn.CreateCommand();
+            upsert.CommandText = """
+                INSERT INTO conversation_summaries (conversation_id, title, preview)
+                VALUES ($id, $title, $preview)
+                ON CONFLICT(conversation_id) DO UPDATE SET title = excluded.title, preview = excluded.preview;
+                """;
+            upsert.Parameters.AddWithValue("$id", id);
+            upsert.Parameters.AddWithValue("$title", title);
+            upsert.Parameters.AddWithValue("$preview", preview);
+            upsert.ExecuteNonQuery();
+        }
+
+        string TranscriptOf(string id) => Path.Combine(dir, "brain", id, ".system_generated", "logs", "transcript.jsonl");
+        string ArtifactsOf(string id) => Path.Combine(dir, "brain", id);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var agent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "agy", Title = "Antigravity CLI" };
+        projects.AddItem(project, agent);
+        _ = AppHost.Get<IItemActivityService>();
+        var hub = AppHost.Get<ISignalHub>();
+        AgentSignal Signal(string channel, object payload) =>
+            new("agy", channel, agent.Id, "", 0, 0, System.Text.Json.JsonSerializer.Serialize(payload));
+
+        void WaitTitle(string expected)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (agent.Title != expected && DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(20);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Assert.Equal(expected, agent.Title);
+        }
+
+        // SessionStart on a fresh conversation leaves the default name until a prompt or stored title exists.
+        hub.Publish(Signal("session-start", new { conversationId = "conv-1", transcriptPath = TranscriptOf("conv-1"), artifactDirectoryPath = ArtifactsOf("conv-1") }));
+        Frames.Pump();
+        Assert.Equal("Antigravity CLI", agent.Title);
+
+        // First PreInvocation titles the tab immediately from lastUserInput.
+        hub.Publish(Signal("invocation", new
+        {
+            conversationId = "conv-1",
+            transcriptPath = TranscriptOf("conv-1"),
+            artifactDirectoryPath = ArtifactsOf("conv-1"),
+            lastUserInput = "反重力的标签没有拿到会话标题",
+        }));
+        Frames.Pump();
+        Assert.Equal("反重力的标签没有拿到会话标题", agent.Title);
+
+        // Once agy writes the generated title to conversation_summaries.db, Stop picks it up.
+        UpsertSummary("conv-1", "Anti-Gravity Label Missing", "反重力的标签没有拿到会话标题");
+        hub.Publish(Signal("stop", new
+        {
+            conversationId = "conv-1",
+            transcriptPath = TranscriptOf("conv-1"),
+            artifactDirectoryPath = ArtifactsOf("conv-1"),
+            lastUserInput = "反重力的标签没有拿到会话标题",
+        }));
+        WaitTitle("Anti-Gravity Label Missing");
+
+        // Follow-up prompts in the same conversation do not clobber the generated title.
+        hub.Publish(Signal("invocation", new
+        {
+            conversationId = "conv-1",
+            transcriptPath = TranscriptOf("conv-1"),
+            artifactDirectoryPath = ArtifactsOf("conv-1"),
+            lastUserInput = "再检查一下边界情况",
+        }));
+        Frames.Pump();
+        Assert.Equal("Anti-Gravity Label Missing", agent.Title);
+
+        // Switching to another conversation (/resume or /new) resets naming and picks up the new conversation's title.
+        UpsertSummary("conv-2", "", "登陆的弹窗需要优化一下");
+        hub.Publish(Signal("session-start", new
+        {
+            conversationId = "conv-2",
+            transcriptPath = TranscriptOf("conv-2"),
+            artifactDirectoryPath = ArtifactsOf("conv-2"),
+        }));
+        WaitTitle("登陆的弹窗需要优化一下");
+
+        UpsertSummary("conv-2", "Login Dialog Polish", "登陆的弹窗需要优化一下");
+        hub.Publish(Signal("stop", new
+        {
+            conversationId = "conv-2",
+            transcriptPath = TranscriptOf("conv-2"),
+            artifactDirectoryPath = ArtifactsOf("conv-2"),
+        }));
+        WaitTitle("Login Dialog Polish");
+    }
+
+    [AvaloniaFact, FreshApp]
+    public void A_resumed_session_keeps_its_title_across_follow_up_prompts_and_generic_agent_titles()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-resumed-activity-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var agent = new ProjectItem
+        {
+            Kind = ProjectItemKind.Agent,
+            AgentId = "agy",
+            Title = "登陆的弹窗需要优化一下",
+            Launch = new Octopus.Core.Agents.AgentLaunchOptions { SessionId = "conv-resumed" },
+        };
+        projects.AddItem(project, agent);
+        var activity = AppHost.Get<IItemActivityService>();
+        var hub = AppHost.Get<ISignalHub>();
+
+        // Generic agent title or follow-up prompt in the same resumed session must not overwrite its title.
+        activity.ReportTitle(agent.Id, "Antigravity CLI");
+        hub.Publish(new AgentSignal("agy", "invocation", agent.Id, "", 0, 0,
+            """{"conversationId":"conv-resumed","lastUserInput":"继续"}"""));
+        Frames.Pump();
+        Assert.Equal("登陆的弹窗需要优化一下", agent.Title);
+
+        // Starting a different session in the same tab replaces the old title.
+        hub.Publish(new AgentSignal("agy", "invocation", agent.Id, "", 0, 0,
+            """{"conversationId":"conv-new","lastUserInput":"修复标签标题"}"""));
+        Frames.Pump();
+        Assert.Equal("修复标签标题", agent.Title);
     }
 }

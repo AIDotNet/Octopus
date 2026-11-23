@@ -1,13 +1,28 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using Octopus.Agents.Sessions;
 
 namespace Octopus.App.Activity;
 
+/// <summary>The naming clues extracted from an agent hook payload.</summary>
+public readonly record struct SessionPayload(
+    string? Prompt,
+    string? TranscriptPath,
+    string? SessionId = null,
+    string? ArtifactDirectoryPath = null);
+
+/// <summary>
+/// A session title read from an agent's own storage: <see cref="Title"/> is an explicit or AI-generated title (takes
+/// precedence over a prompt fallback); <see cref="FallbackPrompt"/> is a prompt/preview found when no title exists yet.
+/// </summary>
+public readonly record struct StoredSessionTitle(string? Title, string? FallbackPrompt = null);
+
 /// <summary>
 /// The session name an agent's hook payload leads to. Claude Code names a session only once a turn is about
-/// something (an <c>ai-title</c> record in its transcript, mirrored in the terminal title); a greeting such as
-/// "你好" never gets one, and the title stays "Claude Code". Until a name exists, the first prompt stands in.
+/// something (an <c>ai-title</c> record in its transcript, mirrored in the terminal title); Antigravity CLI writes its
+/// generated title to <c>conversation_summaries.db</c> without setting a terminal title. Until a name exists, the first
+/// prompt stands in.
 /// </summary>
 public static class SessionName
 {
@@ -19,23 +34,53 @@ public static class SessionName
 
     private static readonly byte[] AiTitleMarker = "\"ai-title\""u8.ToArray();
 
-    /// <summary>The prompt and transcript path a hook payload carries; nulls when it is not JSON or has none.</summary>
-    public static (string? Prompt, string? TranscriptPath) ReadPayload(string payload)
+    /// <summary>
+    /// The prompt, transcript path, session/conversation id and artifact directory a hook payload carries; empty
+    /// record when it is not JSON or has none. Understands both snake_case (Claude Code) and camelCase (Antigravity CLI).
+    /// </summary>
+    public static SessionPayload ReadPayload(string payload)
     {
         if (string.IsNullOrWhiteSpace(payload) || payload.TrimStart()[0] != '{')
         {
-            return (null, null);
+            return default;
         }
         try
         {
             using var document = JsonDocument.Parse(payload);
             var root = document.RootElement;
-            return (StringOf(root, "prompt"), StringOf(root, "transcript_path"));
+            return new SessionPayload(
+                NonEmptyStringOf(root, "prompt") ?? NonEmptyStringOf(root, "lastUserInput") ?? NonEmptyStringOf(root, "last_user_input"),
+                NonEmptyStringOf(root, "transcript_path") ?? NonEmptyStringOf(root, "transcriptPath"),
+                NonEmptyStringOf(root, "session_id")
+                    ?? NonEmptyStringOf(root, "sessionId")
+                    ?? NonEmptyStringOf(root, "conversationId")
+                    ?? NonEmptyStringOf(root, "conversation_id"),
+                NonEmptyStringOf(root, "artifactDirectoryPath") ?? NonEmptyStringOf(root, "artifact_directory_path"));
         }
         catch (JsonException)
         {
-            return (null, null);
+            return default;
         }
+    }
+
+    /// <summary>
+    /// Reads the stored session title for an agent dialect: Antigravity CLI keeps its generated title in
+    /// <c>conversation_summaries.db</c>; Claude-compatible agents write <c>ai-title</c> records to their transcript.
+    /// </summary>
+    public static StoredSessionTitle ReadStoredTitle(string dialect, SessionPayload payload, string? agyDefaultDirectory = null)
+    {
+        if (string.Equals(dialect, AgySessionSource.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            var (title, preview) = AgySessionSource.ReadConversationTitle(
+                payload.SessionId,
+                payload.TranscriptPath,
+                payload.ArtifactDirectoryPath,
+                agyDefaultDirectory);
+            return new StoredSessionTitle(title, preview);
+        }
+        return payload.TranscriptPath is { Length: > 0 } path
+            ? new StoredSessionTitle(ReadTranscriptTitle(path))
+            : default;
     }
 
     /// <summary>
@@ -121,6 +166,9 @@ public static class SessionName
             return null;
         }
     }
+
+    private static string? NonEmptyStringOf(JsonElement element, string name) =>
+        StringOf(element, name) is { } text && !string.IsNullOrWhiteSpace(text) ? text : null;
 
     private static string? StringOf(JsonElement element, string name) =>
         element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

@@ -133,10 +133,14 @@ public sealed partial class ModelPriceCatalog : IDisposable
         if (models.Count > 0)
         {
             // Claude Code writes "claude-sonnet-5.5" as well as "claude-sonnet-5-5"; GPT ids keep their dots; some ids
-            // carry a release date.
-            foreach (var candidate in (string[])[key, DigitDot().Replace(key, "$1-$2"), DigitDash().Replace(key, "$1.$2"), DateSuffix().Replace(key, "")])
+            // carry a release date, an effort suffix (Antigravity CLI: "gemini-4-neon-xhigh", "claude-sonnet-5-5-medium")
+            // or a build variant (Grok CLI: "grok-4.7-build").
+            foreach (var variant in (string[])[key, DateSuffix().Replace(key, ""), EffortSuffix().Replace(key, ""), BuildSuffix().Replace(key, "")])
             {
-                if (models.TryGetValue(candidate, out var price)) return price;
+                foreach (var candidate in (string[])[variant, DigitDot().Replace(variant, "$1-$2"), DigitDash().Replace(variant, "$1.$2")])
+                {
+                    if (models.TryGetValue(candidate, out var price)) return price;
+                }
             }
         }
         foreach (var (pattern, input, output, cacheRead) in Builtin)
@@ -288,4 +292,10 @@ public sealed partial class ModelPriceCatalog : IDisposable
 
     [GeneratedRegex(@"-\d{8}$")]
     private static partial Regex DateSuffix();
+
+    [GeneratedRegex(@"-(?:low|medium|high|xhigh|max)$")]
+    private static partial Regex EffortSuffix();
+
+    [GeneratedRegex(@"-build(?:-fast)?$")]
+    private static partial Regex BuildSuffix();
 }

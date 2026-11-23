@@ -18,6 +18,11 @@ public interface IHostWorkspace
     Task<ItemMessage> CreateItemAsync(CreateItemMessage request);
     Task RemoveItemAsync(string itemId);
     Task RenameItemAsync(string itemId, string? title);
+    /// <summary>Returns git branches and optional GitHub issues/PRs available for creating a branch workspace in a project.</summary>
+    Task<WorkspaceOptionsMessage> GetWorkspaceOptionsAsync(string projectId) => Task.FromResult(new WorkspaceOptionsMessage());
+    /// <summary>Creates an isolated git worktree workspace under <c>~/.octopus/workspaces/&lt;project&gt;/&lt;branch&gt;</c> on this host.</summary>
+    Task<WorkspaceMessage> CreateWorkspaceAsync(CreateWorkspaceMessage request) =>
+        throw new RemoteException(RemoteProtocol.MethodNotFound, "Branch workspaces are not supported by this host.");
     Task<IReadOnlyList<AgentMessage>> ListAgentsAsync();
 
     /// <summary>

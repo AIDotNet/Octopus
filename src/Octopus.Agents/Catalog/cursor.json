@@ -86,5 +86,13 @@
       "select": ["subscriptionTier"],
       "minIntervalSec": 86400
     }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "--disable-auto-update",
+      "acp"
+    ],
+    "dialect": "cursor"
   }
 }

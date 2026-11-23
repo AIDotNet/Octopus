@@ -1,0 +1,153 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:dialogs="using:Octopus.App.Dialogs"
+             x:Class="Octopus.App.Dialogs.InspectWorkspacesView"
+             x:DataType="dialogs:InspectWorkspacesViewModel">
+    <StackPanel Spacing="12">
+        <!-- Toolbar: filter tabs, summary and quick selection actions -->
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+            <arc:ToggleGroup x:Name="FilterTabs" Size="Small" SelectedValue="{Binding Filter, Mode=TwoWay}"
+                             Label="{l:AppLangResource WorkspaceInspectTitle}" />
+            <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center"
+                       Text="{Binding SummaryText}" TextTrimming="CharacterEllipsis"
+                       IsVisible="{Binding !IsLoading}" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <arc:Button Variant="Ghost" Size="Small"
+                            IsEnabled="{Binding HasAnySuggested}"
+                            Command="{Binding SelectRecommendedCommand}"
+                            Content="{l:AppLangResource WorkspaceInspectSelectRecommended}" />
+                <arc:Button Variant="Ghost" Size="Small"
+                            IsVisible="{Binding HasSelection}"
+                            Command="{Binding ClearSelectionCommand}"
+                            Content="{l:AppLangResource WorkspaceInspectClearSelection}" />
+                <arc:Button Variant="Secondary" Size="Small"
+                            IsLoading="{Binding IsLoading}"
+                            Command="{Binding RefreshCommand}"
+                            AutomationProperties.Name="{l:AppLangResource WorkspaceInspectRefresh}"
+                            arc:Tooltip.Tip="{l:AppLangResource WorkspaceInspectRefresh}">
+                    <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+                </arc:Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Workspace list -->
+        <Border CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                BorderThickness="1"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                Background="{arc:ArcDesignTokenResource Surface}"
+                MinHeight="180"
+                MaxHeight="380"
+                ClipToBounds="True">
+            <Panel>
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Margin="16,24" IsVisible="{Binding IsLoading}">
+                    <arc:ArcSpinner Width="14" Height="14" Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                    <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceInspectLoading}" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20,24"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding ShowEmpty}"
+                           Text="{l:AppLangResource WorkspaceInspectEmpty}" />
+
+                <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20,24"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding ShowFilterEmpty}"
+                           Text="{l:AppLangResource WorkspaceInspectNoFilterMatch}" />
+
+                <arc:ScrollArea FadeLength="0" HorizontalScrollBarVisibility="Disabled"
+                                IsVisible="{Binding !IsLoading}">
+                    <ItemsControl ItemsSource="{Binding Filtered}" Margin="0,-1,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="dialogs:InspectWorkspaceRowViewModel">
+                                <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                        BorderThickness="0,1,0,0"
+                                        Padding="12,10">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <CheckBox Grid.Column="0"
+                                                  VerticalAlignment="Top"
+                                                  Margin="0,2,0,0"
+                                                  IsEnabled="{Binding CanSelect}"
+                                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  AutomationProperties.Name="{Binding BranchName}" />
+
+                                        <StackPanel Grid.Column="1" Spacing="4">
+                                            <!-- Line 1: project name, branch name, linked task -->
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Border CornerRadius="4" Padding="5,1" VerticalAlignment="Center"
+                                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                        BorderThickness="1" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}">
+                                                    <TextBlock Classes="hint" FontWeight="Medium" Text="{Binding ProjectName}" />
+                                                </Border>
+                                                <lucide:LucideIcon Kind="GitBranch" Size="13" VerticalAlignment="Center"
+                                                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                                <TextBlock Classes="body" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                           Text="{Binding BranchName}" TextTrimming="CharacterEllipsis" />
+                                                <Border IsVisible="{Binding HasTask}" CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                                                        Padding="6,1" VerticalAlignment="Center"
+                                                        Background="{arc:ArcDesignTokenResource AccentSubtle}">
+                                                    <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                               Text="{Binding TaskKey}" />
+                                                </Border>
+                                            </StackPanel>
+
+                                            <!-- Line 2: matched cleanup reasons and protection badges -->
+                                            <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
+                                                <arc:Badge Size="Small" Tone="Success" Content="{Binding MergedBadgeText}" IsVisible="{Binding IsMerged}" />
+                                                <arc:Badge Size="Small" Tone="Info" Content="{l:AppLangResource WorkspaceInspectBadgeUnchanged}" IsVisible="{Binding IsUnchanged}" />
+                                                <arc:Badge Size="Small" Tone="Warning" Content="{Binding InactiveBadgeText}" IsVisible="{Binding IsInactive}" />
+
+                                                <arc:Badge Size="Small" Tone="Neutral" Content="{l:AppLangResource WorkspaceInspectBadgePinned}" IsVisible="{Binding IsPinned}" />
+                                                <arc:Badge Size="Small" Tone="Warning" Content="{Binding RunningBadgeText}" IsVisible="{Binding HasRunning}" />
+                                                <arc:Badge Size="Small" Tone="Danger" Content="{l:AppLangResource WorkspaceInspectBadgeUnsaved}" IsVisible="{Binding HasUnsavedEdits}" />
+                                                <arc:Badge Size="Small" Tone="Warning" Content="{Binding UncommittedBadgeText}" IsVisible="{Binding HasUncommitted}" />
+                                                <arc:Badge Size="Small" Tone="Warning" Content="{Binding UnpushedBadgeText}" IsVisible="{Binding HasUnpushed}" />
+                                                <arc:Badge Size="Small" Tone="Neutral" Content="{l:AppLangResource WorkspaceInspectBadgeUnavailable}" IsVisible="{Binding HasStatusUnavailable}" />
+                                            </WrapPanel>
+
+                                            <!-- Line 3: path + last activity -->
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                                <TextBlock Grid.Column="0" Classes="mono" Text="{Binding ShortPath}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="1" Classes="hint" Text="{Binding LastActivityText}" />
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                            <arc:Button Variant="Ghost" Size="Small"
+                                                        Command="{Binding TogglePinCommand}"
+                                                        AutomationProperties.Name="{Binding PinTooltip}"
+                                                        arc:Tooltip.Tip="{Binding PinTooltip}">
+                                                <Panel>
+                                                    <lucide:LucideIcon Kind="PinOff" Size="14" IsVisible="{Binding IsPinned}"
+                                                                       Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                                    <lucide:LucideIcon Kind="Pin" Size="14" IsVisible="{Binding !IsPinned}" />
+                                                </Panel>
+                                            </arc:Button>
+                                            <arc:Button Variant="Ghost" Size="Small"
+                                                        Command="{Binding RevealCommand}"
+                                                        AutomationProperties.Name="{l:AppLangResource WorkspaceRevealFolder}"
+                                                        arc:Tooltip.Tip="{l:AppLangResource WorkspaceRevealFolder}">
+                                                <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                                            </arc:Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </arc:ScrollArea>
+            </Panel>
+        </Border>
+
+        <arc:Alert Tone="Warning"
+                   IsVisible="{Binding HasForceWarning}"
+                   Content="{Binding ForceWarningText}" />
+
+        <TextBlock Classes="hint" Text="{Binding BranchNoteText}" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

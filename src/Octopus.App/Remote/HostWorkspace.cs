@@ -4,6 +4,7 @@ using Octopus.Agents;
 using Octopus.App.Activity;
 using Octopus.App.Common;
 using Octopus.App.Services;
+using Octopus.App.Services.Workspaces;
 using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
@@ -37,14 +38,19 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     private readonly Octopus.FileSystem.IFileTreeService _files;
     private readonly Octopus.Git.IGitService _git;
     private readonly PathComparer _paths;
+    private readonly IWorkspaceManager? _workspaces;
+    private readonly IGitHubTaskProvider? _taskProvider;
 
     public HostWorkspace(IProjectService projects, IItemLaunchService launcher, ITerminalConnectionFactory factory, TerminalSessionRegistry sessions,
         ITabContentRegistry tabs, IItemActivityService activity, IAgentCatalog catalog, IAgentScanner scanner, ISettingsStore settings, IShellResolver shells,
-        Octopus.FileSystem.IFileTreeService files, Octopus.Git.IGitService git, PathComparer paths)
+        Octopus.FileSystem.IFileTreeService files, Octopus.Git.IGitService git, PathComparer paths,
+        IWorkspaceManager? workspaces = null, IGitHubTaskProvider? taskProvider = null)
     {
         _files = files;
         _git = git;
         _paths = paths;
+        _workspaces = workspaces;
+        _taskProvider = taskProvider;
         _projects = projects;
         _launcher = launcher;
         _factory = factory;
@@ -102,6 +108,13 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     public Task<ItemMessage> CreateItemAsync(CreateItemMessage request) => OnUi(() =>
     {
         var project = FindProject(request.ProjectId);
+        ProjectWorkspace? workspace = null;
+        if (!string.IsNullOrWhiteSpace(request.WorkspaceId))
+        {
+            workspace = project.Workspaces.FirstOrDefault(w => w.Id == request.WorkspaceId)
+                ?? throw new RemoteException(RemoteMethods.NotFound, "The branch workspace does not exist on the host.");
+        }
+
         ProjectItem item;
         if (request.Kind == ItemKinds.Agent)
         {
@@ -110,16 +123,24 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             {
                 throw new RemoteException(RemoteMethods.NotFound, $"The agent '{request.AgentId}' is not installed on the host.");
             }
+            var prompt = Blank(request.Prompt);
+            if (request.InjectTaskPrompt && workspace?.Task is { } task)
+            {
+                var taskBlock = WorkspaceManager.FormatTaskPrompt(task);
+                prompt = prompt is null ? taskBlock : $"{taskBlock}\n\n{prompt}";
+            }
             item = new ProjectItem
             {
                 Kind = ProjectItemKind.Agent,
                 AgentId = definition.Id,
                 Title = definition.Name,
+                WorkspaceId = workspace?.Id,
+                WorkingDirectory = workspace?.Path,
                 Launch = new AgentLaunchOptions
                 {
                     Model = Blank(request.Model),
                     Effort = Blank(request.Effort),
-                    Prompt = Blank(request.Prompt),
+                    Prompt = prompt,
                 },
             };
         }
@@ -127,7 +148,13 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         {
             var chosen = _settings.Current.Terminal.Shell;
             var shell = (string.IsNullOrEmpty(chosen) ? null : _shells.Describe(chosen)) ?? _shells.GetDefaultShell();
-            item = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = shell.Name };
+            item = new ProjectItem
+            {
+                Kind = ProjectItemKind.Terminal,
+                Title = shell.Name,
+                WorkspaceId = workspace?.Id,
+                WorkingDirectory = workspace?.Path,
+            };
         }
         // Behind whatever the person at this computer is looking at.
         _projects.AddItem(project, item, activate: false);
@@ -153,6 +180,152 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         _projects.RenameItem(itemId, Blank(title));
         return true;
     });
+
+    public async Task<WorkspaceOptionsMessage> GetWorkspaceOptionsAsync(string projectId)
+    {
+        var project = await OnUi(() => FindProject(projectId)).ConfigureAwait(false);
+        if (!Directory.Exists(project.Path)) return new WorkspaceOptionsMessage();
+        var repoRoot = await _git.FindRepositoryRootAsync(project.Path).ConfigureAwait(false);
+        if (repoRoot is null) return new WorkspaceOptionsMessage();
+
+        var branchesTask = _git.GetBranchesAsync(repoRoot);
+        var worktreesTask = _git.GetWorktreesAsync(repoRoot);
+        Task<TaskProviderResult>? issuesTask = null;
+        Task<TaskProviderResult>? prsTask = null;
+        CancellationTokenSource? taskLimit = null;
+        if (_taskProvider is not null)
+        {
+            taskLimit = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+            issuesTask = SafeLoadTasksAsync(() => _taskProvider.ListIssuesAsync(repoRoot, taskLimit.Token));
+            prsTask = SafeLoadTasksAsync(() => _taskProvider.ListPullRequestsAsync(repoRoot, taskLimit.Token));
+        }
+
+        await Task.WhenAll(branchesTask, worktreesTask).ConfigureAwait(false);
+        var branches = branchesTask.Result;
+        var worktrees = worktreesTask.Result;
+
+        var occupied = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var wt in worktrees)
+        {
+            if (string.IsNullOrWhiteSpace(wt.Branch)) continue;
+            occupied[wt.Branch] = wt.IsMain ? project.Name : (wt.Branch ?? Path.GetFileName(wt.Path));
+        }
+
+        var defaultBranch = branches.FirstOrDefault(b => !b.IsRemote && b.IsCurrent)?.Name
+            ?? branches.FirstOrDefault(b => !b.IsRemote && (b.Name == "main" || b.Name == "master"))?.Name
+            ?? branches.FirstOrDefault(b => !b.IsRemote)?.Name;
+
+        var message = new WorkspaceOptionsMessage
+        {
+            IsGitRepository = true,
+            DefaultBranch = defaultBranch,
+            WorkspacesDirectory = _workspaces is null
+                ? null
+                : WorkspacePaths.FormatHomePath(_workspaces.ProjectWorkspacesDirectory(project), _workspaces.HomeDirectory),
+            Branches =
+            [
+                .. branches.Select(b =>
+                {
+                    var localName = b.IsRemote && b.Name.IndexOf('/') is var slash and >= 0 ? b.Name[(slash + 1)..] : b.Name;
+                    occupied.TryGetValue(b.IsRemote ? localName : b.Name, out var by);
+                    return new WorkspaceBranchMessage
+                    {
+                        Name = b.Name,
+                        IsRemote = b.IsRemote,
+                        IsCurrent = b.IsCurrent,
+                        OccupiedBy = by,
+                    };
+                }),
+            ],
+        };
+
+        if (issuesTask is not null && prsTask is not null)
+        {
+            try
+            {
+                await Task.WhenAll(issuesTask, prsTask).ConfigureAwait(false);
+                var issues = issuesTask.Result;
+                var prs = prsTask.Result;
+                message.GhAvailable = issues.IsAvailable || prs.IsAvailable;
+                message.Issues = [.. issues.Items.Select(ToTaskOptionMessage)];
+                message.PullRequests = [.. prs.Items.Select(ToTaskOptionMessage)];
+            }
+            finally
+            {
+                taskLimit?.Dispose();
+            }
+        }
+
+        return message;
+    }
+
+    public async Task<WorkspaceMessage> CreateWorkspaceAsync(CreateWorkspaceMessage request)
+    {
+        if (_workspaces is null)
+        {
+            throw new RemoteException(RemoteProtocol.MethodNotFound, "Branch workspaces are not enabled on this host.");
+        }
+        var project = await OnUi(() => FindProject(request.ProjectId)).ConfigureAwait(false);
+        var branch = request.BranchName.Trim();
+        if (branch.Length == 0)
+        {
+            throw new RemoteException(RemoteProtocol.InvalidParams, "A branch name is required.");
+        }
+
+        WorkspaceTaskLink? task = null;
+        if (!string.IsNullOrWhiteSpace(request.TaskKind) || !string.IsNullOrWhiteSpace(request.TaskTitle) || !string.IsNullOrWhiteSpace(request.TaskUrl))
+        {
+            var kind = request.TaskKind switch
+            {
+                "issue" => WorkspaceTaskKind.GitHubIssue,
+                "pr" => WorkspaceTaskKind.GitHubPr,
+                "url" => WorkspaceTaskKind.Url,
+                _ => !string.IsNullOrWhiteSpace(request.TaskUrl) ? WorkspaceTaskKind.Url : WorkspaceTaskKind.Note,
+            };
+            task = new WorkspaceTaskLink
+            {
+                Kind = kind,
+                Key = string.IsNullOrWhiteSpace(request.TaskKey)
+                    ? (kind == WorkspaceTaskKind.Url ? "LINK" : "NOTE")
+                    : request.TaskKey.Trim(),
+                Title = Blank(request.TaskTitle) ?? Blank(request.TaskUrl) ?? "",
+                Url = Blank(request.TaskUrl),
+                Body = Blank(request.TaskBody),
+            };
+        }
+
+        var result = await _workspaces.CreateAsync(project, new CreateWorkspaceRequest(
+            request.CreateBranch,
+            branch,
+            Blank(request.BaseRef),
+            request.IsRemoteBranch,
+            task,
+            InjectTaskPrompt: false,
+            AfterCreate: WorkspaceAfterCreate.None)).ConfigureAwait(false);
+
+        if (!result.Succeeded || result.Workspace is null)
+        {
+            throw new RemoteException(RemoteMethods.StartFailed, result.Error ?? "Failed to create branch workspace.");
+        }
+        return ToWorkspaceMessage(result.Workspace);
+    }
+
+    private static async Task<TaskProviderResult> SafeLoadTasksAsync(Func<Task<TaskProviderResult>> load)
+    {
+        try { return await load().ConfigureAwait(false); }
+        catch (Exception e) when (e is OperationCanceledException or IOException) { return new TaskProviderResult(false, null, []); }
+    }
+
+    private static WorkspaceTaskOptionMessage ToTaskOptionMessage(RemoteTaskItem item) => new()
+    {
+        Kind = item.Kind == WorkspaceTaskKind.GitHubPr ? "pr" : "issue",
+        Key = item.Key,
+        Title = item.Title,
+        Url = item.Url,
+        Body = item.ToTaskLink().Body,
+        SuggestedBranch = item.SuggestedBranch(),
+        HeadBranch = item.HeadBranch,
+    };
 
     public Task<IReadOnlyList<AgentMessage>> ListAgentsAsync() => OnUi<IReadOnlyList<AgentMessage>>(() =>
     {
@@ -347,7 +520,12 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         return await RemoteGitDispatcher.CallAsync(_git, method, arguments).ConfigureAwait(false);
     }
 
-    private List<string> LocalRoots() => [.. _projects.Projects.Where(ProjectLocation.IsOnThisComputer).Select(p => p.Path)];
+    private List<string> LocalRoots() =>
+    [
+        .. _projects.Projects
+            .Where(ProjectLocation.IsOnThisComputer)
+            .SelectMany(p => p.Workspaces.Select(w => w.Path).Prepend(p.Path)),
+    ];
 
     /// <summary>The full path, when it is a project's folder or lies in one; anything else is refused (design/12 §5.4).</summary>
     private async Task<string> InsideProjectAsync(string path)
@@ -404,7 +582,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     {
         switch (e.Kind)
         {
-            case ProjectChangeKind.Projects or ProjectChangeKind.Items or ProjectChangeKind.Order:
+            case ProjectChangeKind.Projects or ProjectChangeKind.Items or ProjectChangeKind.Order or ProjectChangeKind.Workspaces:
                 Changed?.Invoke();
                 break;
             case ProjectChangeKind.ItemTitle when e.Item is { } item && e.Project is { } project && IsSession(item):
@@ -432,8 +610,89 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             ? (project, item)
             : throw new RemoteException(RemoteMethods.NotFound, "The item does not exist on the host.");
 
-    private static ProjectMessage ToMessage(Project project) =>
-        new() { Id = project.Id, Name = project.Name, Path = project.Path, Color = project.Color, Icon = project.Icon };
+    private static ProjectMessage ToMessage(Project project)
+    {
+        var (isGit, defaultBranch) = InspectGitRepository(project.Path);
+        return new ProjectMessage
+        {
+            Id = project.Id,
+            Name = project.Name,
+            Path = project.Path,
+            Color = project.Color,
+            Icon = project.Icon,
+            IsGitRepository = isGit,
+            DefaultBranch = defaultBranch,
+            Workspaces = project.Workspaces.Count > 0 ? [.. project.Workspaces.Select(ToWorkspaceMessage)] : null,
+        };
+    }
+
+    private static WorkspaceMessage ToWorkspaceMessage(ProjectWorkspace workspace) => new()
+    {
+        Id = workspace.Id,
+        Name = workspace.Name,
+        Branch = workspace.Branch,
+        Path = workspace.Path,
+        TaskKind = workspace.Task?.Kind switch
+        {
+            WorkspaceTaskKind.GitHubIssue => "issue",
+            WorkspaceTaskKind.GitHubPr => "pr",
+            WorkspaceTaskKind.Url => "url",
+            WorkspaceTaskKind.Note => "note",
+            _ => null,
+        },
+        TaskKey = workspace.Task?.Key,
+        TaskTitle = workspace.Task?.Title,
+        TaskUrl = workspace.Task?.Url,
+    };
+
+    private static (bool IsGit, string? Branch) InspectGitRepository(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return (false, null);
+        try
+        {
+            for (var dir = new DirectoryInfo(path); dir is not null; dir = dir.Parent)
+            {
+                var dotGit = Path.Combine(dir.FullName, ".git");
+                if (Directory.Exists(dotGit))
+                {
+                    return (true, ReadHeadBranch(Path.Combine(dotGit, "HEAD")));
+                }
+                if (File.Exists(dotGit))
+                {
+                    // Linked worktree / submodule pointer file: "gitdir: <path>"
+                    var first = File.ReadLines(dotGit).FirstOrDefault()?.Trim();
+                    if (first is not null && first.StartsWith("gitdir:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var gitDir = first["gitdir:".Length..].Trim();
+                        if (!Path.IsPathRooted(gitDir)) gitDir = Path.GetFullPath(Path.Combine(dir.FullName, gitDir));
+                        return (true, ReadHeadBranch(Path.Combine(gitDir, "HEAD")));
+                    }
+                    return (true, null);
+                }
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+        }
+        return (false, null);
+    }
+
+    private static string? ReadHeadBranch(string headFile)
+    {
+        try
+        {
+            if (!File.Exists(headFile)) return null;
+            var line = File.ReadLines(headFile).FirstOrDefault()?.Trim();
+            const string prefix = "ref: refs/heads/";
+            return line is not null && line.StartsWith(prefix, StringComparison.Ordinal)
+                ? line[prefix.Length..].Trim()
+                : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     private ItemMessage ToMessage(Project project, ProjectItem item) => new()
     {
@@ -444,6 +703,8 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         AgentId = item.AgentId,
         Model = item.Launch?.Model,
         Effort = item.Launch?.Effort,
+        WorkspaceId = item.WorkspaceId,
+        WorkspaceBranch = item.WorkspaceId is null ? null : project.Workspaces.FirstOrDefault(w => w.Id == item.WorkspaceId)?.DisplayName,
         Activity = _activity.Of(item.Id) switch
         {
             ItemActivity.Working => ItemActivities.Working,

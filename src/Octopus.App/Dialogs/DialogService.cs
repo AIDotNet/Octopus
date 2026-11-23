@@ -75,16 +75,17 @@ public sealed class DialogService(
         }
     }
 
-    public Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false)
-    {
-        if (windows.Window is null)
+    public Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false) =>
+        OnUiAsync(() =>
         {
-            return Task.FromResult(false);
-        }
-        return Dialog.ConfirmAsync(
-            windows.Window, title, description, confirmText,
-            AppLangResources.Get(AppLangResourceKind.Cancel), isDanger);
-    }
+            if (windows.Window is null)
+            {
+                return Task.FromResult(false);
+            }
+            return Dialog.ConfirmAsync(
+                windows.Window, title, description, confirmText,
+                AppLangResources.Get(AppLangResourceKind.Cancel), isDanger);
+        });
 
     public async Task<string?> AskNameAsync(string title, string label, string? initial, string confirmText)
     {
@@ -392,4 +393,134 @@ public sealed class DialogService(
         }
         return completedByExit || result is true;
     }
+
+    public Task<Octopus.App.Services.Workspaces.CreateWorkspaceRequest?> AskCreateWorkspaceAsync(
+        Project project,
+        string repositoryRoot,
+        IReadOnlyList<Octopus.Git.GitBranch> branches,
+        IReadOnlyList<Octopus.Git.GitWorktree> worktrees,
+        Octopus.App.Services.Workspaces.IGitHubTaskProvider taskProvider,
+        Func<string, string> computePath,
+        string homeDirectory,
+        string? defaultAgentName,
+        Octopus.App.Services.Workspaces.CreateWorkspaceRequest? initial = null,
+        string? initialError = null) =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return null;
+            }
+            var model = new CreateWorkspaceViewModel(
+                project,
+                repositoryRoot,
+                branches,
+                worktrees,
+                taskProvider,
+                computePath,
+                homeDirectory,
+                defaultAgentName,
+                initial,
+                initialError,
+                pickFolder: () => pickers.PickFolderAsync());
+            var projectDir = Path.GetDirectoryName(computePath("branch"))
+                ?? WorkspacePaths.ProjectWorkspacesDirectory(project.Name, project.Path, homeDirectory);
+            var displayProjectDir = WorkspacePaths.FormatHomePath(projectDir, homeDirectory).TrimEnd('/', '\\') + Path.DirectorySeparatorChar;
+            while (true)
+            {
+                var dialog = new Dialog
+                {
+                    Size = ControlSize.Large,
+                    Title = AppLangResources.Get(AppLangResourceKind.WorkspaceDialogTitle),
+                    Description = AppLangResources.Format(AppLangResourceKind.WorkspaceDialogDescription, displayProjectDir),
+                    Content = new CreateWorkspaceView(model),
+                    Actions = Dialog.BuildActions(
+                    [
+                        new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
+                        new DialogAction(AppLangResources.Get(AppLangResourceKind.WorkspaceDialogCreate), true, ButtonVariant.Primary),
+                    ]),
+                };
+                var result = await dialog.ShowAsync(windows.Window);
+                if (result is not true)
+                {
+                    return null;
+                }
+                if (model.BuildRequest() is { } request)
+                {
+                    return request;
+                }
+            }
+        });
+
+    public Task<Octopus.App.Services.Workspaces.WorkspaceCleanupRunSummary?> ShowInspectWorkspacesAsync(
+        Octopus.App.Services.Workspaces.IWorkspaceCleanupService cleanup,
+        IProjectService projects,
+        Octopus.Platform.IFileOpener? fileOpener = null) =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return null;
+            }
+            var settings = Composition.AppHost.Get<Octopus.Storage.ISettingsStore>();
+            var model = new InspectWorkspacesViewModel(cleanup, projects, fileOpener, settings.Current.WorkspaceCleanup.DeleteMergedBranch);
+            var view = new InspectWorkspacesView(model);
+            Octopus.App.Services.Workspaces.WorkspaceCleanupRunSummary? summary = null;
+
+            var cancelButton = new TKCode.Arc.Button
+            {
+                Content = AppLangResources.Get(AppLangResourceKind.Cancel),
+                Variant = ButtonVariant.Secondary,
+                Size = ControlSize.Small,
+            };
+            var removeButton = new TKCode.Arc.Button
+            {
+                Content = model.RemoveButtonText,
+                Variant = ButtonVariant.Danger,
+                Size = ControlSize.Small,
+                IsEnabled = false,
+            };
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Spacing = 8,
+            };
+            actions.Children.Add(cancelButton);
+            actions.Children.Add(removeButton);
+
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Large,
+                Title = AppLangResources.Get(AppLangResourceKind.WorkspaceInspectTitle),
+                Description = AppLangResources.Get(AppLangResourceKind.WorkspaceInspectDescription),
+                Content = view,
+                Actions = actions,
+            };
+            dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthLG)] = 740.0;
+
+            void SyncButtons()
+            {
+                removeButton.Content = model.RemoveButtonText;
+                removeButton.IsEnabled = model.CanConfirmRemove;
+                removeButton.IsLoading = model.IsRemoving;
+                cancelButton.IsEnabled = !model.IsRemoving;
+            }
+
+            model.SelectionStateChanged += (_, _) => Dispatcher.UIThread.Post(SyncButtons);
+            cancelButton.Click += (_, _) => dialog.Close(false);
+            removeButton.Click += async (_, _) =>
+            {
+                if (!model.CanConfirmRemove) return;
+                summary = await model.RemoveSelectedAsync();
+                dialog.Close(true);
+            };
+            dialog.Opened += (_, _) => _ = model.LoadAsync();
+
+            await dialog.ShowAsync(windows.Window);
+            return summary;
+        });
+
+    private static Task<T> OnUiAsync<T>(Func<Task<T>> action) =>
+        Dispatcher.UIThread.CheckAccess() ? action() : Dispatcher.UIThread.InvokeAsync(action);
 }

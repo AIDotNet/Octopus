@@ -7,6 +7,7 @@ namespace Octopus.Agents.Tests;
 public class SignalSchemaTests
 {
     private static readonly string[] SignalAgents = ["claude", "codebuddy", "codex", "grok", "cursor", "opencode", "agy"];
+    private static readonly string[] ProbeOnlyAgents = ["copilot"];
 
     [Fact]
     public void The_signal_agents_declare_signals_and_the_others_do_not()
@@ -18,6 +19,12 @@ public class SignalSchemaTests
                 Assert.NotNull(definition.Signals);
                 Assert.False(string.IsNullOrEmpty(definition.Signals!.MinVersion), definition.Id);
                 Assert.NotEmpty(definition.Signals.Channels);
+            }
+            else if (ProbeOnlyAgents.Contains(definition.Id))
+            {
+                Assert.Null(definition.Signals);
+                Assert.NotNull(definition.Probes);
+                Assert.NotEmpty(definition.Probes!);
             }
             else
             {
@@ -137,6 +144,33 @@ public class SignalSchemaTests
         Assert.Equal("{signalConfig}", opencode.Signals!.Attach.Single().Env!["OPENCODE_CONFIG_CONTENT"]);
         Assert.Equal("session.usage.updated", opencode.Signals.Channels["session-usage"].Event);
         Assert.Null(opencode.Probes);
+    }
+
+    [Fact]
+    public void Agy_and_copilot_declare_their_usage_probes_and_data_directories()
+    {
+        var home = OperatingSystem.IsWindows() ? @"C:\Users\x" : "/Users/x";
+
+        var agy = Builtins.Get("agy");
+        Assert.Equal("", SignalAccounts.Key(agy, "/anything", home));
+        Assert.Equal(Path.Combine(home, ".gemini", "antigravity-cli"), SignalAccounts.DefaultDataDirectory(agy, home));
+        var agyUsage = agy.Probes!["usage"];
+        Assert.Equal(ProbeKinds.Command, agyUsage.Kind);
+        Assert.Equal(["--print", "/usage", "--output-format", "json"], agyUsage.Args);
+        Assert.Equal(["status", "command.data.groups"], agyUsage.Select);
+        Assert.Equal(30000, agyUsage.TimeoutMs);
+        Assert.Equal(120, agyUsage.MinIntervalSec);
+
+        var copilot = Builtins.Get("copilot");
+        Assert.Equal("COPILOT_HOME", SignalAccounts.AccountEnv(copilot));
+        Assert.Equal(Path.Combine(home, ".copilot"), SignalAccounts.DefaultDataDirectory(copilot, home));
+        var copilotQuota = copilot.Probes!["quota"];
+        Assert.Equal(ProbeKinds.JsonRpcStdio, copilotQuota.Kind);
+        Assert.Equal(ProbeFramings.ContentLength, copilotQuota.Framing);
+        Assert.Equal(["--headless", "--stdio", "--no-auto-update"], copilotQuota.Args);
+        Assert.Equal(["account.getQuota"], copilotQuota.Requests.Select(r => r.Method));
+        Assert.Equal(["quotaSnapshots"], copilotQuota.Select);
+        Assert.Equal("account", copilotQuota.ExclusivePer);
     }
 
     [Fact]

@@ -11,7 +11,7 @@ public class ProjectServiceTests
     private static (ProjectService Service, InMemoryProjectStore Store) Create()
     {
         var store = new InMemoryProjectStore();
-        var service = new ProjectService(store, new PathComparer(ignoreCase: false), new InMemorySettingsStore());
+        var service = new ProjectService(store, new PathComparer(ignoreCase: false));
         service.LoadAsync().GetAwaiter().GetResult();
         return (service, store);
     }
@@ -111,16 +111,36 @@ public class ProjectServiceTests
     }
 
     [Fact]
-    public async Task Items_loaded_from_the_file_count_as_restored()
+    public async Task Items_loaded_from_the_file_keep_files_as_restored_and_drop_terminals_and_agents()
     {
-        var item = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude" };
-        var document = new ProjectsDocument { Projects = [new Project { Name = "p", Path = "/tmp/p", Items = [item] }] };
-        var service = new ProjectService(new InMemoryProjectStore(document), new PathComparer(ignoreCase: false), new InMemorySettingsStore());
+        var agent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude" };
+        var terminal = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" };
+        var file = new ProjectItem { Kind = ProjectItemKind.File, Title = "README.md", FilePath = "/tmp/p/README.md" };
+        var document = new ProjectsDocument { Projects = [new Project { Name = "p", Path = "/tmp/p", DockLayout = "{}", Items = [agent, terminal, file] }] };
+        var store = new InMemoryProjectStore(document);
+        var service = new ProjectService(store, new PathComparer(ignoreCase: false));
         await service.LoadAsync();
-        Assert.True(service.WasRestored(item.Id));
+        var kept = Assert.Single(service.Projects[0].Items);
+        Assert.Equal(file.Id, kept.Id);
+        Assert.True(service.WasRestored(file.Id));
+        Assert.False(service.WasRestored(agent.Id));
+        Assert.Null(service.Projects[0].DockLayout);
+
+        // Newly opened terminals and agents stay in memory for the current run, but are never saved to disk.
         var created = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" };
+        var createdAgent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "agy", Title = "Antigravity CLI" };
         service.AddItem(service.Projects[0], created);
+        service.AddItem(service.Projects[0], createdAgent);
+        service.SetDockLayout(service.Projects[0], "{\"v\":1}");
         Assert.False(service.WasRestored(created.Id));
+        Assert.Equal(3, service.Projects[0].Items.Count);
+
+        await service.FlushAsync();
+        var saved = await store.LoadAsync(TestContext.Current.CancellationToken);
+        var savedItem = Assert.Single(saved.Projects[0].Items);
+        Assert.Equal(file.Id, savedItem.Id);
+        Assert.Equal(file.Id, saved.Projects[0].ActiveItemId);
+        Assert.Null(saved.Projects[0].DockLayout);
     }
 
     [Fact]

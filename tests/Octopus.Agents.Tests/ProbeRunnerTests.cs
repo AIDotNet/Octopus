@@ -459,6 +459,56 @@ public sealed class ProbeRunnerTests : IDisposable
         var request = Request("initialize", """{"clientInfo":{"name":"octopus","version":"{appVersion}"},"n":1,"list":["{appVersion}",true]}""");
         var line = System.Text.Encoding.UTF8.GetString(ProbeProcess.BuildRequest(7, request, s => s.Replace("{appVersion}", "1.2.3")));
         Assert.Equal("""{"jsonrpc":"2.0","id":7,"method":"initialize","params":{"clientInfo":{"name":"octopus","version":"1.2.3"},"n":1,"list":["1.2.3",true]}}""" + "\n", line);
+
+        var framed = System.Text.Encoding.UTF8.GetString(ProbeProcess.BuildRequest(1, Request("account.getQuota", "{}"), s => s, contentLength: true));
+        const string expectedBody = """{"jsonrpc":"2.0","id":1,"method":"account.getQuota","params":{}}""";
+        Assert.Equal($"Content-Length: {System.Text.Encoding.UTF8.GetByteCount(expectedBody)}\r\n\r\n{expectedBody}", framed);
+    }
+
+    [Fact]
+    public async Task Content_length_json_rpc_probe_reads_framed_responses_and_sets_accounts_env()
+    {
+        var server = Script(_dir.Path, "copilot", """
+            printf '%s\n' "$@" > "$LOG_DIR/args"
+            printf '%s' "${COPILOT_HOME-unset}" > "$LOG_DIR/env"
+            echo $$ > "$LOG_DIR/server.pid"
+            python3 -u -c '
+            import json, sys
+            def read_msg():
+                length = None
+                while True:
+                    line = sys.stdin.buffer.readline()
+                    if not line: return None
+                    s = line.decode("ascii", "ignore").strip()
+                    if not s:
+                        if length is not None: break
+                        continue
+                    if s.lower().startswith("content-length:"):
+                        length = int(s.split(":", 1)[1].strip())
+                return json.loads(sys.stdin.buffer.read(length).decode("utf-8"))
+            def send(obj):
+                body = json.dumps(obj).encode("utf-8")
+                sys.stdout.buffer.write(f"Content-Length: {len(body)}\r\nContent-Type: application/vscode-jsonrpc; charset=utf-8\r\n\r\n".encode("ascii") + body)
+                sys.stdout.buffer.flush()
+            req = read_msg()
+            if req and req.get("method") == "account.getQuota":
+                send({"jsonrpc": "2.0", "method": "telemetry", "params": {}})
+                send({"jsonrpc": "2.0", "id": req["id"], "result": {"login": "octocat", "quotaSnapshots": {"premium_interactions": {"entitlementRequests": 300, "usedRequests": 60, "remainingPercentage": 80.0, "resetDate": "2026-12-01T00:00:00Z"}}}})
+            '
+            """);
+        var copilot = Builtins.Get("copilot");
+
+        var result = await Run(copilot, "quota", server, account: "/accounts/copilot");
+
+        Assert.True(result.Success, result.Message);
+        using var json = JsonDocument.Parse(result.Json!);
+        var premium = json.RootElement.GetProperty("quotaSnapshots").GetProperty("premium_interactions");
+        Assert.Equal(80.0, premium.GetProperty("remainingPercentage").GetDouble());
+        Assert.DoesNotContain("octocat", result.Json);
+        Assert.Equal("/accounts/copilot", File.ReadAllText(Log("env")));
+        Assert.Equal(SignalAccounts.KeyOfDirectory("/accounts/copilot"), result.Account);
+        Assert.Equal(["--headless", "--stdio", "--no-auto-update"], File.ReadAllLines(Log("args")));
+        await AssertGoneAsync(int.Parse(File.ReadAllText(Log("server.pid")).Trim()));
     }
 
     private static async Task AssertGoneAsync(int pid)

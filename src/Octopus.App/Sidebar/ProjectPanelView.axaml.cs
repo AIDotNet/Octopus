@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using TKCode.Arc;
 using Avalonia.Interactivity;
@@ -14,13 +16,21 @@ namespace Octopus.App.Sidebar;
 public partial class ProjectPanelView : UserControl
 {
     private ProjectPanelViewModel? _model;
+    private bool _isEditingName;
+    private string? _editingProjectId;
 
     public ProjectPanelView()
     {
         InitializeComponent();
         ItemList.ItemTitleSelector = item => (item as ItemRowViewModel)?.Title ?? "";
         ItemList.ContainerPrepared += (_, e) => MakeCompact(e.Container);
+        NameInput.AddHandler(KeyDownEvent, OnNameInputKeyDown, RoutingStrategies.Tunnel);
+        NameInput.PropertyChanged += OnNameInputPropertyChanged;
+        NameInput.LostFocus += OnNameInputLostFocus;
     }
+
+    /// <summary>True while the project name inline editor is open.</summary>
+    public bool IsEditingProjectName => _isEditingName;
 
     protected override void OnDataContextChanged(EventArgs e)
     {
@@ -28,16 +38,169 @@ public partial class ProjectPanelView : UserControl
         if (_model is not null)
         {
             _model.RenameRequested -= OnRenameRequested;
+            _model.PropertyChanged -= OnModelPropertyChanged;
+        }
+        if (_isEditingName)
+        {
+            EndNameEdit(focusDisplay: false);
         }
         _model = DataContext as ProjectPanelViewModel;
         if (_model is not null)
         {
             _model.RenameRequested += OnRenameRequested;
+            _model.PropertyChanged += OnModelPropertyChanged;
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        if (_isEditingName)
+        {
+            EndNameEdit(focusDisplay: false);
         }
     }
 
     private void OnRenameRequested(object? sender, EventArgs e) =>
-        UiContext.PostToUi(() => NameEdit.BeginEdit(), DispatcherPriority.Input);
+        UiContext.PostToUi(BeginNameEdit, DispatcherPriority.Input);
+
+    private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!_isEditingName)
+        {
+            return;
+        }
+        if (e.PropertyName is nameof(ProjectPanelViewModel.ProjectId) or nameof(ProjectPanelViewModel.HasProject)
+            && (!(_model?.HasProject ?? false) || _model?.ProjectId != _editingProjectId))
+        {
+            // Switching projects while editing commits the draft to the project that was being edited, never the new one.
+            CommitNameEdit(focusDisplay: false);
+        }
+    }
+
+    /// <summary>Opens the project name inline editor and selects all text for immediate replacement.</summary>
+    public void BeginNameEdit()
+    {
+        if (_model is not { HasProject: true, ProjectId: { } projectId })
+        {
+            return;
+        }
+        if (_isEditingName && _editingProjectId == projectId)
+        {
+            NameInput.Focus();
+            NameInput.SelectAll();
+            return;
+        }
+        _isEditingName = true;
+        _editingProjectId = projectId;
+        NameInput.Text = _model.ProjectName;
+        UpdateNameEditActions();
+        NameDisplayButton.IsVisible = false;
+        NameEditFrame.IsVisible = true;
+        NameInput.Focus();
+        NameInput.SelectAll();
+    }
+
+    /// <summary>Commits the active edit (reverting quietly if blank) and closes the inline editor.</summary>
+    public void CommitNameEdit(bool focusDisplay = false)
+    {
+        if (!_isEditingName)
+        {
+            return;
+        }
+        var projectId = _editingProjectId;
+        var draft = NameInput.Text;
+        EndNameEdit(focusDisplay);
+        _model?.CommitProjectRename(projectId, draft);
+    }
+
+    /// <summary>Cancels the active edit without saving and closes the inline editor.</summary>
+    public void CancelNameEdit(bool focusDisplay = false)
+    {
+        if (!_isEditingName)
+        {
+            return;
+        }
+        EndNameEdit(focusDisplay);
+    }
+
+    private void EndNameEdit(bool focusDisplay)
+    {
+        _isEditingName = false;
+        _editingProjectId = null;
+        NameEditFrame.IsVisible = false;
+        NameDisplayButton.IsVisible = true;
+        if (focusDisplay)
+        {
+            NameDisplayButton.Focus();
+        }
+    }
+
+    private void OnNameDisplayClick(object? sender, RoutedEventArgs e) => BeginNameEdit();
+
+    private void OnNameSaveClick(object? sender, RoutedEventArgs e) => CommitNameEdit(focusDisplay: true);
+
+    private void OnNameCancelClick(object? sender, RoutedEventArgs e) => CancelNameEdit(focusDisplay: true);
+
+    private void OnNameInputPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == TextBox.TextProperty && _isEditingName)
+        {
+            UpdateNameEditActions();
+        }
+    }
+
+    private void UpdateNameEditActions() =>
+        NameSaveButton.IsEnabled = !string.IsNullOrWhiteSpace(NameInput.Text);
+
+    private void OnNameInputKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!_isEditingName || HasImePreedit())
+        {
+            return;
+        }
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            CommitNameEdit(focusDisplay: true);
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CancelNameEdit(focusDisplay: true);
+        }
+    }
+
+    private bool HasImePreedit() =>
+        !string.IsNullOrEmpty(NameInput.GetVisualDescendants().OfType<TextPresenter>().FirstOrDefault()?.PreeditText);
+
+    private void OnNameInputLostFocus(object? sender, RoutedEventArgs e)
+    {
+        if (!_isEditingName)
+        {
+            return;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_isEditingName || NameSaveButton.IsPressed || NameCancelButton.IsPressed)
+            {
+                return;
+            }
+            if (TopLevel.GetTopLevel(this) is { } topLevel)
+            {
+                if (topLevel is WindowBase window && !window.IsActive)
+                {
+                    return;
+                }
+                if (topLevel.FocusManager?.GetFocusedElement() is Visual focused
+                    && (ReferenceEquals(focused, NameEditFrame) || NameEditFrame.IsVisualAncestorOf(focused)))
+                {
+                    return;
+                }
+            }
+            CommitNameEdit(focusDisplay: false);
+        }, DispatcherPriority.Input);
+    }
 
     private static readonly AttachedProperty<bool> s_compactWiredProperty =
         AvaloniaProperty.RegisterAttached<ProjectPanelView, TemplatedControl, bool>("CompactWired");

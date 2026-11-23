@@ -25,7 +25,7 @@ public sealed class ItemOpener(
     Octopus.App.Remote.RemoteProjectAccess? access = null,
     IAgentAccountService? accounts = null) : IItemOpener
 {
-    public ProjectItem? OpenTerminal()
+    public ProjectItem? OpenTerminal(string? workspaceId = null, string? workingDirectory = null)
     {
         var project = projects.Current;
         if (project is null)
@@ -38,6 +38,7 @@ public sealed class ItemOpener(
             _ = CreateOnHostAsync(project, null, null);
             return null;
         }
+        var (resolvedWorkspaceId, resolvedCwd) = ResolveTarget(project, workspaceId, workingDirectory);
         var chosen = settings.Current.Terminal.Shell;
         var info = string.IsNullOrEmpty(chosen) ? null : shells.Describe(chosen);
         var item = new ProjectItem
@@ -45,12 +46,14 @@ public sealed class ItemOpener(
             Kind = ProjectItemKind.Terminal,
             // On a host the tab says where it is: the shell of this computer is not the one it runs.
             Title = project.SshHost ?? (info ?? shells.GetDefaultShell()).Name,
+            WorkspaceId = resolvedWorkspaceId,
+            WorkingDirectory = resolvedCwd,
         };
         projects.AddItem(project, item);
         return item;
     }
 
-    public ProjectItem? OpenAgent(string agentId, AgentLaunchOptions? launch = null)
+    public ProjectItem? OpenAgent(string agentId, AgentLaunchOptions? launch = null, string? workspaceId = null, string? workingDirectory = null)
     {
         var project = projects.Current;
         if (project is not null && ProjectLocation.IsOnRemoteHost(project))
@@ -65,6 +68,7 @@ public sealed class ItemOpener(
         {
             return null;
         }
+        var (resolvedWorkspaceId, resolvedCwd) = ResolveTarget(project, workspaceId, workingDirectory);
         // For globalKeyring agents (Antigravity CLI), ensure the active keychain snapshot matches the resolved account before the PTY starts.
         if (accounts is not null && definition.Accounts is { Mode: AccountModes.GlobalKeyring })
         {
@@ -82,12 +86,20 @@ public sealed class ItemOpener(
                 }
             }
         }
+        var surface = AgentSurfaceResolver.Resolve(
+            definition,
+            settings.Current.Agents,
+            launch?.Surface,
+            acpAvailable: ProjectLocation.IsOnThisComputer(project));
         var item = new ProjectItem
         {
             Kind = ProjectItemKind.Agent,
             AgentId = agentId,
             Title = definition.Name,
             Launch = launch,
+            Surface = surface,
+            WorkspaceId = resolvedWorkspaceId,
+            WorkingDirectory = resolvedCwd,
         };
         projects.AddItem(project, item);
         return item;
@@ -164,7 +176,7 @@ public sealed class ItemOpener(
         }
     }
 
-    public async Task<ProjectItem?> PickAndOpenFileAsync()
+    public async Task<ProjectItem?> PickAndOpenFileAsync(string? workspaceId = null)
     {
         var project = projects.Current;
         // A file on an SSH host is not a file of this computer: the picker would look in the wrong place.
@@ -172,7 +184,8 @@ public sealed class ItemOpener(
         {
             return null;
         }
-        var path = await pickers.PickFileAsync(project.Path);
+        var (_, cwd) = ResolveTarget(project, workspaceId, null);
+        var path = await pickers.PickFileAsync(cwd ?? project.Path);
         return path is null ? null : OpenFile(path);
     }
 
@@ -208,14 +221,14 @@ public sealed class ItemOpener(
         }
     }
 
-    public ProjectItem? OpenDefaultAgent()
+    public ProjectItem? OpenDefaultAgent(string? workspaceId = null, AgentLaunchOptions? launch = null)
     {
         if (projects.Current is { RemoteHost: { } host } && remoteHosts is not null)
         {
             // The host's default agent, or its first one.
             var agents = remoteHosts.AgentsOf(host);
             var chosen = agents.FirstOrDefault(a => a.IsDefault) ?? agents.FirstOrDefault();
-            return chosen is null ? null : OpenAgent(chosen.Id, null);
+            return chosen is null ? null : OpenAgent(chosen.Id, launch, workspaceId);
         }
         var id = settings.Current.Agents.DefaultAgentId;
         if (id is null || scanner.Find(id) is null || !settings.Current.Agents.ProfileOf(id).Enabled)
@@ -224,6 +237,39 @@ public sealed class ItemOpener(
                 .Select(i => i.AgentId)
                 .FirstOrDefault(a => catalog.Find(a) is not null && settings.Current.Agents.ProfileOf(a).Enabled);
         }
-        return id is null ? null : OpenAgent(id, null);
+        return id is null ? null : OpenAgent(id, launch, workspaceId);
+    }
+
+    private (string? WorkspaceId, string? WorkingDirectory) ResolveTarget(Project project, string? workspaceId, string? workingDirectory)
+    {
+        if (!ProjectLocation.IsOnThisComputer(project))
+        {
+            return (null, null);
+        }
+        if (workspaceId == IItemOpener.DefaultWorkspaceId)
+        {
+            return (null, workingDirectory);
+        }
+        ProjectWorkspace? workspace = null;
+        if (workspaceId is { Length: > 0 })
+        {
+            workspace = projects.FindWorkspace(project, workspaceId);
+        }
+        else if (workingDirectory is null && project.ActiveItemId is { } activeId
+            && project.Items.FirstOrDefault(i => i.Id == activeId)?.WorkspaceId is { Length: > 0 } activeWsId)
+        {
+            workspace = projects.FindWorkspace(project, activeWsId);
+        }
+        if (workspace is not null)
+        {
+            return (workspace.Id, workspace.Path);
+        }
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            var matched = project.Workspaces.FirstOrDefault(w => paths.Equals(w.Path, workingDirectory));
+            if (matched is not null) return (matched.Id, matched.Path);
+            if (!paths.Equals(project.Path, workingDirectory)) return (null, workingDirectory);
+        }
+        return (null, null);
     }
 }

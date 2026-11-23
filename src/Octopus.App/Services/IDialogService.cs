@@ -42,6 +42,31 @@ public interface IDialogService
     /// cleanly or the user clicked Done; false when cancelled.
     /// </summary>
     Task<bool> RunAccountLoginAsync(string title, string description, Octopus.Core.Terminals.LaunchSpec spec, bool autoCloseOnSuccess = true);
+
+    /// <summary>
+    /// Shows the "New branch workspace" dialog (branch selection, optional GitHub Issue/PR or note binding, path preview).
+    /// Returns the validated request, or null when dismissed.
+    /// </summary>
+    Task<Octopus.App.Services.Workspaces.CreateWorkspaceRequest?> AskCreateWorkspaceAsync(
+        Octopus.Core.Projects.Project project,
+        string repositoryRoot,
+        IReadOnlyList<Octopus.Git.GitBranch> branches,
+        IReadOnlyList<Octopus.Git.GitWorktree> worktrees,
+        Octopus.App.Services.Workspaces.IGitHubTaskProvider taskProvider,
+        Func<string, string> computePath,
+        string homeDirectory,
+        string? defaultAgentName,
+        Octopus.App.Services.Workspaces.CreateWorkspaceRequest? initial = null,
+        string? initialError = null);
+
+    /// <summary>
+    /// Shows the manual "Inspect workspaces" cleanup dialog listing all branch workspaces across local projects,
+    /// allowing the user to review statuses/protections and remove selected ones. Returns the cleanup summary or null if closed.
+    /// </summary>
+    Task<Octopus.App.Services.Workspaces.WorkspaceCleanupRunSummary?> ShowInspectWorkspacesAsync(
+        Octopus.App.Services.Workspaces.IWorkspaceCleanupService cleanup,
+        IProjectService projects,
+        Octopus.Platform.IFileOpener? fileOpener = null);
 }
 
 /// <summary>What the project icon dialog returns: the color, a Lucide icon name (null: the initial) and a thumbnail file (null: none).</summary>

@@ -32,7 +32,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private int _version;
     private bool _isActive = true;
     /// <summary>The project the shell asked for while the panel was closed: it is read when the panel opens.</summary>
-    private (string? Path, string? Name, string? SshHost, string? RemoteHost)? _pendingProject;
+    private (string? Path, string? Name, string? SshHost, string? RemoteHost, string? RootPath, string? WorkspaceBranch)? _pendingProject;
     /// <summary>The local folder's watches were stopped while the panel was closed: on opening, they restart and the panel catches up.</summary>
     private bool _paused;
     private GitDirectories? _gitDirectories;
@@ -110,6 +110,9 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     public string? RemoteStatusText => RemoteStatus is null ? null : AppLangResources.Format(AppLangResourceKind.ExplorerRemoteStatus, RemoteStatus);
     [ObservableProperty] public partial string ProjectName { get; set; } = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasWorkspaceBanner), nameof(WorkspaceBannerText))]
+    public partial string? WorkspaceBranch { get; private set; }
     [ObservableProperty] public partial bool IsGitRepository { get; private set; }
 
     /// <summary>The project is on an SSH host: the panel then has a tunnels tab (and no git, no search).</summary>
@@ -132,6 +135,11 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     /// <summary>Sessions are read from this computer: a project on an SSH host has none here.</summary>
     public bool IsSessionsTab => HasProject && !IsSshProject && !IsHostProject && Tab == ExplorerTab.Sessions;
     public bool HasChanges => ChangeCount > 0;
+    /// <summary>Shown above Files and Git tabs when the right panel is following a non-default git worktree.</summary>
+    public bool HasWorkspaceBanner => !string.IsNullOrEmpty(WorkspaceBranch) && (IsFilesTab || IsGitTab);
+    public string WorkspaceBannerText => string.IsNullOrEmpty(WorkspaceBranch)
+        ? ""
+        : AppLangResources.Format(AppLangResourceKind.WorkspaceScopeFollowing, WorkspaceBranch);
 
     /// <summary>The numbers next to the tab icons: changed files, running tunnels.</summary>
     public string ChangeCountText => ChangeCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
@@ -202,6 +210,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         OnPropertyChanged(nameof(IsGitTab));
         OnPropertyChanged(nameof(IsTunnelsTab));
         OnPropertyChanged(nameof(IsSessionsTab));
+        OnPropertyChanged(nameof(HasWorkspaceBanner));
         OnPropertyChanged(nameof(TabKey));
         Sessions.IsActive = _isActive && IsSessionsTab;
     }
@@ -283,7 +292,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     {
         if (_pendingProject is { } pending)
         {
-            await SetProjectAsync(pending.Path, pending.Name, pending.SshHost, pending.RemoteHost);
+            await SetProjectAsync(pending.Path, pending.Name, pending.SshHost, pending.RemoteHost, pending.RootPath, pending.WorkspaceBranch);
             return;
         }
         if (!_paused || ProjectPath is not { } folder) return;
@@ -292,7 +301,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         if (!_gitLookedUp)
         {
             // The git lookup had not finished when the panel closed: the folder is read again from the start.
-            await SetProjectAsync(folder, ProjectName);
+            await SetProjectAsync(folder, ProjectName, workspaceBranch: WorkspaceBranch);
             return;
         }
         WatchLocal(folder);
@@ -306,24 +315,28 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     /// While the panel is closed (<see cref="IsActive"/>) this only remembers the folder.
     /// </summary>
     /// <param name="remoteHost">The device id of the Octopus host the folder is on: read through that host, with its git.</param>
-    public async Task SetProjectAsync(string? path, string? name, string? sshHost = null, string? remoteHost = null)
+    /// <param name="rootPath">The parent project's main root folder when <paramref name="path"/> is a worktree; used by Sessions.</param>
+    /// <param name="workspaceBranch">Branch name of the active worktree when viewing one; null for the default project directory.</param>
+    public async Task SetProjectAsync(string? path, string? name, string? sshHost = null, string? remoteHost = null, string? rootPath = null, string? workspaceBranch = null)
     {
         var version = ++_version;
         StopWatching();
         _paused = false;
         if (!_isActive)
         {
-            _pendingProject = (path, name, sshHost, remoteHost);
+            _pendingProject = (path, name, sshHost, remoteHost, rootPath, workspaceBranch);
             return;
         }
         _pendingProject = null;
         _gitDirectories = null;
         _gitLookedUp = false;
+        WorkspaceBranch = workspaceBranch;
         // Without the service that reaches hosts there is nothing to read the folder through: no project is shown.
         if (remoteHost is not null && _access is null) path = null;
         IsSshProject = path is not null && sshHost is not null;
-        // A folder on another machine is never looked up here, even when this computer happens to have the same path.
-        Sessions.SetProject(sshHost is null && remoteHost is null && path is not null && Directory.Exists(path) ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) : null);
+        // Sessions always aggregate the whole project (default + all worktrees), so it receives the main project root.
+        var sessionsRoot = rootPath ?? path;
+        Sessions.SetProject(sshHost is null && remoteHost is null && sessionsRoot is not null && Directory.Exists(sessionsRoot) ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(sessionsRoot)) : null);
         IsHostProject = path is not null && remoteHost is not null;
         if (path is not null && remoteHost is not null && _access is not null)
         {

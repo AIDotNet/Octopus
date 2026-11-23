@@ -188,12 +188,8 @@
     <unit id="SettingsEnvSecretNote"><segment><source>Saved as plain text in settings.json</source><target state="translated">以明文保存在 settings.json</target></segment></unit>
     <unit id="SettingsBrowse"><segment><source>Browse…</source><target state="translated">浏览…</target></segment></unit>
     <unit id="SettingsGeneralTitle"><segment><source>General</source><target state="translated">通用</target></segment></unit>
-    <unit id="SettingsGeneralSubtitle"><segment><source>Language, what happens when the app starts again, and updates.</source><target state="translated">语言、应用再次启动时的行为，以及更新。</target></segment></unit>
+    <unit id="SettingsGeneralSubtitle"><segment><source>Language, system tray, and updates.</source><target state="translated">语言、系统托盘和更新。</target></segment></unit>
     <unit id="SettingsLanguageHint"><segment><source>The language of the whole app</source><target state="translated">整个应用使用的语言</target></segment></unit>
-    <unit id="SettingsRestoreItems"><segment><source>Reopen terminals and agents at startup</source><target state="translated">启动时恢复上次的终端和智能体</target></segment></unit>
-    <unit id="SettingsRestoreItemsHint"><segment><source>Off: every start begins without them. Files of a project stay.</source><target state="translated">关闭后每次启动都不带上次的终端和智能体；项目里的文件条目保留。</target></segment></unit>
-    <unit id="SettingsResumeAgents"><segment><source>Continue agent sessions after restart</source><target state="translated">重启后继续智能体会话</target></segment></unit>
-    <unit id="SettingsResumeAgentsHint"><segment><source>Agents that were open come back with their latest session.</source><target state="translated">上次打开的智能体会接着最近的会话继续。</target></segment></unit>
     <unit id="SettingsTerminalTitle"><segment><source>Terminal</source><target state="translated">终端</target></segment></unit>
     <unit id="SettingsTerminalSubtitle"><segment><source>The shell, the font and how much history a terminal keeps. Changes apply to open terminals at once.</source><target state="translated">终端使用的 shell、字体和保留的历史行数。修改会立即应用到已打开的终端。</target></segment></unit>
     <unit id="SettingsShell"><segment><source>Shell</source><target state="translated">Shell</target></segment></unit>
@@ -893,5 +889,239 @@
     <unit id="AccountLauncherLabel"><segment><source>Account</source><target state="translated">订阅账户</target></segment></unit>
     <unit id="ProjectAgentAccountsMenu"><segment><source>Agent accounts</source><target state="translated">智能体账户</target></segment></unit>
     <unit id="ProjectAccountFollowDefault"><segment><source>Follow global default ({0})</source><target state="translated">跟随全局默认（{0}）</target></segment></unit>
+    <unit id="WorkspaceDefaultName"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="WorkspaceDefaultWithBranch"><segment><source>Default · {0}</source><target state="translated">默认 · {0}</target></segment></unit>
+    <unit id="WorkspaceSectionHeader"><segment><source>Workspaces &amp; sessions</source><target state="translated">工作区与会话</target></segment></unit>
+    <unit id="WorkspaceNewBranch"><segment><source>New branch</source><target state="translated">新分支</target></segment></unit>
+    <unit id="WorkspaceNewBranchMenu"><segment><source>New branch workspace…</source><target state="translated">新建分支工作区…</target></segment></unit>
+    <unit id="WorkspaceNewBranchTip"><segment><source>Create an isolated git worktree branch workspace</source><target state="translated">新建隔离的 Git 分支工作区</target></segment></unit>
+    <unit id="WorkspaceNewInTip"><segment><source>New item in {0}</source><target state="translated">在「{0}」中新建</target></segment></unit>
+    <unit id="WorkspaceLauncherScope"><segment><source>In {0}</source><target state="translated">新建于 {0}</target></segment></unit>
+    <unit id="WorkspaceEmpty"><segment><source>No active sessions</source><target state="translated">暂无运行中的会话</target></segment></unit>
+    <unit id="WorkspaceRevealFolder"><segment><source>Reveal in file manager</source><target state="translated">在文件管理器中显示</target></segment></unit>
+    <unit id="WorkspaceOpenLinkedTask"><segment><source>Open {0}</source><target state="translated">打开 {0}</target></segment></unit>
+    <unit id="WorkspaceRemove"><segment><source>Remove workspace…</source><target state="translated">清理工作区…</target></segment></unit>
+    <unit id="WorkspaceRemoveTitle"><segment><source>Remove workspace "{0}"?</source><target state="translated">清理工作区「{0}」？</target></segment></unit>
+    <unit id="WorkspaceRemoveBody"><segment><source>This removes the git worktree at:
+{0}</source><target state="translated">将移除以下位置的 Git worktree 目录：
+{0}</target></segment></unit>
+    <unit id="WorkspaceRemoveDirtyWarning"><segment><source>Warning: this workspace has {0} uncommitted change(s). Force removal will discard them.</source><target state="translated">注意：该工作区有 {0} 处未提交的更改，强制清理将丢弃这些更改。</target></segment></unit>
+    <unit id="WorkspaceRemoveRunningWarning"><segment><source>{0} open tab(s) in this workspace will be closed.</source><target state="translated">该工作区下有 {0} 个已打开的标签将被关闭。</target></segment></unit>
+    <unit id="WorkspaceRemoveConfirm"><segment><source>Remove workspace</source><target state="translated">清理工作区</target></segment></unit>
+    <unit id="WorkspaceRemoveForceConfirm"><segment><source>Force remove</source><target state="translated">强制清理</target></segment></unit>
+    <unit id="WorkspaceRemoveFailedTitle"><segment><source>Could not remove workspace</source><target state="translated">清理工作区失败</target></segment></unit>
+    <unit id="WorkspaceDialogTitle"><segment><source>New branch workspace</source><target state="translated">新建分支工作区</target></segment></unit>
+    <unit id="WorkspaceDialogDescription"><segment><source>Create an isolated git worktree under {0}</source><target state="translated">将在 {0} 下创建独立 Git worktree</target></segment></unit>
+    <unit id="WorkspaceDialogCreate"><segment><source>Create workspace</source><target state="translated">创建工作区</target></segment></unit>
+    <unit id="WorkspaceTaskSection"><segment><source>Link task context (optional)</source><target state="translated">绑定任务上下文（可选）</target></segment></unit>
+    <unit id="WorkspaceTaskNone"><segment><source>None</source><target state="translated">不绑定</target></segment></unit>
+    <unit id="WorkspaceTaskIssue"><segment><source>GitHub Issue</source><target state="translated">GitHub Issue</target></segment></unit>
+    <unit id="WorkspaceTaskPr"><segment><source>Pull Request</source><target state="translated">Pull Request</target></segment></unit>
+    <unit id="WorkspaceTaskCustom"><segment><source>Link / Note</source><target state="translated">链接 / 备注</target></segment></unit>
+    <unit id="WorkspaceTaskSearch"><segment><source>Filter issues or PRs…</source><target state="translated">筛选 Issue 或 PR…</target></segment></unit>
+    <unit id="WorkspaceTaskLoading"><segment><source>Loading from GitHub via gh…</source><target state="translated">正在通过 gh 拉取 GitHub 列表…</target></segment></unit>
+    <unit id="WorkspaceTaskEmpty"><segment><source>No open items found.</source><target state="translated">没有找到打开的条目。</target></segment></unit>
+    <unit id="WorkspaceTaskGhMissing"><segment><source>GitHub CLI (gh) was not found. Install gh and sign in, or use Link / Note.</source><target state="translated">未检测到 GitHub CLI（gh），请安装并登录后使用，或改用「链接 / 备注」。</target></segment></unit>
+    <unit id="WorkspaceTaskUrlLabel"><segment><source>Task URL (optional)</source><target state="translated">任务链接（可选）</target></segment></unit>
+    <unit id="WorkspaceTaskUrlPlaceholder"><segment><source>https://github.com/… or Linear / Jira URL</source><target state="translated">粘贴 GitHub / Linear / Jira 链接…</target></segment></unit>
+    <unit id="WorkspaceTaskNoteLabel"><segment><source>Task title or note</source><target state="translated">任务标题或备注</target></segment></unit>
+    <unit id="WorkspaceTaskNotePlaceholder"><segment><source>Brief description of what this branch is for</source><target state="translated">简单描述这个分支要解决的问题…</target></segment></unit>
+    <unit id="WorkspaceTaskInjectPrompt"><segment><source>Include linked task context in the agent's initial prompt</source><target state="translated">启动智能体时自动将绑定任务作为首条提示词上下文</target></segment></unit>
+    <unit id="WorkspaceBranchSection"><segment><source>Branch</source><target state="translated">分支配置</target></segment></unit>
+    <unit id="WorkspaceBranchModeNew"><segment><source>New branch</source><target state="translated">新建分支</target></segment></unit>
+    <unit id="WorkspaceBranchModeExisting"><segment><source>Existing branch</source><target state="translated">复用已有分支</target></segment></unit>
+    <unit id="WorkspaceBaseBranchLabel"><segment><source>Base branch</source><target state="translated">基础分支</target></segment></unit>
+    <unit id="WorkspaceBranchNameLabel"><segment><source>Branch name</source><target state="translated">新分支名</target></segment></unit>
+    <unit id="WorkspaceBranchNamePlaceholder"><segment><source>e.g. feat/worktree-ui</source><target state="translated">例如 feat/worktree-ui</target></segment></unit>
+    <unit id="WorkspaceExistingBranchPlaceholder"><segment><source>Search existing branches…</source><target state="translated">搜索已有分支…</target></segment></unit>
+    <unit id="WorkspaceBranchOccupiedDefault"><segment><source>Checked out in default</source><target state="translated">已在默认目录检出</target></segment></unit>
+    <unit id="WorkspaceBranchOccupiedOther"><segment><source>Checked out in another worktree</source><target state="translated">已在其他工作区检出</target></segment></unit>
+    <unit id="WorkspaceBranchRemoteBadge"><segment><source>remote</source><target state="translated">远程</target></segment></unit>
+    <unit id="WorkspacePathPreviewLabel"><segment><source>Worktree directory</source><target state="translated">Worktree 目录</target></segment></unit>
+    <unit id="WorkspacePathSlashNote"><segment><source>Directory replaces "/" with "-"; git branch keeps "{0}".</source><target state="translated">目录名已将 / 映射为 -，Git 分支名仍保留「{0}」。</target></segment></unit>
+    <unit id="WorkspaceAfterCreateLabel"><segment><source>After creation</source><target state="translated">创建后动作</target></segment></unit>
+    <unit id="WorkspaceAfterAgent"><segment><source>Start default agent ({0})</source><target state="translated">启动默认智能体（{0}）</target></segment></unit>
+    <unit id="WorkspaceAfterTerminal"><segment><source>Open new terminal</source><target state="translated">打开新终端</target></segment></unit>
+    <unit id="WorkspaceAfterNone"><segment><source>Create workspace only</source><target state="translated">仅创建工作区</target></segment></unit>
+    <unit id="WorkspaceValidationBranchRequired"><segment><source>Enter a branch name.</source><target state="translated">请输入分支名。</target></segment></unit>
+    <unit id="WorkspaceValidationExistingRequired"><segment><source>Choose an available branch.</source><target state="translated">请选择一个未被占用的分支。</target></segment></unit>
+    <unit id="WorkspaceScopeFollowing"><segment><source>Workspace: {0}</source><target state="translated">当前工作区：{0}</target></segment></unit>
+    <unit id="SessionsFilterAll"><segment><source>All</source><target state="translated">全部</target></segment></unit>
+    <unit id="SessionsFilterDefault"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="SessionsFilterWorkspaces"><segment><source>Workspaces</source><target state="translated">工作区</target></segment></unit>
+    <unit id="SessionsWorkspaceMissingTitle"><segment><source>Workspace directory no longer exists</source><target state="translated">原工作区目录已不存在</target></segment></unit>
+    <unit id="SessionsWorkspaceMissingBody"><segment><source>The worktree "{0}" was removed from disk. Continue this session in the default project directory instead?</source><target state="translated">工作区「{0}」的目录已被删除，是否改为在默认项目目录中继续该会话？</target></segment></unit>
+    <unit id="SessionsWorkspaceMissingConfirm"><segment><source>Continue in default</source><target state="translated">在默认目录继续</target></segment></unit>
+    <unit id="SettingsSurfaceSectionTitle"><segment><source>Default open mode</source><target state="translated">默认打开方式</target></segment></unit>
+    <unit id="SettingsSurfaceSectionHint"><segment><source>Choose how agents open when launched. Agents without ACP support always open in a terminal.</source><target state="translated">选择启动智能体时的默认界面。不支持 ACP 协议的智能体始终仅在终端中打开。</target></segment></unit>
+    <unit id="SettingsSurfaceGuiTitle"><segment><source>GUI (ACP)</source><target state="translated">GUI（ACP 对话界面）</target></segment></unit>
+    <unit id="SettingsSurfaceGuiDesc"><segment><source>Structured document stream, collapsible tool calls, inline diffs, approval cards and a dynamic agent-aware composer.</source><target state="translated">结构化文档对话流、可折叠工具调用与代码 Diff、权限审批卡和随智能体动态适配的输入框。</target></segment></unit>
+    <unit id="SettingsSurfaceGuiBadge"><segment><source>ACP</source><target state="translated">支持 ACP</target></segment></unit>
+    <unit id="SettingsSurfaceTerminalTitle"><segment><source>Terminal (CLI)</source><target state="translated">终端（CLI）</target></segment></unit>
+    <unit id="SettingsSurfaceTerminalDesc"><segment><source>Run the agent's native interactive CLI inside a PTY terminal emulator. Works with every agent.</source><target state="translated">在 PTY 终端模拟器中直接运行智能体原生 CLI，兼容全部智能体。</target></segment></unit>
+    <unit id="SettingsSurfaceTerminalBadge"><segment><source>Universal</source><target state="translated">全兼容</target></segment></unit>
+    <unit id="SettingsSurfaceSelectedBadge"><segment><source>Default</source><target state="translated">当前默认</target></segment></unit>
+    <unit id="SettingsAcpAdapterPolicy"><segment><source>ACP adapter policy</source><target state="translated">ACP 适配器策略</target></segment></unit>
+    <unit id="SettingsAcpAdapterPolicyHint"><segment><source>How Octopus starts ACP for agents that rely on official companion adapters (Claude, Codex, Amp, Pi, etc.).</source><target state="translated">当智能体通过官方 ACP 适配器接入（如 Claude、Codex、Amp、Pi）时的启动方式。</target></segment></unit>
+    <unit id="SettingsAcpPolicyNativeOnly"><segment><source>Local binaries only</source><target state="translated">仅本地已安装二进制</target></segment></unit>
+    <unit id="SettingsAcpPolicyLocalRunners"><segment><source>Local binaries, fallback to npx / uvx</source><target state="translated">本地优先，缺省回退 npx / uvx</target></segment></unit>
+    <unit id="SettingsAcpPolicyManagedRegistry"><segment><source>Official ACP Registry (managed)</source><target state="translated">官方 ACP Registry（自动管理）</target></segment></unit>
+    <unit id="SettingsAcpFormElicitation"><segment><source>Interactive form prompts (Elicitation)</source><target state="translated">交互式表单提问（Elicitation）</target></segment></unit>
+    <unit id="SettingsAcpFormElicitationHint"><segment><source>Allow ACP agents to show structured multiple-choice questions and forms directly in the chat stream.</source><target state="translated">允许 ACP 智能体在 GUI 对话中以结构化选择卡和表单形式向你提问。</target></segment></unit>
+    <unit id="SettingsAcpBadgeNative"><segment><source>ACP Native</source><target state="translated">ACP 原生</target></segment></unit>
+    <unit id="SettingsAcpBadgeAdapter"><segment><source>ACP Adapter</source><target state="translated">ACP 适配器</target></segment></unit>
+    <unit id="SettingsAcpBadgeTerminalOnly"><segment><source>Terminal only</source><target state="translated">仅终端</target></segment></unit>
+    <unit id="SettingsSurfaceFollow"><segment><source>Follow</source><target state="translated">跟随</target></segment></unit>
+    <unit id="SettingsSurfaceGuiShort"><segment><source>GUI</source><target state="translated">GUI</target></segment></unit>
+    <unit id="SettingsSurfaceTerminalShort"><segment><source>Terminal</source><target state="translated">终端</target></segment></unit>
+    <unit id="SettingsAcpCommandLabel"><segment><source>ACP launch</source><target state="translated">ACP 启动方式</target></segment></unit>
+    <unit id="LaunchGui"><segment><source>Launch GUI</source><target state="translated">GUI 启动</target></segment></unit>
+    <unit id="LaunchTerminalOnlyHint"><segment><source>Terminal only (no ACP)</source><target state="translated">仅终端（不支持 ACP）</target></segment></unit>
+    <unit id="AgentGuiStatusConnecting"><segment><source>Connecting…</source><target state="translated">正在连接…</target></segment></unit>
+    <unit id="AgentGuiStatusReady"><segment><source>Ready</source><target state="translated">就绪</target></segment></unit>
+    <unit id="AgentGuiStatusThinking"><segment><source>Working…</source><target state="translated">运行中…</target></segment></unit>
+    <unit id="AgentGuiStatusWaiting"><segment><source>Waiting for input</source><target state="translated">等待确认</target></segment></unit>
+    <unit id="AgentGuiStatusDisconnected"><segment><source>Disconnected</source><target state="translated">已断开</target></segment></unit>
+    <unit id="AgentGuiStatusError"><segment><source>Error</source><target state="translated">出错</target></segment></unit>
+    <unit id="AgentGuiContinueInTerminal"><segment><source>Continue in Terminal</source><target state="translated">在终端继续</target></segment></unit>
+    <unit id="AgentGuiReconnect"><segment><source>Reconnect</source><target state="translated">重新连接</target></segment></unit>
+    <unit id="AgentGuiEmptyTitle"><segment><source>Start a conversation with {0}</source><target state="translated">开始与 {0} 对话</target></segment></unit>
+    <unit id="AgentGuiEmptyHint"><segment><source>Messages, tool runs, inline diffs and approvals stream directly over ACP.</source><target state="translated">消息、工具执行、代码 Diff 与权限审批将通过 ACP 协议实时呈现。</target></segment></unit>
+    <unit id="AgentGuiThinkingLabel"><segment><source>Thinking</source><target state="translated">思考过程</target></segment></unit>
+    <unit id="AgentGuiPlanTitle"><segment><source>Plan</source><target state="translated">执行计划</target></segment></unit>
+    <unit id="AgentGuiPermissionTitle"><segment><source>Approval required</source><target state="translated">需要你的确认</target></segment></unit>
+    <unit id="AgentGuiPermissionCancel"><segment><source>Cancel</source><target state="translated">取消</target></segment></unit>
+    <unit id="AgentGuiQuestionSubmit"><segment><source>Submit</source><target state="translated">提交</target></segment></unit>
+    <unit id="AgentGuiQuestionCancel"><segment><source>Cancel</source><target state="translated">取消</target></segment></unit>
+    <unit id="AgentGuiComposerPlaceholder"><segment><source>Message {0}… (Enter to send, Shift+Enter for newline)</source><target state="translated">向 {0} 发送消息…（Enter 发送，Shift+Enter 换行）</target></segment></unit>
+    <unit id="AgentGuiAttachImage"><segment><source>Attach image</source><target state="translated">添加图片</target></segment></unit>
+    <unit id="AgentGuiMentionFile"><segment><source>Mention file (@)</source><target state="translated">引用文件 (@)</target></segment></unit>
+    <unit id="AgentGuiSlashCommands"><segment><source>Slash commands (/)</source><target state="translated">斜杠命令 (/)</target></segment></unit>
+    <unit id="AgentGuiSend"><segment><source>Send</source><target state="translated">发送</target></segment></unit>
+    <unit id="AgentGuiStop"><segment><source>Stop</source><target state="translated">停止</target></segment></unit>
+    <unit id="AgentGuiContextUsage"><segment><source>{0} / {1}</source><target state="translated">{0} / {1}</target></segment></unit>
+    <unit id="AgentGuiToolRunning"><segment><source>Running</source><target state="translated">执行中</target></segment></unit>
+    <unit id="AgentGuiToolDone"><segment><source>Done</source><target state="translated">完成</target></segment></unit>
+    <unit id="AgentGuiToolFailed"><segment><source>Failed</source><target state="translated">失败</target></segment></unit>
+    <unit id="AgentGuiModeLabel"><segment><source>Mode</source><target state="translated">模式</target></segment></unit>
+    <unit id="AgentGuiPermissionLabel"><segment><source>Permission</source><target state="translated">权限</target></segment></unit>
+    <unit id="AgentGuiModelLabel"><segment><source>Model</source><target state="translated">模型</target></segment></unit>
+    <unit id="AgentGuiEffortLabel"><segment><source>Effort</source><target state="translated">深度</target></segment></unit>
+    <unit id="AgentGuiFastLabel"><segment><source>Fast</source><target state="translated">快速</target></segment></unit>
+    <unit id="AgentGuiAuthRequiredTitle"><segment><source>Authentication required</source><target state="translated">需要登录认证</target></segment></unit>
+    <unit id="AgentGuiAuthRequiredHint"><segment><source>Sign in to this agent in Terminal before starting an ACP session, then click Reconnect.</source><target state="translated">该智能体在启动 ACP 会话前需先在终端完成登录认证，登录后点击「重新连接」即可。</target></segment></unit>
+    <unit id="AgentGuiNoCommands"><segment><source>No matching commands</source><target state="translated">没有匹配的命令</target></segment></unit>
+    <unit id="AgentGuiNoFiles"><segment><source>No matching files</source><target state="translated">没有匹配的文件</target></segment></unit>
+    <unit id="AgentGuiCopyOutput"><segment><source>Copy</source><target state="translated">复制</target></segment></unit>
+    <unit id="AgentGuiStderrToggle"><segment><source>Diagnostics</source><target state="translated">诊断输出</target></segment></unit>
+    <unit id="SettingsNavWorkspaceCleanup"><segment><source>Workspace cleanup</source><target state="translated">工作区清理</target></segment></unit>
+    <unit id="SettingsWorkspaceCleanupTitle"><segment><source>Workspace cleanup</source><target state="translated">工作区清理</target></segment></unit>
+    <unit id="SettingsWorkspaceCleanupSubtitle"><segment><source>Remove workspaces you no longer need. Before removing anything, Octopus re-checks for unsaved work.</source><target state="translated">移除你已不再需要的工作区。在移除任何内容之前，Octopus 会再次检查是否有未保存的工作。</target></segment></unit>
+    <unit id="WorkspaceCleanupManualSection"><segment><source>Manual cleanup</source><target state="translated">手动清理</target></segment></unit>
+    <unit id="WorkspaceCleanupManualTitle"><segment><source>Delete workspaces you choose</source><target state="translated">删除你选择的工作区</target></segment></unit>
+    <unit id="WorkspaceCleanupManualDescription"><segment><source>Inspect all workspaces and choose which ones to remove</source><target state="translated">查看所有工作区，并选择要删除哪些</target></segment></unit>
+    <unit id="WorkspaceCleanupInspectButton"><segment><source>Inspect workspaces</source><target state="translated">检查工作区</target></segment></unit>
+    <unit id="WorkspaceCleanupAutoSection"><segment><source>Automatic cleanup</source><target state="translated">自动清理</target></segment></unit>
+    <unit id="WorkspaceCleanupStatusOff"><segment><source>Off</source><target state="translated">已关闭</target></segment></unit>
+    <unit id="WorkspaceCleanupStatusOn"><segment><source>Active</source><target state="translated">已开启</target></segment></unit>
+    <unit id="WorkspaceCleanupAutoSubtitle"><segment><source>Turn on a rule to remove workspaces on a schedule</source><target state="translated">开启一条规则，即可按计划移除工作区</target></segment></unit>
+    <unit id="WorkspaceCleanupRunNow"><segment><source>Run now</source><target state="translated">立即检查</target></segment></unit>
+    <unit id="WorkspaceCleanupRecommended"><segment><source>Recommended</source><target state="translated">推荐</target></segment></unit>
+    <unit id="WorkspaceCleanupRuleMergedTitle"><segment><source>Delete merged workspaces</source><target state="translated">删除已合并的工作区</target></segment></unit>
+    <unit id="WorkspaceCleanupRuleMergedDescription"><segment><source>Pull request is merged or branch is merged into the default branch, and everything in the workspace is included</source><target state="translated">拉取请求已合并或分支已合并到默认分支，且工作区中的所有内容都已包含在其中</target></segment></unit>
+    <unit id="WorkspaceCleanupRuleUnchangedTitle"><segment><source>Delete unchanged workspaces</source><target state="translated">删除无改动的工作区</target></segment></unit>
+    <unit id="WorkspaceCleanupRuleUnchangedDescription"><segment><source>No new commits relative to the default branch, and no local edits</source><target state="translated">相对默认分支没有新提交，也没有任何编辑</target></segment></unit>
+    <unit id="WorkspaceCleanupRuleInactiveTitle"><segment><source>Delete inactive workspaces</source><target state="translated">删除不活跃的工作区</target></segment></unit>
+    <unit id="WorkspaceCleanupRuleInactiveDescription"><segment><source>No activity for {0} days</source><target state="translated">{0} 天没有活动</target></segment></unit>
+    <unit id="WorkspaceCleanupAdvancedTitle"><segment><source>Advanced</source><target state="translated">高级</target></segment></unit>
+    <unit id="WorkspaceCleanupAdvancedHint"><segment><source>Schedule, inactive threshold, grace period and branch options</source><target state="translated">检查周期、不活跃天数、宽限期与分支处理</target></segment></unit>
+    <unit id="WorkspaceCleanupInactiveDaysLabel"><segment><source>Inactivity threshold (days)</source><target state="translated">不活跃天数阈值</target></segment></unit>
+    <unit id="WorkspaceCleanupIntervalLabel"><segment><source>Check schedule</source><target state="translated">自动检查周期</target></segment></unit>
+    <unit id="WorkspaceCleanupInterval30m"><segment><source>Every 30 minutes</source><target state="translated">每 30 分钟</target></segment></unit>
+    <unit id="WorkspaceCleanupInterval1h"><segment><source>Every hour</source><target state="translated">每小时</target></segment></unit>
+    <unit id="WorkspaceCleanupInterval6h"><segment><source>Every 6 hours</source><target state="translated">每 6 小时</target></segment></unit>
+    <unit id="WorkspaceCleanupInterval24h"><segment><source>Daily</source><target state="translated">每天</target></segment></unit>
+    <unit id="WorkspaceCleanupGraceLabel"><segment><source>Grace period for unchanged workspaces</source><target state="translated">无改动工作区宽限期</target></segment></unit>
+    <unit id="WorkspaceCleanupGraceNone"><segment><source>None</source><target state="translated">立即生效</target></segment></unit>
+    <unit id="WorkspaceCleanupGrace1h"><segment><source>1 hour</source><target state="translated">1 小时</target></segment></unit>
+    <unit id="WorkspaceCleanupGrace6h"><segment><source>6 hours</source><target state="translated">6 小时</target></segment></unit>
+    <unit id="WorkspaceCleanupGrace24h"><segment><source>24 hours</source><target state="translated">24 小时</target></segment></unit>
+    <unit id="WorkspaceCleanupDeleteBranchLabel"><segment><source>Delete merged local branches</source><target state="translated">随工作区删除已合并分支</target></segment></unit>
+    <unit id="WorkspaceCleanupDeleteBranchHint"><segment><source>Unmerged branches are always kept</source><target state="translated">未合并的分支始终保留</target></segment></unit>
+    <unit id="WorkspaceCleanupFetchLabel"><segment><source>Fetch remotes before checking</source><target state="translated">检查前同步远程状态</target></segment></unit>
+    <unit id="WorkspaceCleanupFetchHint"><segment><source>Run non-interactive git fetch to refresh remote default branches</source><target state="translated">运行非交互式 git fetch 以更新远程默认分支状态</target></segment></unit>
+    <unit id="WorkspaceCleanupBranchNoteDelete"><segment><source>Merged branches are deleted with the workspace; unmerged branches are kept.</source><target state="translated">已合并的分支会随工作区一起删除，未合并的分支会保留</target></segment></unit>
+    <unit id="WorkspaceCleanupBranchNoteKeep"><segment><source>Only workspace directories are removed; all local branches are kept.</source><target state="translated">仅移除工作区目录，所有本地分支都会保留</target></segment></unit>
+    <unit id="WorkspaceCleanupProtectionSection"><segment><source>Protection</source><target state="translated">保护</target></segment></unit>
+    <unit id="WorkspaceCleanupProtectionTitle"><segment><source>Always keep</source><target state="translated">始终保留</target></segment></unit>
+    <unit id="WorkspaceCleanupProtectionBody"><segment><source>Pinned workspaces, running agents or terminals, unsaved editor changes, uncommitted changes, and unpushed commits.</source><target state="translated">已固定的工作区、正在运行的智能体或终端、编辑器中未保存的更改、未提交的更改、未推送的提交</target></segment></unit>
+    <unit id="WorkspaceCleanupAutoToast"><segment><source>Automatically cleaned up {0} workspace(s).</source><target state="translated">已自动清理 {0} 个工作区。</target></segment></unit>
+    <unit id="WorkspaceCleanupRunResultRemoved"><segment><source>Cleaned {0} workspace(s)</source><target state="translated">已清理 {0} 个工作区</target></segment></unit>
+    <unit id="WorkspaceCleanupRunResultNone"><segment><source>Checked {0} workspace(s); none needed cleanup.</source><target state="translated">已检查 {0} 个工作区，暂无需要清理的项。</target></segment></unit>
+    <unit id="WorkspaceCleanupRunResultSkipped"><segment><source>{0} skipped due to protection</source><target state="translated">{0} 个因保护条件跳过</target></segment></unit>
+    <unit id="WorkspaceCleanupRunResultFailed"><segment><source>{0} failed</source><target state="translated">{0} 个清理失败</target></segment></unit>
+    <unit id="WorkspaceInspectTitle"><segment><source>Inspect workspaces</source><target state="translated">检查工作区</target></segment></unit>
+    <unit id="WorkspaceInspectDescription"><segment><source>Review all branch workspaces across your projects and choose which ones to remove. Unsaved work is re-checked before removal.</source><target state="translated">查看所有项目的分支工作区并选择要删除的项。移除前会再次检查未保存的工作。</target></segment></unit>
+    <unit id="WorkspaceInspectLoading"><segment><source>Scanning workspaces and git status…</source><target state="translated">正在扫描工作区与 Git 状态…</target></segment></unit>
+    <unit id="WorkspaceInspectEmpty"><segment><source>No branch workspaces found across your local projects.</source><target state="translated">本地项目中暂无分支工作区。</target></segment></unit>
+    <unit id="WorkspaceInspectNoFilterMatch"><segment><source>No workspaces match this filter.</source><target state="translated">当前筛选条件下没有工作区。</target></segment></unit>
+    <unit id="WorkspaceInspectFilterAll"><segment><source>All</source><target state="translated">全部</target></segment></unit>
+    <unit id="WorkspaceInspectFilterEligible"><segment><source>Suggested</source><target state="translated">建议清理</target></segment></unit>
+    <unit id="WorkspaceInspectFilterProtected"><segment><source>Protected</source><target state="translated">受保护</target></segment></unit>
+    <unit id="WorkspaceInspectSelectRecommended"><segment><source>Select suggested</source><target state="translated">选中建议项</target></segment></unit>
+    <unit id="WorkspaceInspectClearSelection"><segment><source>Clear</source><target state="translated">清空选择</target></segment></unit>
+    <unit id="WorkspaceInspectRefresh"><segment><source>Refresh</source><target state="translated">刷新</target></segment></unit>
+    <unit id="WorkspaceInspectSummary"><segment><source>{0} workspace(s) · {1} suggested · {2} protected</source><target state="translated">共 {0} 个工作区 · {1} 个建议清理 · {2} 个受保护</target></segment></unit>
+    <unit id="WorkspaceInspectRemoveButton"><segment><source>Remove selected ({0})</source><target state="translated">删除所选 ({0})</target></segment></unit>
+    <unit id="WorkspaceInspectRemoveDisabled"><segment><source>Remove selected</source><target state="translated">删除所选</target></segment></unit>
+    <unit id="WorkspaceInspectForceWarning"><segment><source>{0} selected workspace(s) have uncommitted changes, unpushed commits, or running sessions. Removing them will close their tabs and may discard uncommitted changes.</source><target state="translated">所选项中有 {0} 个工作区包含未提交更改、未推送提交或运行中的会话，继续删除将关闭其标签页并可能丢弃未提交更改。</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeMerged"><segment><source>Merged</source><target state="translated">已合并</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeMergedPr"><segment><source>PR #{0} merged</source><target state="translated">PR #{0} 已合并</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeUnchanged"><segment><source>Unchanged</source><target state="translated">无改动</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeInactive"><segment><source>Inactive ({0}d)</source><target state="translated">不活跃（{0} 天）</target></segment></unit>
+    <unit id="WorkspaceInspectBadgePinned"><segment><source>Pinned</source><target state="translated">已固定</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeRunning"><segment><source>Running ({0})</source><target state="translated">运行中（{0}）</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeUnsaved"><segment><source>Unsaved edits</source><target state="translated">未保存编辑</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeUncommitted"><segment><source>Uncommitted ({0})</source><target state="translated">未提交（{0}）</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeUnpushed"><segment><source>Unpushed ({0})</source><target state="translated">未推送（{0}）</target></segment></unit>
+    <unit id="WorkspaceInspectBadgeUnavailable"><segment><source>Status unavailable</source><target state="translated">状态不可用</target></segment></unit>
+    <unit id="WorkspaceInspectLastActivityToday"><segment><source>Active today</source><target state="translated">今天活跃</target></segment></unit>
+    <unit id="WorkspaceInspectLastActivityDays"><segment><source>Last active {0}d ago</source><target state="translated">{0} 天前活跃</target></segment></unit>
+    <unit id="WorkspacePin"><segment><source>Pin workspace</source><target state="translated">固定工作区</target></segment></unit>
+    <unit id="WorkspaceUnpin"><segment><source>Unpin workspace</source><target state="translated">取消固定</target></segment></unit>
+    <unit id="WorkspacePinnedTip"><segment><source>Pinned (protected from automatic cleanup)</source><target state="translated">已固定（受自动清理保护）</target></segment></unit>
+    <unit id="WorkspaceCleanupOpenSettingsTip"><segment><source>Workspace cleanup settings</source><target state="translated">工作区清理设置</target></segment></unit>
+    <unit id="AgentGuiJumpToBottom"><segment><source>Jump to latest</source><target state="translated">回到最新</target></segment></unit>
+    <unit id="AgentGuiOpenFile"><segment><source>Open file</source><target state="translated">打开文件</target></segment></unit>
+    <unit id="AgentGuiCopyReply"><segment><source>Copy reply</source><target state="translated">复制回复</target></segment></unit>
+    <unit id="AgentGuiCopyPrompt"><segment><source>Copy message</source><target state="translated">复制消息</target></segment></unit>
+    <unit id="AgentGuiClearSession"><segment><source>Clear view</source><target state="translated">清屏</target></segment></unit>
+    <unit id="AgentGuiQueuedBadge"><segment><source>Queued ({0})</source><target state="translated">待发送 ({0})</target></segment></unit>
+    <unit id="AgentGuiComposerHint"><segment><source>Enter send · ⇧Enter newline · ↑↓ history</source><target state="translated">Enter 发送 · ⇧Enter 换行 · ↑↓ 历史</target></segment></unit>
+    <unit id="AgentGuiQuickPromptOverview"><segment><source>Summarize this repository</source><target state="translated">概览当前仓库结构</target></segment></unit>
+    <unit id="AgentGuiQuickPromptDiff"><segment><source>Review recent git changes</source><target state="translated">检查最近 Git 改动</target></segment></unit>
+    <unit id="AgentGuiQuickPromptTests"><segment><source>Run tests and investigate failures</source><target state="translated">运行测试并排查失败</target></segment></unit>
+    <unit id="AgentGuiOpenDiff"><segment><source>View diff tab</source><target state="translated">在 Diff 标签查看</target></segment></unit>
+    <unit id="AgentGuiReusePrompt"><segment><source>Edit and resend</source><target state="translated">编辑重发</target></segment></unit>
+    <unit id="AgentGuiNewSession"><segment><source>New session</source><target state="translated">新建会话</target></segment></unit>
+    <unit id="AgentGuiExplorationSummary"><segment><source>Explored {0} steps ({1})</source><target state="translated">探索了 {0} 项操作（{1}）</target></segment></unit>
+    <unit id="AgentGuiExploreRead"><segment><source>read {0}</source><target state="translated">阅读 {0}</target></segment></unit>
+    <unit id="AgentGuiExploreSearch"><segment><source>search {0}</source><target state="translated">搜索 {0}</target></segment></unit>
+    <unit id="AgentGuiExploreFetch"><segment><source>fetch {0}</source><target state="translated">抓取 {0}</target></segment></unit>
+    <unit id="AgentGuiExploreOther"><segment><source>other {0}</source><target state="translated">其他 {0}</target></segment></unit>
+    <unit id="SessionsContinueInGui"><segment><source>Continue in GUI (ACP)</source><target state="translated">在 GUI (ACP) 继续</target></segment></unit>
+    <unit id="SessionsContinueInTerminal"><segment><source>Continue in Terminal</source><target state="translated">在终端继续</target></segment></unit>
+    <unit id="SettingsNavWorkspaces"><segment><source>Workspaces</source><target state="translated">工作区</target></segment></unit>
+    <unit id="SettingsWorkspacesTitle"><segment><source>Workspaces</source><target state="translated">工作区</target></segment></unit>
+    <unit id="SettingsWorkspacesSubtitle"><segment><source>Configure the default folder for branch workspaces and manage cleanup rules. Before removing anything, Octopus re-checks for unsaved work.</source><target state="translated">配置分支工作区的默认存放目录与清理规则。在移除任何内容之前，Octopus 会再次检查是否有未保存的工作。</target></segment></unit>
+    <unit id="WorkspaceDirectorySection"><segment><source>Storage location</source><target state="translated">存储位置</target></segment></unit>
+    <unit id="WorkspaceDirectoryTitle"><segment><source>Default workspace directory</source><target state="translated">默认工作区目录</target></segment></unit>
+    <unit id="WorkspaceDirectoryDescription"><segment><source>New branch workspaces (git worktrees) are created under &lt;project&gt;/&lt;branch&gt; inside this folder. Changing this only affects newly created workspaces; existing ones stay where they are.</source><target state="translated">新建分支工作区（Git worktree）默认存放在此目录下的 &lt;项目名&gt;/&lt;分支名&gt; 中。修改仅对新建工作区生效，已有工作区路径保持不变。</target></segment></unit>
+    <unit id="WorkspaceDirectoryPickTitle"><segment><source>Choose default workspace directory</source><target state="translated">选择默认工作区目录</target></segment></unit>
+    <unit id="WorkspaceDirectoryPreview"><segment><source>Active path: {0}</source><target state="translated">当前生效路径：{0}</target></segment></unit>
+    <unit id="WorkspaceDirectoryErrorInvalid"><segment><source>Enter an absolute folder path (or start with ~).</source><target state="translated">请输入绝对路径（或以 ~ 开头），不支持相对路径。</target></segment></unit>
+    <unit id="WorkspaceDirectoryErrorIsFile"><segment><source>This path points to an existing file. Choose a folder instead.</source><target state="translated">该路径指向一个已存在的文件，请选择文件夹。</target></segment></unit>
+    <unit id="WorkspaceDirectoryChangeButton"><segment><source>Change…</source><target state="translated">更改…</target></segment></unit>
+    <unit id="WorkspaceDirectoryCustomHint"><segment><source>Using custom folder for this workspace</source><target state="translated">已为本次创建指定自定义目录</target></segment></unit>
   </file>
 </xliff>

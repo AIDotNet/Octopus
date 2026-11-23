@@ -57,6 +57,16 @@ public sealed class AgentIcon : Border
         ["codebuff"] = ("#65A30D", "B"),
         ["nanocoder"] = ("#0891B2", "N"),
         ["jules"] = ("#9333EA", "J"),
+        ["omp"] = ("#0EA5E9", "O"),
+        ["agy"] = ("#4F46E5", "A"),
+        ["devin"] = ("#14B8A6", "D"),
+        ["hermes"] = ("#8B5CF6", "H"),
+        ["autohand"] = ("#F97316", "A"),
+        ["mimo"] = ("#FF6900", "M"),
+        ["vtcode"] = ("#059669", "V"),
+        ["bob"] = ("#0F62FE", "B"),
+        ["stakpak"] = ("#6366F1", "S"),
+        ["minimax"] = ("#EC4899", "M"),
     };
 
     private readonly TextBlock _letter = new()

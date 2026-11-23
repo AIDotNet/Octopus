@@ -114,5 +114,16 @@
       "path": "auth.json",
       "kind": "codexAuthJwt"
     }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "codex-acp",
+    "adapter": {
+      "registryId": "codex-acp",
+      "executables": [
+        "codex-acp"
+      ],
+      "npxPackage": "@agentclientprotocol/codex-acp"
+    }
   }
 }

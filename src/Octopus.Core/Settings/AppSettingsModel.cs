@@ -15,6 +15,50 @@ public sealed class AppSettingsModel
     public UpdateSettings Updates { get; set; } = new();
     public TraySettings Tray { get; set; } = new();
     public RemoteSettings Remote { get; set; } = new();
+    public WorkspaceSettings Workspaces { get; set; } = new();
+    public WorkspaceCleanupSettings WorkspaceCleanup { get; set; } = new();
+}
+
+/// <summary>Global preferences for isolated branch workspaces (git worktrees).</summary>
+public sealed class WorkspaceSettings
+{
+    /// <summary>
+    /// Custom root folder where new branch workspaces are created (<c>&lt;root&gt;/&lt;project&gt;/&lt;branch&gt;</c>).
+    /// Null or empty uses the default <c>~/.octopus/workspaces</c>. Supports a leading <c>~</c>.
+    /// </summary>
+    public string? RootDirectory { get; set; }
+}
+
+/// <summary>Automatic branch workspace (git worktree) cleanup rules.</summary>
+public sealed class WorkspaceCleanupSettings
+{
+    public const int DefaultInactiveDays = 30;
+    public const int MinInactiveDays = 1;
+    public const int MaxInactiveDays = 365;
+    public const int DefaultCheckIntervalMinutes = 60;
+    public const int MinCheckIntervalMinutes = 15;
+    public const int MaxCheckIntervalMinutes = 1440;
+    public const int DefaultUnchangedGraceHours = 1;
+    public const int MaxUnchangedGraceHours = 168;
+
+    /// <summary>Remove workspaces whose pull request or branch is merged into the default branch and contains all local content.</summary>
+    public bool DeleteMerged { get; set; }
+    /// <summary>Remove workspaces with no commits ahead of the default branch and no local edits.</summary>
+    public bool DeleteUnchanged { get; set; }
+    /// <summary>Remove workspaces with no activity for at least <see cref="InactiveDays"/> days.</summary>
+    public bool DeleteInactive { get; set; }
+    /// <summary>Days without activity before a workspace qualifies for the inactive rule.</summary>
+    public int InactiveDays { get; set; } = DefaultInactiveDays;
+    /// <summary>Delete the local branch together with the worktree when the branch is merged; unmerged branches are always kept.</summary>
+    public bool DeleteMergedBranch { get; set; } = true;
+    /// <summary>How often scheduled automatic cleanup checks run, in minutes.</summary>
+    public int CheckIntervalMinutes { get; set; } = DefaultCheckIntervalMinutes;
+    /// <summary>Minimum age (in hours) before an unchanged workspace is automatically removed.</summary>
+    public int UnchangedGraceHours { get; set; } = DefaultUnchangedGraceHours;
+    /// <summary>Run non-interactive <c>git fetch --all --prune</c> before checking merge status.</summary>
+    public bool FetchBeforeCheck { get; set; }
+
+    public bool HasAutoRulesEnabled() => DeleteMerged || DeleteUnchanged || DeleteInactive;
 }
 
 /// <summary>The icon in the notification area (Windows, Linux) or the menu bar (macOS).</summary>
@@ -109,9 +153,6 @@ public sealed class TerminalSettings
     public int ScrollbackLines { get; set; } = 10_000;
     /// <summary>Absolute path of the shell; null detects the user's shell.</summary>
     public string? Shell { get; set; }
-    /// <summary>Terminals and agents that were open come back when the app starts. Off: every start begins without them (files stay).</summary>
-    public bool RestoreItemsOnStartup { get; set; } = true;
-    public bool ResumeAgentsOnRestart { get; set; } = true;
     /// <summary>Ask before pasting text with several lines into a program that does not use bracketed paste.</summary>
     public bool ConfirmMultilinePaste { get; set; } = true;
 }
@@ -119,6 +160,12 @@ public sealed class TerminalSettings
 public sealed class AgentSettings
 {
     public string? DefaultAgentId { get; set; }
+    /// <summary>Global default surface for ACP-capable agents (<see cref="AgentSurface.Gui"/> or <see cref="AgentSurface.Terminal"/>). Non-ACP agents always use Terminal.</summary>
+    public AgentSurface DefaultSurface { get; set; } = AgentSurface.Terminal;
+    /// <summary>How ACP adapters (e.g. Claude/Codex official adapters) are resolved when not installed natively.</summary>
+    public AcpAdapterPolicy AcpAdapterPolicy { get; set; } = AcpAdapterPolicy.UseLocalRunners;
+    /// <summary>Advertises <c>elicitation.form</c> to ACP agents whose dialect supports structured form questions.</summary>
+    public bool AcpEnableFormElicitation { get; set; } = true;
     /// <summary>The permission level of every agent that has none of its own.</summary>
     public string DefaultPermission { get; set; } = PermissionModes.Default;
     /// <summary>

@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "hermes",
+  "name": "Hermes Agent",
+  "icon": "hermes",
+  "homepage": "https://github.com/NousResearch/hermes-agent",
+  "verified": false,
+  "detect": {
+    "executables": ["hermes"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "uv", "command": "uv tool install hermes-agent" },
+      { "kind": "pip", "command": "pip install hermes-agent" }
+    ]
+  },
+  "capabilities": {
+    "baseArgs": ["--tui"],
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["--approval-mode", "workspace_session"] },
+        "full": { "args": ["--approval-mode", "session"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "native",
+    "args": ["acp"],
+    "dialect": "hermes",
+    "permissionStrategy": "agentMode",
+    "permissionModes": {
+      "default": "ask",
+      "acceptEdits": "workspace_session",
+      "full": "session"
+    }
+  }
+}

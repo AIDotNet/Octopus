@@ -17,6 +17,7 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     private readonly object _gate = new();
     private readonly List<ProjectMessage> _projects = [];
     private readonly List<ItemMessage> _items = [];
+    private readonly Dictionary<string, WorkspaceOptionsMessage> _workspaceOptions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FakeTerminal> _terminals = new(StringComparer.Ordinal);
     private int _nextId;
 
@@ -32,23 +33,62 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     ];
     /// <summary>What devices asked to be started, in order.</summary>
     public ConcurrentQueue<CreateItemMessage> Created { get; } = new();
+    /// <summary>Branch workspaces devices asked to create, in order.</summary>
+    public ConcurrentQueue<CreateWorkspaceMessage> CreatedWorkspaces { get; } = new();
 
     public event Action? Changed;
     public event Action<ItemMessage>? ItemChanged;
 
-    public ProjectMessage AddProject(string name, string path)
+    public ProjectMessage AddProject(string name, string path, bool isGitRepository = false, string? defaultBranch = null)
     {
-        var project = new ProjectMessage { Id = "p" + Interlocked.Increment(ref _nextId), Name = name, Path = path };
+        var project = new ProjectMessage
+        {
+            Id = "p" + Interlocked.Increment(ref _nextId),
+            Name = name,
+            Path = path,
+            IsGitRepository = isGitRepository,
+            DefaultBranch = defaultBranch ?? (isGitRepository ? "main" : null),
+        };
         lock (_gate) _projects.Add(project);
         Changed?.Invoke();
         return project;
     }
 
-    public ItemMessage AddItem(ProjectMessage project, string title, string? agentId = null, string activity = ItemActivities.Idle, string? model = null, string? effort = null)
+    public WorkspaceMessage AddWorkspace(ProjectMessage project, string branch, string? taskKind = null, string? taskKey = null, string? taskTitle = null, string? taskUrl = null)
+    {
+        var ws = new WorkspaceMessage
+        {
+            Id = "w" + Interlocked.Increment(ref _nextId),
+            Name = branch,
+            Branch = branch,
+            Path = $"/home/ada/.octopus/workspaces/{Octopus.Core.Projects.WorkspacePaths.SanitizeSegment(project.Name)}/{Octopus.Core.Projects.WorkspacePaths.SanitizeSegment(branch)}",
+            TaskKind = taskKind,
+            TaskKey = taskKey,
+            TaskTitle = taskTitle,
+            TaskUrl = taskUrl,
+        };
+        lock (_gate)
+        {
+            project.IsGitRepository = true;
+            project.DefaultBranch ??= "main";
+            project.Workspaces ??= [];
+            project.Workspaces.Add(ws);
+        }
+        Changed?.Invoke();
+        return ws;
+    }
+
+    public void SetWorkspaceOptions(ProjectMessage project, WorkspaceOptionsMessage options)
+    {
+        lock (_gate) _workspaceOptions[project.Id] = options;
+    }
+
+    public ItemMessage AddItem(ProjectMessage project, string title, string? agentId = null, string activity = ItemActivities.Idle, string? model = null, string? effort = null, WorkspaceMessage? workspace = null)
     {
         var item = new ItemMessage
         {
             Id = "i" + Interlocked.Increment(ref _nextId), ProjectId = project.Id, Title = title, AgentId = agentId, Model = model, Effort = effort,
+            WorkspaceId = workspace?.Id, WorkspaceBranch = workspace?.Branch,
             Kind = agentId is null ? ItemKinds.Terminal : ItemKinds.Agent, Activity = activity, IsRunning = true,
         };
         lock (_gate) _items.Add(item);
@@ -93,12 +133,54 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     public Task<ItemMessage> CreateItemAsync(CreateItemMessage request)
     {
         ProjectMessage project;
-        lock (_gate) project = _projects.FirstOrDefault(known => known.Id == request.ProjectId) ?? throw new RemoteException(RemoteMethods.NotFound, "No such project.");
+        WorkspaceMessage? workspace = null;
+        lock (_gate)
+        {
+            project = _projects.FirstOrDefault(known => known.Id == request.ProjectId) ?? throw new RemoteException(RemoteMethods.NotFound, "No such project.");
+            if (!string.IsNullOrWhiteSpace(request.WorkspaceId))
+            {
+                workspace = project.Workspaces?.FirstOrDefault(w => w.Id == request.WorkspaceId)
+                    ?? throw new RemoteException(RemoteMethods.NotFound, "No such branch workspace.");
+            }
+        }
         if (request.Prompt == "fail") throw new RemoteException(RemoteMethods.StartFailed, "The agent is not installed on this computer.");
         Created.Enqueue(request);
         var title = request.Kind == ItemKinds.Agent ? request.Prompt ?? "Claude" : "zsh";
         return Task.FromResult(AddItem(project, title, request.Kind == ItemKinds.Agent ? request.AgentId : null,
-            request.Prompt is null ? ItemActivities.Idle : ItemActivities.Working, request.Model, request.Effort));
+            request.Prompt is null ? ItemActivities.Idle : ItemActivities.Working, request.Model, request.Effort, workspace));
+    }
+
+    public Task<WorkspaceOptionsMessage> GetWorkspaceOptionsAsync(string projectId)
+    {
+        lock (_gate)
+        {
+            var project = _projects.FirstOrDefault(known => known.Id == projectId) ?? throw new RemoteException(RemoteMethods.NotFound, "No such project.");
+            if (_workspaceOptions.TryGetValue(projectId, out var custom)) return Task.FromResult(custom);
+            if (!project.IsGitRepository) return Task.FromResult(new WorkspaceOptionsMessage());
+            var def = project.DefaultBranch ?? "main";
+            return Task.FromResult(new WorkspaceOptionsMessage
+            {
+                IsGitRepository = true,
+                DefaultBranch = def,
+                Branches = [new WorkspaceBranchMessage { Name = def, IsCurrent = true, OccupiedBy = project.Name }],
+            });
+        }
+    }
+
+    public Task<WorkspaceMessage> CreateWorkspaceAsync(CreateWorkspaceMessage request)
+    {
+        ProjectMessage project;
+        lock (_gate)
+        {
+            project = _projects.FirstOrDefault(known => known.Id == request.ProjectId) ?? throw new RemoteException(RemoteMethods.NotFound, "No such project.");
+        }
+        if (string.IsNullOrWhiteSpace(request.BranchName)) throw new RemoteException(RemoteProtocol.InvalidParams, "Branch name is required.");
+        if (request.BranchName == "fail") throw new RemoteException(RemoteMethods.StartFailed, "git worktree add failed.");
+        CreatedWorkspaces.Enqueue(request);
+        var branch = !request.CreateBranch && request.IsRemoteBranch && request.BranchName.IndexOf('/') is var slash and >= 0
+            ? request.BranchName[(slash + 1)..]
+            : request.BranchName.Trim();
+        return Task.FromResult(AddWorkspace(project, branch, request.TaskKind, request.TaskKey, request.TaskTitle, request.TaskUrl));
     }
 
     public Task RemoveItemAsync(string itemId)

@@ -5,6 +5,7 @@ using Octopus.App.Settings.General;
 using Octopus.App.Settings.Shortcuts;
 using Octopus.App.Settings.Ssh;
 using Octopus.App.Settings.Terminal;
+using Octopus.App.Settings.Workspaces;
 
 namespace Octopus.App.Settings;
 
@@ -17,6 +18,7 @@ internal static class SettingsModule
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<AgentsSettingsViewModel>();
         services.AddTransient<GeneralSettingsViewModel>();
+        services.AddTransient<WorkspaceCleanupSettingsViewModel>();
         services.AddTransient<TerminalSettingsViewModel>();
         services.AddTransient<SshSettingsViewModel>();
         services.AddTransient<Remote.RemoteAccessSettingsViewModel>();

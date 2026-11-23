@@ -64,5 +64,49 @@
     <unit id="PairingContacting"><segment><source>Reaching the computer</source><target state="translated">正在联系主机</target></segment></unit>
     <unit id="PairingNotOpen"><segment><source>The computer is not accepting new devices. On it, open Settings → Remote access and choose "Start pairing", then try again.</source><target state="translated">那台电脑现在不接受新设备。在它上面打开 设置 → 远程访问，点“开始配对”，再试一次。</target></segment></unit>
     <unit id="PairingUnreachable"><segment><source>The computer could not be reached.</source><target state="translated">连不上那台电脑。</target></segment></unit>
+    <unit id="WelcomeTagline"><segment><source>Work with the terminals and coding agents on your computers, from your phone</source><target state="translated">在手机上操作你电脑里的终端和编码智能体</target></segment></unit>
+    <unit id="OtherWays"><segment><source>Other ways to connect</source><target state="translated">其他连接方式</target></segment></unit>
+    <unit id="UseLocal"><segment><source>Local network</source><target state="translated">局域网直连</target></segment></unit>
+    <unit id="UseLocalHint"><segment><source>No account: connect to computers on the same network</source><target state="translated">不登录，连接同一网络里的电脑</target></segment></unit>
+    <unit id="UseCustom"><segment><source>Custom service</source><target state="translated">自定义服务</target></segment></unit>
+    <unit id="UseCustomHint"><segment><source>Sign in to an Octopus Server you host yourself</source><target state="translated">登录你自己部署的 Octopus Server</target></segment></unit>
+    <unit id="AddHost"><segment><source>Add a computer</source><target state="translated">添加电脑</target></segment></unit>
+    <unit id="AddHostHint"><segment><source>On the computer, open Octopus Settings → Remote access and choose "Start pairing".</source><target state="translated">在电脑上打开 Octopus 的 设置 → 远程访问，点“开始配对”。</target></segment></unit>
+    <unit id="AddHostTarget"><segment><source>Address or pairing link</source><target state="translated">地址或配对链接</target></segment></unit>
+    <unit id="AddHostConnect"><segment><source>Connect</source><target state="translated">连接</target></segment></unit>
+    <unit id="AddHostLinkHint"><segment><source>Paste the pairing link the computer shows (octopus://pair?…) to skip comparing the number.</source><target state="translated">粘贴电脑上显示的配对链接（octopus://pair?…）可以免去核对数字这一步。</target></segment></unit>
+    <unit id="AddHostNotAnAddress"><segment><source>This is neither an address nor a pairing link.</source><target state="translated">这不是一个地址，也不是配对链接。</target></segment></unit>
+    <unit id="NotSignedIn"><segment><source>Not signed in</source><target state="translated">未登录</target></segment></unit>
+    <unit id="LeaveLocal"><segment><source>Leave local network mode</source><target state="translated">退出局域网模式</target></segment></unit>
+    <unit id="HostsEmptyLocal"><segment><source>No computer added yet.</source><target state="translated">还没有添加电脑。</target></segment></unit>
+    <unit id="WorkspaceSection"><segment><source>Workspace</source><target state="translated">工作区</target></segment></unit>
+    <unit id="WorkspaceDefault"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="WorkspaceDefaultTitle"><segment><source>Default folder</source><target state="translated">默认目录</target></segment></unit>
+    <unit id="WorkspaceNewBranch"><segment><source>New branch workspace</source><target state="translated">新建分支工作区</target></segment></unit>
+    <unit id="WorkspaceNewBranchShort"><segment><source>New branch</source><target state="translated">新分支</target></segment></unit>
+    <unit id="WorkspaceEmpty"><segment><source>No sessions yet</source><target state="translated">暂无会话</target></segment></unit>
+    <unit id="WorkspaceModeNew"><segment><source>New branch</source><target state="translated">新建分支</target></segment></unit>
+    <unit id="WorkspaceModeExisting"><segment><source>Existing branch</source><target state="translated">复用分支</target></segment></unit>
+    <unit id="WorkspaceBaseBranch"><segment><source>Base branch</source><target state="translated">基于分支</target></segment></unit>
+    <unit id="WorkspaceBranchName"><segment><source>Branch name</source><target state="translated">分支名称</target></segment></unit>
+    <unit id="WorkspaceBranchNamePlaceholder"><segment><source>feat/my-feature</source><target state="translated">feat/my-feature</target></segment></unit>
+    <unit id="WorkspaceExistingBranch"><segment><source>Branch</source><target state="translated">选择分支</target></segment></unit>
+    <unit id="WorkspaceExistingBranchEmpty"><segment><source>No unoccupied branches available</source><target state="translated">没有可复用的空闲分支</target></segment></unit>
+    <unit id="WorkspacePathPreview"><segment><source>Worktree path: {0}</source><target state="translated">工作区路径：{0}</target></segment></unit>
+    <unit id="WorkspaceTaskSection"><segment><source>Link task (optional)</source><target state="translated">关联任务（可选）</target></segment></unit>
+    <unit id="WorkspaceTaskNone"><segment><source>None</source><target state="translated">不绑定</target></segment></unit>
+    <unit id="WorkspaceTaskIssue"><segment><source>Issue</source><target state="translated">Issue</target></segment></unit>
+    <unit id="WorkspaceTaskPr"><segment><source>PR</source><target state="translated">PR</target></segment></unit>
+    <unit id="WorkspaceTaskNote"><segment><source>Note</source><target state="translated">备注</target></segment></unit>
+    <unit id="WorkspaceTaskPicker"><segment><source>Select item</source><target state="translated">选择条目</target></segment></unit>
+    <unit id="WorkspaceTaskPickerPlaceholder"><segment><source>Choose from host</source><target state="translated">从主机选择</target></segment></unit>
+    <unit id="WorkspaceTaskLoading"><segment><source>Loading from host…</source><target state="translated">正在从主机加载…</target></segment></unit>
+    <unit id="WorkspaceTaskGhUnavailable"><segment><source>gh CLI not available on host</source><target state="translated">主机未检测到 gh CLI</target></segment></unit>
+    <unit id="WorkspaceTaskEmpty"><segment><source>No open items found</source><target state="translated">暂无打开的条目</target></segment></unit>
+    <unit id="WorkspaceTaskNotePlaceholder"><segment><source>Task title or note</source><target state="translated">任务标题或备注</target></segment></unit>
+    <unit id="WorkspaceTaskUrlPlaceholder"><segment><source>Link URL (optional)</source><target state="translated">关联链接（可选）</target></segment></unit>
+    <unit id="WorkspaceTaskInjectPrompt"><segment><source>Include task context in initial prompt</source><target state="translated">将任务信息写入首条提示词</target></segment></unit>
+    <unit id="WorkspaceBranchNameRequired"><segment><source>Enter or select a branch name.</source><target state="translated">请填写或选择一个分支名称。</target></segment></unit>
+    <unit id="WorkspaceUnsupportedHost"><segment><source>Update Octopus on the host to create branch workspaces.</source><target state="translated">请更新主机上的 Octopus 以创建分支工作区。</target></segment></unit>
   </file>
 </xliff>

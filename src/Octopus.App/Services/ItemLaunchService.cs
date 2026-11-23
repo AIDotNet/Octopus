@@ -30,10 +30,7 @@ public sealed class ItemLaunchService(
     /// <summary>Points at an <c>octopus-signal</c> build when it is not next to the app (development).</summary>
     public const string ForwarderVariable = "OCTOPUS_SIGNAL_FORWARDER";
 
-    public bool Resumes(ProjectItem item) =>
-        item.Kind == ProjectItemKind.Agent && projects.WasRestored(item.Id) && settings.Current.Terminal.ResumeAgentsOnRestart
-        // An agent on another computer was never stopped by this app's restart: there is nothing to resume.
-        && projects.FindProjectOf(item.Id) is not { RemoteHost: not null };
+    public bool Resumes(ProjectItem item) => false;
 
     /// <summary>What a tab of a project on another computer is started with: the program runs there, nothing is launched here.</summary>
     public static LaunchSpec RemoteSession { get; } = new("octopus-remote-session", [], null, new Dictionary<string, string>());
@@ -70,9 +67,6 @@ public sealed class ItemLaunchService(
         {
             throw new InvalidOperationException($"Unknown agent '{item.AgentId}'.");
         }
-        // The prompt is for the first start only; a restored tab continues its session instead.
-        var restored = projects.WasRestored(item.Id);
-        var resume = allowResume && Resumes(item);
         var launch = new AgentLaunchOptions
         {
             Model = item.Launch?.Model,
@@ -80,8 +74,8 @@ public sealed class ItemLaunchService(
             Fast = item.Launch?.Fast,
             AccountId = item.Launch?.AccountId,
             Prompt = item.Launch?.Prompt,
-            Resume = resume,
-            SessionId = allowResume && (!restored || resume) ? item.Launch?.SessionId : null,
+            Resume = false,
+            SessionId = allowResume ? item.Launch?.SessionId : null,
             Env = item.Launch?.Env,
         };
         var profile = current.Agents.ProfileOf(definition.Id);

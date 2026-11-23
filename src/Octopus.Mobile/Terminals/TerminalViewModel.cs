@@ -76,8 +76,13 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
 
     public RemoteSession Session { get; }
     public string Title => Session.Title;
-    /// <summary>Project, host and how the host is reached, under the title.</summary>
-    public string Location => string.Join(" · ", Session.Project.Name, Session.Project.Host.Name, LinkName(Session.Project.Host.Link));
+    /// <summary>Project (with branch when in a worktree), host and how the host is reached, under the title.</summary>
+    public string Location => string.Join(" · ",
+        Session.WorkspaceBranch is { Length: > 0 } branch
+            ? $"{Session.Project.Name} ({branch})"
+            : Session.Project.Name,
+        Session.Project.Host.Name,
+        LinkName(Session.Project.Host.Link));
 
     /// <summary>What the terminal control is started with: the session on the host, not a program of this device.</summary>
     public LaunchSpec Spec { get; } = new("octopus-remote-session", [], null, new Dictionary<string, string>());
@@ -235,6 +240,9 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         {
             case nameof(RemoteSession.Title):
                 OnPropertyChanged(nameof(Title));
+                break;
+            case nameof(RemoteSession.WorkspaceBranch):
+                OnPropertyChanged(nameof(Location));
                 break;
             case nameof(RemoteSession.Columns) or nameof(RemoteSession.Rows) or nameof(RemoteSession.SizeOwner):
                 OnPropertyChanged(nameof(SizeText));

@@ -4,10 +4,13 @@ using CommunityToolkit.Mvvm.Input;
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
 using Octopus.App.Common;
+using Octopus.App.Localization;
 using Octopus.App.Services;
+using Octopus.App.Services.Workspaces;
 using Octopus.App.Shell;
 using Octopus.App.Shell.Keymap;
 using Octopus.Core.Agents;
+using Octopus.Core.Projects;
 using Octopus.Storage;
 
 namespace Octopus.App.Launcher;
@@ -24,8 +27,10 @@ public sealed partial class LauncherViewModel : ObservableObject
     private readonly IItemOpener _opener;
     private readonly ISettingsNavigator _navigator;
     private readonly IAgentAccountService? _accounts;
+    private readonly IWorkspaceManager? _workspaces;
     private readonly Dictionary<string, AgentLaunchViewModel> _panels = [];
     private readonly Plugins.PluginWorkbench? _plugins;
+    private string? _targetWorkspaceId;
 
     public LauncherViewModel(
         IAgentScanner scanner,
@@ -38,10 +43,12 @@ public sealed partial class LauncherViewModel : ObservableObject
         IAppKeymap keymap,
         IProjectService projects,
         Plugins.PluginWorkbench? plugins = null,
-        IAgentAccountService? accounts = null)
+        IAgentAccountService? accounts = null,
+        IWorkspaceManager? workspaces = null)
     {
         _plugins = plugins;
         _accounts = accounts;
+        _workspaces = workspaces;
         _scanner = scanner;
         _catalog = catalog;
         _settings = settings;
@@ -90,6 +97,48 @@ public sealed partial class LauncherViewModel : ObservableObject
     [ObservableProperty] public partial LauncherAgentViewModel? ExpandedAgent { get; private set; }
     [ObservableProperty] public partial AgentLaunchViewModel? Panel { get; private set; }
 
+    /// <summary>Shown at the top of the menu when the project has branch workspaces, naming which folder new items open in.</summary>
+    [ObservableProperty] public partial bool ShowWorkspaceBanner { get; private set; }
+    [ObservableProperty] public partial string TargetWorkspaceScopeText { get; private set; } = "";
+    [ObservableProperty] public partial bool IsTargetWorktree { get; private set; }
+    [ObservableProperty] public partial bool CanCreateBranchWorkspace { get; private set; }
+
+    /// <summary>Sets which workspace the next menu action targets (<c>""</c> = default folder, id = worktree, null = active tab's workspace).</summary>
+    public void SetTargetWorkspace(string? workspaceId, bool isGitProject = false)
+    {
+        _targetWorkspaceId = workspaceId;
+        UpdateWorkspaceBanner(isGitProject);
+    }
+
+    private void UpdateWorkspaceBanner(bool isGitProject)
+    {
+        var project = _projects.Current;
+        CanCreateBranchWorkspace = _workspaces is not null && project is not null && ProjectLocation.IsOnThisComputer(project) && isGitProject;
+        if (project is null || !ProjectLocation.IsOnThisComputer(project) || project.Workspaces.Count == 0)
+        {
+            ShowWorkspaceBanner = false;
+            TargetWorkspaceScopeText = "";
+            IsTargetWorktree = false;
+            return;
+        }
+        ProjectWorkspace? resolved = null;
+        if (_targetWorkspaceId != IItemOpener.DefaultWorkspaceId)
+        {
+            var id = _targetWorkspaceId;
+            if (id is null && project.ActiveItemId is { } activeId)
+            {
+                id = project.Items.FirstOrDefault(i => i.Id == activeId)?.WorkspaceId;
+            }
+            resolved = _projects.FindWorkspace(project, id);
+        }
+        IsTargetWorktree = resolved is not null;
+        var label = resolved is not null
+            ? resolved.DisplayName
+            : AppLangResources.Get(AppLangResourceKind.WorkspaceDefaultName);
+        TargetWorkspaceScopeText = AppLangResources.Format(AppLangResourceKind.WorkspaceLauncherScope, label);
+        ShowWorkspaceBanner = true;
+    }
+
     /// <summary>In a project on an SSH host no agent is offered: agents need this computer's files and programs.</summary>
     /// <summary>The current project is somewhere agents cannot run (an SSH host): the menu says so instead of listing them.</summary>
     public bool IsRemoteProject => _projects.Current is { } current && !Octopus.Core.Projects.ProjectLocation.CanRunAgents(current);
@@ -123,7 +172,7 @@ public sealed partial class LauncherViewModel : ObservableObject
             {
                 continue;
             }
-            rows.Add(new LauncherAgentViewModel(definition.Id, definition.Name, definition.Id == agents.DefaultAgentId, LaunchAgent, Expand));
+            rows.Add(new LauncherAgentViewModel(definition.Id, definition.Name, definition.Id == agents.DefaultAgentId, LaunchAgent, Expand, definition.SupportsAcp));
         }
         // The default agent first; the rest keep the catalog's order.
         var ordered = rows.OrderByDescending(r => r.IsDefault).ToList();
@@ -171,15 +220,26 @@ public sealed partial class LauncherViewModel : ObservableObject
     [RelayCommand]
     private void NewTerminal()
     {
-        _opener.OpenTerminal();
+        _opener.OpenTerminal(_targetWorkspaceId);
         Close();
     }
 
     [RelayCommand]
     private async Task OpenFileAsync()
     {
+        var target = _targetWorkspaceId;
         Close();
-        await _opener.PickAndOpenFileAsync();
+        await _opener.PickAndOpenFileAsync(target);
+    }
+
+    [RelayCommand]
+    private async Task NewBranchWorkspaceAsync()
+    {
+        Close();
+        if (_workspaces is not null)
+        {
+            await _workspaces.PromptAndCreateAsync();
+        }
     }
 
     /// <summary>Clicking the agent row itself: start it with its default configuration.</summary>
@@ -197,7 +257,7 @@ public sealed partial class LauncherViewModel : ObservableObject
             return;
         }
         var profile = _settings.Current.Agents.ProfileOf(agent.Id);
-        _opener.OpenAgent(agent.Id, new AgentLaunchOptions { Model = profile.Model, Effort = profile.Effort, Fast = profile.Fast });
+        _opener.OpenAgent(agent.Id, new AgentLaunchOptions { Model = profile.Model, Effort = profile.Effort, Fast = profile.Fast }, _targetWorkspaceId);
         Close();
     }
 
@@ -228,6 +288,10 @@ public sealed partial class LauncherViewModel : ObservableObject
             accounts = _accounts.GetAccounts(definition);
             preferredAccountId = _accounts.ResolvePreferredAccountId(definition, profile, localProject);
         }
+        var isLocal = _projects.Current is null || ProjectLocation.IsOnThisComputer(_projects.Current);
+        var defaultSurface = isLocal
+            ? AgentSurfaceResolver.Resolve(definition, current)
+            : AgentSurface.Terminal;
         var panel = new AgentLaunchViewModel(
             definition,
             profile,
@@ -237,11 +301,13 @@ public sealed partial class LauncherViewModel : ObservableObject
             _scanner.Find(agent.Id)?.Path,
             options =>
             {
-                _opener.OpenAgent(agent.Id, options);
+                _opener.OpenAgent(agent.Id, options, _targetWorkspaceId);
                 Close();
             },
             accounts,
-            preferredAccountId);
+            preferredAccountId,
+            defaultSurface,
+            allowGui: isLocal && definition.SupportsAcp);
         _panels[agent.Id] = panel;
         return panel;
     }

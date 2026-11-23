@@ -64,5 +64,17 @@
       "error": ["session-error"]
     },
     "credentialFiles": ["auth.json"]
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "acp"
+    ],
+    "env": {
+      "OPENCODE_CLIENT": "acp",
+      "OPENCODE_ENABLE_QUESTION_TOOL": "false"
+    },
+    "dialect": "opencode",
+    "minVersion": "1.19.3"
   }
 }

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Octopus.Core/Octopus.Core.csproj" />
+        <ProjectReference Include="../Octopus.Platform/Octopus.Platform.csproj" />
+        <ProjectReference Include="../Octopus.Agents/Octopus.Agents.csproj" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    </ItemGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Acp.Tests" />
+    </ItemGroup>
+</Project>

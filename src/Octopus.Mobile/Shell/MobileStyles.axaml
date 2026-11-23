@@ -106,4 +106,38 @@
         <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource Type3XL}" />
         <Setter Property="HorizontalAlignment" Value="Center" />
     </Style>
+
+    <!-- Workspace grouping on the host page and path preview inside the New sheet. -->
+    <Style Selector="TextBlock.sectionHeader">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+    </Style>
+    <Style Selector="TextBlock.wsTitle">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="Border.wsPill">
+        <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+        <Setter Property="Padding" Value="7,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+    </Style>
+    <Style Selector="Border.wsPill TextBlock">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Border.pathPreview">
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+    </Style>
+    <Style Selector="Border.emptyCard">
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+    </Style>
 </Styles>

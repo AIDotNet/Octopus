@@ -51,6 +51,10 @@ internal sealed class HostConnection : IAsyncDisposable
             await _workspace.RenameItemAsync(request.ItemId, request.Title).ConfigureAwait(false);
             return new Nothing();
         });
+        _connection.Handle(RemoteMethods.WorkspaceOptions, json.ProjectRefMessage, json.WorkspaceOptionsMessage,
+            (request, _) => _workspace.GetWorkspaceOptionsAsync(request.ProjectId));
+        _connection.Handle(RemoteMethods.WorkspaceCreate, json.CreateWorkspaceMessage, json.WorkspaceMessage,
+            (request, _) => _workspace.CreateWorkspaceAsync(request));
         _connection.Handle(RemoteMethods.AgentCatalog, json.Nothing, json.AgentListMessage,
             async (_, _) => new AgentListMessage { Agents = [.. await _workspace.ListAgentsAsync().ConfigureAwait(false)] });
         _connection.Handle(RemoteMethods.SessionAttach, json.AttachMessage, json.AttachedMessage, (request, _) => AttachAsync(request));

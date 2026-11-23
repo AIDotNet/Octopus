@@ -25,5 +25,20 @@
       ],
       "allowCustom": true
     }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "--acp"
+    ],
+    "dialect": "qwen-code",
+    "minVersion": "0.16.0",
+    "permissionStrategy": "agentMode",
+    "permissionModes": {
+      "default": "default",
+      "acceptEdits": "auto-edit",
+      "auto": "auto",
+      "full": "yolo"
+    }
   }
 }

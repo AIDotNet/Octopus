@@ -31,6 +31,9 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     [ObservableProperty]
     private IReadOnlyList<SelectOption> _permissionOptions = [];
 
+    [ObservableProperty]
+    private IReadOnlyList<SelectOption> _acpAdapterPolicyOptions = [];
+
     public AgentsSettingsViewModel(
         ISettingsStore settings,
         IAgentCatalog catalog,
@@ -55,6 +58,7 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         _services = new AgentServices(settings, compiler, discovery, opener, pathPicker, accounts, dialogs, launchPlanner, projects, sessions);
         _isScanning = scanner.IsScanning;
         BuildPermissionOptions();
+        BuildAcpAdapterPolicyOptions();
         Rebuild(expandFirst: true);
         scanner.Changed += OnScannerChanged;
         catalog.Changed += OnCatalogChanged;
@@ -73,6 +77,65 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     public string NotInstalledTitle => AppLangResources.Format(AppLangResourceKind.SettingsNotInstalledCount, NotInstalled.Count);
 
     public string Subtitle => AppLangResources.Format(AppLangResourceKind.SettingsAgentsSubtitle, Installed.Count);
+
+    /// <summary>Default launch surface for ACP-capable agents (non-ACP agents always open in Terminal).</summary>
+    public AgentSurface DefaultSurface
+    {
+        get => _settings.Current.Agents.DefaultSurface;
+        set
+        {
+            if (value == DefaultSurface)
+            {
+                return;
+            }
+            _settings.Update(s => s.Agents.DefaultSurface = value);
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsGuiDefault));
+            OnPropertyChanged(nameof(IsTerminalDefault));
+        }
+    }
+
+    public bool IsGuiDefault => DefaultSurface == AgentSurface.Gui;
+
+    public bool IsTerminalDefault => DefaultSurface == AgentSurface.Terminal;
+
+    [RelayCommand]
+    private void SelectGuiSurface() => DefaultSurface = AgentSurface.Gui;
+
+    [RelayCommand]
+    private void SelectTerminalSurface() => DefaultSurface = AgentSurface.Terminal;
+
+    /// <summary>Selected ACP adapter resolution policy key.</summary>
+    public string AcpAdapterPolicyKey
+    {
+        get => _settings.Current.Agents.AcpAdapterPolicy.ToString();
+        set
+        {
+            if (string.IsNullOrEmpty(value)
+                || !Enum.TryParse<AcpAdapterPolicy>(value, ignoreCase: true, out var parsed)
+                || parsed == _settings.Current.Agents.AcpAdapterPolicy)
+            {
+                return;
+            }
+            _settings.Update(s => s.Agents.AcpAdapterPolicy = parsed);
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Whether ACP agents may render structured form elicitation prompts inside the GUI.</summary>
+    public bool AcpEnableFormElicitation
+    {
+        get => _settings.Current.Agents.AcpEnableFormElicitation;
+        set
+        {
+            if (value == AcpEnableFormElicitation)
+            {
+                return;
+            }
+            _settings.Update(s => s.Agents.AcpEnableFormElicitation = value);
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>The unified permission level of agents without their own; the id of one of <see cref="PermissionOptions"/>.</summary>
     public string GlobalPermission
@@ -262,6 +325,14 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     private void BuildPermissionOptions() =>
         PermissionOptions = [.. PermissionModes.All.Select(id => new SelectOption(id, PermissionNames.Of(id)))];
 
+    private void BuildAcpAdapterPolicyOptions() =>
+        AcpAdapterPolicyOptions =
+        [
+            new SelectOption(nameof(AcpAdapterPolicy.UseLocalRunners), AppLangResources.Get(AppLangResourceKind.SettingsAcpPolicyLocalRunners)),
+            new SelectOption(nameof(AcpAdapterPolicy.NativeOnly), AppLangResources.Get(AppLangResourceKind.SettingsAcpPolicyNativeOnly)),
+            new SelectOption(nameof(AcpAdapterPolicy.ManagedRegistry), AppLangResources.Get(AppLangResourceKind.SettingsAcpPolicyManagedRegistry)),
+        ];
+
     private void OnScannerChanged(object? sender, EventArgs e) => UiContext.PostToUi(() =>
     {
         IsScanning = _scanner.IsScanning;
@@ -278,13 +349,21 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     {
         OnPropertyChanged(nameof(GlobalPermission));
         OnPropertyChanged(nameof(ShowFullWarning));
+        OnPropertyChanged(nameof(UseSystemProxy));
+        OnPropertyChanged(nameof(DefaultSurface));
+        OnPropertyChanged(nameof(IsGuiDefault));
+        OnPropertyChanged(nameof(IsTerminalDefault));
+        OnPropertyChanged(nameof(AcpAdapterPolicyKey));
+        OnPropertyChanged(nameof(AcpEnableFormElicitation));
     });
 
     private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.PostToUi(() =>
     {
         BuildPermissionOptions();
+        BuildAcpAdapterPolicyOptions();
         Rebuild();
         OnPropertyChanged(nameof(GlobalPermission));
+        OnPropertyChanged(nameof(AcpAdapterPolicyKey));
         OnPropertyChanged(nameof(RescanText));
     });
 

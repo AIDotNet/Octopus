@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -48,6 +49,10 @@ internal sealed class RelayDeviceLoginRequest
     public string? DeviceName { get; set; }
     public string? Kind { get; set; }
     public string? PublicKey { get; set; }
+    /// <summary>The system this device runs ("macOS", "iOS"…); left out when it is none the relay knows.</summary>
+    public string? Platform { get; set; }
+    /// <summary>The app's version; left out when it has none.</summary>
+    public string? AppVersion { get; set; }
 }
 
 internal sealed class RelayDeviceLoginResponse
@@ -107,6 +112,33 @@ internal sealed class RelayDevicesResponse
 [JsonSerializable(typeof(RelayTokenResponse))]
 internal sealed partial class RelayAccountJsonContext : JsonSerializerContext;
 
+/// <summary>What a device says about itself when it signs in, for the account's list of devices (the relay's design/04-设备管理.md §6).</summary>
+public static class RelayClientInfo
+{
+    /// <summary>The system this app runs on, as the relay names it; null on any other.</summary>
+    public static string? Platform { get; } =
+        OperatingSystem.IsIOS() ? "iOS"
+        : OperatingSystem.IsAndroid() ? "Android"
+        : OperatingSystem.IsMacOS() ? "macOS"
+        : OperatingSystem.IsWindows() ? "Windows"
+        : OperatingSystem.IsLinux() ? "Linux"
+        : null;
+
+    /// <summary>
+    /// The app's version: the informational version of the program that was started (on a phone, where there is no
+    /// such program, of this library, which is built with the same one), without the commit after "+". Null when there is none.
+    /// </summary>
+    public static string? AppVersion { get; } = VersionOf(
+        (Assembly.GetEntryAssembly() ?? typeof(RelayClientInfo).Assembly).GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+
+    /// <summary>"1.2.3+4f5e6d7" is "1.2.3"; nothing, or something too long to be a version, is null.</summary>
+    internal static string? VersionOf(string? informational)
+    {
+        var version = informational?.Split('+', 2)[0].Trim();
+        return version is { Length: > 0 and <= 64 } ? version : null;
+    }
+}
+
 /// <summary>
 /// Signing this device in at a relay (the relay's design/03-账号与登录.md §4): the device asks for a code and shows
 /// it, the person confirms it in a browser where they are signed in, and the device, proving its key, is given its
@@ -127,7 +159,13 @@ public static class RelayAccountClient
     /// <summary>Starts a sign-in for this device. Throws <see cref="RelayException"/>.</summary>
     public static async Task<RelayDeviceLogin> StartLoginAsync(Uri relay, DeviceIdentity identity, string deviceName, string kind = "desktop", CancellationToken cancellationToken = default)
     {
-        var request = new RelayDeviceLoginRequest { DeviceName = deviceName, Kind = kind, PublicKey = Convert.ToBase64String(identity.PublicKey.Bytes) };
+        // The system and the version are only shown to the person, in the account's list of devices: a relay that
+        // does not know these two fields ignores them.
+        var request = new RelayDeviceLoginRequest
+        {
+            DeviceName = deviceName, Kind = kind, PublicKey = Convert.ToBase64String(identity.PublicKey.Bytes),
+            Platform = RelayClientInfo.Platform, AppVersion = RelayClientInfo.AppVersion,
+        };
         var (status, bytes) = await PostAsync(new Uri(relay, "v1/auth/device"), JsonSerializer.SerializeToUtf8Bytes(request, RelayAccountJsonContext.Default.RelayDeviceLoginRequest), cancellationToken).ConfigureAwait(false);
         if (status == HttpStatusCode.TooManyRequests) throw new RelayException(RelayFailure.Busy, "The relay is busy; try again later.");
         var answer = status == HttpStatusCode.OK ? Parse(bytes, RelayAccountJsonContext.Default.RelayDeviceLoginResponse) : null;

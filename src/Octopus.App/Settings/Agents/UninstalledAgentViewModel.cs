@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.Input;
+using Octopus.App.Localization;
 using Octopus.Core.Agents;
 using Octopus.Platform;
 
@@ -12,6 +13,15 @@ public sealed partial class UninstalledAgentViewModel(AgentDefinition definition
     public string Id => Definition.Id;
 
     public string Name => Definition.Name;
+
+    public bool SupportsAcp => Definition.SupportsAcp;
+
+    public string AcpBadgeText => Definition.Acp switch
+    {
+        null => AppLangResources.Get(AppLangResourceKind.SettingsAcpBadgeTerminalOnly),
+        { Mode: "adapter" } => AppLangResources.Get(AppLangResourceKind.SettingsAcpBadgeAdapter),
+        _ => AppLangResources.Get(AppLangResourceKind.SettingsAcpBadgeNative),
+    };
 
     /// <summary>"Custom" or "Modified" when the user has a definition file of this agent; null for a built-in one as shipped.</summary>
     public string? OriginBadge { get; init; }

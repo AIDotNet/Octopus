@@ -63,7 +63,52 @@ public sealed partial class RemoteHost : ObservableObject
     partial void OnLinkChanged(HostLink value) => OnPropertyChanged(nameof(IsOnline));
 }
 
-/// <summary>A project on a host: a folder there, with its terminals and agents.</summary>
+/// <summary>An isolated git worktree workspace of a project on the host.</summary>
+public sealed record RemoteBranchWorkspace(
+    string Id,
+    string Name,
+    string Branch,
+    string Path,
+    string? TaskKind = null,
+    string? TaskKey = null,
+    string? TaskTitle = null,
+    string? TaskUrl = null)
+{
+    public string DisplayName => !string.IsNullOrWhiteSpace(Branch) ? Branch : Name;
+    public bool HasTask => !string.IsNullOrWhiteSpace(TaskKey);
+}
+
+public sealed record RemoteBranchOption(string Name, bool IsRemote, bool IsCurrent, string? OccupiedBy)
+{
+    public bool IsOccupied => !string.IsNullOrEmpty(OccupiedBy);
+}
+
+public sealed record RemoteTaskOption(string Kind, string Key, string Title, string? Url, string? Body, string SuggestedBranch, string? HeadBranch);
+
+public sealed record RemoteWorkspaceOptions(
+    bool IsGitRepository,
+    string? DefaultBranch,
+    IReadOnlyList<RemoteBranchOption> Branches,
+    bool GhAvailable,
+    IReadOnlyList<RemoteTaskOption> Issues,
+    IReadOnlyList<RemoteTaskOption> PullRequests,
+    string? WorkspacesDirectory = null)
+{
+    public static RemoteWorkspaceOptions Empty { get; } = new(false, null, [], false, [], []);
+}
+
+public sealed record CreateBranchWorkspaceRequest(
+    bool CreateBranch,
+    string BranchName,
+    string? BaseRef,
+    bool IsRemoteBranch,
+    string? TaskKind = null,
+    string? TaskKey = null,
+    string? TaskTitle = null,
+    string? TaskUrl = null,
+    string? TaskBody = null);
+
+/// <summary>A project on a host: a folder there, with its branch workspaces, terminals and agents.</summary>
 public sealed class RemoteProject(RemoteHost host, string id, string name, string path)
 {
     public RemoteHost Host { get; } = host;
@@ -71,6 +116,9 @@ public sealed class RemoteProject(RemoteHost host, string id, string name, strin
     public string Name { get; } = name;
     /// <summary>The folder on the host, as the host shows it.</summary>
     public string Path { get; } = path;
+    public bool IsGitRepository { get; set; }
+    public string? DefaultBranch { get; set; }
+    public ObservableCollection<RemoteBranchWorkspace> Workspaces { get; } = [];
     public ObservableCollection<RemoteSession> Sessions { get; } = [];
 }
 
@@ -92,6 +140,12 @@ public sealed partial class RemoteSession : ObservableObject
     public string? AgentId { get; init; }
     /// <summary>The second line of its row: model and effort for an agent, the shell for a terminal.</summary>
     public string? Detail { get; init; }
+    /// <summary>Null when running in the project's default folder; otherwise the branch workspace id.</summary>
+    [ObservableProperty] public partial string? WorkspaceId { get; set; }
+    /// <summary>Branch name of the workspace this session runs in; null for default folder.</summary>
+    [ObservableProperty] public partial string? WorkspaceBranch { get; set; }
+    /// <summary>Optional short task badge (e.g. #142) from the session's workspace.</summary>
+    [ObservableProperty] public partial string? WorkspaceTaskKey { get; set; }
     [ObservableProperty] public partial string Title { get; set; }
     [ObservableProperty] public partial SessionActivity Activity { get; set; }
     /// <summary>One line about what it is doing or asking; null when there is nothing to say.</summary>
@@ -106,4 +160,12 @@ public sealed partial class RemoteSession : ObservableObject
 /// <summary>What to start in a project.</summary>
 /// <param name="AgentId">Null for a plain terminal.</param>
 /// <param name="Model">Null for the agent's default.</param>
-public sealed record NewSessionRequest(string? AgentId, string? Model, string? Effort, string? Prompt);
+/// <param name="WorkspaceId">Null for the project's default folder; otherwise the id of a branch workspace.</param>
+/// <param name="InjectTaskPrompt">When true and the target workspace has a linked task, prepend task context to the initial prompt.</param>
+public sealed record NewSessionRequest(
+    string? AgentId,
+    string? Model,
+    string? Effort,
+    string? Prompt,
+    string? WorkspaceId = null,
+    bool InjectTaskPrompt = false);

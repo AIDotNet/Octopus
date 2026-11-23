@@ -18,6 +18,7 @@ internal static class SettingsTestSupport
         s.Agents = new AgentSettings();
         s.Terminal = new TerminalSettings();
         s.Appearance = new AppearanceSettings();
+        s.WorkspaceCleanup = new WorkspaceCleanupSettings();
     });
 
     public static AgentServices Services() => new(

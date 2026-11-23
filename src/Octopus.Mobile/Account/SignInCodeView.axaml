@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+             xmlns:l="using:Octopus.Mobile.Localization"
+             xmlns:vm="using:Octopus.Mobile.Account"
+             x:Class="Octopus.Mobile.Account.SignInCodeView"
+             x:DataType="vm:SignInFlow">
+    <!-- The code, to be confirmed in the browser. -->
+    <StackPanel Spacing="18">
+        <TextBlock Classes="secondary"
+                   Text="{l:MobileLangResource SignInHint}"
+                   TextWrapping="Wrap"
+                   TextTrimming="None"
+                   TextAlignment="Center" />
+        <Border Background="{arc:ArcDesignTokenResource Surface}"
+                BorderBrush="{arc:ArcDesignTokenResource Border}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
+                Padding="16,14">
+            <TextBlock Name="UserCode" Classes="code" Text="{Binding UserCode}" FontSize="{arc:ArcDesignTokenResource Type2XL}" />
+        </Border>
+        <arcm:Button Name="BrowseButton"
+                     Variant="Filled"
+                     HorizontalAlignment="Stretch"
+                     HorizontalContentAlignment="Center"
+                     Content="{l:MobileLangResource SignInOpenBrowser}"
+                     Command="{Binding BrowseCommand}" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+            <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+            <TextBlock Classes="muted" Text="{l:MobileLangResource SignInWaiting}" />
+        </StackPanel>
+        <arcm:Button Name="CancelButton"
+                     Variant="Plain"
+                     HorizontalAlignment="Center"
+                     Content="{l:MobileLangResource Cancel}"
+                     Command="{Binding CancelCommand}" />
+    </StackPanel>
+</UserControl>

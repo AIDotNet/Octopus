@@ -25,6 +25,7 @@ public class SettingsPagesTests
     [AvaloniaTheory]
     [InlineData("agents")]
     [InlineData("general")]
+    [InlineData("workspace-cleanup")]
     [InlineData("terminal")]
     [InlineData("appearance")]
     [InlineData("shortcuts")]
@@ -144,10 +145,8 @@ public class SettingsPagesTests
         var general = AppHost.Get<GeneralSettingsViewModel>();
         var settings = AppHost.Get<ISettingsStore>();
 
-        general.ResumeAgentsOnRestart = false;
         general.Language = "en-US";
 
-        Assert.False(settings.Current.Terminal.ResumeAgentsOnRestart);
         Assert.Equal("en-US", settings.Current.Appearance.Language);
         Assert.Equal("en-US", ArcLanguage.Current.ToString());
         Assert.Contains(general.Languages, l => (string)l.Value! == "zh-CN");

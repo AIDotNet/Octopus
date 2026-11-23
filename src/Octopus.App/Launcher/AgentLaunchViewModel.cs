@@ -33,7 +33,9 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         string? executable,
         Action<AgentLaunchOptions> launch,
         IReadOnlyList<AgentAccountRecord>? accounts = null,
-        string? preferredAccountId = null)
+        string? preferredAccountId = null,
+        AgentSurface defaultSurface = AgentSurface.Terminal,
+        bool? allowGui = null)
     {
         _definition = definition;
         _compiler = compiler;
@@ -48,6 +50,8 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         HasAccounts = _accounts.Count >= 2;
         AllowCustomModel = capabilities.Model?.AllowCustom ?? false;
         AgentName = definition.Name;
+        SupportsAcp = allowGui ?? definition.SupportsAcp;
+        DefaultSurface = SupportsAcp ? defaultSurface : AgentSurface.Terminal;
 
         _permissionId = compiler.ResolvePermission(definition, profile, globalPermission) ?? PermissionModes.Default;
 
@@ -77,6 +81,14 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
     }
 
     public string AgentName { get; }
+    public bool SupportsAcp { get; }
+    public AgentSurface DefaultSurface { get; }
+    public bool ShowDualLaunchButtons => SupportsAcp;
+    public bool ShowTerminalOnlyHint => !SupportsAcp;
+    public string PrimaryLaunchLabel => AppLangResources.Get(
+        DefaultSurface == AgentSurface.Gui ? AppLangResourceKind.LaunchGui : AppLangResourceKind.LaunchTerminal);
+    public string SecondaryLaunchLabel => AppLangResources.Get(
+        DefaultSurface == AgentSurface.Gui ? AppLangResourceKind.LaunchTerminal : AppLangResourceKind.LaunchGui);
     public bool HasModel { get; }
     public bool HasEffort { get; }
     public bool HasFast { get; }
@@ -147,19 +159,29 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void Launch() => _launch(BuildOptions());
+    private void Launch() => _launch(BuildOptions(DefaultSurface));
+
+    [RelayCommand]
+    private void LaunchSecondary() => _launch(BuildOptions(DefaultSurface == AgentSurface.Gui ? AgentSurface.Terminal : AgentSurface.Gui));
+
+    [RelayCommand]
+    private void LaunchGui() => _launch(BuildOptions(SupportsAcp ? AgentSurface.Gui : AgentSurface.Terminal));
+
+    [RelayCommand]
+    private void LaunchTerminal() => _launch(BuildOptions(AgentSurface.Terminal));
 
     /// <summary>
     /// The choice made in the panel. The panel always shows a selection, so an explicit "agent default" is the empty
     /// string (it overrides the profile's value and produces no argument); null is only for blocks the agent lacks.
     /// </summary>
-    public AgentLaunchOptions BuildOptions() => new()
+    public AgentLaunchOptions BuildOptions(AgentSurface? surface = null) => new()
     {
         Model = HasModel ? SelectedModelId ?? "" : null,
         Effort = HasEffort ? SelectedEffortId : null,
         Fast = HasFast ? Fast : null,
         AccountId = HasAccounts && !string.IsNullOrWhiteSpace(SelectedAccountId) ? SelectedAccountId : null,
         Prompt = HasPrompt && !string.IsNullOrWhiteSpace(Prompt) ? Prompt.Trim() : null,
+        Surface = surface is { } chosen ? (SupportsAcp ? chosen : AgentSurface.Terminal) : null,
     };
 
     private void RebuildAccounts()
@@ -265,6 +287,8 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         RebuildEfforts();
         OnPropertyChanged(nameof(EffortCaption));
         OnPropertyChanged(nameof(PermissionName));
+        OnPropertyChanged(nameof(PrimaryLaunchLabel));
+        OnPropertyChanged(nameof(SecondaryLaunchLabel));
     });
 
     public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;

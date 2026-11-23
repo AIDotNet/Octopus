@@ -9,8 +9,8 @@ using TKCode.Arc.Mobile;
 namespace Octopus.Mobile.Shell;
 
 /// <summary>
-/// The whole app in one control: the sign-in page while signed out, otherwise a stack of pages that starts at the host
-/// list. It is the navigator of every view model.
+/// The whole app in one control: a stack of pages that starts at the host list while there are hosts to show (signed
+/// in, or used without an account), and at the welcome page otherwise. It is the navigator of every view model.
 /// </summary>
 public sealed class MobileShell : ContentControl, INavigator
 {
@@ -32,17 +32,35 @@ public sealed class MobileShell : ContentControl, INavigator
         Show();
     }
 
-    /// <summary>The stack of pages; null while signed out.</summary>
+    /// <summary>The stack of pages.</summary>
     public NavigationStack? Stack => _stack;
 
-    /// <summary>The page on top: of the stack, or the sign-in page.</summary>
-    public Control? Top => _stack?.Top ?? Content as Control;
+    /// <summary>The page on top of the stack.</summary>
+    public Control? Top => _stack?.Top;
+
+    /// <summary>True while the first page is the host list rather than the welcome page.</summary>
+    private bool ShowsHosts => _account.IsSignedIn || _account.IsLocalOnly;
 
     public void ShowHost(RemoteHost host) => Push(new HostPage(new HostViewModel(host, _workspace, this)));
 
     public void ShowSession(RemoteSession session) => Push(new TerminalPage(new TerminalViewModel(session, _workspace, this)));
 
     public void ShowPairing(RemoteHost host) => Push(new PairingPage(new PairingViewModel(host, _workspace, this)));
+
+    public void ShowPairing(string hostName, PairingAttempt attempt) => Push(new PairingPage(new PairingViewModel(hostName, attempt, this)));
+
+    public void ShowAddHost() => Push(new AddHostPage(new AddHostViewModel(_workspace, _account, this)));
+
+    public void ShowSignIn()
+    {
+        // With an official service: the welcome page's "Sign in", on top of the list. Without one there is only the address to ask for.
+        if (_account.OfficialServer is null) ShowCustomServer();
+        else Push(new WelcomePage(new WelcomeViewModel(_account, _workspace, this, _openBrowser, isOnTop: true)));
+    }
+
+    public void ShowCustomServer() => Push(new CustomServerPage(new CustomServerViewModel(_account, this, _openBrowser)));
+
+    public void ShowFirst() => _stack?.PopToRoot();
 
     public void Back() => _stack?.Pop();
 
@@ -53,27 +71,24 @@ public sealed class MobileShell : ContentControl, INavigator
         _stack.Push(page);
     }
 
-    // Signing in or out replaces everything: no page of one account survives into the other.
+    // Signing in or out, and choosing or leaving the use without an account, replace everything: no page of one
+    // survives into the other.
     private void Show()
     {
         CloseAll();
-        if (_account.IsSignedIn)
-        {
-            _stack = new NavigationStack { Root = new HostsPage(new HostsViewModel(_workspace, _account, this)) };
-            _stack.Navigated += OnNavigated;
-            Content = _stack;
-        }
-        else
-        {
-            Content = new SignInPage(new SignInViewModel(_account, _openBrowser));
-        }
+        Control first = ShowsHosts
+            ? new HostsPage(new HostsViewModel(_workspace, _account, this))
+            : new WelcomePage(new WelcomeViewModel(_account, _workspace, this, _openBrowser));
+        _stack = new NavigationStack { Root = first };
+        _stack.Navigated += OnNavigated;
+        Content = _stack;
     }
 
     private void CloseAll()
     {
         foreach (var page in _pages) (page as IClosablePage)?.OnClosed();
         _pages.Clear();
-        (Content as IClosablePage)?.OnClosed();
+        (_stack?.Root as IClosablePage)?.OnClosed();
         if (_stack is not null) _stack.Navigated -= OnNavigated;
         _stack = null;
     }

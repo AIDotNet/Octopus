@@ -33,5 +33,16 @@
       "allowCustom": true
     },
     "extraArgs": true
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "pi-acp",
+      "executables": [
+        "pi-acp"
+      ],
+      "npxPackage": "pi-acp"
+    }
   }
 }

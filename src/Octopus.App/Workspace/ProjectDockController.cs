@@ -258,7 +258,7 @@ public sealed class ProjectDockController : IDisposable
         var pane = new DockPane
         {
             Id = item.Id,
-            Title = item.DisplayTitle,
+            Title = TitleOf(item, null),
             Icon = IconOf(item),
             CanFloat = false,
             Content = _registry.GetOrCreate(_project, item),
@@ -357,11 +357,11 @@ public sealed class ProjectDockController : IDisposable
     }
 
     /// <summary>A file tab with edits that are not saved shows a dot before its title.</summary>
-    private static void ShowUnsavedMark(DockPane pane, ProjectItem item)
+    private void ShowUnsavedMark(DockPane pane, ProjectItem item)
     {
         if (pane.Content is Plugins.PluginViewTab view)
         {
-            view.ChromeChanged += (_, _) => pane.Title = view.IsDirty ? "● " + item.DisplayTitle : item.DisplayTitle;
+            view.ChromeChanged += (_, _) => pane.Title = view.IsDirty ? "● " + TitleOf(item, null) : TitleOf(item, null);
             return;
         }
         if (pane.Content is not Control { DataContext: FileTabViewModel file }) return;
@@ -371,7 +371,17 @@ public sealed class ProjectDockController : IDisposable
         };
     }
 
-    private static string TitleOf(ProjectItem item, FileTabViewModel? file) => file?.HasUnsavedChanges == true ? "● " + item.DisplayTitle : item.DisplayTitle;
+    private string TitleOf(ProjectItem item, FileTabViewModel? file)
+    {
+        var baseTitle = item.DisplayTitle;
+        if (!string.IsNullOrEmpty(item.WorkspaceId)
+            && _project.Workspaces.FirstOrDefault(w => w.Id == item.WorkspaceId) is { } ws
+            && !string.IsNullOrWhiteSpace(ws.DisplayName))
+        {
+            baseTitle = $"{baseTitle} [{ws.DisplayName}]";
+        }
+        return file?.HasUnsavedChanges == true ? "● " + baseTitle : baseTitle;
+    }
 
     private void OnActivePaneChanged(object? sender, DockPaneEventArgs e)
     {
@@ -443,6 +453,15 @@ public sealed class ProjectDockController : IDisposable
                 break;
             case ProjectChangeKind.ItemTitle when e.Item is { } item && _panes.TryGetValue(item.Id, out var titled):
                 titled.Title = TitleOf(item, (titled.Content as Control)?.DataContext as FileTabViewModel);
+                break;
+            case ProjectChangeKind.Workspaces:
+                foreach (var item in _project.Items)
+                {
+                    if (_panes.TryGetValue(item.Id, out var wsPane))
+                    {
+                        wsPane.Title = TitleOf(item, (wsPane.Content as Control)?.DataContext as FileTabViewModel);
+                    }
+                }
                 break;
             case ProjectChangeKind.Active when !_syncing && e.Item is { } active
                                               && _panes.TryGetValue(active.Id, out var pane) && pane.Group is not null

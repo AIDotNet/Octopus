@@ -10,6 +10,8 @@ public static class RemoteMethods
     public const string ItemCreate = "item/create";
     public const string ItemRemove = "item/remove";
     public const string ItemRename = "item/rename";
+    public const string WorkspaceOptions = "workspace/options";
+    public const string WorkspaceCreate = "workspace/create";
     public const string AgentCatalog = "agent/catalog";
     public const string SessionAttach = "session/attach";
     public const string SessionDetach = "session/detach";
@@ -58,6 +60,8 @@ public static class RemoteMethods
     public const string CapabilitySizeRelease = "session.release";
     /// <summary>The host knows <see cref="FsBrowse"/> and <see cref="FsBrowseCreateDirectory"/>.</summary>
     public const string CapabilityBrowse = "fs.browse";
+    /// <summary>The host exposes branch workspaces (<see cref="WorkspaceOptions"/>, <see cref="WorkspaceCreate"/>, and workspace ids on items).</summary>
+    public const string CapabilityWorkspaces = "workspaces";
 
     /// <summary>The most bytes of a file in one <see cref="FsRead"/> answer or <see cref="FsWrite"/> request.</summary>
     public const int FilePieceBytes = 256 * 1024;
@@ -118,6 +122,74 @@ public sealed class ProjectMessage
     public string Path { get; set; } = "";
     public string? Color { get; set; }
     public string? Icon { get; set; }
+    /// <summary>True when the project's folder sits inside a git repository on the host.</summary>
+    public bool IsGitRepository { get; set; }
+    /// <summary>Current or default branch of the project's main directory, when it is a git repository.</summary>
+    public string? DefaultBranch { get; set; }
+    /// <summary>Isolated branch worktree workspaces belonging to this project.</summary>
+    public List<WorkspaceMessage>? Workspaces { get; set; }
+}
+
+/// <summary>One isolated git worktree workspace of a project on the host.</summary>
+public sealed class WorkspaceMessage
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Branch { get; set; } = "";
+    public string Path { get; set; } = "";
+    /// <summary><c>issue</c>, <c>pr</c>, <c>url</c> or <c>note</c>; null when no task is linked.</summary>
+    public string? TaskKind { get; set; }
+    public string? TaskKey { get; set; }
+    public string? TaskTitle { get; set; }
+    public string? TaskUrl { get; set; }
+}
+
+public sealed class WorkspaceBranchMessage
+{
+    public string Name { get; set; } = "";
+    public bool IsRemote { get; set; }
+    public bool IsCurrent { get; set; }
+    /// <summary>Where this branch is already checked out, or null when free to use in a new worktree.</summary>
+    public string? OccupiedBy { get; set; }
+}
+
+public sealed class WorkspaceTaskOptionMessage
+{
+    /// <summary><c>issue</c> or <c>pr</c>.</summary>
+    public string Kind { get; set; } = "issue";
+    public string Key { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string? Url { get; set; }
+    public string? Body { get; set; }
+    public string SuggestedBranch { get; set; } = "";
+    public string? HeadBranch { get; set; }
+}
+
+public sealed class WorkspaceOptionsMessage
+{
+    public bool IsGitRepository { get; set; }
+    public string? DefaultBranch { get; set; }
+    /// <summary>Formatted directory on the host where new worktrees for this project will be placed; null falls back to default <c>~/.octopus/workspaces/&lt;project&gt;</c>.</summary>
+    public string? WorkspacesDirectory { get; set; }
+    public List<WorkspaceBranchMessage> Branches { get; set; } = [];
+    public bool GhAvailable { get; set; }
+    public List<WorkspaceTaskOptionMessage> Issues { get; set; } = [];
+    public List<WorkspaceTaskOptionMessage> PullRequests { get; set; } = [];
+}
+
+public sealed class CreateWorkspaceMessage
+{
+    public string ProjectId { get; set; } = "";
+    public bool CreateBranch { get; set; } = true;
+    public string BranchName { get; set; } = "";
+    public string? BaseRef { get; set; }
+    public bool IsRemoteBranch { get; set; }
+    /// <summary><c>issue</c>, <c>pr</c>, <c>url</c> or <c>note</c>; null when no task is linked.</summary>
+    public string? TaskKind { get; set; }
+    public string? TaskKey { get; set; }
+    public string? TaskTitle { get; set; }
+    public string? TaskUrl { get; set; }
+    public string? TaskBody { get; set; }
 }
 
 public sealed class ProjectListMessage
@@ -149,6 +221,10 @@ public sealed class ItemMessage
     public string? AgentId { get; set; }
     public string? Model { get; set; }
     public string? Effort { get; set; }
+    /// <summary>Null when the item runs in the project's default folder; otherwise the id of its branch workspace.</summary>
+    public string? WorkspaceId { get; set; }
+    /// <summary>The branch name of the item's workspace, when it belongs to one.</summary>
+    public string? WorkspaceBranch { get; set; }
     /// <summary>One of <see cref="ItemActivities"/>.</summary>
     public string Activity { get; set; } = ItemActivities.Idle;
     /// <summary>True when its program runs (a tab that was never shown has none yet).</summary>
@@ -168,6 +244,10 @@ public sealed class CreateItemMessage
     public string? Model { get; set; }
     public string? Effort { get; set; }
     public string? Prompt { get; set; }
+    /// <summary>Null or empty starts in the project's default folder; otherwise starts inside that branch workspace.</summary>
+    public string? WorkspaceId { get; set; }
+    /// <summary>When true and the target workspace has a linked task, prepend its context to the agent's initial prompt.</summary>
+    public bool InjectTaskPrompt { get; set; }
 }
 
 public sealed class ItemRefMessage

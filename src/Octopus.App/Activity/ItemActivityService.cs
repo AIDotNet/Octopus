@@ -1,7 +1,9 @@
 using Octopus.Agents;
+using Octopus.Agents.Sessions;
 using Octopus.Agents.Signals;
 using Octopus.App.Common;
 using Octopus.App.Services;
+using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 
 namespace Octopus.App.Activity;
@@ -14,10 +16,12 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
     private readonly Dictionary<string, ItemActivity> _activity = [];
     /// <summary>Whether the last title of the item carried a spinner: only a change of it counts as news.</summary>
     private readonly Dictionary<string, bool> _titleWorking = [];
-    /// <summary>Items the session itself has named (a terminal title other than the agent's name, or an ai-title).</summary>
+    /// <summary>Items the session itself has named (a terminal title other than the agent's name, or a stored title).</summary>
     private readonly HashSet<string> _sessionNamed = [];
     /// <summary>Items titled after their first prompt, while the session has no name of its own.</summary>
     private readonly HashSet<string> _promptTitled = [];
+    /// <summary>Last session/conversation id seen for each item, so switching sessions (/new, /resume) resets naming.</summary>
+    private readonly Dictionary<string, string> _sessionIds = [];
     private readonly Dictionary<string, long> _titleReadAt = [];
     private readonly ISignalHub? _signals;
 
@@ -57,7 +61,7 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
             {
                 _sessionNamed.Add(itemId);
             }
-            if (!isAgentName || !(_sessionNamed.Contains(itemId) || _promptTitled.Contains(itemId)))
+            if (!isAgentName || !(_sessionNamed.Contains(itemId) || _promptTitled.Contains(itemId) || HasResumedTitle(item)))
             {
                 // The item's own title; a name the user gave (CustomTitle) still shows instead.
                 _projects.SetItemTitle(itemId, title.Text);
@@ -76,6 +80,8 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         _titleWorking.Remove(itemId);
         _sessionNamed.Remove(itemId);
         _promptTitled.Remove(itemId);
+        _sessionIds.Remove(itemId);
+        _titleReadAt.Remove(itemId);
         // A program that ended leaves nothing to look at, whatever it was doing.
         Set(itemId, ItemActivity.Idle, finished: false);
     }
@@ -84,50 +90,100 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         item.AgentId is { } id && _catalog.Find(id) is { Name.Length: > 0 } definition ? definition.Name : null;
 
     /// <summary>
-    /// Names the session from a hook payload: the first prompt until the agent names it, then the agent's own name
-    /// from its transcript. Covers a session the agent never names in the terminal title (a greeting, for one).
+    /// True when the tab was opened to resume a specific saved session and already carries that session's title (e.g.
+    /// from the Sessions panel), while still running that same session.
     /// </summary>
-    private void NameFromPayload(AgentSignal signal, SignalStatus? status)
+    private bool HasResumedTitle(ProjectItem item) =>
+        item.Launch?.SessionId is { Length: > 0 } launched
+        && (!_sessionIds.TryGetValue(item.Id, out var current) || string.Equals(current, launched, StringComparison.Ordinal))
+        && !string.IsNullOrWhiteSpace(item.Title)
+        && !string.Equals(item.Title, AgentName(item), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Names the session from a hook payload: the first prompt until the agent names it, then the agent's own name
+    /// from its stored session data (transcript <c>ai-title</c> or Antigravity's <c>conversation_summaries.db</c>).
+    /// Covers agents that do not set a terminal title and sessions the agent never names.
+    /// </summary>
+    private void NameFromPayload(ProjectItem item, AgentDefinition definition, AgentSignal signal, SignalStatus? status)
     {
-        var (prompt, transcript) = SessionName.ReadPayload(signal.Payload);
+        var payload = SessionName.ReadPayload(signal.Payload);
         var itemId = signal.ItemId;
-        if (!_sessionNamed.Contains(itemId) && !_promptTitled.Contains(itemId) && SessionName.FromPrompt(prompt) is { Length: > 0 } fromPrompt)
+        var dialect = string.IsNullOrEmpty(definition.Signals?.Dialect) ? definition.Id : definition.Signals.Dialect;
+        var isAgy = string.Equals(dialect, AgySessionSource.Id, StringComparison.OrdinalIgnoreCase);
+
+        // Switching to a different conversation in the same tab (e.g. /resume or /new) starts naming fresh.
+        if (payload.SessionId is { Length: > 0 } sessionId)
+        {
+            var previous = _sessionIds.TryGetValue(itemId, out var seen) ? seen : item.Launch?.SessionId;
+            if (previous is { Length: > 0 } && !string.Equals(previous, sessionId, StringComparison.Ordinal))
+            {
+                _sessionNamed.Remove(itemId);
+                _promptTitled.Remove(itemId);
+                _titleReadAt.Remove(itemId);
+            }
+            _sessionIds[itemId] = sessionId;
+        }
+
+        var rawPrompt = isAgy ? AgySessionSource.ExtractUserRequest(payload.Prompt) : payload.Prompt;
+        if (!_sessionNamed.Contains(itemId) && !_promptTitled.Contains(itemId) && !HasResumedTitle(item)
+            && SessionName.FromPrompt(rawPrompt) is { Length: > 0 } fromPrompt)
         {
             _promptTitled.Add(itemId);
             _projects.SetItemTitle(itemId, fromPrompt);
         }
-        // The transcript is read once per finished turn (a new topic renames the session), and on any signal until
+
+        var canReadStored = isAgy
+            ? payload.SessionId is { Length: > 0 } || payload.TranscriptPath is { Length: > 0 } || payload.ArtifactDirectoryPath is { Length: > 0 }
+            : payload.TranscriptPath is { Length: > 0 };
+
+        // The stored title is read once per finished turn (a new topic renames the session), and on any signal until
         // the session has a name.
-        if (transcript is { Length: > 0 } path && (status == SignalStatus.Done || !_sessionNamed.Contains(itemId)))
+        if (canReadStored && (status == SignalStatus.Done || !_sessionNamed.Contains(itemId)))
         {
             // Not on every signal (a status line comes every couple of seconds): at most one read per item per 20 s,
             // except at the end of a turn.
             var now = Environment.TickCount64;
             if (status != SignalStatus.Done && _titleReadAt.TryGetValue(itemId, out var last) && now - last < 20_000) return;
             _titleReadAt[itemId] = now;
-            _ = Task.Run(() => SessionName.ReadTranscriptTitle(path)).ContinueWith(read =>
+            var expectedSessionId = payload.SessionId;
+            _ = Task.Run(() => SessionName.ReadStoredTitle(dialect, payload)).ContinueWith(read =>
             {
-                if (read.IsCompletedSuccessfully && read.Result is { } aiTitle)
+                if (!read.IsCompletedSuccessfully) return;
+                var stored = read.Result;
+                if (stored.Title is null && stored.FallbackPrompt is null) return;
+                UiContext.Run(() =>
                 {
-                    UiContext.Run(() =>
+                    if (_projects.FindItem(itemId) is not { } currentItem) return;
+                    if (expectedSessionId is { Length: > 0 }
+                        && _sessionIds.TryGetValue(itemId, out var current)
+                        && !string.Equals(current, expectedSessionId, StringComparison.Ordinal))
                     {
-                        if (_projects.FindItem(itemId) is null) return;
+                        return;
+                    }
+                    if (stored.Title is { Length: > 0 } aiTitle)
+                    {
                         _sessionNamed.Add(itemId);
                         _projects.SetItemTitle(itemId, aiTitle);
-                    });
-                }
+                    }
+                    else if (!_sessionNamed.Contains(itemId) && !_promptTitled.Contains(itemId) && !HasResumedTitle(currentItem)
+                        && SessionName.FromPrompt(stored.FallbackPrompt) is { Length: > 0 } fallback)
+                    {
+                        _promptTitled.Add(itemId);
+                        _projects.SetItemTitle(itemId, fallback);
+                    }
+                });
             }, TaskScheduler.Default);
         }
     }
 
     private void OnSignal(AgentSignal signal)
     {
-        if (signal.ItemId.Length == 0 || _projects.FindItem(signal.ItemId) is null || _catalog.Find(signal.AgentId) is not { } definition)
+        if (signal.ItemId.Length == 0 || _projects.FindItem(signal.ItemId) is not { } item || _catalog.Find(signal.AgentId) is not { } definition)
         {
             return;
         }
         var status = SignalStatusMap.Resolve(definition, signal);
-        NameFromPayload(signal, status);
+        NameFromPayload(item, definition, signal, status);
         switch (status)
         {
             case SignalStatus.Working: Set(signal.ItemId, ItemActivity.Working); break;
@@ -156,7 +212,7 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         else if (e.Kind == ProjectChangeKind.Projects)
         {
             // A removed project's items go without an event each.
-            var ids = _activity.Keys.Concat(_titleWorking.Keys).Concat(_sessionNamed).Concat(_promptTitled).Concat(_titleReadAt.Keys)
+            var ids = _activity.Keys.Concat(_titleWorking.Keys).Concat(_sessionNamed).Concat(_promptTitled).Concat(_sessionIds.Keys).Concat(_titleReadAt.Keys)
                 .Distinct().Where(id => _projects.FindItem(id) is null).ToList();
             foreach (var id in ids) Forget(id);
         }
@@ -168,11 +224,14 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         _activity.Remove(itemId);
         _sessionNamed.Remove(itemId);
         _promptTitled.Remove(itemId);
+        _sessionIds.Remove(itemId);
         _titleReadAt.Remove(itemId);
         _signals?.ForgetItem(itemId);
     }
 
     public void ReportRemote(string itemId, ItemActivity activity) => Set(itemId, activity);
+
+    public void ReportStatus(string itemId, ItemActivity activity) => Set(itemId, activity);
 
     public void MarkSeen(string itemId)
     {

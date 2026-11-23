@@ -60,6 +60,8 @@ public class App : Application
             Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = Plugins.PluginStartup.StartAsync(), Avalonia.Threading.DispatcherPriority.Background);
             // The updater starts once the window is up: its first check waits a while anyway (design/10-自动更新.md §7).
             Avalonia.Threading.Dispatcher.UIThread.Post(Updates.UpdateLifecycle.Start, Avalonia.Threading.DispatcherPriority.Background);
+            // Scheduled branch workspace cleanup & activity tracking starts after the window is up.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => AppHost.Get<Octopus.App.Services.Workspaces.IWorkspaceCleanupService>().Start(), Avalonia.Threading.DispatcherPriority.Background);
             // The window is gone and everything saved: hand a ready update to its installer, then let go of what the
             // services hold (file watchers, timers).
             desktop.Exit += (_, _) =>

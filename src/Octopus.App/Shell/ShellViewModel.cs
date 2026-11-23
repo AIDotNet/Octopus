@@ -57,7 +57,7 @@ public sealed partial class ShellViewModel : ObservableObject
         };
         projects.Changed += (_, e) =>
         {
-            if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.CurrentProject)
+            if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.CurrentProject or ProjectChangeKind.Active or ProjectChangeKind.Items or ProjectChangeKind.Workspaces)
             {
                 ReadProject();
             }
@@ -93,8 +93,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [ObservableProperty] public partial bool IsRightPanelOpen { get; set; }
     [ObservableProperty] public partial double RightPanelWidth { get; set; }
-    /// <summary>Folder and name of the current project, for the right panel; null without a project.</summary>
+    /// <summary>Folder and name of the current project (or the active tab's worktree folder), for the right panel; null without a project.</summary>
     [ObservableProperty] public partial string? CurrentProjectPath { get; private set; }
+    /// <summary>The project's main root folder (always the project root even when viewing a worktree tab), used by the Sessions tab.</summary>
+    [ObservableProperty] public partial string? CurrentProjectRootPath { get; private set; }
+    /// <summary>The branch name of the active worktree workspace; null when on the project's default folder.</summary>
+    [ObservableProperty] public partial string? CurrentWorkspaceBranch { get; private set; }
 
     /// <summary>The SSH host of the current project; null when its folder is on this computer.</summary>
     [ObservableProperty] public partial string? CurrentProjectSshHost { get; private set; }
@@ -133,10 +137,25 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void ReadProject()
     {
-        CurrentProjectPath = _projects.Current?.Path;
-        CurrentProjectRemoteHost = _projects.Current?.RemoteHost;
-        CurrentProjectName = _projects.Current?.Name;
-        CurrentProjectSshHost = _projects.Current?.SshHost;
+        var project = _projects.Current;
+        string? effectivePath = project?.Path;
+        string? activeBranch = null;
+        if (project is not null
+            && Octopus.Core.Projects.ProjectLocation.IsOnThisComputer(project)
+            && project.ActiveItemId is { } activeId
+            && project.Items.FirstOrDefault(i => i.Id == activeId) is { WorkspaceId: { Length: > 0 } wsId }
+            && _projects.FindWorkspace(project, wsId) is { } workspace
+            && Directory.Exists(workspace.Path))
+        {
+            effectivePath = workspace.Path;
+            activeBranch = workspace.DisplayName;
+        }
+        CurrentProjectRootPath = project?.Path;
+        CurrentWorkspaceBranch = activeBranch;
+        CurrentProjectPath = effectivePath;
+        CurrentProjectRemoteHost = project?.RemoteHost;
+        CurrentProjectName = project?.Name;
+        CurrentProjectSshHost = project?.SshHost;
     }
 
     /// <summary>

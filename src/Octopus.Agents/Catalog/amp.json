@@ -28,5 +28,15 @@
       ],
       "allowCustom": true
     }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "amp-acp",
+      "executables": [
+        "amp-acp"
+      ]
+    }
   }
 }

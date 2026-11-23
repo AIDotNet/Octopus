@@ -1,0 +1,317 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:ws="using:Octopus.App.Settings.Workspaces"
+             x:Class="Octopus.App.Settings.Workspaces.WorkspaceCleanupPageView"
+             x:DataType="ws:WorkspaceCleanupSettingsViewModel">
+    <StackPanel Spacing="18">
+        <!-- Page header -->
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsWorkspacesTitle}" />
+            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsWorkspacesSubtitle}" />
+        </StackPanel>
+
+        <!-- Section 0: Storage location -->
+        <StackPanel Spacing="8">
+            <TextBlock Classes="group" Text="{l:AppLangResource WorkspaceDirectorySection}" />
+            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    Background="{arc:ArcDesignTokenResource Surface}"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Padding="16,14">
+                <StackPanel Spacing="10">
+                    <StackPanel Spacing="2">
+                        <TextBlock Classes="name" Text="{l:AppLangResource WorkspaceDirectoryTitle}" />
+                        <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceDirectoryDescription}" />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                        <arc:Input x:Name="RootDirectoryInput"
+                                   Grid.Column="0"
+                                   Text="{Binding RootDirectoryInput, Mode=TwoWay}"
+                                   Placeholder="{Binding DefaultRootDirectoryDisplay}"
+                                   Label="{l:AppLangResource WorkspaceDirectoryTitle}"
+                                   IsLabelVisible="False"
+                                   Size="Small"
+                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" />
+                        <arc:Button x:Name="BrowseRootDirectoryButton"
+                                    Grid.Column="1"
+                                    Variant="Secondary"
+                                    Size="Small"
+                                    Content="{l:AppLangResource SettingsBrowse}"
+                                    IsVisible="{Binding CanBrowseRootDirectory}"
+                                    Command="{Binding BrowseRootDirectoryCommand}" />
+                        <arc:Button x:Name="ResetRootDirectoryButton"
+                                    Grid.Column="2"
+                                    Variant="Ghost"
+                                    Size="Small"
+                                    Content="{l:AppLangResource SettingsReset}"
+                                    IsVisible="{Binding HasCustomRootDirectory}"
+                                    Command="{Binding ResetRootDirectoryCommand}" />
+                        <arc:Button x:Name="RevealRootDirectoryButton"
+                                    Grid.Column="3"
+                                    Variant="Ghost"
+                                    Size="Small"
+                                    IsVisible="{Binding CanRevealRootDirectory}"
+                                    Command="{Binding RevealRootDirectoryCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource RevealInFileManager}"
+                                    arc:Tooltip.Tip="{l:AppLangResource RevealInFileManager}">
+                            <lucide:LucideIcon Kind="FolderOpen" Size="15" />
+                        </arc:Button>
+                    </Grid>
+                    <TextBlock x:Name="RootDirectoryErrorText"
+                               Classes="hint"
+                               Foreground="{arc:ArcDesignTokenResource Danger}"
+                               Text="{Binding RootDirectoryError}"
+                               IsVisible="{Binding HasRootDirectoryError}" />
+                    <TextBlock x:Name="RootDirectoryPreviewText"
+                               Classes="mono"
+                               Text="{Binding EffectiveRootDirectoryPreview}"
+                               TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding !HasRootDirectoryError}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- Section 1: Manual cleanup -->
+        <StackPanel Spacing="8">
+            <TextBlock Classes="group" Text="{l:AppLangResource WorkspaceCleanupManualSection}" />
+            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    Background="{arc:ArcDesignTokenResource Surface}"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Padding="16,14">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="name" Text="{l:AppLangResource WorkspaceCleanupManualTitle}" />
+                        <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceCleanupManualDescription}" />
+                    </StackPanel>
+                    <arc:Button x:Name="InspectWorkspacesButton"
+                                Grid.Column="1"
+                                Variant="Secondary"
+                                Size="Small"
+                                VerticalAlignment="Center"
+                                Command="{Binding InspectWorkspacesCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <lucide:LucideIcon Kind="ListChecks" Size="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{l:AppLangResource WorkspaceCleanupInspectButton}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </arc:Button>
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <!-- Section 2: Automatic cleanup -->
+        <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <StackPanel Spacing="3">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Classes="group" VerticalAlignment="Center" Text="{l:AppLangResource WorkspaceCleanupAutoSection}" />
+                        <arc:Badge x:Name="AutoStatusOffBadge"
+                                   Size="Small"
+                                   Tone="Neutral"
+                                   Content="{l:AppLangResource WorkspaceCleanupStatusOff}"
+                                   IsVisible="{Binding !IsAutoEnabled}"
+                                   VerticalAlignment="Center" />
+                        <arc:Badge x:Name="AutoStatusOnBadge"
+                                   Size="Small"
+                                   Tone="Success"
+                                   Content="{l:AppLangResource WorkspaceCleanupStatusOn}"
+                                   IsVisible="{Binding IsAutoEnabled}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceCleanupAutoSubtitle}" />
+                </StackPanel>
+                <arc:Button x:Name="RunNowButton"
+                            Grid.Column="1"
+                            Variant="Ghost"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding IsAutoEnabled}"
+                            IsLoading="{Binding IsRunningNow}"
+                            Command="{Binding RunNowCommand}"
+                            Content="{l:AppLangResource WorkspaceCleanupRunNow}" />
+            </Grid>
+
+            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    Background="{arc:ArcDesignTokenResource Surface}"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    ClipToBounds="True">
+                <StackPanel>
+                    <!-- Rule 1: Delete merged workspaces (Recommended) -->
+                    <Border Padding="16,13">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                            <StackPanel VerticalAlignment="Center" Spacing="3">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="name" Text="{l:AppLangResource WorkspaceCleanupRuleMergedTitle}" VerticalAlignment="Center" />
+                                    <arc:Badge Size="Small" Tone="Info" Content="{l:AppLangResource WorkspaceCleanupRecommended}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceCleanupRuleMergedDescription}" />
+                            </StackPanel>
+                            <arc:Switch x:Name="DeleteMergedSwitch"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        IsChecked="{Binding DeleteMerged, Mode=TwoWay}"
+                                        AutomationProperties.Name="{l:AppLangResource WorkspaceCleanupRuleMergedTitle}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Rule 2: Delete unchanged workspaces -->
+                    <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="16,13">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                            <StackPanel VerticalAlignment="Center" Spacing="3">
+                                <TextBlock Classes="name" Text="{l:AppLangResource WorkspaceCleanupRuleUnchangedTitle}" />
+                                <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceCleanupRuleUnchangedDescription}" />
+                            </StackPanel>
+                            <arc:Switch x:Name="DeleteUnchangedSwitch"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        IsChecked="{Binding DeleteUnchanged, Mode=TwoWay}"
+                                        AutomationProperties.Name="{l:AppLangResource WorkspaceCleanupRuleUnchangedTitle}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Rule 3: Delete inactive workspaces -->
+                    <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="16,13">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                            <StackPanel VerticalAlignment="Center" Spacing="3">
+                                <TextBlock Classes="name" Text="{l:AppLangResource WorkspaceCleanupRuleInactiveTitle}" />
+                                <TextBlock Classes="hint" Text="{Binding InactiveRuleDescription}" />
+                            </StackPanel>
+                            <arc:Switch x:Name="DeleteInactiveSwitch"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        IsChecked="{Binding DeleteInactive, Mode=TwoWay}"
+                                        AutomationProperties.Name="{l:AppLangResource WorkspaceCleanupRuleInactiveTitle}" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Collapsible Advanced section -->
+                    <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0">
+                        <StackPanel>
+                            <arc:Button x:Name="AdvancedToggleButton"
+                                        Variant="Ghost"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="14,10"
+                                        Command="{Binding ToggleAdvancedCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Panel VerticalAlignment="Center" Width="14">
+                                        <lucide:LucideIcon Kind="ChevronDown" Size="14" IsVisible="{Binding IsAdvancedExpanded}"
+                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                        <lucide:LucideIcon Kind="ChevronRight" Size="14" IsVisible="{Binding !IsAdvancedExpanded}"
+                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                    </Panel>
+                                    <TextBlock Classes="name" Text="{l:AppLangResource WorkspaceCleanupAdvancedTitle}" VerticalAlignment="Center" />
+                                    <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceCleanupAdvancedHint}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </arc:Button>
+
+                            <StackPanel IsVisible="{Binding IsAdvancedExpanded}"
+                                        Margin="16,4,16,14"
+                                        Spacing="12">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                                    <TextBlock Classes="label" VerticalAlignment="Center"
+                                               Text="{l:AppLangResource WorkspaceCleanupInactiveDaysLabel}" />
+                                    <arc:NumberField x:Name="InactiveDaysField"
+                                                     Grid.Column="1"
+                                                     Value="{Binding InactiveDays, Mode=TwoWay}"
+                                                     Minimum="1"
+                                                     Maximum="365"
+                                                     Step="1"
+                                                     Size="Small"
+                                                     Width="130"
+                                                     Label="{l:AppLangResource WorkspaceCleanupInactiveDaysLabel}"
+                                                     IsLabelVisible="False" />
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                                    <TextBlock Classes="label" VerticalAlignment="Center"
+                                               Text="{l:AppLangResource WorkspaceCleanupIntervalLabel}" />
+                                    <arc:Select x:Name="CheckIntervalSelect"
+                                                Grid.Column="1"
+                                                AutoScrollToSelectedItem="False"
+                                                Size="Small"
+                                                Width="190"
+                                                AutomationProperties.Name="{l:AppLangResource WorkspaceCleanupIntervalLabel}"
+                                                ItemsSource="{Binding IntervalOptions}"
+                                                SelectedValue="{Binding CheckIntervalKey, Mode=TwoWay}" />
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                                    <TextBlock Classes="label" VerticalAlignment="Center"
+                                               Text="{l:AppLangResource WorkspaceCleanupGraceLabel}" />
+                                    <arc:Select x:Name="UnchangedGraceSelect"
+                                                Grid.Column="1"
+                                                AutoScrollToSelectedItem="False"
+                                                Size="Small"
+                                                Width="190"
+                                                AutomationProperties.Name="{l:AppLangResource WorkspaceCleanupGraceLabel}"
+                                                ItemsSource="{Binding GraceOptions}"
+                                                SelectedValue="{Binding UnchangedGraceKey, Mode=TwoWay}" />
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Classes="label" Text="{l:AppLangResource WorkspaceCleanupDeleteBranchLabel}" />
+                                        <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceCleanupDeleteBranchHint}" />
+                                    </StackPanel>
+                                    <arc:Switch x:Name="DeleteMergedBranchSwitch"
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding DeleteMergedBranch, Mode=TwoWay}"
+                                                AutomationProperties.Name="{l:AppLangResource WorkspaceCleanupDeleteBranchLabel}" />
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Classes="label" Text="{l:AppLangResource WorkspaceCleanupFetchLabel}" />
+                                        <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceCleanupFetchHint}" />
+                                    </StackPanel>
+                                    <arc:Switch x:Name="FetchBeforeCheckSwitch"
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                IsChecked="{Binding FetchBeforeCheck, Mode=TwoWay}"
+                                                AutomationProperties.Name="{l:AppLangResource WorkspaceCleanupFetchLabel}" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Branch retention footer note -->
+                    <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                            BorderThickness="0,1,0,0"
+                            Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                            Padding="16,11">
+                        <TextBlock Classes="hint" Text="{Binding BranchNoteText}" />
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <arc:Alert Tone="Info"
+                       IsVisible="{Binding HasRunMessage}"
+                       Content="{Binding LastRunMessage}" />
+        </StackPanel>
+
+        <!-- Section 3: Protection -->
+        <StackPanel Spacing="8">
+            <TextBlock Classes="group" Text="{l:AppLangResource WorkspaceCleanupProtectionSection}" />
+            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    Background="{arc:ArcDesignTokenResource Surface}"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Padding="16,14">
+                <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <lucide:LucideIcon Kind="ShieldCheck" Size="15" VerticalAlignment="Center"
+                                           Foreground="{arc:ArcDesignTokenResource Success}" />
+                        <TextBlock Classes="name" Text="{l:AppLangResource WorkspaceCleanupProtectionTitle}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceCleanupProtectionBody}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

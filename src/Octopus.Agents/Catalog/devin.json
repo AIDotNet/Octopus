@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "id": "devin",
+  "name": "Devin CLI",
+  "icon": "devin",
+  "homepage": "https://github.com/CognitionAI/devin-cli",
+  "verified": false,
+  "detect": {
+    "executables": ["devin"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://cli.devin.ai/install.sh | bash" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "acceptEdits": { "args": ["--permission-mode", "accept-edits"] },
+        "auto": { "args": ["--permission-mode", "smart"] },
+        "full": { "args": ["--permission-mode", "bypass"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "native",
+    "args": ["acp", "--process-model", "in-process"],
+    "dialect": "devin",
+    "permissionStrategy": "agentMode",
+    "permissionModes": {
+      "default": "ask",
+      "acceptEdits": "accept-edits",
+      "auto": "smart",
+      "full": "bypass"
+    },
+    "adapter": {
+      "registryId": "devin"
+    }
+  }
+}

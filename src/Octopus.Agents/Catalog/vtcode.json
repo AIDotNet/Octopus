@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "id": "vtcode",
+  "name": "VT Code",
+  "icon": "vtcode",
+  "homepage": "https://github.com/vinhnx/VTCode",
+  "verified": false,
+  "detect": {
+    "executables": ["vtcode"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "cargo", "command": "cargo install vtcode" },
+      { "kind": "brew", "command": "brew install vinhnx/tap/vtcode" }
+    ]
+  },
+  "capabilities": {
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "auto": { "args": ["--auto-approve"] },
+        "full": { "args": ["--full-auto"], "danger": true }
+      }
+    },
+    "prompt": { "mode": "positional" },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "native",
+    "args": ["acp"],
+    "env": {
+      "VT_ACP_ENABLED": "1",
+      "VT_ACP_ZED_ENABLED": "1"
+    },
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "vtcode"
+    }
+  }
+}

@@ -64,6 +64,7 @@
         <ProjectReference Include="../Octopus.Platform.Linux/Octopus.Platform.Linux.csproj" />
         <ProjectReference Include="../Octopus.Platform.Windows/Octopus.Platform.Windows.csproj" />
         <ProjectReference Include="../Octopus.Agents/Octopus.Agents.csproj" />
+        <ProjectReference Include="../Octopus.Acp/Octopus.Acp.csproj" />
         <ProjectReference Include="../Octopus.FileSystem/Octopus.FileSystem.csproj" />
         <ProjectReference Include="../Octopus.Git/Octopus.Git.csproj" />
         <ProjectReference Include="../Octopus.Terminal/Octopus.Terminal.csproj" />

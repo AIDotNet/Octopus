@@ -1,0 +1,221 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:dialogs="using:Octopus.App.Dialogs"
+             x:Class="Octopus.App.Dialogs.CreateWorkspaceView"
+             x:DataType="dialogs:CreateWorkspaceViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.ws-row">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ws-row:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+        <Style Selector="Button.ws-row.selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        </Style>
+        <Style Selector="Button.ws-row:disabled">
+            <Setter Property="Opacity" Value="0.52" />
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="14">
+        <arc:Alert Tone="Danger"
+                   IsOpen="{Binding HasError}"
+                   Title="{Binding Error}" />
+
+        <!-- 1. Optional task context binding (GitHub Issue / PR via gh, or URL / Note) -->
+        <StackPanel Spacing="8">
+            <TextBlock Classes="caption" Text="{l:AppLangResource WorkspaceTaskSection}" />
+            <arc:ToggleGroup x:Name="TaskTabs" Size="Small" SelectedValue="{Binding TaskTab, Mode=TwoWay}"
+                             Label="{l:AppLangResource WorkspaceTaskSection}" />
+
+            <!-- GitHub Issue / PR list -->
+            <StackPanel Spacing="6" IsVisible="{Binding IsRemoteTaskTab}">
+                <arc:SearchField Size="Small" IsLabelVisible="False"
+                                 Label="{l:AppLangResource WorkspaceTaskSearch}"
+                                 Placeholder="{l:AppLangResource WorkspaceTaskSearch}"
+                                 Text="{Binding TaskQuery, Mode=TwoWay}" />
+                <Border CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                        BorderThickness="1" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                        Background="{arc:ArcDesignTokenResource Surface}"
+                        MaxHeight="156">
+                    <Panel>
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="10,12" IsVisible="{Binding IsLoadingTasks}">
+                            <arc:ArcSpinner Width="13" Height="13" Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                            <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceTaskLoading}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Classes="hint" Margin="10,10" TextWrapping="Wrap"
+                                   IsVisible="{Binding HasTaskStatus}" Text="{Binding TaskStatusMessage}" />
+                        <TextBlock Classes="hint" Margin="10,10"
+                                   IsVisible="{Binding ShowTaskEmpty}" Text="{l:AppLangResource WorkspaceTaskEmpty}" />
+                        <arc:ScrollArea FadeLength="0" HorizontalScrollBarVisibility="Disabled"
+                                        IsVisible="{Binding !IsLoadingTasks}">
+                            <ItemsControl ItemsSource="{Binding FilteredTasks}" Margin="3">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="dialogs:TaskChoiceViewModel">
+                                        <Button Classes="ws-row" Classes.selected="{Binding IsSelected}"
+                                                Command="{Binding $parent[UserControl].((dialogs:CreateWorkspaceViewModel)DataContext).SelectTaskCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                <Border CornerRadius="5" Padding="6,1" VerticalAlignment="Top" Margin="0,1,0,0"
+                                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                        BorderThickness="1" BorderBrush="{arc:ArcDesignTokenResource Border}">
+                                                    <TextBlock Text="{Binding Key}"
+                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                               FontWeight="SemiBold" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Spacing="1">
+                                                    <TextBlock Classes="body" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Classes="hint" Text="{Binding Meta}" IsVisible="{Binding HasMeta}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </arc:ScrollArea>
+                    </Panel>
+                </Border>
+            </StackPanel>
+
+            <!-- Custom URL / Note -->
+            <StackPanel Spacing="8" IsVisible="{Binding IsCustomTaskTab}">
+                <arc:Input Size="Small"
+                           Label="{l:AppLangResource WorkspaceTaskUrlLabel}"
+                           Placeholder="{l:AppLangResource WorkspaceTaskUrlPlaceholder}"
+                           Text="{Binding CustomTaskUrl, Mode=TwoWay}" />
+                <arc:Input Size="Small"
+                           Label="{l:AppLangResource WorkspaceTaskNoteLabel}"
+                           Placeholder="{l:AppLangResource WorkspaceTaskNotePlaceholder}"
+                           Text="{Binding CustomTaskNote, Mode=TwoWay}" />
+            </StackPanel>
+
+            <CheckBox IsVisible="{Binding HasTaskBinding}" IsChecked="{Binding InjectTaskPrompt, Mode=TwoWay}"
+                      Content="{l:AppLangResource WorkspaceTaskInjectPrompt}" />
+        </StackPanel>
+
+        <!-- 2. Branch selection & worktree path preview -->
+        <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="caption" VerticalAlignment="Center" Text="{l:AppLangResource WorkspaceBranchSection}" />
+                <arc:ToggleGroup x:Name="BranchModeTabs" Grid.Column="1" Size="Small"
+                                 SelectedValue="{Binding BranchMode, Mode=TwoWay}"
+                                 Label="{l:AppLangResource WorkspaceBranchSection}" />
+            </Grid>
+
+            <!-- New branch -->
+            <Grid ColumnDefinitions="170,*" ColumnSpacing="8" IsVisible="{Binding IsNewBranchMode}">
+                <arc:Select Size="Small" AutoScrollToSelectedItem="False"
+                            Label="{l:AppLangResource WorkspaceBaseBranchLabel}"
+                            ItemsSource="{Binding BaseBranchOptions}"
+                            SelectedValue="{Binding SelectedBaseBranch, Mode=TwoWay}" />
+                <arc:Input x:Name="BranchNameInput" Grid.Column="1" Size="Small"
+                           Label="{l:AppLangResource WorkspaceBranchNameLabel}"
+                           Placeholder="{l:AppLangResource WorkspaceBranchNamePlaceholder}"
+                           Text="{Binding BranchName, Mode=TwoWay}" />
+            </Grid>
+
+            <!-- Existing branch -->
+            <StackPanel Spacing="6" IsVisible="{Binding IsExistingBranchMode}">
+                <arc:SearchField Size="Small" IsLabelVisible="False"
+                                 Label="{l:AppLangResource WorkspaceExistingBranchPlaceholder}"
+                                 Placeholder="{l:AppLangResource WorkspaceExistingBranchPlaceholder}"
+                                 Text="{Binding BranchQuery, Mode=TwoWay}" />
+                <Border CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                        BorderThickness="1" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                        Background="{arc:ArcDesignTokenResource Surface}"
+                        MaxHeight="144">
+                    <arc:ScrollArea FadeLength="0" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding FilteredBranches}" Margin="3">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="dialogs:ExistingBranchOption">
+                                    <Button Classes="ws-row" Classes.selected="{Binding IsSelected}"
+                                            IsEnabled="{Binding CanSelect}"
+                                            Command="{Binding $parent[UserControl].((dialogs:CreateWorkspaceViewModel)DataContext).SelectExistingBranchCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                            <lucide:LucideIcon Kind="GitBranch" Size="13" VerticalAlignment="Center"
+                                                               Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                            <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center"
+                                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                       Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Border IsVisible="{Binding IsRemote}" CornerRadius="4" Padding="5,1"
+                                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                                                    <TextBlock Classes="hint" Text="{l:AppLangResource WorkspaceBranchRemoteBadge}" />
+                                                </Border>
+                                                <Border IsVisible="{Binding IsOccupied}" CornerRadius="4" Padding="6,1"
+                                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                                                    <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                               Foreground="{arc:ArcDesignTokenResource Warning}"
+                                                               Text="{Binding OccupiedLabel}" />
+                                                </Border>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </arc:ScrollArea>
+                </Border>
+            </StackPanel>
+
+            <!-- Live worktree directory preview & optional per-workspace location override -->
+            <Border Padding="10,8"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderThickness="1" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}">
+                <StackPanel Spacing="3">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <lucide:LucideIcon Kind="FolderGit2" Size="13" VerticalAlignment="Center"
+                                               Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                            <TextBlock Classes="hint" Text="{l:AppLangResource WorkspacePathPreviewLabel}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <arc:Button x:Name="ResetDirectoryButton"
+                                        Variant="Ghost"
+                                        Size="Small"
+                                        Content="{l:AppLangResource SettingsReset}"
+                                        IsVisible="{Binding HasCustomBaseDirectory}"
+                                        Command="{Binding ResetDirectoryCommand}" />
+                            <arc:Button x:Name="ChangeDirectoryButton"
+                                        Variant="Ghost"
+                                        Size="Small"
+                                        Content="{l:AppLangResource WorkspaceDirectoryChangeButton}"
+                                        IsVisible="{Binding CanChangeDirectory}"
+                                        Command="{Binding ChangeDirectoryCommand}" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock Text="{Binding PreviewPath}" TextWrapping="Wrap"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                               Foreground="{arc:ArcDesignTokenResource Foreground}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               IsVisible="{Binding HasCustomBaseDirectory}"
+                               Text="{l:AppLangResource WorkspaceDirectoryCustomHint}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               IsVisible="{Binding HasSlashNote}" Text="{Binding SlashNote}"
+                               Foreground="{arc:ArcDesignTokenResource Success}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- 3. Post-creation action -->
+        <arc:Select Size="Small" AutoScrollToSelectedItem="False"
+                    Label="{l:AppLangResource WorkspaceAfterCreateLabel}"
+                    ItemsSource="{Binding AfterCreateOptions}"
+                    SelectedValue="{Binding SelectedAfterCreate, Mode=TwoWay}" />
+    </StackPanel>
+</UserControl>

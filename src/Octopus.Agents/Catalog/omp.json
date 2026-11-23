@@ -45,5 +45,16 @@
       "allowCustom": true
     },
     "extraArgs": true
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "acp"
+    ],
+    "env": {
+      "PI_NO_PTY": "1"
+    },
+    "dialect": "omp",
+    "minVersion": "17.0.5"
   }
 }

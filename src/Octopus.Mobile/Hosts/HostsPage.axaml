@@ -38,10 +38,19 @@
     <arcm:Page.Header>
         <arcm:Navbar Title="{l:MobileLangResource Hosts}" LargeTitle="True">
             <arcm:Navbar.Trailing>
-                <arcm:IconButton Name="AccountButton"
-                                 Icon="{x:Static arc:ArcIcons.User}"
+                <Panel>
+                    <arcm:IconButton Name="AccountButton"
+                                     Icon="{x:Static arc:ArcIcons.User}"
+                                     Command="{Binding OpenAccountCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource Account}"
+                                     IsVisible="{Binding IsSignedIn}" />
+                    <!-- Without an account the entry says so: what it opens offers to sign in. -->
+                    <arcm:Button Name="SignedOutButton"
+                                 Variant="Plain"
+                                 Content="{l:MobileLangResource NotSignedIn}"
                                  Command="{Binding OpenAccountCommand}"
-                                 AutomationProperties.Name="{l:MobileLangResource Account}" />
+                                 IsVisible="{Binding IsSignedOut}" />
+                </Panel>
             </arcm:Navbar.Trailing>
         </arcm:Navbar>
     </arcm:Page.Header>
@@ -62,22 +71,49 @@
                         ItemsSource="{Binding Unpaired}"
                         ItemTemplate="{StaticResource HostRow}"
                         IsVisible="{Binding HasUnpaired}" />
-        <TextBlock Classes="muted"
-                   Text="{l:MobileLangResource HostsEmpty}"
-                   TextWrapping="Wrap"
-                   TextAlignment="Center"
-                   Margin="16,48"
-                   IsVisible="{Binding IsEmpty}" />
+        <!-- A computer the account does not know (or any computer, without an account): by its address or pairing link. -->
+        <arcm:ListGroup Name="AddGroup" IsVisible="{Binding HasHosts}">
+            <arcm:ListItem Name="AddHostRow"
+                           Icon="{x:Static arc:ArcIcons.Plus}"
+                           Content="{l:MobileLangResource AddHost}"
+                           ShowChevron="True"
+                           Command="{Binding AddHostCommand}" />
+        </arcm:ListGroup>
+        <StackPanel Name="Empty" Margin="32,48,32,0" Spacing="18" IsVisible="{Binding IsEmpty}">
+            <TextBlock Name="EmptyText"
+                       Classes="muted"
+                       Text="{Binding EmptyText}"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center" />
+            <arcm:Button Name="AddHostButton"
+                         Variant="Tinted"
+                         HorizontalAlignment="Center"
+                         Content="{l:MobileLangResource AddHost}"
+                         Command="{Binding AddHostCommand}" />
+        </StackPanel>
     </StackPanel>
 
     <arcm:Page.Overlay>
-        <arcm:ActionSheet Name="AccountSheet"
-                          IsOpen="{Binding IsAccountOpen, Mode=TwoWay}"
-                          Title="{Binding AccountName}"
-                          CancelText="{l:MobileLangResource Cancel}">
-            <arcm:ActionSheetItem Content="{l:MobileLangResource SignOut}"
-                                  IsDestructive="True"
-                                  Command="{Binding SignOutCommand}" />
-        </arcm:ActionSheet>
+        <Panel>
+            <arcm:ActionSheet Name="AccountSheet"
+                              IsOpen="{Binding IsAccountOpen, Mode=TwoWay}"
+                              Title="{Binding AccountName}"
+                              CancelText="{l:MobileLangResource Cancel}">
+                <arcm:ActionSheetItem Content="{l:MobileLangResource SignOut}"
+                                      IsDestructive="True"
+                                      Command="{Binding SignOutCommand}" />
+            </arcm:ActionSheet>
+            <!-- Without an account: sign in (the relay then reaches computers elsewhere), or go back to choosing. -->
+            <arcm:ActionSheet Name="LocalSheet"
+                              IsOpen="{Binding IsLocalOpen, Mode=TwoWay}"
+                              Title="{Binding AccountName}"
+                              CancelText="{l:MobileLangResource Cancel}">
+                <arcm:ActionSheetItem Content="{l:MobileLangResource SignInStart}"
+                                      Command="{Binding SignInCommand}" />
+                <arcm:ActionSheetItem Content="{l:MobileLangResource LeaveLocal}"
+                                      IsDestructive="True"
+                                      Command="{Binding LeaveLocalCommand}" />
+            </arcm:ActionSheet>
+        </Panel>
     </arcm:Page.Overlay>
 </arcm:Page>

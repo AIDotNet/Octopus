@@ -10,6 +10,24 @@
     <Grid ColumnDefinitions="Auto,Auto">
         <!-- First level -->
         <StackPanel x:Name="FirstLevel" Grid.Column="0" Width="{DynamicResource OctopusLauncherFirstWidth}" Spacing="1" Margin="2" PointerMoved="OnFirstLevelPointerMoved">
+            <!-- Scheme C: shows which workspace this "+" menu targets when the project has branch workspaces. -->
+            <StackPanel IsVisible="{Binding ShowWorkspaceBanner}" Spacing="2" Margin="2,2,2,0">
+                <Border Padding="8,4" CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                        Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <lucide:LucideIcon Kind="GitBranch" Size="12" VerticalAlignment="Center"
+                                           IsVisible="{Binding IsTargetWorktree}"
+                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                        <lucide:LucideIcon Kind="Folder" Size="12" VerticalAlignment="Center"
+                                           IsVisible="{Binding !IsTargetWorktree}"
+                                           Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                        <TextBlock Classes="caption" VerticalAlignment="Center"
+                                   Text="{Binding TargetWorkspaceScopeText}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Border>
+                <Border Height="1" Margin="2,2" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+            </StackPanel>
+
             <Button Classes="row plain" Height="{DynamicResource OctopusLauncherRowHeight}" Command="{Binding NewTerminalCommand}"
                     AutomationProperties.Name="{l:AppLangResource NewTerminal}">
                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,0">
@@ -46,11 +64,19 @@
                     <DataTemplate x:DataType="vm:LauncherAgentViewModel">
                         <Button Classes="row" Classes.selected="{Binding IsExpanded}" Height="{DynamicResource OctopusLauncherRowHeight}"
                                 Command="{Binding LaunchCommand}" AutomationProperties.Name="{Binding Name}">
-                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="8,0,4,0">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="8,0,4,0">
                                 <common:AgentIcon AgentId="{Binding Id}" AgentName="{Binding Name}" Size="{DynamicResource OctopusItemAgentIconSize}" Margin="0,0,8,0" />
                                 <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Name}"
                                            TextTrimming="CharacterEllipsis" />
-                                <Border Grid.Column="2" IsVisible="{Binding IsDefault}" Margin="6,0"
+                                <Border Grid.Column="2" IsVisible="{Binding SupportsAcp}" Margin="4,0,0,0"
+                                        VerticalAlignment="Center" Padding="5,1"
+                                        CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                                    <TextBlock FontSize="10" FontWeight="Medium"
+                                               Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                               Text="ACP" />
+                                </Border>
+                                <Border Grid.Column="3" IsVisible="{Binding IsDefault}" Margin="6,0"
                                         VerticalAlignment="Center" Padding="6,1"
                                         CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
                                         Background="{arc:ArcDesignTokenResource AccentSubtle}">
@@ -58,7 +84,7 @@
                                                Foreground="{arc:ArcDesignTokenResource AccentStrong}"
                                                Text="{l:AppLangResource DefaultBadge}" />
                                 </Border>
-                                <Button Grid.Column="3" Classes="row" Width="22" Height="22" Command="{Binding ExpandCommand}"
+                                <Button Grid.Column="4" Classes="row" Width="22" Height="22" Command="{Binding ExpandCommand}"
                                         AutomationProperties.Name="{l:AppLangResource ShowLaunchOptions}">
                                     <lucide:LucideIcon Kind="ChevronRight" Size="14" HorizontalAlignment="Center" />
                                 </Button>
@@ -93,6 +119,18 @@
             </StackPanel>
 
             <Border Height="1" Margin="4,3" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Button Classes="row plain" Height="{DynamicResource OctopusLauncherRowHeight}"
+                    IsVisible="{Binding CanCreateBranchWorkspace}"
+                    Command="{Binding NewBranchWorkspaceCommand}"
+                    AutomationProperties.Name="{l:AppLangResource WorkspaceNewBranchMenu}">
+                <Grid ColumnDefinitions="Auto,*" Margin="8,0">
+                    <lucide:LucideIcon Kind="GitBranch" Size="{DynamicResource OctopusItemIconSize}" Margin="0,0,8,0"
+                                       Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                    <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center"
+                               Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                               Text="{l:AppLangResource WorkspaceNewBranchMenu}" />
+                </Grid>
+            </Button>
             <Button Classes="row plain" Height="{DynamicResource OctopusLauncherRowHeight}" Command="{Binding OpenAgentSettingsCommand}"
                     AutomationProperties.Name="{l:AppLangResource AgentSettingsMenu}">
                 <Grid ColumnDefinitions="Auto,*" Margin="8,0">

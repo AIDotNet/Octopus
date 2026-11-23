@@ -44,5 +44,15 @@
       ],
       "allowCustom": true
     }
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "--acp",
+      "--approval-mode",
+      "default"
+    ],
+    "dialect": "gemini",
+    "minVersion": "0.68.0"
   }
 }

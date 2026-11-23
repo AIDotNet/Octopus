@@ -73,8 +73,8 @@ public partial class ShellView : UserControl
         {
             SyncRight();
         }
-        if (e.PropertyName is nameof(ShellViewModel.CurrentProjectPath) or nameof(ShellViewModel.CurrentProjectName) or nameof(ShellViewModel.CurrentProjectSshHost)
-            or nameof(ShellViewModel.CurrentProjectRemoteHost))
+        if (e.PropertyName is nameof(ShellViewModel.CurrentProjectPath) or nameof(ShellViewModel.CurrentProjectRootPath) or nameof(ShellViewModel.CurrentWorkspaceBranch)
+            or nameof(ShellViewModel.CurrentProjectName) or nameof(ShellViewModel.CurrentProjectSshHost) or nameof(ShellViewModel.CurrentProjectRemoteHost))
         {
             ApplyProject();
         }
@@ -268,7 +268,13 @@ public partial class ShellView : UserControl
     /// The name goes first, so the panel never shows the new folder under the old name.
     /// </summary>
     private void ApplyProject() =>
-        RightPanel.SetProject(_model?.CurrentProjectPath, _model?.CurrentProjectName, _model?.CurrentProjectSshHost, _model?.CurrentProjectRemoteHost);
+        RightPanel.SetProject(
+            _model?.CurrentProjectPath,
+            _model?.CurrentProjectName,
+            _model?.CurrentProjectSshHost,
+            _model?.CurrentProjectRemoteHost,
+            _model?.CurrentProjectRootPath,
+            _model?.CurrentWorkspaceBranch);
 
     private void OnRightSplitterDragCompleted(object? sender, Avalonia.Input.VectorEventArgs e)
     {
@@ -284,6 +290,7 @@ public partial class ShellView : UserControl
         {
             return;
         }
+        _model.Launcher.SetTargetWorkspace(e.WorkspaceId, _model.Panel.IsGitProject);
         _model.Launcher.Refresh();
         // From the right half of the window the menu opens leftwards, so it stays inside the window.
         var onRight = e.Anchor.TranslatePoint(default, this) is { } point && point.X > Bounds.Width / 2;

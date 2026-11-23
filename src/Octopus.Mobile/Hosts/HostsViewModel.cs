@@ -9,7 +9,10 @@ using Octopus.Mobile.Workspace;
 
 namespace Octopus.Mobile.Hosts;
 
-/// <summary>The first page: the account's computers, online ones first, each with what needs the person there.</summary>
+/// <summary>
+/// The first page: the account's computers and the ones this phone paired with itself (only those, without an account),
+/// online ones first, each with what needs the person there.
+/// </summary>
 public sealed partial class HostsViewModel : ObservableObject
 {
     private readonly IRemoteWorkspace _workspace;
@@ -36,11 +39,46 @@ public sealed partial class HostsViewModel : ObservableObject
     [ObservableProperty] public partial bool IsEmpty { get; private set; }
     /// <summary>The account sheet (its name and "Sign out") is showing.</summary>
     [ObservableProperty] public partial bool IsAccountOpen { get; set; }
+    /// <summary>The sheet of a phone used without an account ("Sign in", "Leave local network mode") is showing.</summary>
+    [ObservableProperty] public partial bool IsLocalOpen { get; set; }
 
-    public string AccountName => _account.Name ?? MobileLangResources.Get(MobileLangResourceKind.Account);
+    /// <summary>Fixed for the page's life: signing in or out replaces the page.</summary>
+    public bool IsSignedIn => _account.IsSignedIn;
+    public bool IsSignedOut => !_account.IsSignedIn;
+    public string AccountName => _account.IsSignedIn
+        ? _account.Name ?? MobileLangResources.Get(MobileLangResourceKind.Account)
+        : MobileLangResources.Get(MobileLangResourceKind.NotSignedIn);
+    /// <summary>What an empty list says: nothing of the account has remote access on, or nothing was added yet.</summary>
+    public string EmptyText => MobileLangResources.Get(_account.IsSignedIn ? MobileLangResourceKind.HostsEmpty : MobileLangResourceKind.HostsEmptyLocal);
+    public bool HasHosts => !IsEmpty;
+
+    partial void OnIsEmptyChanged(bool value) => OnPropertyChanged(nameof(HasHosts));
 
     [RelayCommand]
-    private void OpenAccount() => IsAccountOpen = true;
+    private void OpenAccount()
+    {
+        if (_account.IsSignedIn) IsAccountOpen = true;
+        else IsLocalOpen = true;
+    }
+
+    /// <summary>A computer by its address or pairing link: also one the account does not know.</summary>
+    [RelayCommand]
+    private void AddHost() => _navigator.ShowAddHost();
+
+    [RelayCommand]
+    private void SignIn()
+    {
+        IsLocalOpen = false;
+        _navigator.ShowSignIn();
+    }
+
+    /// <summary>Back to the welcome page. The computers stay paired.</summary>
+    [RelayCommand]
+    private void LeaveLocal()
+    {
+        IsLocalOpen = false;
+        _account.LeaveLocalOnly();
+    }
 
     /// <summary>Reads the account's computers again; the page asks while it is showing.</summary>
     public Task RefreshAsync() => _workspace.RefreshAsync();

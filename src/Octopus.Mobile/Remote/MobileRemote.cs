@@ -8,8 +8,8 @@ using Octopus.Remote.Security;
 namespace Octopus.Mobile.Remote;
 
 /// <summary>
-/// The phone on the real thing (design/12-远程操作.md §9): its key, its sign-in at the service, the hosts it is paired
-/// with and the connections to them. The same code as the desktop's device side (<see cref="RelaySession"/>,
+/// The phone on the real thing (design/12-远程操作.md §9): its key, its sign-in at the service (if any), the hosts it is
+/// paired with and the connections to them. The same code as the desktop's device side (<see cref="RelaySession"/>,
 /// <see cref="RemoteHostConnections"/>); what is the phone's own is where it keeps things and how it shows them.
 /// </summary>
 public sealed class MobileRemote : IDisposable
@@ -20,11 +20,14 @@ public sealed class MobileRemote : IDisposable
     private readonly Lazy<Task<DeviceIdentity>> _identity;
 
     /// <param name="deviceName">What this phone calls itself to the service and to hosts ("Ada's iPhone").</param>
-    /// <param name="defaultServer">The service's address before the person typed one.</param>
-    public MobileRemote(IMobileStore store, string deviceName, string? defaultServer = null)
+    /// <param name="officialServer">
+    /// The official service's address, where "Sign in" goes without asking. Null takes the one this build was given
+    /// (<see cref="MobileBuild.ServiceUrl"/>); empty means there is none.
+    /// </param>
+    public MobileRemote(IMobileStore store, string deviceName, string? officialServer = null)
     {
         var vault = new MobileVault(store);
-        var settings = new MobileSettings(store.DataDirectory, defaultServer);
+        var settings = new MobileSettings(store.DataDirectory, officialServer ?? MobileBuild.ServiceUrl);
         _identity = new Lazy<Task<DeviceIdentity>>(() => DeviceIdentityStore.LoadOrCreateAsync(vault, Path.Combine(store.DataDirectory, "device.key")));
         _session = new RelaySession(() => settings.Server, vault, () => _identity.Value, kind: "phone");
         _connections = new RemoteHostConnections(
@@ -33,7 +36,7 @@ public sealed class MobileRemote : IDisposable
             () => new DeviceDescription(deviceName, DeviceKind.Phone),
             Hello,
             _session);
-        _workspace = new RemoteWorkspace(_session, _connections);
+        _workspace = new RemoteWorkspace(_session, _connections, settings);
         Account = new RelayAccountSession(_session, settings, deviceName);
     }
 
@@ -47,7 +50,7 @@ public sealed class MobileRemote : IDisposable
     public static HelloMessage Hello { get; } = new()
     {
         AppVersion = typeof(MobileRemote).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "",
-        Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilitySizeRelease],
+        Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
     };
 
@@ -64,34 +67,90 @@ public sealed class MobileRemote : IDisposable
     }
 }
 
-/// <summary>The one setting the phone has so far: the service's address, in a file of the data folder.</summary>
+/// <summary>What this build of the app was given when it was compiled.</summary>
+public static class MobileBuild
+{
+    /// <summary>
+    /// The official service's address: the MSBuild property <c>OctopusServiceUrl</c> (Directory.Build.props), kept in
+    /// this assembly's metadata. Null while there is none.
+    /// </summary>
+    public static string? ServiceUrl { get; } = typeof(MobileBuild).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+        .FirstOrDefault(attribute => attribute.Key == "OctopusServiceUrl")?.Value is { Length: > 0 } url ? url : null;
+}
+
+/// <summary>
+/// The phone's few settings, each a small file of the data folder: the address of a service of the person's own
+/// (<c>server.txt</c>) and whether the app is used without an account (<c>mode.txt</c>: empty or "local").
+/// </summary>
 internal sealed class MobileSettings
 {
-    private readonly string _file;
-    private string _server;
+    private const string Local = "local";
+    private readonly string _serverFile;
+    private readonly string _modeFile;
+    private string _custom;
+    private bool _localOnly;
 
-    public MobileSettings(string directory, string? defaultServer)
+    /// <param name="official">The official service's address; null, empty or not an address when there is none.</param>
+    public MobileSettings(string directory, string? official)
     {
-        _file = Path.Combine(directory, "server.txt");
-        string? kept = null;
-        try { kept = File.Exists(_file) ? File.ReadAllText(_file).Trim() : null; }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        _server = string.IsNullOrEmpty(kept) ? defaultServer?.Trim() ?? "" : kept;
+        _serverFile = Path.Combine(directory, "server.txt");
+        _modeFile = Path.Combine(directory, "mode.txt");
+        Official = RelayAccountClient.ParseUrl(official) is null ? null : official!.Trim();
+        var kept = Read(_serverFile);
+        _custom = IsOfficial(kept) ? "" : kept;
+        _localOnly = Read(_modeFile) == Local;
     }
 
-    public string Server
+    /// <summary>The official service's address; null when this build has none.</summary>
+    public string? Official { get; }
+
+    /// <summary>The address of a service of the person's own, as they typed it; empty when they use the official one or none.</summary>
+    public string Custom => _custom;
+
+    /// <summary>The service this phone signs in to: the person's own when they typed one, otherwise the official one. Empty when there is neither.</summary>
+    public string Server => _custom.Length > 0 ? _custom : Official ?? "";
+
+    /// <summary>The app is used without an account: the hosts are those this phone paired with itself.</summary>
+    public bool LocalOnly
     {
-        get => _server;
+        get => _localOnly;
         set
         {
-            _server = value.Trim();
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(_file)!);
-                File.WriteAllText(_file, _server);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            if (_localOnly == value) return;
+            _localOnly = value;
+            Write(_modeFile, value ? Local : "");
+            LocalOnlyChanged?.Invoke();
         }
+    }
+
+    /// <summary>Raised on the thread that changed <see cref="LocalOnly"/>.</summary>
+    public event Action? LocalOnlyChanged;
+
+    /// <summary>The service to sign in to from now on. The official one is not kept: it is what an empty file means.</summary>
+    public void Use(string server)
+    {
+        var typed = server.Trim();
+        _custom = IsOfficial(typed) ? "" : typed;
+        Write(_serverFile, _custom);
+    }
+
+    private bool IsOfficial(string server) =>
+        Official is not null && RelayAccountClient.ParseUrl(server) is { } url && url == RelayAccountClient.ParseUrl(Official);
+
+    private static string Read(string file)
+    {
+        try { return File.Exists(file) ? File.ReadAllText(file).Trim() : ""; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
+    }
+
+    private static void Write(string file, string text)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, text);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 }
 
@@ -106,11 +165,14 @@ internal sealed class RelayAccountSession : IAccountSession
     {
         (_session, _settings, _deviceName) = (session, settings, deviceName);
         session.Changed += () => Changed?.Invoke(this, EventArgs.Empty);
+        settings.LocalOnlyChanged += () => Changed?.Invoke(this, EventArgs.Empty);
     }
 
     public bool IsSignedIn => _session.Account is not null;
+    public bool IsLocalOnly => !IsSignedIn && _settings.LocalOnly;
     public string? Name => _session.Account?.Name;
-    public string Server => _settings.Server;
+    public string? OfficialServer => _settings.Official;
+    public string Server => _settings.Custom;
     public bool SignInEnded => _session.SignInEnded;
     public event EventHandler? Changed;
 
@@ -119,13 +181,17 @@ internal sealed class RelayAccountSession : IAccountSession
         if (RelayAccountClient.ParseUrl(server) is not { } url) throw new IOException("That is not an address.");
         // Another service than before: what was kept of the old one is of no use there.
         if (url != RelayAccountClient.ParseUrl(_settings.Server)) await _session.ForgetAsync().ConfigureAwait(false);
-        _settings.Server = server;
+        _settings.Use(server);
         var login = await _session.BeginSignInAsync(_deviceName, cancellationToken).ConfigureAwait(false);
         var cancel = new CancellationTokenSource();
         return new SignInChallenge(login.UserCode, login.VerificationUriComplete, CompleteAsync(login, cancel.Token), cancel.Cancel);
     }
 
     public void SignOut() => _ = _session.SignOutAsync();
+
+    public void UseLocalOnly() => _settings.LocalOnly = true;
+
+    public void LeaveLocalOnly() => _settings.LocalOnly = false;
 
     private async Task<SignInOutcome> CompleteAsync(RelayDeviceLogin login, CancellationToken cancellationToken)
     {

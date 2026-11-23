@@ -461,15 +461,19 @@ public sealed class FsModule : IPluginApiModule
         return fresh;
     }
 
-    /// <summary>The agent's default account directory and every other account seen in its signals.</summary>
+    /// <summary>The agent's default account/data directory and every other account seen in its signals.</summary>
     private IEnumerable<(string Directory, string? Key)> AgentDirectories(string agentId)
     {
         if (_agents.Find(agentId) is not { } definition) yield break;
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        if (definition.Signals?.Account is not null)
+        var resolved = SignalAccounts.ResolveDirectory(definition, null, _home);
+        if (resolved.Length > 0)
         {
-            var directory = SignalAccounts.ResolveDirectory(definition, null, _home);
-            if (seen.Add(directory)) yield return (directory, SignalAccounts.KeyOfDirectory(directory));
+            if (seen.Add(resolved)) yield return (resolved, SignalAccounts.KeyOfDirectory(resolved));
+        }
+        else if (SignalAccounts.DefaultDataDirectory(definition, _home) is { Length: > 0 } dataDirectory)
+        {
+            if (seen.Add(dataDirectory)) yield return (dataDirectory, null);
         }
         foreach (var account in _hub?.Accounts(agentId) ?? [])
         {

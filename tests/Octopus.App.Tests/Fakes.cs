@@ -155,6 +155,43 @@ public sealed class FakeDialogService : IDialogService
         return OnRunAccountLogin is not null ? OnRunAccountLogin(spec) : Task.FromResult(LoginResult);
     }
 
+    public Octopus.App.Services.Workspaces.CreateWorkspaceRequest? NextWorkspaceRequest { get; set; }
+    public string? LastWorkspaceError { get; private set; }
+    public bool LastWorkspaceDialogCalledOnUiThread { get; private set; }
+
+    public Task<Octopus.App.Services.Workspaces.CreateWorkspaceRequest?> AskCreateWorkspaceAsync(
+        Project project,
+        string repositoryRoot,
+        IReadOnlyList<Octopus.Git.GitBranch> branches,
+        IReadOnlyList<Octopus.Git.GitWorktree> worktrees,
+        Octopus.App.Services.Workspaces.IGitHubTaskProvider taskProvider,
+        Func<string, string> computePath,
+        string homeDirectory,
+        string? defaultAgentName,
+        Octopus.App.Services.Workspaces.CreateWorkspaceRequest? initial = null,
+        string? initialError = null)
+    {
+        LastWorkspaceDialogCalledOnUiThread = Avalonia.Threading.Dispatcher.UIThread.CheckAccess();
+        LastWorkspaceError = initialError;
+        var next = NextWorkspaceRequest;
+        NextWorkspaceRequest = null;
+        return Task.FromResult(next);
+    }
+
+    public Octopus.App.Services.Workspaces.WorkspaceCleanupRunSummary? NextInspectSummary { get; set; }
+    public int InspectWorkspacesAsked { get; private set; }
+
+    public Task<Octopus.App.Services.Workspaces.WorkspaceCleanupRunSummary?> ShowInspectWorkspacesAsync(
+        Octopus.App.Services.Workspaces.IWorkspaceCleanupService cleanup,
+        IProjectService projects,
+        Octopus.Platform.IFileOpener? fileOpener = null)
+    {
+        InspectWorkspacesAsked++;
+        var next = NextInspectSummary;
+        NextInspectSummary = null;
+        return Task.FromResult(next);
+    }
+
     public Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false)
     {
         Asked++;
@@ -198,6 +235,8 @@ public sealed class FakeAgentSessionService : IAgentSessionService
     public const string Pro = "/home/u/.rec/claude/accounts/51691/config";
 
     public Dictionary<string, AgentSessionGroup> Groups { get; } = [];
+    /// <summary>Optional per-path overrides keyed by <c>(AgentId, NormalizedPath)</c> for multi-workspace session tests.</summary>
+    public Dictionary<(string AgentId, string Path), AgentSessionGroup> GroupsByPath { get; } = [];
     public SessionMigrationResult NextResult { get; set; } = new(SessionMigrationKind.Handoff, Prompt: "# Handoff");
     public SessionMigrationRequest? LastRequest { get; private set; }
 
@@ -208,8 +247,15 @@ public sealed class FakeAgentSessionService : IAgentSessionService
             ? [new(Team, "Team", true, []), new(Pro, "Pro", false, [])]
             : [new("/home/u/.codex", "codex", true, [])]);
 
-    public Task<AgentSessionGroup> ListAsync(AgentDefinition agent, string projectPath, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Groups.GetValueOrDefault(agent.Id) ?? new AgentSessionGroup(agent, CanRead(agent.Id), []));
+    public Task<AgentSessionGroup> ListAsync(AgentDefinition agent, string projectPath, CancellationToken cancellationToken = default)
+    {
+        var normalized = projectPath.TrimEnd('/', '\\');
+        var match = GroupsByPath.FirstOrDefault(kv =>
+            kv.Key.AgentId == agent.Id
+            && string.Equals(kv.Key.Path.TrimEnd('/', '\\'), normalized, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase));
+        if (match.Value is not null) return Task.FromResult(match.Value);
+        return Task.FromResult(Groups.GetValueOrDefault(agent.Id) ?? new AgentSessionGroup(agent, CanRead(agent.Id), []));
+    }
 
     public Task<SessionTranscript> ReadAsync(AgentSessionInfo session, CancellationToken cancellationToken = default) =>
         Task.FromResult(new SessionTranscript(session, []));

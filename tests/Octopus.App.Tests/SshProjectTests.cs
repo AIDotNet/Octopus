@@ -28,7 +28,7 @@ public class SshProjectTests
     [Fact]
     public async Task A_folder_on_a_host_is_kept_as_typed_and_is_a_project_of_its_own()
     {
-        var projects = new ProjectService(new InMemoryProjectStore(), new PathComparer(ignoreCase: false), new InMemorySettingsStore());
+        var projects = new ProjectService(new InMemoryProjectStore(), new PathComparer(ignoreCase: false));
         await projects.LoadAsync();
 
         var local = projects.AddProject("/srv/app");
