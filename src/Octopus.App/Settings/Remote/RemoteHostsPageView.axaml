@@ -85,10 +85,22 @@
                                                Foreground="{arc:ArcDesignTokenResource Danger}"
                                                IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                 </StackPanel>
-                                <arc:Button Grid.Column="2" Variant="Secondary" Size="Small" VerticalAlignment="Center"
-                                            Content="{l:AppLangResource SettingsRemoteHostsRemove}"
-                                            Command="{Binding $parent[ItemsControl].((remote:RemoteHostsSettingsViewModel)DataContext).RemoveCommand}"
-                                            CommandParameter="{Binding}" />
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <arc:Button Variant="Primary" Size="Small"
+                                                Content="{l:AppLangResource SettingsRemoteHostsConnect}"
+                                                IsVisible="{Binding CanConnect}"
+                                                Command="{Binding $parent[ItemsControl].((remote:RemoteHostsSettingsViewModel)DataContext).ConnectCommand}"
+                                                CommandParameter="{Binding}" />
+                                    <arc:Button Variant="Secondary" Size="Small"
+                                                Content="{Binding StopText}"
+                                                IsVisible="{Binding !CanConnect}"
+                                                Command="{Binding $parent[ItemsControl].((remote:RemoteHostsSettingsViewModel)DataContext).DisconnectCommand}"
+                                                CommandParameter="{Binding}" />
+                                    <arc:Button Variant="Secondary" Size="Small"
+                                                Content="{l:AppLangResource SettingsRemoteHostsRemove}"
+                                                Command="{Binding $parent[ItemsControl].((remote:RemoteHostsSettingsViewModel)DataContext).RemoveCommand}"
+                                                CommandParameter="{Binding}" />
+                                </StackPanel>
                             </Grid>
                         </Border>
                     </DataTemplate>

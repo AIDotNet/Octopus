@@ -778,6 +778,8 @@
     <unit id="SettingsRemoteHostsUnreachable"><segment><source>The host could not be reached: {0}</source></segment></unit>
     <unit id="SettingsRemoteHostsNone"><segment><source>This computer is not paired with any host.</source></segment></unit>
     <unit id="SettingsRemoteHostsRemove"><segment><source>Remove</source></segment></unit>
+    <unit id="SettingsRemoteHostsConnect"><segment><source>Connect</source></segment></unit>
+    <unit id="SettingsRemoteHostsDisconnect"><segment><source>Disconnect</source></segment></unit>
     <unit id="SettingsRemoteHostsStateConnected"><segment><source>Connected</source></segment></unit>
     <unit id="SettingsRemoteHostsStateConnecting"><segment><source>Connecting…</source></segment></unit>
     <unit id="SettingsRemoteHostsStateOffline"><segment><source>Not connected</source></segment></unit>

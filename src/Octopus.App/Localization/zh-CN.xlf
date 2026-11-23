@@ -778,6 +778,8 @@
     <unit id="SettingsRemoteHostsUnreachable"><segment><source>The host could not be reached: {0}</source><target state="translated">连不上主机：{0}</target></segment></unit>
     <unit id="SettingsRemoteHostsNone"><segment><source>This computer is not paired with any host.</source><target state="translated">这台电脑还没有和任何主机配对。</target></segment></unit>
     <unit id="SettingsRemoteHostsRemove"><segment><source>Remove</source><target state="translated">移除</target></segment></unit>
+    <unit id="SettingsRemoteHostsConnect"><segment><source>Connect</source><target state="translated">连接</target></segment></unit>
+    <unit id="SettingsRemoteHostsDisconnect"><segment><source>Disconnect</source><target state="translated">断开</target></segment></unit>
     <unit id="SettingsRemoteHostsStateConnected"><segment><source>Connected</source><target state="translated">已连接</target></segment></unit>
     <unit id="SettingsRemoteHostsStateConnecting"><segment><source>Connecting…</source><target state="translated">正在连接…</target></segment></unit>
     <unit id="SettingsRemoteHostsStateOffline"><segment><source>Not connected</source><target state="translated">未连接</target></segment></unit>

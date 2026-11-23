@@ -230,6 +230,32 @@ public class RemoteProjectTests
     }
 
     [AvaloniaFact]
+    public async Task A_paired_host_is_connected_and_disconnected_from_its_row()
+    {
+        await using var other = new OtherComputer();
+        var (page, hostId) = await Pair(other);
+        using var _ = page;
+        var runtime = AppHost.Get<RemoteClientRuntime>();
+        var paired = Assert.Single(page.Hosts);
+        Assert.True(paired.IsConnected);
+        Assert.False(paired.CanConnect);
+
+        // Ended from the row: the host sees the device leave, and the row offers to connect again.
+        await Wait(page.DisconnectCommand.ExecuteAsync(paired));
+        await Until(() => other.Service.Connections.Count == 0, "the host sees the device leave");
+        Assert.Equal(RemoteHostState.Disconnected, runtime.StateOf(hostId));
+        var stopped = Assert.Single(page.Hosts);
+        Assert.False(stopped.IsConnected);
+        Assert.True(stopped.CanConnect);
+
+        // Asked for again from the row.
+        await Wait(page.ConnectCommand.ExecuteAsync(stopped));
+        await Until(() => other.Service.Connections.Count == 1, "the host sees the device come back");
+        Assert.Equal(RemoteHostState.Connected, runtime.StateOf(hostId));
+        Assert.True(Assert.Single(page.Hosts).IsConnected);
+    }
+
+    [AvaloniaFact]
     public async Task A_project_on_the_host_sits_on_the_rail_and_its_terminal_runs_there()
     {
         await using var other = new OtherComputer();

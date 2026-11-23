@@ -791,6 +791,8 @@ public enum AppLangResourceKind
     SettingsRemoteHostsUnreachable,
     SettingsRemoteHostsNone,
     SettingsRemoteHostsRemove,
+    SettingsRemoteHostsConnect,
+    SettingsRemoteHostsDisconnect,
     SettingsRemoteHostsStateConnected,
     SettingsRemoteHostsStateConnecting,
     SettingsRemoteHostsStateOffline,

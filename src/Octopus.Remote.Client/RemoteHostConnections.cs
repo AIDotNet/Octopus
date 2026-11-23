@@ -45,6 +45,8 @@ public class RemoteHostConnections : IDisposable
         public bool Wanted;
         public bool Retrying;
         public bool ThroughRelay;
+        /// <summary>The person disconnected: a connection still being made is closed when it arrives rather than kept.</summary>
+        public bool Closed;
     }
 
     /// <param name="identity">This device's key (read from its keystore on first use).</param>
@@ -177,7 +179,13 @@ public class RemoteHostConnections : IDisposable
             var client = await RemoteHostClient.ConnectAsync(transport, identity, Description, expected, _hello, options, cancellationToken).ConfigureAwait(false);
             // The way through the relay is not an address of the host's: it is tried for every host while a relay is set up.
             var peer = Hosts.Add(client.Host, client.HostDescription, address.Scheme == RelayScheme ? [] : [address.ToString()]);
-            Adopt(peer.Id, client, address.Scheme == RelayScheme);
+            Link hostLink;
+            lock (_gate)
+            {
+                if (!_links.TryGetValue(peer.Id, out var existing)) _links[peer.Id] = hostLink = new Link();
+                else hostLink = existing;
+            }
+            Adopt(peer.Id, hostLink, client, address.Scheme == RelayScheme);
             return peer;
         }
         throw new IOException(last?.Message ?? "The host cannot be reached.", last);
@@ -199,17 +207,41 @@ public class RemoteHostConnections : IDisposable
         }
     }
 
-    /// <summary>Forgets a host and ends the connection to it.</summary>
-    public async Task RemoveHostAsync(string hostId)
+    /// <summary>
+    /// Ends the connection to one host and stops asking for it; who is paired is kept. Something that shows the host
+    /// (a project, a terminal) connects it again when it is next needed.
+    /// </summary>
+    public async Task DisconnectAsync(string hostId)
     {
+        Task<RemoteHostClient>? connecting;
         RemoteHostClient? client;
         lock (_gate)
         {
-            client = _links.GetValueOrDefault(hostId)?.Client;
-            _links.Remove(hostId);
+            if (!_links.Remove(hostId, out var link)) return;
+            link.Wanted = false;
+            link.Retrying = false;
+            link.Closed = true;
+            client = link.Client;
+            link.Client = null;
+            connecting = link.Connecting;
         }
-        Hosts.Remove(hostId);
+        StateChanged?.Invoke(hostId);
+        // A connection being made is taken when it arrives, so that it can be closed too.
+        if (client is null && connecting is not null)
+        {
+            try { client = await connecting.ConfigureAwait(false); }
+            catch (Exception e) when (e is IOException or HandshakeException or RemoteException
+                                          or System.Net.WebSockets.WebSocketException or System.Net.Sockets.SocketException
+                                          or OperationCanceledException or ObjectDisposedException) { }
+        }
         if (client is not null) await client.DisposeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Forgets a host and ends the connection to it.</summary>
+    public async Task RemoveHostAsync(string hostId)
+    {
+        await DisconnectAsync(hostId).ConfigureAwait(false);
+        Hosts.Remove(hostId);
         StateChanged?.Invoke(hostId);
     }
 
@@ -282,7 +314,7 @@ public class RemoteHostConnections : IDisposable
                 }
                 var (client, text, address) = done.Result;
                 Hosts.Touch(hostId, client.HostDescription.Name, text);
-                Adopt(hostId, client, address.Scheme == RelayScheme);
+                Adopt(hostId, link, client, address.Scheme == RelayScheme);
                 return client;
             }
             throw new IOException(last switch
@@ -327,11 +359,16 @@ public class RemoteHostConnections : IDisposable
     }
 
     // A live client for a host: remembered, listened to, and replaced when it ends.
-    private void Adopt(string hostId, RemoteHostClient client, bool throughRelay = false)
+    private void Adopt(string hostId, Link link, RemoteHostClient client, bool throughRelay = false)
     {
         lock (_gate)
         {
-            if (!_links.TryGetValue(hostId, out var link)) _links[hostId] = link = new Link();
+            // The person disconnected while it was being made: it is closed rather than kept.
+            if (link.Closed || !_links.TryGetValue(hostId, out var current) || !ReferenceEquals(current, link))
+            {
+                _ = client.DisposeAsync().AsTask();
+                return;
+            }
             link.Client = client;
             link.ThroughRelay = throughRelay;
             link.Connecting = null;

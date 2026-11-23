@@ -11,7 +11,16 @@ using Octopus.Remote.Security;
 namespace Octopus.App.Settings.Remote;
 
 /// <summary>A paired host in the list.</summary>
-public sealed record RemoteHostRow(string Id, string Name, string Address, string StateText, bool IsConnected, string? Error, string ProjectsText);
+public sealed record RemoteHostRow(string Id, string Name, string Address, string StateText, bool IsConnected, bool IsConnecting, string? Error, string ProjectsText)
+{
+    /// <summary>The connection can be asked for: the host is neither connected nor on its way.</summary>
+    public bool CanConnect => !IsConnected && !IsConnecting;
+
+    /// <summary>The button while there is a connection to end (or one on its way to stop).</summary>
+    public string StopText => IsConnecting
+        ? AppLangResources.Get(AppLangResourceKind.SettingsRemoteHostsCancel)
+        : AppLangResources.Get(AppLangResourceKind.SettingsRemoteHostsDisconnect);
+}
 
 /// <summary>
 /// The "Remote hosts" page (design/12-远程操作.md §7.2): the computers this one is paired with, and pairing with
@@ -55,6 +64,30 @@ public sealed partial class RemoteHostsSettingsViewModel : ObservableObject, IDi
 
     [RelayCommand]
     private void CancelPairing() => _pairing?.Cancel();
+
+    /// <summary>Connects a paired host on the person's word; a failure is shown on its row and retried in the background.</summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task ConnectAsync(RemoteHostRow? row)
+    {
+        if (row is null) return;
+        try { await _runtime.ConnectAsync(row.Id); }
+        catch (Exception e) when (e is IOException or HandshakeException or Octopus.Remote.Protocol.RemoteException
+                                      or System.Net.WebSockets.WebSocketException or System.Net.Sockets.SocketException
+                                      or ObjectDisposedException)
+        {
+            // The row says why, and the retry loop keeps trying.
+        }
+        Refresh();
+    }
+
+    /// <summary>Ends a connection (or stops one being made); something on the host connects it again when needed.</summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task DisconnectAsync(RemoteHostRow? row)
+    {
+        if (row is null) return;
+        await _runtime.DisconnectAsync(row.Id);
+        Refresh();
+    }
 
     [RelayCommand]
     private async Task RemoveAsync(RemoteHostRow? row)
@@ -152,6 +185,7 @@ public sealed partial class RemoteHostsSettingsViewModel : ObservableObject, IDi
                     _ => AppLangResourceKind.SettingsRemoteHostsStateOffline,
                 }),
                 state == RemoteHostState.Connected,
+                state == RemoteHostState.Connecting,
                 state == RemoteHostState.Connected ? null : _runtime.ErrorOf(peer.Id),
                 count == 0 ? "" : string.Format(AppLangResources.Get(AppLangResourceKind.SettingsRemoteHostsProjects), count));
         }).ToList();
