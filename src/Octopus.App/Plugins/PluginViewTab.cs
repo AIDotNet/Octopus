@@ -222,12 +222,14 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
 
     private void ShowLoading()
     {
+        UiRenderer.DisposeTree(_rendered);
         _rendered = null;
         _host.Child = new Skeleton { IsLoading = true, Lines = 4, Margin = new Thickness(24) };
     }
 
     private void ShowUnavailable(string message, string? detail)
     {
+        UiRenderer.DisposeTree(_rendered);
         _rendered = null;
         _host.Child = new EmptyState
         {
@@ -240,6 +242,7 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
 
     private void ShowError(string message, string? detail)
     {
+        UiRenderer.DisposeTree(_rendered);
         _rendered = null;
         var retry = new TKCode.Arc.Button { Content = PluginText.Get("重试", "Retry"), Variant = ButtonVariant.Secondary, Size = ControlSize.Small };
         retry.Click += async (_, _) =>
@@ -285,6 +288,9 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
             await PluginWorkbench.InvokeQuietlyAsync(plugin, "view.close", new JsonArray(JsonValue.Create(InstanceId)), TimeSpan.FromSeconds(2));
             _workbench.Detach(plugin.Id, InstanceId, this);
         }
+        UiRenderer.DisposeTree(_rendered);
+        _rendered = null;
+        _host.Child = null;
     }
 
     /// <summary>"Restart" on a plugin tab opens the view again (its state is kept).</summary>

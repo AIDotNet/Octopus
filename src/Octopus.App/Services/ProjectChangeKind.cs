@@ -25,4 +25,6 @@ public enum ProjectChangeKind
     GroupExpanded,
     /// <summary>A tunnel of a project on an SSH host was added, edited or removed. Nothing but the tunnels is affected.</summary>
     Tunnels,
+    /// <summary>A project's per-agent subscription account binding changed.</summary>
+    ProjectAccounts,
 }

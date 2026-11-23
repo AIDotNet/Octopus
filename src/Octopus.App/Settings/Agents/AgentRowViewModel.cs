@@ -37,12 +37,19 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         Definition = definition;
         Installation = installation;
         _services = services;
+        AccountsSection = definition.Accounts is not null && services.Accounts is not null
+            ? new AgentAccountsSectionViewModel(this, services, services.Accounts)
+            : null;
         Fields = AgentFieldFactory.Create(this);
         Refresh();
         services.Settings.Changed += OnSettingsChanged;
     }
 
     public AgentDefinition Definition { get; }
+
+    public AgentAccountsSectionViewModel? AccountsSection { get; }
+
+    public bool HasAccountsSection => AccountsSection is not null;
 
     /// <summary>"Custom" or "Modified" when the user has a definition file of this agent; null for a built-in one as shipped.</summary>
     public string? OriginBadge { get; init; }
@@ -187,6 +194,10 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         if (value)
         {
             _ = DiscoverModelsAsync();
+            if (Definition.Accounts is not null && _services.Accounts is { } accounts)
+            {
+                _ = accounts.RefreshAllIdentitiesAsync(Definition);
+            }
         }
     }
 
@@ -221,6 +232,7 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
     private void OnSettingsChangedOnUi()
     {
         Refresh();
+        AccountsSection?.Rebuild();
         foreach (var field in Fields)
         {
             field.OnSettingsChanged();
@@ -235,6 +247,7 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         }
         _disposed = true;
         _services.Settings.Changed -= OnSettingsChanged;
+        AccountsSection?.Dispose();
         _discoveryCts?.Cancel();
         _discoveryCts?.Dispose();
     }

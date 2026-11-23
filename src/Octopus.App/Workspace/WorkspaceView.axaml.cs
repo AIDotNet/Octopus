@@ -1,7 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
+using Octopus.App.Appearance;
 using TKCode.Arc;
 
 namespace Octopus.App.Workspace;
@@ -29,12 +32,25 @@ public partial class WorkspaceView : UserControl
     /// <summary>The view's own bounds at that walk.</summary>
     private Rect _foundIn;
 
+    static WorkspaceView()
+    {
+        // Class handlers belong here: in the instance constructor every new view would add another pair.
+        LeftInsetProperty.Changed.AddClassHandler<WorkspaceView>((view, _) => view.ApplyStrips());
+        RightInsetProperty.Changed.AddClassHandler<WorkspaceView>((view, _) => view.ApplyStrips());
+    }
+
     public WorkspaceView()
     {
         InitializeComponent();
+        // Arc's internal DockTab already trims its title when the tab has a finite width.
+        if (typeof(DockLayout).Assembly.GetType("TKCode.Arc.DockTab") is { } tabType)
+        {
+            Styles.Add(new Style(selector => selector.OfType(tabType))
+            {
+                Setters = { new Setter(MaxWidthProperty, new DynamicResourceExtension("OctopusTabMaxWidth")) },
+            });
+        }
         LayoutUpdated += (_, _) => ApplyStrips();
-        LeftInsetProperty.Changed.AddClassHandler<WorkspaceView>((view, _) => view.ApplyStrips());
-        RightInsetProperty.Changed.AddClassHandler<WorkspaceView>((view, _) => view.ApplyStrips());
         AddHandler(PointerPressedEvent, OnStripPressedTunnel, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
@@ -173,17 +189,18 @@ public partial class WorkspaceView : UserControl
             row.Children.Add(button);
             _addButtons.Add(row, button);
         }
-        // The button's own width, read once while it still has no margin: with the margin that places it, the available
-        // room can be smaller than the button and its desired size no longer says how wide it is.
-        if (button.Tag is not double width)
+        // The button's own width for the active layout style, read once while it still has no margin (or refreshed when the
+        // layout style changes its button size).
+        var expectedButtonSize = ThemeService.CurrentMetrics.IconButtonSize;
+        if (button.Tag is not (double width, double cachedSize) || cachedSize != expectedButtonSize)
         {
             if (button.DesiredSize.Width <= 0)
             {
                 // Not measured yet: the next layout pass comes right after this child was added.
                 return;
             }
-            width = button.DesiredSize.Width;
-            button.Tag = width;
+            width = expectedButtonSize;
+            button.Tag = (width, expectedButtonSize);
         }
         var reserve = width + AddGap;
         if (strip.Margin.Right != reserve)

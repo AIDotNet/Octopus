@@ -36,6 +36,7 @@
     },
     "prompt": { "mode": "flag", "args": ["-i", "{value}"] },
     "resume": { "continueLatest": ["--resume", "latest"] },
+    "additionalDirs": { "mode": "comma", "args": ["--include-directories", "{value}"], "maxCount": 5 },
     "extraArgs": true,
     "env": {
       "known": [

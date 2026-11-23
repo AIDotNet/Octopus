@@ -62,7 +62,7 @@ public sealed class PluginScreenshots
         var config = AppHost.Get<Octopus.Plugins.Runtime.Modules.PluginConfigStore>();
         config.Set(usageManifest, "octopus.agent-usage.claude.source", JsonValue.Create("command"), byUser: true);
         config.Set(usageManifest, "octopus.agent-usage.claude.command",
-            JsonValue.Create("printf '%s' '{\"plan\":\"Max\",\"windows\":[{\"label\":\"5 小时\",\"usedPercent\":64},{\"label\":\"7 天\",\"usedPercent\":23}]}'"), byUser: true);
+            JsonValue.Create($$"""printf '%s' '{"plan":"Max","windows":[{"label":"5 小时","windowMinutes":300,"usedPercent":64,"resetsAt":{{DateTimeOffset.UtcNow.AddMinutes(112).ToUnixTimeSeconds()}}},{"label":"7 天","windowMinutes":10080,"usedPercent":92,"resetsAt":{{DateTimeOffset.UtcNow.AddHours(13).ToUnixTimeSeconds()}}}]}'"""), byUser: true);
         await manager.StartAsync();
         await manager.FireAsync("onAgentInstalled:codex");
         var plugin = manager.Find("octopus.agent-usage")!;
@@ -87,19 +87,27 @@ public sealed class PluginScreenshots
         Frames.Save(main, Path.Combine(s_dir, $"plugin-indicator-{suffix}.png"));
         main.Close();
 
-        // The popover, as the indicator shows it.
-        var json = await plugin.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5));
-        var tree = JsonNode.Parse(json)!["tree"];
-        var renderer = new UiRenderer(AppHost.Get<PluginWorkbench>().SinkFor(plugin, "indicator:shot"));
-        var popover = new Window
+        // The popover, as the indicator shows it: compact (the default), then comfortable.
+        async Task ShootPopover(string name)
         {
-            Width = 420, Height = 640,
-            Content = new Border { Padding = new Thickness(12), Child = renderer.Render(tree, null) },
-        };
-        popover.Show();
+            var json = await plugin.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5));
+            var tree = JsonNode.Parse(json)!["tree"];
+            var renderer = new UiRenderer(AppHost.Get<PluginWorkbench>().SinkFor(plugin, "indicator:shot"));
+            var popover = new Window
+            {
+                Width = 460, Height = 640,
+                Content = new Border { Padding = new Thickness(12), Child = renderer.Render(tree, null) },
+            };
+            popover.Show();
+            Frames.Until(() => false, milliseconds: 300);
+            Frames.Save(popover, Path.Combine(s_dir, $"{name}-{suffix}.png"));
+            popover.Close();
+        }
+        await ShootPopover("plugin-usage-popover");
+        config.Set(usageManifest, "octopus.agent-usage.style", JsonValue.Create("comfortable"), byUser: true);
         Frames.Until(() => false, milliseconds: 300);
-        Frames.Save(popover, Path.Combine(s_dir, $"plugin-usage-popover-{suffix}.png"));
-        popover.Close();
+        await ShootPopover("plugin-usage-popover-comfortable");
+        config.Set(usageManifest, "octopus.agent-usage.style", null, byUser: true);
 
         // The history tab, over made-up session records in the test's own home folder.
         SeedSessions(AppHost.Get<Octopus.Plugins.Security.UserHome>().Path);

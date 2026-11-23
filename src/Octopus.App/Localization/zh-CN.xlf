@@ -21,7 +21,7 @@
     <unit id="NewProjectRemoteFolderPlaceholder"><segment><source>For example ~/code/app</source><target state="translated">例如 ~/code/app</target></segment></unit>
     <unit id="NewProjectRemoteHint"><segment><source>The folder is checked when a terminal opens in it, not here.</source><target state="translated">打开终端时才会检查这个文件夹，这里不检查。</target></segment></unit>
     <unit id="Appearance"><segment><source>Appearance</source><target state="translated">外观</target></segment></unit>
-    <unit id="AppearanceDescription"><segment><source>Light, dark, or follow the system setting. The switch in the top bar changes it too.</source><target state="translated">浅色、深色或跟随系统设置。顶栏中的开关也可以切换。</target></segment></unit>
+    <unit id="AppearanceDescription"><segment><source>Theme, accent color, and interface layout style.</source><target state="translated">主题明暗、强调色与界面风格布局。</target></segment></unit>
     <unit id="AppearanceSystem"><segment><source>System</source><target state="translated">跟随系统</target></segment></unit>
     <unit id="AppearanceLight"><segment><source>Light</source><target state="translated">浅色</target></segment></unit>
     <unit id="AppearanceDark"><segment><source>Dark</source><target state="translated">深色</target></segment></unit>
@@ -540,6 +540,8 @@
     <unit id="RenameGroup"><segment><source>Rename group…</source><target state="translated">重命名分组…</target></segment></unit>
     <unit id="RenameGroupTitle"><segment><source>Rename group</source><target state="translated">重命名分组</target></segment></unit>
     <unit id="GroupColor"><segment><source>Color</source><target state="translated">颜色</target></segment></unit>
+    <unit id="GroupMergeWorkspaces"><segment><source>Merge working directories</source><target state="translated">合并工作目录</target></segment></unit>
+    <unit id="GroupMergedWorkspacesTag"><segment><source>Shared directories</source><target state="translated">已合并工作目录</target></segment></unit>
     <unit id="RemoveGroup"><segment><source>Ungroup</source><target state="translated">解散分组</target></segment></unit>
     <unit id="GroupProjectCountOne"><segment><source>1 project</source><target state="translated">1 个项目</target></segment></unit>
     <unit id="GroupProjectCount"><segment><source>{0} projects</source><target state="translated">{0} 个项目</target></segment></unit>
@@ -809,5 +811,76 @@
     <unit id="SettingsRemoteRelayStateSignIn"><segment><source>Sign in to the relay first</source><target state="translated">先登录中转服务</target></segment></unit>
     <unit id="SettingsRemoteRelayInsecure"><segment><source>This address is not encrypted (http): the sign-in is sent in the clear. Use it only for a relay on this computer or a network you trust.</source><target state="translated">这个地址没有加密（http），登录凭据会明文发送。只用于本机或你信任的网络里的中转。</target></segment></unit>
     <unit id="SettingsRemoteHostsViaRelay"><segment><source>Through the relay</source><target state="translated">经中转</target></segment></unit>
+    <unit id="NewProjectRemoteDescription"><segment><source>Add a folder on {0} as a project. Terminals and agents of the project start on that computer.</source><target state="translated">把 {0} 上的一个目录添加为项目，项目下的终端和智能体都在那台电脑上启动。</target></segment></unit>
+    <unit id="NewProjectSshDescription"><segment><source>Add a folder on {0} as a project. Terminals of the project open there over SSH.</source><target state="translated">把 {0} 上的一个目录添加为项目，项目下的终端会通过 SSH 在那个目录里打开。</target></segment></unit>
+    <unit id="FolderBrowserTitle"><segment><source>Choose folder</source><target state="translated">选择文件夹</target></segment></unit>
+    <unit id="FolderBrowserHostTitle"><segment><source>Choose folder on {0}</source><target state="translated">在 {0} 上选择文件夹</target></segment></unit>
+    <unit id="FolderBrowserSelect"><segment><source>Select folder</source><target state="translated">选择此文件夹</target></segment></unit>
+    <unit id="FolderBrowserUp"><segment><source>Parent folder</source><target state="translated">上一级目录</target></segment></unit>
+    <unit id="FolderBrowserHome"><segment><source>Home</source><target state="translated">主目录</target></segment></unit>
+    <unit id="FolderBrowserDrives"><segment><source>Drives</source><target state="translated">磁盘</target></segment></unit>
+    <unit id="FolderBrowserRefresh"><segment><source>Refresh</source><target state="translated">刷新</target></segment></unit>
+    <unit id="FolderBrowserEditPath"><segment><source>Type a path</source><target state="translated">输入路径</target></segment></unit>
+    <unit id="FolderBrowserPathPlaceholder"><segment><source>Enter a folder path and press Enter</source><target state="translated">输入目录路径并回车跳转</target></segment></unit>
+    <unit id="FolderBrowserPlaces"><segment><source>Places</source><target state="translated">位置</target></segment></unit>
+    <unit id="FolderBrowserExistingProjects"><segment><source>Projects</source><target state="translated">已有项目</target></segment></unit>
+    <unit id="FolderBrowserExistingProjectBadge"><segment><source>Project</source><target state="translated">已有项目</target></segment></unit>
+    <unit id="FolderBrowserFilterPlaceholder"><segment><source>Filter folders…</source><target state="translated">筛选当前目录…</target></segment></unit>
+    <unit id="FolderBrowserNewFolder"><segment><source>New folder</source><target state="translated">新建文件夹</target></segment></unit>
+    <unit id="FolderBrowserNewFolderPlaceholder"><segment><source>Folder name</source><target state="translated">新文件夹名称</target></segment></unit>
+    <unit id="FolderBrowserCreate"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
+    <unit id="FolderBrowserShowHidden"><segment><source>Show hidden folders</source><target state="translated">显示隐藏文件夹</target></segment></unit>
+    <unit id="FolderBrowserLoading"><segment><source>Loading folders…</source><target state="translated">正在读取目录…</target></segment></unit>
+    <unit id="FolderBrowserEmpty"><segment><source>No subfolders here.</source><target state="translated">此目录下没有子文件夹。</target></segment></unit>
+    <unit id="FolderBrowserNoMatches"><segment><source>No matching folders.</source><target state="translated">没有匹配的文件夹。</target></segment></unit>
+    <unit id="FolderBrowserRetry"><segment><source>Retry</source><target state="translated">重试</target></segment></unit>
+    <unit id="FolderBrowserSelectedPrefix"><segment><source>Selected:</source><target state="translated">将选择：</target></segment></unit>
+    <unit id="FolderBrowserNoneSelected"><segment><source>Choose a drive or folder</source><target state="translated">请选择一个磁盘或文件夹</target></segment></unit>
+    <unit id="FolderBrowserUnsupportedHost"><segment><source>The Octopus on this host is an older version and does not support browsing folders. Update the host or type the path manually.</source><target state="translated">该主机上的 Octopus 版本较旧，暂不支持浏览目录。请更新主机端，或返回手动输入路径。</target></segment></unit>
+    <unit id="SettingsDensity"><segment><source>Interface style</source><target state="translated">界面风格</target></segment></unit>
+    <unit id="SettingsDensityHint"><segment><source>Compact tightens spacing and row heights to show more information at once; comfortable leaves more breathing room.</source><target state="translated">紧凑风格缩小间距与行高以展示更多信息，宽松风格保留更充裕的留白。默认使用紧凑风格。</target></segment></unit>
+    <unit id="DensityCompact"><segment><source>Compact</source><target state="translated">紧凑</target></segment></unit>
+    <unit id="DensityComfortable"><segment><source>Comfortable</source><target state="translated">宽松</target></segment></unit>
+    <unit id="AccountSectionLabel"><segment><source>Accounts</source><target state="translated">订阅账户</target></segment></unit>
+    <unit id="AccountSectionEnvHint"><segment><source>Each account uses its own isolated configuration directory ({0}), so multiple tabs and projects can run different subscriptions side by side.</source><target state="translated">每个账户使用独立的配置目录（{0}），不同项目和标签页可同时使用不同订阅互不干扰。</target></segment></unit>
+    <unit id="AccountSectionGlobalWarningTitle"><segment><source>Shared system keychain login</source><target state="translated">共享系统钥匙串凭证</target></segment></unit>
+    <unit id="AccountSectionGlobalWarningBody"><segment><source>{0} stores one active OAuth login in the system keychain. Switching accounts swaps the saved snapshot for new and existing sessions on this computer.</source><target state="translated">{0} 在系统钥匙串中使用单一全局登录槽位；切换账户会替换本机当前生效的凭证快照，影响后续及正在运行的会话。</target></segment></unit>
+    <unit id="AccountDefaultName"><segment><source>Default</source><target state="translated">默认账户</target></segment></unit>
+    <unit id="AccountDefaultBadge"><segment><source>Default</source><target state="translated">默认</target></segment></unit>
+    <unit id="AccountActiveBadge"><segment><source>Active</source><target state="translated">当前生效</target></segment></unit>
+    <unit id="AccountExternalBadge"><segment><source>Imported</source><target state="translated">外部目录</target></segment></unit>
+    <unit id="AccountAdd"><segment><source>Add account…</source><target state="translated">添加账户…</target></segment></unit>
+    <unit id="AccountAddDialogTitle"><segment><source>Add {0} account</source><target state="translated">添加 {0} 账户</target></segment></unit>
+    <unit id="AccountLabelField"><segment><source>Account name</source><target state="translated">账户备注名</target></segment></unit>
+    <unit id="AccountAddDefaultLabel"><segment><source>Account {0}</source><target state="translated">账户 {0}</target></segment></unit>
+    <unit id="AccountCreateAndLogin"><segment><source>Create &amp; Sign in</source><target state="translated">创建并登录</target></segment></unit>
+    <unit id="AccountImportFolder"><segment><source>Import folder…</source><target state="translated">导入目录…</target></segment></unit>
+    <unit id="AccountLogin"><segment><source>Sign in</source><target state="translated">登录</target></segment></unit>
+    <unit id="AccountLoginDialogTitle"><segment><source>Sign in to {0} ({1})</source><target state="translated">登录 {0}（{1}）</target></segment></unit>
+    <unit id="AccountLoginDialogDescription"><segment><source>Complete the sign-in flow in the terminal below. This dialog closes automatically when the login command finishes, or click Done once signed in.</source><target state="translated">请在下方终端中完成授权登录。登录命令结束后会自动关闭，或登录完成后点击「完成」。</target></segment></unit>
+    <unit id="AccountLoginAgyDescription"><segment><source>Complete the sign-in flow in the terminal below, then click Done (or exit the CLI) so Octopus can save the new keychain snapshot.</source><target state="translated">请在下方终端完成新账户授权登录，看到已登录后点击「完成」（或退出 CLI），Octopus 将自动保存该凭证快照。</target></segment></unit>
+    <unit id="AccountLoginDone"><segment><source>Done</source><target state="translated">完成</target></segment></unit>
+    <unit id="AccountSetDefault"><segment><source>Set default</source><target state="translated">设为默认</target></segment></unit>
+    <unit id="AccountClearDefault"><segment><source>Use default</source><target state="translated">恢复默认</target></segment></unit>
+    <unit id="AccountRename"><segment><source>Rename</source><target state="translated">重命名</target></segment></unit>
+    <unit id="AccountRenameTitle"><segment><source>Rename account</source><target state="translated">重命名账户</target></segment></unit>
+    <unit id="AccountRevealFolder"><segment><source>Show folder</source><target state="translated">打开配置目录</target></segment></unit>
+    <unit id="AccountRemove"><segment><source>Remove</source><target state="translated">移除</target></segment></unit>
+    <unit id="AccountRemoveManagedTitle"><segment><source>Remove account "{0}"?</source><target state="translated">移除账户「{0}」？</target></segment></unit>
+    <unit id="AccountRemoveManagedBody"><segment><source>This removes the account and its isolated credentials managed by Octopus.</source><target state="translated">将移除该账户及其由 Octopus 管理的独立配置与凭证快照。</target></segment></unit>
+    <unit id="AccountRemoveExternalTitle"><segment><source>Remove imported account "{0}"?</source><target state="translated">移除外部账户「{0}」？</target></segment></unit>
+    <unit id="AccountRemoveExternalBody"><segment><source>The account will be removed from Octopus. Its folder on disk will not be deleted.</source><target state="translated">仅从 Octopus 列表中移除引用，不会删除磁盘上的原目录。</target></segment></unit>
+    <unit id="AccountSaveCurrentLogin"><segment><source>Save current login…</source><target state="translated">保存当前登录…</target></segment></unit>
+    <unit id="AccountLoginNew"><segment><source>Sign in new account…</source><target state="translated">登录新账户…</target></segment></unit>
+    <unit id="AccountSwitchTo"><segment><source>Switch</source><target state="translated">切换</target></segment></unit>
+    <unit id="AccountUpdateSnapshot"><segment><source>Update snapshot</source><target state="translated">更新快照</target></segment></unit>
+    <unit id="AccountNoKeyringCredentialTitle"><segment><source>No active login found</source><target state="translated">未检测到已登录凭证</target></segment></unit>
+    <unit id="AccountNoKeyringCredentialBody"><segment><source>Sign in to {0} first, or use "Sign in new account…" to authenticate and save a snapshot.</source><target state="translated">系统中尚未检测到 {0} 的登录凭证，请先点击「登录新账户…」完成授权。</target></segment></unit>
+    <unit id="AccountGlobalSwitchConfirmTitle"><segment><source>Switch {0} to "{1}"?</source><target state="translated">将 {0} 切换为「{1}」？</target></segment></unit>
+    <unit id="AccountGlobalSwitchConfirmBody"><segment><source>There are running {0} tabs. Because {0} shares one system keychain credential, switching now may affect active sessions.</source><target state="translated">当前有正在运行的 {0} 会话。由于 {0} 共享系统钥匙串凭证，立即切换可能影响已打开的会话。</target></segment></unit>
+    <unit id="AccountGlobalSwitchConfirmAction"><segment><source>Switch now</source><target state="translated">立即切换</target></segment></unit>
+    <unit id="AccountLauncherLabel"><segment><source>Account</source><target state="translated">订阅账户</target></segment></unit>
+    <unit id="ProjectAgentAccountsMenu"><segment><source>Agent accounts</source><target state="translated">智能体账户</target></segment></unit>
+    <unit id="ProjectAccountFollowDefault"><segment><source>Follow global default ({0})</source><target state="translated">跟随全局默认（{0}）</target></segment></unit>
   </file>
 </xliff>

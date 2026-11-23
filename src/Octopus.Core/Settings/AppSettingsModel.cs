@@ -54,12 +54,25 @@ public sealed class UpdateSettings
     public string? SkippedVersion { get; set; }
 }
 
+/// <summary>The layout style (density) of the desktop interface.</summary>
+public static class UiDensityValues
+{
+    /// <summary>Tighter spacing and row heights to display more information at once (system default).</summary>
+    public const string Compact = "compact";
+    /// <summary>More generous spacing and breathing room.</summary>
+    public const string Comfortable = "comfortable";
+
+    public static bool IsKnown(string? value) => value is Compact or Comfortable;
+}
+
 public sealed class AppearanceSettings
 {
     /// <summary><c>system</c>, <c>light</c> or <c>dark</c>.</summary>
     public string Theme { get; set; } = "system";
     /// <summary>Accent seed color (<c>#AARRGGBB</c>); null is the default accent.</summary>
     public string? Accent { get; set; }
+    /// <summary>Interface layout style: <c>compact</c> (default) or <c>comfortable</c>.</summary>
+    public string Density { get; set; } = UiDensityValues.Compact;
     /// <summary>BCP 47 tag; null is the language the app starts with.</summary>
     public string? Language { get; set; }
 }

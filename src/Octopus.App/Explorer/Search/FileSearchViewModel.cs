@@ -55,7 +55,7 @@ public sealed partial class FileSearchViewModel(IFileSearchService service) : Ob
     /// <summary>The folder to search; clears the box and the results. Null (a folder on an SSH host): nothing is searched.</summary>
     public void SetRoot(string? root)
     {
-        _cancel?.Cancel();
+        CancelCurrent();
         _root = root;
         Results.Clear();
         IsSearching = false;
@@ -67,9 +67,17 @@ public sealed partial class FileSearchViewModel(IFileSearchService service) : Ob
     /// <summary>There is a folder to search on this computer.</summary>
     public bool HasRoot => _root is not null;
 
+    private void CancelCurrent()
+    {
+        if (_cancel is not { } old) return;
+        _cancel = null;
+        old.Cancel();
+        old.Dispose();
+    }
+
     private async Task SearchAfterDelayAsync()
     {
-        _cancel?.Cancel();
+        CancelCurrent();
         if (!IsActive)
         {
             Results.Clear();
@@ -91,7 +99,7 @@ public sealed partial class FileSearchViewModel(IFileSearchService service) : Ob
     /// <summary>Searches now (without the typing delay); a search that is still running is cancelled.</summary>
     public Task SearchNowAsync()
     {
-        _cancel?.Cancel();
+        CancelCurrent();
         if (!IsActive)
         {
             Results.Clear();

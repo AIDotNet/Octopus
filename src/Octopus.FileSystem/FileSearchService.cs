@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.IO.Enumeration;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -111,9 +112,20 @@ public sealed class FileSearchService : IFileSearchService
             var info = new FileInfo(path);
             if (info.Length > MaxFileSize) return matches;
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var probe = new byte[Math.Min(BinaryProbeSize, (int)Math.Min(info.Length, BinaryProbeSize))];
-            var read = stream.Read(probe, 0, probe.Length);
-            if (Array.IndexOf(probe, (byte)0, 0, read) >= 0) return matches;
+            var probeLen = Math.Min(BinaryProbeSize, (int)Math.Min(info.Length, BinaryProbeSize));
+            if (probeLen > 0)
+            {
+                var probe = ArrayPool<byte>.Shared.Rent(probeLen);
+                try
+                {
+                    var read = stream.Read(probe, 0, probeLen);
+                    if (Array.IndexOf(probe, (byte)0, 0, read) >= 0) return matches;
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(probe);
+                }
+            }
             stream.Position = 0;
             using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             var number = 0;

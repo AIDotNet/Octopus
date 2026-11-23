@@ -12,6 +12,7 @@ internal sealed class ChangeWatcher : IDisposable
 
     private readonly string _root;
     private readonly Action _onChange;
+    private readonly Action<bool>? _onTypedChange;
     private readonly TimeSpan _debounce;
     private readonly FileSystemWatcher? _watcher;
     private readonly Func<string, bool>? _filter;
@@ -19,14 +20,22 @@ internal sealed class ChangeWatcher : IDisposable
     private readonly Lock _gate = new();
     private DateTime _firstPending;
     private bool _pending;
+    private bool _gitMetadataChanged;
     private bool _disposed;
 
-    public ChangeWatcher(string root, Action onChange, TimeSpan debounce, bool recursive = true, Func<string, bool>? filter = null)
+    public ChangeWatcher(
+        string root,
+        Action onChange,
+        TimeSpan debounce,
+        bool recursive = true,
+        Func<string, bool>? filter = null,
+        Action<bool>? onTypedChange = null)
     {
         _filter = filter;
         _root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (_root.Length == 0) _root = Path.DirectorySeparatorChar.ToString();
         _onChange = onChange;
+        _onTypedChange = onTypedChange;
         _debounce = debounce;
         _timer = new Timer(static s => ((ChangeWatcher)s!).Flush(), this, Timeout.Infinite, Timeout.Infinite);
         try
@@ -35,6 +44,7 @@ internal sealed class ChangeWatcher : IDisposable
             {
                 IncludeSubdirectories = recursive,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size,
+                InternalBufferSize = recursive ? 64 * 1024 : 8 * 1024,
             };
             _watcher.Created += (_, e) => Add(e.FullPath);
             _watcher.Deleted += (_, e) => Add(e.FullPath);
@@ -42,14 +52,14 @@ internal sealed class ChangeWatcher : IDisposable
             // (its creation and deletion still count, through Created/Deleted).
             _watcher.Changed += (_, e) =>
             {
-                if (Path.GetFileName(e.FullPath) != ".git") Add(e.FullPath);
+                if (!e.FullPath.AsSpan().TrimEnd(Separators).EndsWith(".git", StringComparison.Ordinal)) Add(e.FullPath);
             };
             _watcher.Renamed += (_, e) =>
             {
                 Add(e.OldFullPath);
                 Add(e.FullPath);
             };
-            _watcher.Error += (_, _) => Schedule();
+            _watcher.Error += (_, _) => Schedule(gitMeta: true);
             _watcher.EnableRaisingEvents = true;
         }
         catch (Exception)
@@ -62,10 +72,10 @@ internal sealed class ChangeWatcher : IDisposable
 
     private void Add(string path)
     {
-        if (IsRelevant(path)) Schedule();
+        if (Classify(path, out var gitMeta)) Schedule(gitMeta);
     }
 
-    private void Schedule()
+    private void Schedule(bool gitMeta = false)
     {
         lock (_gate)
         {
@@ -76,6 +86,7 @@ internal sealed class ChangeWatcher : IDisposable
                 _pending = true;
                 _firstPending = now;
             }
+            _gitMetadataChanged |= gitMeta;
             var wait = _debounce;
             var left = _firstPending + MaxWait - now;
             if (left < wait) wait = left > TimeSpan.Zero ? left : TimeSpan.Zero;
@@ -86,8 +97,9 @@ internal sealed class ChangeWatcher : IDisposable
     private static readonly char[] Separators = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
     // Runs for every event: thousands a second during a build or an install, so it looks at the path without copying it.
-    private bool IsRelevant(string path)
+    private bool Classify(string path, out bool gitMeta)
     {
+        gitMeta = false;
         if (_filter is not null) return _filter(path);
         if (path.Length <= _root.Length) return true;
         var rest = path.AsSpan(_root.Length).TrimStart(Separators);
@@ -98,12 +110,26 @@ internal sealed class ChangeWatcher : IDisposable
             if (segment is ".git")
             {
                 // Inside .git only the few files that tell the repository changed are worth a refresh.
-                if (cut < 0) return true;
+                if (cut < 0)
+                {
+                    gitMeta = true;
+                    return true;
+                }
                 var inner = rest[(cut + 1)..];
                 var next = inner.IndexOfAny(Separators);
                 var name = next < 0 ? inner : inner[..next];
-                if (name is "index" or "HEAD" or "packed-refs") return next < 0;
-                return name is "refs";
+                if (name is "index") return next < 0;
+                if (name is "HEAD" or "packed-refs")
+                {
+                    gitMeta = next < 0;
+                    return gitMeta;
+                }
+                if (name is "refs")
+                {
+                    gitMeta = true;
+                    return true;
+                }
+                return false;
             }
             if (cut < 0) return true;
             rest = rest[(cut + 1)..];
@@ -112,14 +138,18 @@ internal sealed class ChangeWatcher : IDisposable
 
     private void Flush()
     {
+        bool gitMeta;
         lock (_gate)
         {
             if (_disposed || !_pending) return;
             _pending = false;
+            gitMeta = _gitMetadataChanged;
+            _gitMetadataChanged = false;
         }
         try
         {
-            _onChange();
+            if (_onTypedChange is not null) _onTypedChange(gitMeta);
+            else _onChange();
         }
         catch (Exception)
         {

@@ -27,6 +27,7 @@ public sealed partial class ImageViewerModel : FileViewerModel
     private int _played;
     private bool _onScreen;
     private DispatcherTimer? _timer;
+    private string? _svgSource;
 
     public ImageViewerModel(FileViewerContext context) : base(context)
     {
@@ -44,7 +45,7 @@ public sealed partial class ImageViewerModel : FileViewerModel
     public string? MonoFontFamily { get; }
     public double FontSize { get; }
 
-    /// <summary>The SVG's text, for the source view; empty for other pictures.</summary>
+    /// <summary>The SVG's text, for the source view; empty until <see cref="SourceMode"/> is entered and for other pictures.</summary>
     [ObservableProperty] public partial string SourceText { get; private set; } = "";
 
     /// <summary><see cref="RenderedMode"/> or <see cref="SourceMode"/> (an SVG only).</summary>
@@ -54,7 +55,7 @@ public sealed partial class ImageViewerModel : FileViewerModel
     public bool ShowRendered => !ShowSource;
 
     /// <summary>The SVG's source shows instead (also when it could not be drawn: the text is still there to read).</summary>
-    public bool ShowSource => IsSvg && ViewMode == SourceMode && SourceText.Length > 0;
+    public bool ShowSource => IsSvg && ViewMode == SourceMode && !string.IsNullOrEmpty(_svgSource);
 
     public bool IsRenderedMode => ViewMode == RenderedMode;
     public bool IsSourceMode => ViewMode == SourceMode;
@@ -66,12 +67,20 @@ public sealed partial class ImageViewerModel : FileViewerModel
         if (mode is RenderedMode or SourceMode) ViewMode = mode;
     }
 
-    public bool ShowModeSwitch => IsSvg && SourceText.Length > 0;
+    public bool ShowModeSwitch => IsSvg && !string.IsNullOrEmpty(_svgSource);
     public bool ShowZoom => HasContent && ShowRendered;
     public bool ShowCanvas => HasContent && ShowRendered;
     public bool ShowNotice => HasNotice && ShowRendered;
 
-    partial void OnViewModeChanged(string value) => RaiseModes();
+    partial void OnViewModeChanged(string value)
+    {
+        if (value == SourceMode && SourceText.Length == 0 && !string.IsNullOrEmpty(_svgSource))
+        {
+            SourceText = _svgSource;
+            return;
+        }
+        RaiseModes();
+    }
     partial void OnSourceTextChanged(string value) => RaiseModes();
     protected override void NoticeChanged() => RaiseModes();
 
@@ -246,7 +255,9 @@ public sealed partial class ImageViewerModel : FileViewerModel
             Release(result.Bitmap, result.Animation);
             return;
         }
-        SourceText = result.Source ?? "";
+        _svgSource = result.Source;
+        SourceText = ViewMode == SourceMode ? result.Source ?? "" : "";
+        RaiseModes();
         var old = Image;
         var oldAnimation = _animation;
         var wasPaused = oldAnimation is not null && !IsPlaying;
@@ -365,6 +376,7 @@ public sealed partial class ImageViewerModel : FileViewerModel
         base.Dispose();
         _timer?.Stop();
         _timer = null;
+        _svgSource = null;
         Release(Image, _animation);
         _animation = null;
         Image = null;

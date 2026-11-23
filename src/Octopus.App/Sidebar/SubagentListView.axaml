@@ -14,7 +14,7 @@
                     AutomationProperties.Name="{Binding Title}"
                     arc:Tooltip.Tip="{Binding Tip}">
                 <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
-                        CornerRadius="{arc:ArcDesignTokenResource RadiusControl}" Padding="7,5,7,6">
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusControl}" Padding="{DynamicResource OctopusSubagentCardPadding}">
                     <StackPanel Spacing="1">
                         <Grid ColumnDefinitions="Auto,Auto,*">
                             <Panel Width="12" Height="12" Margin="0,0,7,0" VerticalAlignment="Center">
@@ -59,17 +59,17 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <StackPanel Margin="18,1,2,4" Spacing="3" IsVisible="{Binding ShowList}">
+    <StackPanel Margin="{DynamicResource OctopusSubagentListMargin}" Spacing="{DynamicResource OctopusSubagentListSpacing}" IsVisible="{Binding ShowList}">
         <ItemsControl ItemsSource="{Binding Active}" ItemTemplate="{StaticResource SubagentCard}">
             <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><StackPanel Spacing="3" /></ItemsPanelTemplate>
+                <ItemsPanelTemplate><StackPanel Spacing="{DynamicResource OctopusSubagentListSpacing}" /></ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
         </ItemsControl>
         <!-- The finished ones, folded into one line. -->
-        <Button Classes="row" Height="24" IsVisible="{Binding HasFinished}" Command="{Binding ToggleFoldCommand}"
+        <Button Classes="row" Height="{DynamicResource OctopusSubagentFoldHeight}" IsVisible="{Binding HasFinished}" Command="{Binding ToggleFoldCommand}"
                 AutomationProperties.Name="{Binding FinishedText}">
-            <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,0">
-                <lucide:LucideIcon Kind="Check" Size="12" Margin="0,0,7,0" VerticalAlignment="Center"
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="6,0">
+                <lucide:LucideIcon Kind="Check" Size="12" Margin="0,0,6,0" VerticalAlignment="Center"
                                    Foreground="{arc:ArcDesignTokenResource Success}" />
                 <TextBlock Grid.Column="1" Text="{Binding FinishedText}" VerticalAlignment="Center"
                            FontSize="{arc:ArcDesignTokenResource TypeSM}"
@@ -83,9 +83,9 @@
             </Grid>
         </Button>
         <ItemsControl ItemsSource="{Binding VisibleFinished}" ItemTemplate="{StaticResource SubagentCard}"
-                      Margin="8,0,0,0" Opacity="0.62">
+                      Margin="6,0,0,0" Opacity="0.62">
             <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><StackPanel Spacing="3" /></ItemsPanelTemplate>
+                <ItemsPanelTemplate><StackPanel Spacing="{DynamicResource OctopusSubagentListSpacing}" /></ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
         </ItemsControl>
     </StackPanel>

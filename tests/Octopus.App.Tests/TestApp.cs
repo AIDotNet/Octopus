@@ -46,6 +46,7 @@ public static class TestApp
             services.Replace(ServiceDescriptor.Singleton<IProjectStore, RecordingProjectStore>());
             services.AddSingleton(p => (RecordingProjectStore)p.GetRequiredService<IProjectStore>());
             services.Replace(ServiceDescriptor.Singleton<ISettingsStore, InMemorySettingsStore>());
+            services.Replace(ServiceDescriptor.Singleton<IAccountStore, InMemoryAccountStore>());
             services.Replace(ServiceDescriptor.Singleton<IAppPaths>(_ => new TempAppPaths()));
             // Tests never touch the real keychain.
             services.Replace(ServiceDescriptor.Singleton<ISecretStore, MemorySecretStore>());

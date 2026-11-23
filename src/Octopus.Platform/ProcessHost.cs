@@ -97,7 +97,8 @@ public sealed class ProcessHost : IProcessHost
         // Not read, but not left to fill up either.
         var output = Task.Run(async () =>
         {
-            try { await process.StandardOutput.ReadToEndAsync().ConfigureAwait(false); }
+            // Drained, never accumulated (ReadToEnd would keep every byte for the life of the process).
+            try { await process.StandardOutput.BaseStream.CopyToAsync(Stream.Null).ConfigureAwait(false); }
             catch (Exception e) when (e is IOException or ObjectDisposedException) { }
         });
 

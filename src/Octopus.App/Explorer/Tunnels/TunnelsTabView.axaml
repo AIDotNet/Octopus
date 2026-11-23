@@ -35,7 +35,7 @@
 
     <Grid RowDefinitions="Auto,*">
         <!-- Title row: the host, new tunnel, and the actions for all of them. -->
-        <Grid ColumnDefinitions="*,Auto" Margin="14,0,8,2" Height="32">
+        <Grid ColumnDefinitions="*,Auto" Margin="{DynamicResource OctopusExplorerHeaderMargin}" Height="{DynamicResource OctopusExplorerHeaderHeight}">
             <TextBlock Classes="ex-body" FontWeight="SemiBold" VerticalAlignment="Center"
                        Text="{Binding Host}" TextTrimming="CharacterEllipsis" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
@@ -74,7 +74,7 @@
             </ItemsControl.Template>
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="tun:TunnelRowViewModel">
-                    <Border Classes="ex-row" Cursor="Arrow" Padding="10,6,6,6" Margin="0,1">
+                    <Border Classes="ex-row" Cursor="Arrow" Padding="{DynamicResource OctopusTunnelRowPadding}" Margin="0,1">
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8">
                             <Ellipse Classes="tunnel-dot" Classes.busy="{Binding IsBusy}" Classes.running="{Binding IsRunning}"
                                      Classes.failed="{Binding IsFailed}" VerticalAlignment="Center" />

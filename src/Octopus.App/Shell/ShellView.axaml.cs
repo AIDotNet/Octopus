@@ -140,7 +140,7 @@ public partial class ShellView : UserControl
             return;
         }
         // The area keeps its open width, pinned to the clip's right edge: the sidebar slides off to the left.
-        LeftArea.Width = ShellViewModel.RailWidth + _model!.PanelWidth;
+        LeftArea.Width = _model!.RailWidth + _model.PanelWidth;
         LeftArea.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right;
         LeftClip.IsVisible = true;
         LeftSplitter.IsVisible = false;
@@ -318,7 +318,7 @@ public partial class ShellView : UserControl
     {
         if (_model is not null && _model.IsSidebarVisible)
         {
-            _model.CommitPanelWidth(LeftArea.Bounds.Width - ShellViewModel.RailWidth);
+            _model.CommitPanelWidth(LeftArea.Bounds.Width - _model.RailWidth);
         }
     }
 

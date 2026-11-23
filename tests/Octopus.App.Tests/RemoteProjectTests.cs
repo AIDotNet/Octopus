@@ -379,7 +379,7 @@ public class RemoteProjectTests
         // The folder is the host's to check: nothing on this computer is looked at.
         Assert.Null(NewProjectView.Validate("/does/not/exist/here", remoteHost: "abc"));
         Assert.NotNull(NewProjectView.Validate("/does/not/exist/here"));
-        Assert.False(view.FindControl<Control>("BrowseButton")!.IsVisible);
+        Assert.True(view.FindControl<Control>("BrowseButton")!.IsVisible);
         window.Close();
 
         // With no host of either kind the place is not asked.

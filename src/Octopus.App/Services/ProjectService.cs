@@ -207,6 +207,28 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
         Raise(ProjectChangeKind.Projects, project);
     }
 
+    public void SetProjectAgentAccount(string projectId, string agentId, string? accountId)
+    {
+        var project = Find(projectId);
+        if (project is null || string.IsNullOrWhiteSpace(agentId))
+        {
+            return;
+        }
+        var key = agentId.Trim();
+        var value = string.IsNullOrWhiteSpace(accountId) ? null : accountId.Trim();
+        project.AgentAccounts ??= [];
+        if (value is null)
+        {
+            if (!project.AgentAccounts.Remove(key)) return;
+        }
+        else
+        {
+            if (project.AgentAccounts.TryGetValue(key, out var existing) && existing == value) return;
+            project.AgentAccounts[key] = value;
+        }
+        Raise(ProjectChangeKind.ProjectAccounts, project);
+    }
+
     public void SetCurrent(string projectId)
     {
         var project = Find(projectId);
@@ -288,6 +310,17 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
             return;
         }
         group.Color = value;
+        Raise(ProjectChangeKind.Groups);
+    }
+
+    public void SetGroupMergeWorkspaces(string groupId, bool merge)
+    {
+        var group = FindGroup(groupId);
+        if (group is null || group.MergeWorkspaces == merge)
+        {
+            return;
+        }
+        group.MergeWorkspaces = merge;
         Raise(ProjectChangeKind.Groups);
     }
 

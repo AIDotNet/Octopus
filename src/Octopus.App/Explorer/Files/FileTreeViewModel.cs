@@ -410,13 +410,18 @@ public sealed partial class FileTreeViewModel : ObservableObject
         if (parent is not null) parent.IsLoaded = true;
     }
 
+    private static readonly HashSet<string> SkipReadAhead = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "node_modules", ".venv", "venv", "target", ".gradle", "__pycache__",
+    };
+
     /// <summary>
     /// Reads the folders among <paramref name="rows"/> that have not been read yet (without their own folders), off the
     /// UI thread: opening a folder with hundreds of folders in it would otherwise wait for hundreds of listings.
     /// </summary>
     private void PopulateFolders(ObservableCollection<FileNodeViewModel> rows)
     {
-        var folders = rows.Where(r => r is { IsDirectory: true, IsLoaded: false }).ToArray();
+        var folders = rows.Where(r => r is { IsDirectory: true, IsLoaded: false } && !SkipReadAhead.Contains(r.Name)).ToArray();
         if (folders.Length == 0) return;
         var task = ReadAheadAsync(rows, folders, _service, _generation);
         _readAhead = _readAhead.IsCompleted ? task : Task.WhenAll(_readAhead, task);
@@ -443,7 +448,10 @@ public sealed partial class FileTreeViewModel : ObservableObject
     private void Forget(FileNodeViewModel node)
     {
         _nodes.Remove(node.FullPath);
-        foreach (var child in node.Children) Forget(child);
+        if (node.IsDirectory && node.Children.Count > 0)
+        {
+            foreach (var child in node.Children) Forget(child);
+        }
         if (ReferenceEquals(SelectedNode, node)) SelectedNode = null;
     }
 }

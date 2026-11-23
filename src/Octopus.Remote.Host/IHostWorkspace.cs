@@ -41,6 +41,10 @@ public interface IHostWorkspace
     Task DeleteAsync(string path, bool isDirectory);
     /// <summary>Calls <paramref name="changed"/> (on any thread) whenever something under the folder changes, until the result is disposed.</summary>
     Task<IDisposable> WatchAsync(string folder, Action changed);
+    /// <summary>Lists folders anywhere on the host (directories only, no files) for choosing a project folder.</summary>
+    Task<BrowseFolderResultMessage> BrowseFolderAsync(BrowseFolderMessage request);
+    /// <summary>Creates an empty folder inside <see cref="CreateBrowseFolderMessage.ParentPath"/> and returns its full path.</summary>
+    Task<string> BrowseCreateDirectoryAsync(CreateBrowseFolderMessage request);
     /// <summary>A call of this computer's git service on a repository inside a project: arguments and result as JSON.</summary>
     Task<string> GitAsync(string method, string arguments);
 
@@ -68,7 +72,9 @@ public interface ISessionAttachment : IDisposable
     /// <summary>The position of the first output after <see cref="Snapshot"/>.</summary>
     ulong Position { get; }
     bool IsNative { get; }
-    byte[] Snapshot { get; }
+    int SnapshotLength { get; }
+    /// <summary>Takes the initial snapshot once; subsequent calls return an empty array so the buffer is not kept for the whole session.</summary>
+    byte[] TakeSnapshot();
     int Columns { get; }
     int Rows { get; }
     string? Title { get; }

@@ -8,7 +8,11 @@ Outputs (src/Octopus.App/Assets/Icon/):
   dock.png      512 px macOS Dock icon, with the transparent margin the Dock expects (set at run time by MacAppIcon)
   logo.png      128 px in-app logo (sidebar head)
 
-Usage: python3 tools/generate-icons.py   (needs Pillow)
+Mobile outputs:
+  Android Resources/mipmap-*/octopus.png (48–192 px)
+  iOS Assets.xcassets/AppIcon.appiconset/icon-1024.png (opaque RGB)
+
+Usage: python3 tools/generate-icons.py   (needs Pillow and macOS iconutil)
 """
 import io
 import struct
@@ -21,9 +25,9 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "icon.png"
 OUT = ROOT / "src" / "Octopus.App" / "Assets" / "Icon"
+ANDROID = ROOT / "src" / "Octopus.Mobile.Android" / "Resources"
+IOS_ICON = ROOT / "src" / "Octopus.Mobile.iOS" / "Assets.xcassets" / "AppIcon.appiconset" / "icon-1024.png"
 
-# The master is a glow on black: a rounded square keeps that black as the icon's own tile, and its soft edge
-# fades into the corners, so it reads the same on light and dark taskbars.
 CORNER = 0.2237  # the macOS app-icon corner radius, as a share of the tile
 
 
@@ -38,7 +42,7 @@ def rounded(master: Image.Image, size: int, inset: float = 0.0) -> Image.Image:
     art.putalpha(mask.resize((tile, tile), Image.LANCZOS))
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     offset = (size - tile) // 2
-    canvas.paste(art, (offset, offset), art)
+    canvas.paste(art, (offset, offset))
     return canvas
 
 
@@ -84,7 +88,18 @@ def main() -> None:
     (OUT / "dock.png").write_bytes(png_bytes(rounded(master, 512, inset=100 / 1024)))
     (OUT / "logo.png").write_bytes(png_bytes(rounded(master, 128)))
 
-    for file in sorted(OUT.iterdir()):
+    mobile_icons = []
+    for density, size in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)):
+        path = ANDROID / f"mipmap-{density}" / "octopus.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(png_bytes(rounded(master, size)))
+        mobile_icons.append(path)
+
+    # iOS applies the corner mask itself and expects an icon without transparency.
+    IOS_ICON.write_bytes(png_bytes(master.resize((1024, 1024), Image.LANCZOS)))
+    mobile_icons.append(IOS_ICON)
+
+    for file in sorted([*OUT.iterdir(), *mobile_icons]):
         print(f"{file.relative_to(ROOT)}  {file.stat().st_size:,} bytes")
 
 

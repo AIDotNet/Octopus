@@ -64,30 +64,35 @@ public static class SshProtocol
         return null;
     }
 
+    private static readonly string[] Failures =
+    [
+        "Permission denied",
+        "Could not resolve hostname",
+        "Connection refused",
+        "Connection timed out",
+        "Operation timed out",
+        "No route to host",
+        "Network is unreachable",
+        "Host key verification failed",
+        "Too many authentication failures",
+        "Timeout, server",
+        "Connection closed by",
+        "Connection reset by",
+        "kex_exchange_identification",
+        "ssh_exchange_identification",
+        "Bad configuration option",
+        "Bad permissions",
+        "Could not open",
+    ];
+
     /// <summary>The text of a line that says the connection failed (wrong password, unknown host, timeout...), or null.</summary>
     public static string? FailureOf(string line)
     {
         var text = Clean(line);
-        string[] failures =
-        [
-            "Permission denied",
-            "Could not resolve hostname",
-            "Connection refused",
-            "Connection timed out",
-            "Operation timed out",
-            "No route to host",
-            "Network is unreachable",
-            "Host key verification failed",
-            "Too many authentication failures",
-            "Timeout, server",
-            "Connection closed by",
-            "Connection reset by",
-            "kex_exchange_identification",
-            "ssh_exchange_identification",
-            "Bad configuration option",
-            "Bad permissions",
-            "Could not open",
-        ];
-        return failures.Any(f => text.Contains(f, StringComparison.Ordinal)) ? text : null;
+        foreach (var failure in Failures)
+        {
+            if (text.Contains(failure, StringComparison.Ordinal)) return text;
+        }
+        return null;
     }
 }

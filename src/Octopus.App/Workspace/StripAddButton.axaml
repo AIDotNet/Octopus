@@ -8,6 +8,6 @@
                 Click="OnClick"
                 AutomationProperties.Name="{l:AppLangResource NewTab}"
                 arc:Tooltip.Tip="{l:AppLangResource NewTab}" arc:Tooltip.Side="Bottom">
-        <lucide:LucideIcon Kind="Plus" Size="16" />
+        <lucide:LucideIcon Kind="Plus" Size="{DynamicResource OctopusTopIconSize}" />
     </arc:Button>
 </UserControl>

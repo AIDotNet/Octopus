@@ -28,14 +28,37 @@ public partial class ProjectChipView : UserControl
         {
             ChipIcon.Kind = kind;
         }
-        MenuFactory.Attach(ChipButton,
-        [
+        var entries = new List<MenuFactory.Entry>
+        {
             new(AppLangResources.Get(AppLangResourceKind.RenameProject), chip.RenameCommand, Glyph: ArcIcons.Pencil),
             new(AppLangResources.Get(AppLangResourceKind.ChangeProjectIcon), chip.ChangeIconCommand, Glyph: ArcIcons.Image),
             new(AppLangResources.Get(AppLangResourceKind.MoveToGroup), null, Glyph: ArcIcons.Folder) { Children = GroupMenuOf(chip) },
-            new(AppLangResources.Get(AppLangResourceKind.RevealInFileManager), chip.RevealCommand, Glyph: ArcIcons.FolderOpen),
-            new(AppLangResources.Get(AppLangResourceKind.RemoveProject), chip.RemoveCommand, IsDestructive: true, SeparatorBefore: true, Glyph: ArcIcons.Trash2),
-        ]);
+        };
+        if (chip.HasAgentAccounts)
+        {
+            entries.Add(new(AppLangResources.Get(AppLangResourceKind.ProjectAgentAccountsMenu), null, Glyph: ArcIcons.Sparkles)
+            {
+                Children = AgentAccountsMenuOf(chip),
+            });
+        }
+        entries.Add(new(AppLangResources.Get(AppLangResourceKind.RevealInFileManager), chip.RevealCommand, Glyph: ArcIcons.FolderOpen));
+        entries.Add(new(AppLangResources.Get(AppLangResourceKind.RemoveProject), chip.RemoveCommand, IsDestructive: true, SeparatorBefore: true, Glyph: ArcIcons.Trash2));
+        MenuFactory.Attach(ChipButton, entries);
+    }
+
+    public static List<MenuFactory.Entry> AgentAccountsMenuOf(ProjectChipViewModel chip)
+    {
+        return chip.AgentAccounts.Select(agent => new MenuFactory.Entry(agent.AgentName, null, Glyph: ArcIcons.Sparkles)
+        {
+            Children = agent.Options.Select((opt, idx) => new MenuFactory.Entry(
+                opt.Label,
+                chip.SetAgentAccountCommand,
+                SeparatorBefore: idx == 1)
+            {
+                CommandParameter = new ProjectAgentAccountSelection(agent.AgentId, opt.AccountId),
+                IsChecked = opt.IsChecked,
+            }).ToList(),
+        }).ToList();
     }
 
     /// <summary>"No group", every group (the project's own one checked), then "New group…".</summary>

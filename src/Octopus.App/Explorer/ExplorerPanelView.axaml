@@ -12,8 +12,8 @@
              x:DataType="ex:ExplorerPanelViewModel">
     <UserControl.Styles>
         <Style Selector="arc|Button.ex-icon">
-            <Setter Property="Width" Value="28" />
-            <Setter Property="Height" Value="28" />
+            <Setter Property="Width" Value="{DynamicResource OctopusIconButtonSize}" />
+            <Setter Property="Height" Value="{DynamicResource OctopusIconButtonSize}" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="0" />
@@ -50,7 +50,7 @@
 
     <Grid Background="{arc:ArcDesignTokenResource SurfaceMuted}" RowDefinitions="Auto,*">
         <!-- The top row lines up with the window's top row; the right end stays free for the panel switch (and the caption buttons) the window floats there, see TrailingInset. -->
-        <Grid x:Name="TopBar" Height="40" Background="Transparent" ColumnDefinitions="Auto,*,44"
+        <Grid x:Name="TopBar" Height="{DynamicResource OctopusTopRowHeight}" Background="Transparent" ColumnDefinitions="Auto,*,44"
               PointerPressed="OnTopBarPointerPressed">
             <!-- The options are made by the code behind: Files always, Git while the folder is in a repository, Sessions
                  for a folder on this computer, Tunnels for a project on an SSH host. The chosen one shows its name. -->

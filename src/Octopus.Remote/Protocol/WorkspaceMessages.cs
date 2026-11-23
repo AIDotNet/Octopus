@@ -31,6 +31,10 @@ public static class RemoteMethods
     /// <summary>Asks to be told when anything under a folder changes (<see cref="FsChanged"/>, with the same path).</summary>
     public const string FsWatch = "fs/watch";
     public const string FsUnwatch = "fs/unwatch";
+    /// <summary>Lists folders (only directories, never files) anywhere on the host for picking a new project folder.</summary>
+    public const string FsBrowse = "fs/browse";
+    /// <summary>Creates a new empty folder while browsing for a new project folder.</summary>
+    public const string FsBrowseCreateDirectory = "fs/browseCreateDirectory";
     /// <summary>A call of the host's git service: the method's name and its arguments as JSON, the result as JSON.</summary>
     public const string GitCall = "git/call";
 
@@ -52,6 +56,8 @@ public static class RemoteMethods
     public const string CapabilityGit = "git";
     /// <summary>The host knows <see cref="SessionRelease"/>.</summary>
     public const string CapabilitySizeRelease = "session.release";
+    /// <summary>The host knows <see cref="FsBrowse"/> and <see cref="FsBrowseCreateDirectory"/>.</summary>
+    public const string CapabilityBrowse = "fs.browse";
 
     /// <summary>The most bytes of a file in one <see cref="FsRead"/> answer or <see cref="FsWrite"/> request.</summary>
     public const int FilePieceBytes = 256 * 1024;
@@ -327,6 +333,46 @@ public sealed class DeleteMessage
 {
     public string Path { get; set; } = "";
     public bool IsDirectory { get; set; }
+}
+
+public sealed class BrowseFolderMessage
+{
+    /// <summary>The folder to list; null or empty means the host's home folder (unless <see cref="ListRoots"/> is true).</summary>
+    public string? Path { get; set; }
+    /// <summary>True to list system root entries (drive letters on Windows, "/" on Unix).</summary>
+    public bool ListRoots { get; set; }
+    /// <summary>When true and <see cref="Path"/> does not exist, walk up to the nearest existing ancestor (or home).</summary>
+    public bool FallbackToParent { get; set; }
+}
+
+public sealed class BrowseEntryMessage
+{
+    public string Name { get; set; } = "";
+    public string Path { get; set; } = "";
+    public bool IsHidden { get; set; }
+    public bool IsExistingProject { get; set; }
+    /// <summary><c>folder</c>, <c>drive</c>, or <c>home</c>.</summary>
+    public string Kind { get; set; } = "folder";
+}
+
+public sealed class BrowseFolderResultMessage
+{
+    /// <summary>Normalized current folder path; empty string stands for a virtual root (Windows drive list).</summary>
+    public string Path { get; set; } = "";
+    /// <summary>Parent folder path; empty string to step up to the Windows drive list; null when already at the top.</summary>
+    public string? Parent { get; set; }
+    /// <summary>Path separator on the host (<c>"/"</c> or <c>"\\"</c>).</summary>
+    public string Separator { get; set; } = "/";
+    /// <summary>The host's home folder.</summary>
+    public string Home { get; set; } = "";
+    public List<BrowseEntryMessage> Roots { get; set; } = [];
+    public List<BrowseEntryMessage> Entries { get; set; } = [];
+}
+
+public sealed class CreateBrowseFolderMessage
+{
+    public string ParentPath { get; set; } = "";
+    public string Name { get; set; } = "";
 }
 
 public sealed class CallMessage

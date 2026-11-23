@@ -153,7 +153,9 @@ public sealed class SignalHub : ISignalHub
 
     public int AccountsVersion => Volatile.Read(ref _accountsVersion);
 
-    public string RegisterAccount(string agentId, string directory)
+    public string RegisterAccount(string agentId, string directory) => RegisterAccount(agentId, directory, null);
+
+    public string RegisterAccount(string agentId, string directory, string? label)
     {
         var definition = _catalog.Find(agentId);
         if (definition is null) return "";
@@ -161,7 +163,26 @@ public sealed class SignalHub : ISignalHub
         var key = SignalAccounts.KeyOfDirectory(resolved);
         if (key.Length > 0)
         {
-            AddAccount(new AgentAccount(definition.Id, key, resolved, SignalAccounts.DefaultLabel(resolved)));
+            var chosen = string.IsNullOrWhiteSpace(label) ? null : label.Trim();
+            if (chosen is not null)
+            {
+                var updated = new AgentAccount(definition.Id, key, resolved, chosen);
+                var changed = false;
+                _accounts.AddOrUpdate(
+                    (definition.Id, key),
+                    _ => { changed = true; return updated; },
+                    (_, existing) =>
+                    {
+                        if (existing.DefaultLabel == chosen) return existing;
+                        changed = true;
+                        return updated;
+                    });
+                if (changed) Interlocked.Increment(ref _accountsVersion);
+            }
+            else
+            {
+                AddAccount(new AgentAccount(definition.Id, key, resolved, SignalAccounts.DefaultLabel(resolved)));
+            }
         }
         return key;
     }

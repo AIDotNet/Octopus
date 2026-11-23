@@ -6,7 +6,7 @@
              xmlns:common="using:Octopus.App.Common"
              x:Class="Octopus.App.Sidebar.ProjectChipView"
              x:DataType="vm:ProjectChipViewModel">
-    <Grid Width="42" Height="42" HorizontalAlignment="Center">
+    <Grid Width="{DynamicResource OctopusProjectSlotSize}" Height="{DynamicResource OctopusProjectSlotSize}" HorizontalAlignment="Center">
         <!-- While a dragged square is over this one: the middle makes a group of the two; the edges place it before or after. -->
         <Border x:Name="IntoMark" IsVisible="False" Background="{arc:ArcDesignTokenResource Accent}" Opacity="0.22"
                 CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
@@ -17,7 +17,7 @@
         <Border IsVisible="{Binding IsCurrent}" BorderThickness="2"
                 BorderBrush="{arc:ArcDesignTokenResource Accent}"
                 CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
-        <Button x:Name="ChipButton" Classes="chip" Width="34" Height="34" Command="{Binding SelectCommand}"
+        <Button x:Name="ChipButton" Classes="chip" Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}" Command="{Binding SelectCommand}"
                 Background="{Binding Background}"
                 arc:Tooltip.Tip="{Binding Tip}" arc:Tooltip.Side="Right"
                 AutomationProperties.Name="{Binding Name}" Opacity="{Binding ChipOpacity}">
@@ -25,38 +25,38 @@
                 <TextBlock IsVisible="{Binding ShowInitial}" Text="{Binding Initial}" Foreground="White" FontWeight="Bold"
                            FontSize="{arc:ArcDesignTokenResource TypeSM}"
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
-                <lucide:LucideIcon x:Name="ChipIcon" IsVisible="{Binding ShowIcon}" Size="16" Foreground="White"
+                <lucide:LucideIcon x:Name="ChipIcon" IsVisible="{Binding ShowIcon}" Size="{DynamicResource OctopusProjectChipIconSize}" Foreground="White"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                 <!-- A built-in pixel icon, one device-independent pixel per pixel of its 24 x 24 grid. -->
-                <common:PixelIconView IsVisible="{Binding ShowPixel}" Icon="{Binding Pixel}" Width="24" Height="24"
+                <common:PixelIconView IsVisible="{Binding ShowPixel}" Icon="{Binding Pixel}" Width="{DynamicResource OctopusProjectChipPixelSize}" Height="{DynamicResource OctopusProjectChipPixelSize}"
                                       Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                <!-- A 128 px thumbnail drawn at 34 px; the chip's template clips it to the rounded square. -->
-                <Image IsVisible="{Binding HasImage}" Source="{Binding Image}" Width="34" Height="34" Stretch="UniformToFill"
+                <!-- A 128 px thumbnail drawn at chip size; the chip's template clips it to the rounded square. -->
+                <Image IsVisible="{Binding HasImage}" Source="{Binding Image}" Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}" Stretch="UniformToFill"
                        RenderOptions.BitmapInterpolationMode="HighQuality" />
             </Panel>
         </Button>
         <!-- A turn finished while the user was elsewhere: a green dot, under the ring and the yellow dot. -->
-        <Border IsVisible="{Binding IsDone}" IsHitTestVisible="False" Width="16" Height="16" CornerRadius="8"
+        <Border IsVisible="{Binding IsDone}" IsHitTestVisible="False" Width="{DynamicResource OctopusStatusBadgeSize}" Height="{DynamicResource OctopusStatusBadgeSize}" CornerRadius="{DynamicResource OctopusStatusBadgeCorner}"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
                 Background="{arc:ArcDesignTokenResource Background}"
                 BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-            <Ellipse Width="8" Height="8" HorizontalAlignment="Center" VerticalAlignment="Center"
+            <Ellipse Width="7" Height="7" HorizontalAlignment="Center" VerticalAlignment="Center"
                      Fill="{arc:ArcDesignTokenResource Success}" />
         </Border>
         <!-- An agent of the project is working: a loading ring in the corner (the top right stays free for a count). -->
-        <Border IsVisible="{Binding IsWorking}" IsHitTestVisible="False" Width="16" Height="16" CornerRadius="8"
+        <Border IsVisible="{Binding IsWorking}" IsHitTestVisible="False" Width="{DynamicResource OctopusStatusBadgeSize}" Height="{DynamicResource OctopusStatusBadgeSize}" CornerRadius="{DynamicResource OctopusStatusBadgeCorner}"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
                 Background="{arc:ArcDesignTokenResource Background}"
                 BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-            <arc:ArcSpinner Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+            <arc:ArcSpinner Width="9" Height="9" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Foreground="{arc:ArcDesignTokenResource Accent}" />
         </Border>
         <!-- An agent of the project waits for the user: a yellow dot, over the ring. -->
-        <Border IsVisible="{Binding NeedsInput}" IsHitTestVisible="False" Width="16" Height="16" CornerRadius="8"
+        <Border IsVisible="{Binding NeedsInput}" IsHitTestVisible="False" Width="{DynamicResource OctopusStatusBadgeSize}" Height="{DynamicResource OctopusStatusBadgeSize}" CornerRadius="{DynamicResource OctopusStatusBadgeCorner}"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
                 Background="{arc:ArcDesignTokenResource Background}"
                 BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-            <Ellipse Width="8" Height="8" HorizontalAlignment="Center" VerticalAlignment="Center"
+            <Ellipse Width="7" Height="7" HorizontalAlignment="Center" VerticalAlignment="Center"
                      Fill="{arc:ArcDesignTokenResource Warning}" />
         </Border>
     </Grid>

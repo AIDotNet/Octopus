@@ -38,6 +38,9 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private GitDirectories? _gitDirectories;
     /// <summary>The git lookup of the current folder finished (whether or not it is in a repository).</summary>
     private bool _gitLookedUp;
+    private readonly Lock _pendingDirsLock = new();
+    private readonly HashSet<string> _pendingDirs = new(StringComparer.Ordinal);
+    private bool _pendingDirsScheduled;
 
     public ExplorerPanelViewModel(
         FileTreeViewModel files,
@@ -372,7 +375,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private void WatchGit(string folder)
     {
         // Any change in the folder (a file saved, `git add`, `git commit`, `git checkout` in a terminal) may change the status.
-        _changeWatch = _tree.WatchChanges(folder, OnAnyChange, GitRefreshDelay);
+        _changeWatch = _tree.WatchChanges(folder, OnFolderChange, GitRefreshDelay);
         // The repository may be above the project folder (or the folder is a worktree, whose .git is a file): the real
         // git directory is then outside the watch above and is watched for HEAD, index and refs on its own. Inside the
         // folder it is not watched twice: each git command would otherwise be read twice.
@@ -402,10 +405,34 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     private void OnDirectoryChanged(string directory)
     {
-        // Called on a background thread by the watcher.
+        // Called on a background thread by the watcher: coalesce bursts into one UI dispatch.
+        bool schedule;
+        lock (_pendingDirsLock)
+        {
+            _pendingDirs.Add(directory);
+            schedule = !_pendingDirsScheduled;
+            _pendingDirsScheduled = true;
+        }
+        if (!schedule) return;
         _ui.Post(() =>
         {
-            Files.RefreshDirectory(directory);
+            string[] dirs;
+            lock (_pendingDirsLock)
+            {
+                dirs = [.. _pendingDirs];
+                _pendingDirs.Clear();
+                _pendingDirsScheduled = false;
+            }
+            foreach (var dir in dirs) Files.RefreshDirectory(dir);
+        });
+    }
+
+    private void OnFolderChange(bool gitMetadataChanged)
+    {
+        // Plain file writes and `git add` only affect `git status`; commits/branches/stashes change only when refs/HEAD move.
+        _ui.Post(() =>
+        {
+            if (IsGitRepository) _ = Git.RefreshAsync(includeLog: gitMetadataChanged && IsGitTab);
         });
     }
 
@@ -524,6 +551,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     public void Dispose()
     {
+        _version++; // prevent an in-flight SetProjectAsync from starting new watches after Dispose
         StopWatching();
         // It listens to the projects and the tunnels, which live longer than the panel.
         Tunnels.Dispose();

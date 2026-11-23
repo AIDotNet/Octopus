@@ -2,26 +2,35 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Appearance;
 using Octopus.App.Common;
+using Octopus.App.Composition;
 using TKCode.Arc;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Settings.Appearance;
 
 /// <summary>
-/// The appearance page: theme and accent. It only drives Arc's theme (<see cref="ArcTheme.Apply"/>); ThemeService saves
-/// the result, and this page follows changes made elsewhere (the switch in the top bar).
+/// The appearance page: theme, accent, and interface layout style (compact vs. comfortable).
+/// Theme and accent drive Arc's theme (<see cref="ArcTheme.Apply"/>); layout style drives <see cref="ThemeService.SetDensity"/>.
 /// </summary>
 public sealed partial class AppearanceSettingsViewModel : ObservableObject, IDisposable
 {
+    private readonly ThemeService _themeService;
+
     [ObservableProperty]
     private string _theme;
 
-    public AppearanceSettingsViewModel()
+    [ObservableProperty]
+    private string _density;
+
+    public AppearanceSettingsViewModel(ThemeService? themeService = null)
     {
+        _themeService = themeService ?? AppHost.Get<ThemeService>();
         _theme = ThemeService.Format(ArcTheme.State.Appearance);
+        _density = _themeService.Density;
         Accents = [.. Enum.GetValues<ArcAccentPreset>().Select(p => new AccentChoiceViewModel(p))];
         UpdateAccentSelection();
         ArcTheme.Manager.StateChanged += OnArcThemeChanged;
+        _themeService.DensityChanged += OnDensityServiceChanged;
         ArcLanguage.Changed += OnLanguageChanged;
     }
 
@@ -45,6 +54,20 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject, IDis
         }
     }
 
+    partial void OnDensityChanged(string value)
+    {
+        var normalized = UiDensityMetrics.Normalize(value);
+        if (normalized != value)
+        {
+            Density = normalized;
+            return;
+        }
+        if (normalized != _themeService.Density)
+        {
+            _themeService.SetDensity(normalized);
+        }
+    }
+
     [RelayCommand]
     private void SelectAccent(AccentChoiceViewModel? choice)
     {
@@ -60,6 +83,11 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject, IDis
         UpdateAccentSelection();
     }
 
+    private void OnDensityServiceChanged(object? sender, UiDensityMetrics metrics)
+    {
+        Density = metrics.Key;
+    }
+
     private void UpdateAccentSelection()
     {
         var name = ThemeChoices.AccentName(ArcTheme.State.Accent);
@@ -72,6 +100,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject, IDis
     public void Dispose()
     {
         ArcTheme.Manager.StateChanged -= OnArcThemeChanged;
+        _themeService.DensityChanged -= OnDensityServiceChanged;
         ArcLanguage.Changed -= OnLanguageChanged;
     }
 }

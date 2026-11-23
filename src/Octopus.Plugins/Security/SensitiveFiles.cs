@@ -61,16 +61,25 @@ public static class SensitiveFiles
     /// <summary>A secret-looking file, or anything inside a secret-holding directory (<see cref="Directories"/>).</summary>
     public static bool IsSensitive(string path)
     {
-        var segments = path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 0) return false;
-        foreach (var segment in segments)
+        var rest = path.AsSpan();
+        ReadOnlySpan<char> last = default;
+        while (rest.Length > 0)
         {
-            foreach (var directory in Directories)
+            var cut = rest.IndexOfAny('/', '\\');
+            var segment = cut < 0 ? rest : rest[..cut];
+            if (segment.Length > 0)
             {
-                if (string.Equals(segment, directory, StringComparison.OrdinalIgnoreCase)) return true;
+                last = segment;
+                foreach (var directory in Directories)
+                {
+                    if (segment.Equals(directory.AsSpan(), StringComparison.OrdinalIgnoreCase)) return true;
+                }
             }
+            if (cut < 0) break;
+            rest = rest[(cut + 1)..];
         }
-        var name = segments[^1];
+        if (last.Length == 0) return false;
+        var name = last.ToString();
         foreach (var glob in NameGlobs)
         {
             if (glob.IsMatch(name)) return true;

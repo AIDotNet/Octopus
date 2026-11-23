@@ -5,6 +5,8 @@
     <ItemGroup>
         <ProjectReference Include="../Octopus.Core/Octopus.Core.csproj" />
         <ProjectReference Include="../Octopus.Platform/Octopus.Platform.csproj" />
+        <ProjectReference Include="../Octopus.Storage/Octopus.Storage.csproj" />
+        <PackageReference Include="Microsoft.Data.Sqlite" />
     </ItemGroup>
     <ItemGroup>
         <EmbeddedResource Include="Catalog/*.json" />

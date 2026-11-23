@@ -150,6 +150,11 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         return view.Factory;
     }
 
+    public void CloseTerminal(RemoteSession session)
+    {
+        if (_states.TryGetValue(session.Project.Host.Id, out var state)) state.Views.Remove(session.Id);
+    }
+
     public Task ClaimSizeAsync(RemoteSession session, int columns, int rows) =>
         ViewOf(session)?.ClaimSizeAsync(columns, rows) ?? Task.CompletedTask;
 
@@ -339,11 +344,15 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         var load = Interlocked.Increment(ref state.Loads);
         try
         {
-            // The agents first: a session's row is named and colored after its agent.
-            var agents = await client.ListAgentsAsync().ConfigureAwait(false);
-            var projects = await client.ListProjectsAsync().ConfigureAwait(false);
-            var items = new Dictionary<string, IReadOnlyList<ItemMessage>>(StringComparer.Ordinal);
-            foreach (var project in projects) items[project.Id] = await client.ListItemsAsync(project.Id).ConfigureAwait(false);
+            // Agents and projects are independent; then all projects' items are fetched in parallel (2 RTTs instead of 2 + N).
+            var agentsTask = client.ListAgentsAsync();
+            var projectsTask = client.ListProjectsAsync();
+            await Task.WhenAll(agentsTask, projectsTask).ConfigureAwait(false);
+            var agents = await agentsTask.ConfigureAwait(false);
+            var projects = await projectsTask.ConfigureAwait(false);
+            var itemPairs = await Task.WhenAll(projects.Select(async project =>
+                (project.Id, Items: await client.ListItemsAsync(project.Id).ConfigureAwait(false)))).ConfigureAwait(false);
+            var items = itemPairs.ToDictionary(p => p.Id, p => p.Items, StringComparer.Ordinal);
             Ui(() =>
             {
                 if (load != Volatile.Read(ref state.Loads) || _states.GetValueOrDefault(hostId) != state) return;

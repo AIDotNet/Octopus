@@ -17,23 +17,27 @@
 
         <Grid IsVisible="{Binding HasProject}" RowDefinitions="Auto,Auto,Auto,Auto,*">
             <!-- The group the project is in: the rail shows a group's name only in its tooltip. -->
-            <TextBlock Classes="caption" Margin="16,10,14,-8" IsVisible="{Binding HasGroup}"
-                       Text="{Binding GroupName}" TextTrimming="CharacterEllipsis" />
-            <arc:InlineEdit x:Name="NameEdit" Grid.Row="1" Margin="8,10,8,0" HeadingLevel="2" Variant="Body" FontWeight="SemiBold"
+            <StackPanel Orientation="Horizontal" Spacing="5" Margin="{DynamicResource OctopusPanelGroupMargin}" IsVisible="{Binding HasGroup}">
+                <TextBlock Classes="caption" Text="{Binding GroupName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <lucide:LucideIcon Kind="Link" Size="11" IsVisible="{Binding IsGroupMerged}" VerticalAlignment="Center"
+                                   Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                   arc:Tooltip.Tip="{l:AppLangResource GroupMergedWorkspacesTag}" />
+            </StackPanel>
+            <arc:InlineEdit x:Name="NameEdit" Grid.Row="1" Margin="{DynamicResource OctopusPanelNameMargin}" HeadingLevel="2" Variant="Body" FontWeight="SemiBold"
                             Label="{l:AppLangResource ProjectName}"
                             Value="{Binding ProjectName, Mode=TwoWay}" />
-            <TextBlock Grid.Row="2" Margin="16,0,14,8" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+            <TextBlock Grid.Row="2" Margin="{DynamicResource OctopusPanelPathMargin}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
                        FontSize="{arc:ArcDesignTokenResource TypeXS}" Foreground="{arc:ArcDesignTokenResource TextMuted}"
                        Text="{Binding ProjectPath}" TextTrimming="PathSegmentEllipsis"
                        arc:Tooltip.Tip="{Binding ProjectPath}" />
-            <arc:SearchField Grid.Row="3" Margin="10,0,10,6" Size="Small" IsLabelVisible="False"
+            <arc:SearchField Grid.Row="3" Margin="{DynamicResource OctopusPanelSearchMargin}" Size="Small" IsLabelVisible="False"
                              Label="{l:AppLangResource SearchInProject}"
                              Placeholder="{l:AppLangResource SearchInProject}"
                              Text="{Binding Filter, Mode=TwoWay}" />
             <arc:ScrollArea Grid.Row="4">
-                <StackPanel Margin="6,0,6,8" Spacing="2">
+                <StackPanel Margin="{DynamicResource OctopusPanelListMargin}" Spacing="1">
                     <!-- Terminals and agents, one list the user arranges by dragging. -->
-                    <Grid ColumnDefinitions="*,Auto" Margin="8,6,0,0">
+                    <Grid ColumnDefinitions="*,Auto" Margin="{DynamicResource OctopusPanelHeaderMargin}">
                         <TextBlock Classes="caption" VerticalAlignment="Center" Text="{l:AppLangResource ItemList}" />
                         <arc:Button x:Name="AddItemButton" Grid.Column="1" Classes="icon" Variant="Ghost"
                                     Click="OnAddItemClick"

@@ -21,6 +21,11 @@ internal static class ProjectsDocumentNormalizer
             project.Tunnels ??= [];
             var tunnelIds = new HashSet<string>();
             project.Tunnels.RemoveAll(t => t is null || string.IsNullOrEmpty(t.Id) || !tunnelIds.Add(t.Id));
+            project.AgentAccounts ??= [];
+            foreach (var key in project.AgentAccounts.Keys.Where(k => string.IsNullOrWhiteSpace(k) || string.IsNullOrWhiteSpace(project.AgentAccounts[k])).ToList())
+            {
+                project.AgentAccounts.Remove(key);
+            }
         }
         if (document.ActiveProjectId is not null && !projectIds.Contains(document.ActiveProjectId))
             document.ActiveProjectId = null;

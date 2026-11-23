@@ -363,4 +363,38 @@ public class CompilerTests
         Assert.Equal(["--model", "auto"], off.Take(2));
         Assert.DoesNotContain("fast", string.Join(' ', off));
     }
+
+    [Fact]
+    public void Additional_directories_follow_variadic_repeat_and_comma_modes()
+    {
+        var claude = Compiler.Compile(new AgentCompileRequest(
+            Builtins.Get("claude"), new AgentProfile(), new AgentLaunchOptions { Prompt = "fix both" },
+            PermissionModes.Default, null, AdditionalDirectories: ["/repo/a", "/repo/b"]));
+        // Variadic --add-dir inserts "--" before a positional prompt so the prompt is not read as a folder.
+        Assert.Equal(["--add-dir", "/repo/a", "/repo/b", "--", "fix both"], claude.Arguments);
+        Assert.False(claude.Environment.ContainsKey("CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"));
+
+        // Enabling the Claude feature sets CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1.
+        var claudeWithMd = Compiler.Compile(new AgentCompileRequest(
+            Builtins.Get("claude"),
+            new AgentProfile { Features = { ["additionalDirsClaudeMd"] = "true" } },
+            null, PermissionModes.Default, null, AdditionalDirectories: ["/repo/a"]));
+        Assert.Equal("1", claudeWithMd.Environment["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"]);
+
+        var codex = Compiler.Compile(new AgentCompileRequest(
+            Builtins.Get("codex"), new AgentProfile(), new AgentLaunchOptions { Resume = true },
+            PermissionModes.Default, null, AdditionalDirectories: ["/repo/a", "/repo/b"]));
+        Assert.Equal(["--add-dir", "/repo/a", "--add-dir", "/repo/b", "resume", "--last"], codex.Arguments);
+
+        var gemini = Compiler.Compile(new AgentCompileRequest(
+            Builtins.Get("gemini"), new AgentProfile(), null,
+            PermissionModes.Default, null, AdditionalDirectories: ["/d1", "/d2", "/d3", "/d4", "/d5", "/d6"]));
+        Assert.Equal(["--include-directories", "/d1,/d2,/d3,/d4,/d5"], gemini.Arguments);
+
+        // Agents without AdditionalDirs ignore the directories silently.
+        var opencode = Compiler.Compile(new AgentCompileRequest(
+            Builtins.Get("opencode"), new AgentProfile(), null,
+            PermissionModes.Default, null, AdditionalDirectories: ["/repo/a"]));
+        Assert.Empty(opencode.Arguments);
+    }
 }

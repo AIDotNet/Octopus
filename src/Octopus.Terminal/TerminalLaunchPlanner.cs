@@ -27,11 +27,29 @@ public sealed class TerminalLaunchPlanner(
     {
         var shell = ResolveShell(shellPath);
         var commandLine = commandBuilder.Build(command.Executable, command.Arguments, shell.Kind);
+        var builtEnv = environment.Build(command.Environment);
+        if (command.UnsetEnvironment is { Count: > 0 } unsets)
+        {
+            // Remove from the parent PTY environment AND unset/re-export inside the interactive login shell so ~/.zshrc
+            // or $PROFILE cannot re-inject API keys or overwrite the isolated account directory variable.
+            var filtered = new Dictionary<string, string>(
+                OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            foreach (var (k, v) in builtEnv) filtered[k] = v;
+            foreach (var name in unsets)
+            {
+                if (!command.Environment.ContainsKey(name))
+                {
+                    filtered.Remove(name);
+                }
+            }
+            builtEnv = filtered;
+            commandLine = commandBuilder.WrapEnvironment(commandLine, shell.Kind, unsets, command.Environment);
+        }
         return new LaunchSpec(
             shell.Path,
             shells.GetCommandArguments(shell, commandLine),
             ResolveDirectory(workingDirectory),
-            environment.Build(command.Environment));
+            builtEnv);
     }
 
     /// <inheritdoc />

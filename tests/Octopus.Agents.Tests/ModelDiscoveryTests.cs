@@ -52,4 +52,26 @@ public class ModelDiscoveryTests
         Assert.Empty(await discovery.DiscoverAsync(Builtins.Get("claude"), "claude"));
         Assert.Single(runner.Calls);
     }
+
+    [Fact]
+    public async Task Discover_passes_system_proxy_when_unset_in_environment()
+    {
+        IReadOnlyDictionary<string, string>? seenEnv = null;
+        var runner = new FakeRunner((_, _, env) =>
+        {
+            seenEnv = env;
+            return new ProcessResult(0, "gemini-4-neon-high\tGemini 4 Neon (High)\n", "", false);
+        });
+        var discovery = new ModelDiscovery(runner, new FakeLoginEnvironment(), new FixedProxy(new Uri("http://127.0.0.1:7890")));
+
+        var options = await discovery.DiscoverAsync(Builtins.Get("agy"), "agy");
+
+        Assert.Equal(["gemini-4-neon-high"], options.Select(o => o.Id));
+        Assert.Equal("http://127.0.0.1:7890", seenEnv!["HTTPS_PROXY"]);
+    }
+
+    private sealed class FixedProxy(Uri? uri) : ISystemProxy
+    {
+        public Uri? Resolve() => uri;
+    }
 }

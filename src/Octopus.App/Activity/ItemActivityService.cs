@@ -18,9 +18,12 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
     private readonly HashSet<string> _sessionNamed = [];
     /// <summary>Items titled after their first prompt, while the session has no name of its own.</summary>
     private readonly HashSet<string> _promptTitled = [];
+    private readonly Dictionary<string, long> _titleReadAt = [];
+    private readonly ISignalHub? _signals;
 
     public ItemActivityService(IProjectService projects, IAgentCatalog catalog, ISignalHub? signals = null)
     {
+        _signals = signals;
         _projects = projects;
         _catalog = catalog;
         // Signals arrive on a background thread; everything here runs on the UI thread.
@@ -97,6 +100,11 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         // the session has a name.
         if (transcript is { Length: > 0 } path && (status == SignalStatus.Done || !_sessionNamed.Contains(itemId)))
         {
+            // Not on every signal (a status line comes every couple of seconds): at most one read per item per 20 s,
+            // except at the end of a turn.
+            var now = Environment.TickCount64;
+            if (status != SignalStatus.Done && _titleReadAt.TryGetValue(itemId, out var last) && now - last < 20_000) return;
+            _titleReadAt[itemId] = now;
             _ = Task.Run(() => SessionName.ReadTranscriptTitle(path)).ContinueWith(read =>
             {
                 if (read.IsCompletedSuccessfully && read.Result is { } aiTitle)
@@ -143,11 +151,25 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         // A removed item: forget it, so a tab reopened under the same id starts clean.
         if (e.Kind == ProjectChangeKind.Items && e.Item is { } item && _projects.FindItem(item.Id) is null)
         {
-            _titleWorking.Remove(item.Id);
-            _activity.Remove(item.Id);
-            _sessionNamed.Remove(item.Id);
-            _promptTitled.Remove(item.Id);
+            Forget(item.Id);
         }
+        else if (e.Kind == ProjectChangeKind.Projects)
+        {
+            // A removed project's items go without an event each.
+            var ids = _activity.Keys.Concat(_titleWorking.Keys).Concat(_sessionNamed).Concat(_promptTitled).Concat(_titleReadAt.Keys)
+                .Distinct().Where(id => _projects.FindItem(id) is null).ToList();
+            foreach (var id in ids) Forget(id);
+        }
+    }
+
+    private void Forget(string itemId)
+    {
+        _titleWorking.Remove(itemId);
+        _activity.Remove(itemId);
+        _sessionNamed.Remove(itemId);
+        _promptTitled.Remove(itemId);
+        _titleReadAt.Remove(itemId);
+        _signals?.ForgetItem(itemId);
     }
 
     public void ReportRemote(string itemId, ItemActivity activity) => Set(itemId, activity);

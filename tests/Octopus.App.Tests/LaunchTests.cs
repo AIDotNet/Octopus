@@ -49,6 +49,47 @@ public class LaunchTests
     }
 
     [AvaloniaFact]
+    public void Continuing_a_chosen_session_passes_its_id_and_account_env()
+    {
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(Dir);
+        var claude = new ProjectItem
+        {
+            Kind = ProjectItemKind.Agent,
+            AgentId = "claude",
+            Title = "Claude Code",
+            Launch = new AgentLaunchOptions
+            {
+                SessionId = "sess-123",
+                Env = new Dictionary<string, string> { ["CLAUDE_CONFIG_DIR"] = "/tmp/claude-work" },
+            },
+        };
+        projects.AddItem(project, claude);
+        var spec = AppHost.Get<IItemLaunchService>().Plan(project, claude);
+        var line = string.Join(' ', spec.Arguments);
+        Assert.Contains("--resume", line);
+        Assert.Contains("sess-123", line);
+        Assert.Equal("/tmp/claude-work", spec.Environment["CLAUDE_CONFIG_DIR"]);
+
+        var agy = new ProjectItem
+        {
+            Kind = ProjectItemKind.Agent,
+            AgentId = "agy",
+            Title = "Antigravity CLI",
+            Launch = new AgentLaunchOptions { SessionId = "conv-456" },
+        };
+        projects.AddItem(project, agy);
+        var agyLine = string.Join(' ', AppHost.Get<IItemLaunchService>().Plan(project, agy).Arguments);
+        Assert.Contains("--conversation", agyLine);
+        Assert.Contains("conv-456", agyLine);
+
+        // Fallback (allowResume: false) drops the session id but keeps the account environment.
+        var fallback = AppHost.Get<IItemLaunchService>().Plan(project, claude, allowResume: false);
+        Assert.DoesNotContain("--resume", string.Join(' ', fallback.Arguments));
+        Assert.Equal("/tmp/claude-work", fallback.Environment["CLAUDE_CONFIG_DIR"]);
+    }
+
+    [AvaloniaFact]
     public void A_terminal_item_runs_the_shell_in_the_project_directory()
     {
         var project = new Project { Path = Dir };
@@ -56,6 +97,58 @@ public class LaunchTests
         var spec = AppHost.Get<IItemLaunchService>().Plan(project, item);
         Assert.Equal(item.WorkingDirectory, spec.WorkingDirectory);
         Assert.False(string.IsNullOrEmpty(spec.FileName));
+    }
+
+    [AvaloniaFact, FreshApp]
+    public void A_group_with_merged_workspaces_passes_sibling_local_folders_to_supported_agents()
+    {
+        var projects = AppHost.Get<IProjectService>();
+        var dirA = Directory.CreateTempSubdirectory("octopus-merge-a-").FullName;
+        var dirB = Directory.CreateTempSubdirectory("octopus-merge-b-").FullName;
+        var dirMissing = Path.Combine(Path.GetTempPath(), "octopus-merge-missing-" + Guid.NewGuid().ToString("N"));
+        var a = projects.AddProject(dirA, "A");
+        var b = projects.AddProject(dirB, "B");
+        var missing = projects.AddProject(dirMissing, "Missing");
+        var ssh = projects.AddProject("/srv/remote", "RemoteSsh", sshHost: "prod");
+        var group = projects.AddGroup("Stack", [a.Id, b.Id, missing.Id, ssh.Id]);
+
+        var claude = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude Code" };
+        var codex = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "codex", Title = "Codex CLI" };
+        var opencode = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "OpenCode" };
+        projects.AddItem(a, claude);
+        projects.AddItem(a, codex);
+        projects.AddItem(a, opencode);
+
+        var launcher = AppHost.Get<IItemLaunchService>();
+
+        // Disabled by default: no --add-dir.
+        var offLine = string.Join(' ', launcher.Plan(a, claude).Arguments);
+        Assert.DoesNotContain("--add-dir", offLine);
+
+        // Enabled: sibling local existing folder is added; own cwd, SSH and missing folders are excluded.
+        projects.SetGroupMergeWorkspaces(group.Id, true);
+        var claudeSpec = launcher.Plan(a, claude);
+        var claudeLine = string.Join(' ', claudeSpec.Arguments);
+        Assert.Contains("--add-dir", claudeLine);
+        Assert.Contains(dirB, claudeLine);
+        Assert.DoesNotContain(dirA, claudeLine);
+        Assert.DoesNotContain(dirMissing, claudeLine);
+        Assert.DoesNotContain("/srv/remote", claudeLine);
+        Assert.False(claudeSpec.Environment.ContainsKey("CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"));
+
+        // Enabling the setting passes CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1.
+        AppHost.Get<ISettingsStore>().Update(s =>
+            s.Agents.Profiles["claude"] = new AgentProfile { Features = { ["additionalDirsClaudeMd"] = "true" } });
+        Assert.Equal("1", launcher.Plan(a, claude).Environment["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"]);
+
+        var codexLine = string.Join(' ', launcher.Plan(a, codex).Arguments);
+        Assert.Contains("--add-dir", codexLine);
+        Assert.Contains(dirB, codexLine);
+
+        // Agents without multi-dir support launch cleanly without extra flags.
+        var opencodeLine = string.Join(' ', launcher.Plan(a, opencode).Arguments);
+        Assert.DoesNotContain("--add-dir", opencodeLine);
+        Assert.DoesNotContain(dirB, opencodeLine);
     }
 
     private static AgentLaunchViewModel Panel(string id)

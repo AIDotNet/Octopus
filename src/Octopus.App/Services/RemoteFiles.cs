@@ -46,6 +46,10 @@ public sealed class RemoteFiles(IProcessRunner runner, IAppPaths paths, string? 
     public SshFileTree TreeFor(string host) =>
         _trees.GetOrAdd(host, h => new SshFileTree(h, runner, [.. SshCommands.Unattended, .. SharedOptions]));
 
+    /// <summary>A folder browser for picking a project folder on an SSH host, sharing its ControlMaster connection.</summary>
+    public SshFolderBrowser BrowserFor(string host, string? displayName = null) =>
+        new(host, runner, [.. SshCommands.Unattended, .. SharedOptions], displayName);
+
     /// <summary>
     /// Copies a file of a host into the app's cache and returns the copy's path. The copy is read-only: edits to it are not
     /// written back. Throws <see cref="SshCommandException"/> (or <see cref="SshFileTooLargeException"/>) when it cannot be copied.

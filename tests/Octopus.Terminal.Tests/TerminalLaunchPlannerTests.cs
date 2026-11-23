@@ -138,4 +138,40 @@ public class TerminalLaunchPlannerTests
         Assert.Equal(["10.0.0.1"], Planner().PlanTelnet("10.0.0.1", null).Arguments);
         Assert.Equal("telnet", Planner().PlanTelnet("10.0.0.1", null).FileName);
     }
+
+    [Fact]
+    public void PlanAgent_strips_unset_variables_from_env_and_wraps_the_login_shell_command()
+    {
+        var env = new DirtyEnvironment();
+        var planner = new TerminalLaunchPlanner(new FakeResolver(), new ShellCommandBuilder(), env);
+        var command = new AgentCommand(
+            "claude",
+            ["--model", "opus"],
+            new Dictionary<string, string> { ["CLAUDE_CONFIG_DIR"] = "/tmp/acc1" },
+            ["ANTHROPIC_API_KEY", "CLAUDE_CONFIG_DIR"]);
+
+        var spec = planner.PlanAgent(command, Path.GetTempPath());
+
+        // ANTHROPIC_API_KEY was removed from LaunchSpec.Environment, while CLAUDE_CONFIG_DIR (present in command.Environment) stayed.
+        Assert.False(spec.Environment.ContainsKey("ANTHROPIC_API_KEY"));
+        Assert.Equal("/tmp/acc1", spec.Environment["CLAUDE_CONFIG_DIR"]);
+        Assert.Equal(
+            "unset ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR; export CLAUDE_CONFIG_DIR=/tmp/acc1; claude --model opus",
+            spec.Arguments[^1]);
+    }
+
+    private sealed class DirtyEnvironment : ITerminalEnvironment
+    {
+        public IReadOnlyDictionary<string, string> Build(IReadOnlyDictionary<string, string>? extra = null)
+        {
+            var result = new Dictionary<string, string>
+            {
+                ["TERM"] = "xterm-256color",
+                ["ANTHROPIC_API_KEY"] = "sk-ant-from-process",
+                ["CLAUDE_CONFIG_DIR"] = "/stray/dir",
+            };
+            if (extra is not null) foreach (var (k, v) in extra) result[k] = v;
+            return result;
+        }
+    }
 }

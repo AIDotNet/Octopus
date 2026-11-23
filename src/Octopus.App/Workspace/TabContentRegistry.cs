@@ -118,7 +118,9 @@ public sealed class TabContentRegistry(
             {
                 await content.CloseAsync();
             }
-            (control.DataContext as IDisposable)?.Dispose();
+            var dataContext = control.DataContext;
+            control.DataContext = null;
+            (dataContext as IDisposable)?.Dispose();
             // A terminal tab closed its session through the registry already; this covers a tab that never started it.
             if (sessions is not null) await sessions.CloseAsync(itemId);
         }

@@ -93,20 +93,40 @@ public sealed partial record MarkdownFidelity(IReadOnlyList<MarkdownIssue> Lost,
     };
 
     /// <summary>The same text, but for the final newline and the line endings (the editor writes neither a final newline nor a CR).</summary>
-    private static bool SameDocument(string a, string b) =>
-        string.Equals(a.Replace("\r\n", "\n").TrimEnd('\n'), b.Replace("\r\n", "\n").TrimEnd('\n'), StringComparison.Ordinal);
+    private static bool SameDocument(string a, string b)
+    {
+        var sa = a.AsSpan().TrimEnd("\r\n");
+        var sb = b.AsSpan().TrimEnd("\r\n");
+        if (!sa.Contains('\r') && !sb.Contains('\r')) return sa.SequenceEqual(sb);
+        int ia = 0, ib = 0;
+        while (ia < sa.Length && ib < sb.Length)
+        {
+            if (sa[ia] == '\r' && ia + 1 < sa.Length && sa[ia + 1] == '\n') ia++;
+            if (sb[ib] == '\r' && ib + 1 < sb.Length && sb[ib + 1] == '\n') ib++;
+            if (sa[ia] != sb[ib]) return false;
+            ia++;
+            ib++;
+        }
+        return ia == sa.Length && ib == sb.Length;
+    }
 
     /// <summary>The line (1-based) where a front matter block ends, or 0 when the text has none.</summary>
     private static int FrontMatterEndLine(string markdown)
     {
-        var lines = markdown.Split('\n');
-        if (lines.Length < 3) return 0;
-        var open = lines[0].TrimEnd();
+        var span = markdown.AsSpan();
+        var firstEnd = span.IndexOf('\n');
+        if (firstEnd < 0) return 0;
+        var open = span[..firstEnd].TrimEnd();
         if (open is not ("---" or "+++")) return 0;
-        for (var i = 1; i < lines.Length && i < 200; i++)
+        var pos = firstEnd + 1;
+        for (var i = 1; pos < span.Length && i < 200; i++)
         {
-            var line = lines[i].TrimEnd();
-            if (line == open || (open == "---" && line == "...")) return i + 1;
+            var nl = span[pos..].IndexOf('\n');
+            var raw = nl < 0 ? span[pos..] : span.Slice(pos, nl);
+            var line = raw.TrimEnd();
+            if (line.SequenceEqual(open) || (open is "---" && line is "...")) return i + 1;
+            if (nl < 0) break;
+            pos += nl + 1;
         }
         return 0;
     }
@@ -114,16 +134,23 @@ public sealed partial record MarkdownFidelity(IReadOnlyList<MarkdownIssue> Lost,
     /// <summary>A line that ends in a backslash and continues on the next line: a hard line break the editor writes back as a stray backslash.</summary>
     private static bool HasBackslashBreak(string markdown)
     {
-        var lines = markdown.Split('\n');
+        var span = markdown.AsSpan();
         var inFence = false;
-        for (var i = 0; i < lines.Length - 1; i++)
+        var pos = 0;
+        while (pos < span.Length)
         {
-            var line = lines[i].TrimEnd('\r');
+            var nl = span[pos..].IndexOf('\n');
+            if (nl < 0) break;
+            var line = span.Slice(pos, nl).TrimEnd('\r');
+            pos += nl + 1;
             var trimmed = line.TrimStart();
             if (trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal)) inFence = !inFence;
-            if (inFence || lines[i + 1].Trim().Length == 0) continue;
+            if (inFence || line.Length == 0 || line[^1] != '\\') continue;
+            var nextNl = span[pos..].IndexOf('\n');
+            var nextLine = nextNl < 0 ? span[pos..] : span.Slice(pos, nextNl);
+            if (nextLine.Trim().Length == 0) continue;
             var slashes = line.Length - line.TrimEnd('\\').Length;
-            if (slashes % 2 == 1) return true;
+            if ((slashes & 1) == 1) return true;
         }
         return false;
     }

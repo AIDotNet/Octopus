@@ -43,7 +43,7 @@ public sealed class TerminalInputRouter(
                 TerminalKey.End => ViewportScroll.Bottom,
                 _ => null,
             };
-            if (scroll is { } target && !session.ReadInputModes().AlternateScreen)
+            if (scroll is { } target && !session.CachedInputModes.AlternateScreen)
             {
                 session.Use(c => c.ScrollViewport(target));
                 e.Handled = true;
@@ -59,7 +59,7 @@ public sealed class TerminalInputRouter(
             return;
         }
 
-        var modes = session.ReadInputModes();
+        var modes = session.CachedInputModes;
         if (input.Action == KeyAction.Press && Translate(input, modes) is { } text)
         {
             session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
@@ -86,7 +86,7 @@ public sealed class TerminalInputRouter(
     public void SendKey(TerminalKey key, KeyMods mods = KeyMods.None)
     {
         var input = WithCodepoint(new KeyInput(key, KeyAction.Press, mods));
-        var modes = session.ReadInputModes();
+        var modes = session.CachedInputModes;
         session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
         if (Translate(input, modes) is { } text)
         {
@@ -173,7 +173,7 @@ public sealed class TerminalInputRouter(
     /// <summary>Focus in/out, reported to programs that asked for it (mode 1004).</summary>
     public void HandleFocus(bool focused)
     {
-        if (!session.ReadInputModes().FocusEvents) return;
+        if (!session.CachedInputModes.FocusEvents) return;
         Span<byte> buffer = stackalloc byte[16];
         var n = InputEncoder.EncodeFocus(focused, buffer);
         if (n > 0) session.Send(buffer[..n]);
@@ -182,7 +182,7 @@ public sealed class TerminalInputRouter(
     /// <summary>Mouse and wheel.</summary>
     public void HandlePointer(TerminalPointerEventArgs e)
     {
-        var modes = session.ReadInputModes();
+        var modes = session.CachedInputModes;
         var reporting = modes.MouseTracking != MouseTracking.None && !e.Mouse.Mods.HasFlag(KeyMods.Shift);
 
         if (e.Kind == TerminalPointerKind.Wheel)

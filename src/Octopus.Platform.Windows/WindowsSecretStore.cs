@@ -14,9 +14,27 @@ public sealed class WindowsSecretStore : ISecretStore
 
     private static string Target(string service, string name) => service + "/" + name;
 
-    public Task<string?> GetAsync(string service, string name, CancellationToken cancellationToken = default) => Task.Run(() =>
+    public Task<string?> GetAsync(string service, string name, CancellationToken cancellationToken = default) =>
+        ReadTargetAsync(Target(service, name), cancellationToken);
+
+    public Task SetAsync(string service, string name, string value, CancellationToken cancellationToken = default) =>
+        WriteTargetAsync(Target(service, name), name, value, cancellationToken);
+
+    public Task DeleteAsync(string service, string name, CancellationToken cancellationToken = default) =>
+        DeleteTargetAsync(Target(service, name), cancellationToken);
+
+    public Task<string?> GetExternalAsync(ExternalKeyringSlot slot, CancellationToken cancellationToken = default) =>
+        ReadTargetAsync(slot.EffectiveWindowsTarget, cancellationToken);
+
+    public Task SetExternalAsync(ExternalKeyringSlot slot, string value, CancellationToken cancellationToken = default) =>
+        WriteTargetAsync(slot.EffectiveWindowsTarget, slot.Account, value, cancellationToken);
+
+    public Task DeleteExternalAsync(ExternalKeyringSlot slot, CancellationToken cancellationToken = default) =>
+        DeleteTargetAsync(slot.EffectiveWindowsTarget, cancellationToken);
+
+    private static Task<string?> ReadTargetAsync(string target, CancellationToken cancellationToken) => Task.Run(() =>
     {
-        if (!CredRead(Target(service, name), CredTypeGeneric, 0, out var pointer))
+        if (!CredRead(target, CredTypeGeneric, 0, out var pointer))
         {
             var error = Marshal.GetLastWin32Error();
             if (error == ErrorNotFound) return null;
@@ -36,7 +54,7 @@ public sealed class WindowsSecretStore : ISecretStore
         }
     }, cancellationToken);
 
-    public Task SetAsync(string service, string name, string value, CancellationToken cancellationToken = default) => Task.Run(() =>
+    private static Task WriteTargetAsync(string target, string userName, string value, CancellationToken cancellationToken) => Task.Run(() =>
     {
         var bytes = Encoding.UTF8.GetBytes(value);
         var blob = Marshal.AllocHGlobal(Math.Max(1, bytes.Length));
@@ -46,11 +64,11 @@ public sealed class WindowsSecretStore : ISecretStore
             var credential = new Credential
             {
                 Type = CredTypeGeneric,
-                TargetName = Target(service, name),
+                TargetName = target,
                 CredentialBlobSize = bytes.Length,
                 CredentialBlob = blob,
                 Persist = CredPersistLocalMachine,
-                UserName = name,
+                UserName = userName,
             };
             if (!CredWrite(ref credential, 0))
             {
@@ -63,9 +81,9 @@ public sealed class WindowsSecretStore : ISecretStore
         }
     }, cancellationToken);
 
-    public Task DeleteAsync(string service, string name, CancellationToken cancellationToken = default) => Task.Run(() =>
+    private static Task DeleteTargetAsync(string target, CancellationToken cancellationToken) => Task.Run(() =>
     {
-        if (!CredDelete(Target(service, name), CredTypeGeneric, 0))
+        if (!CredDelete(target, CredTypeGeneric, 0))
         {
             var error = Marshal.GetLastWin32Error();
             if (error != ErrorNotFound) throw new IOException($"The Credential Manager could not delete the secret (error {error}).");

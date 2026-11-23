@@ -44,6 +44,8 @@ public partial class TerminalPage : Page, ITerminalSurface, IClosablePage
 
     public string ReadScreenText() => Terminal.ReadScreenText();
 
+    public string ReadTailText(int maxLines = 16) => Terminal.ReadVisibleTailText(maxLines);
+
     // What fits this phone, not what the terminal has: while only looking the two differ.
     public (int Columns, int Rows)? GridSize => Terminal.ViewGridSize ?? Terminal.GridSize;
 

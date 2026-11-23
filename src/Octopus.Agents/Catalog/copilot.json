@@ -30,6 +30,7 @@
     },
     "prompt": { "mode": "flag", "args": ["-i", "{value}"] },
     "resume": { "continueLatest": ["--continue"] },
+    "additionalDirs": { "mode": "repeat", "args": ["--add-dir", "{value}"] },
     "extraArgs": true,
     "env": {
       "known": [
@@ -37,6 +38,18 @@
         { "name": "COPILOT_GITHUB_TOKEN", "label": "GitHub token", "secret": true, "localized": { "zh-CN": { "label": "GitHub 令牌" } } }
       ],
       "allowCustom": true
+    }
+  },
+  "accounts": {
+    "mode": "envDir",
+    "env": "COPILOT_HOME",
+    "defaultDir": "~/.copilot",
+    "loginArgs": ["login"],
+    "unsetEnv": ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"],
+    "identityFile": {
+      "path": "config.json",
+      "kind": "jsonPaths",
+      "jsonPaths": ["last_logged_in_user.login", "user.login"]
     }
   }
 }

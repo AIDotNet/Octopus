@@ -13,11 +13,10 @@ const DAY = 24 * 60 * 60_000;
 // The tab charts up to 30 days; the bill export reaches back as far as this (a quarter, or a month and a half more).
 const MAX_DAYS = 92;
 
-/** path → { size, mtime, offset, lastTotal, model } */
+/** path → { size, mtime, offset, lastTotal, model, seen } */
 const files = new Map();
 /** `${day}|${agent}|${model}` → { requests, input, output, cache, total, cost, unpriced } (cost in USD at API list prices) */
 const totals = new Map();
-const seenRequests = new Set();
 let scanning;
 let progress = { done: 0, total: 0 };
 let skipped = 0;
@@ -34,10 +33,13 @@ const SOURCES = [
       'message.usage.cache_creation_input_tokens', 'message.usage.cache_read_input_tokens',
       'message.usage.cache_creation.ephemeral_1h_input_tokens'],
     add(file, [timestamp, requestId, model, input, output, cacheWrite, cacheRead, write1h]) {
-      // Claude writes one line per content block of a reply, all with the same request id and usage.
+      // Claude writes one line per content block of a reply, consecutively in the same transcript file, all with the
+      // same request id and usage. Only a small per-file window is needed instead of retaining every id for 92 days.
       if (requestId) {
-        if (seenRequests.has(requestId)) return;
-        seenRequests.add(requestId);
+        file.seen ??= new Set();
+        if (file.seen.has(requestId)) return;
+        if (file.seen.size >= 64) file.seen.delete(file.seen.values().next().value);
+        file.seen.add(requestId);
       }
       // Cache writes cost more for the 1-hour cache than for the 5-minute one; without the split, all are 5-minute.
       const oneHour = Math.min(write1h ?? 0, cacheWrite ?? 0);
@@ -134,7 +136,6 @@ export function costSummary() {
 function forget() {
   files.clear();
   totals.clear();
-  seenRequests.clear();
   skipped = 0;
 }
 
@@ -195,12 +196,16 @@ export function scan({ refreshPrices = false } = {}) {
           for (;;) {
             const page = await fs.scanJsonLines(entry.path, { fromOffset: file.offset, where: source.where, select: source.select, limit: 5000 });
             // The prices of the models on this page, before their rows are counted.
-            if (await ensurePrices(page.rows.map(row => source.modelOf(file, row)))) repriced = true;
+            if (await ensurePrices(page.rows.map(row => source.modelOf(file, row)))) {
+              repriced = true;
+              break;
+            }
             for (const row of page.rows) source.add(file, row);
             skipped += page.skipped;
             file.offset = page.nextOffset;
             if (page.done || page.rows.length === 0) break;
           }
+          if (repriced) break;
           file.size = entry.size;
           file.mtime = entry.mtime;
         } catch {

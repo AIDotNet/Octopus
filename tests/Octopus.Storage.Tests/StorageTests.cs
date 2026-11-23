@@ -220,7 +220,7 @@ public class ProjectStoreTests
         var document = new ProjectsDocument
         {
             Projects = [new Project { Id = "p1", Name = "A" }, new Project { Id = "p2", Name = "B", GroupId = "g1" }],
-            Groups = [new ProjectGroup { Id = "g1", Name = "工作", Color = "#0EA5E9" }, new ProjectGroup { Id = "g2", Name = "开源" }],
+            Groups = [new ProjectGroup { Id = "g1", Name = "工作", Color = "#0EA5E9", MergeWorkspaces = true }, new ProjectGroup { Id = "g2", Name = "开源" }],
             ExpandedGroupId = "g1",
         };
         await new JsonProjectStore(paths).SaveAsync(document, TestContext.Current.CancellationToken);
@@ -228,6 +228,8 @@ public class ProjectStoreTests
         Assert.Equal(new[] { "g1", "g2" }, loaded.Groups.Select(g => g.Id));
         Assert.Equal("工作", loaded.Groups[0].Name);
         Assert.Equal("#0EA5E9", loaded.Groups[0].Color);
+        Assert.True(loaded.Groups[0].MergeWorkspaces);
+        Assert.False(loaded.Groups[1].MergeWorkspaces);
         Assert.Null(loaded.Projects[0].GroupId);
         Assert.Equal("g1", loaded.Projects[1].GroupId);
         Assert.Equal("g1", loaded.ExpandedGroupId);

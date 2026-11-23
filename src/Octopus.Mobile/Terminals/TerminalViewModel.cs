@@ -29,6 +29,8 @@ public interface ITerminalSurface
     void SendKey(TerminalKey key, KeyMods mods);
     /// <summary>The screen and scrollback as plain text.</summary>
     string ReadScreenText();
+    /// <summary>The last non-empty lines currently visible in the viewport.</summary>
+    string ReadTailText(int maxLines = 16) => ReadScreenText();
     (int Columns, int Rows)? GridSize { get; }
     void FocusTerminal();
 }
@@ -172,7 +174,7 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
     public void RefreshQuickReplies()
     {
         IReadOnlyList<QuickReply> found = Session.Activity == SessionActivity.Waiting && _surface is not null
-            ? Terminals.QuickReplies.Parse(_surface.ReadScreenText())
+            ? Terminals.QuickReplies.Parse(_surface.ReadTailText())
             : [];
         // Esc closes the question without choosing: always the last row when there are choices.
         if (found.Count > 0) found = [.. found, new QuickReply("Esc", "\u001b", TerminalKey.Escape)];
@@ -184,7 +186,11 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasQuickReplies));
     }
 
-    public void Dispose() => Session.PropertyChanged -= OnSessionChanged;
+    public void Dispose()
+    {
+        Session.PropertyChanged -= OnSessionChanged;
+        _workspace.CloseTerminal(Session);
+    }
 
     private KeyCapViewModel Cap(string label, TerminalKey? key, string? text = null, bool isControl = false) => new(label, key, text, isControl, Press);
 

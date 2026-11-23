@@ -1,6 +1,8 @@
 // Each adapter turns one agent's raw data into a usage snapshot (design/plugins/12 §5):
-//   { account?, plan?, windows: [{ id, label, usedPercent, resetsAt? }], credits?, session?, source, unavailable? }
-// Only official sources: Claude's status line, Codex's app-server, Cursor's `about`, OpenCode's plugin events.
+//   { account?, plan?, windows: [{ id, label, usedPercent, resetsAt?, durationMs?, tag? }], credits?, session?, source, unavailable? }
+// durationMs (the window's length) lets the popover tell how much of the window has passed and whether, at the current
+// pace, it runs out before it resets; tag is a qualifier kept in the short label ("7d Opus").
+// Only official sources: Claude's status line, Codex's app-server, Cursor's `about`.
 // Nothing here reads another tool's credentials (design 12 §9 is still undecided).
 
 import { env } from 'octopus';
@@ -26,13 +28,13 @@ export function claudeFromStatusLine(payload, account) {
   if (!payload || typeof payload !== 'object') return undefined;
   const limits = payload.rate_limits;
   const windows = [];
-  const add = (id, label, w) => {
+  const add = (id, label, minutes, w, tag) => {
     if (num(w?.used_percentage) === undefined) return;
-    windows.push({ id, label, usedPercent: w.used_percentage, resetsAt: seconds(w.resets_at) });
+    windows.push({ id, label, usedPercent: w.used_percentage, resetsAt: seconds(w.resets_at), durationMs: minutes * 60_000, tag });
   };
-  add('five_hour', t('5 小时', '5 hours'), limits?.five_hour);
-  add('seven_day', t('7 天', '7 days'), limits?.seven_day);
-  add('seven_day_opus', t('7 天 · Opus', '7 days · Opus'), limits?.seven_day_opus);
+  add('five_hour', t('5 小时', '5 hours'), 300, limits?.five_hour);
+  add('seven_day', t('7 天', '7 days'), 10080, limits?.seven_day);
+  add('seven_day_opus', t('7 天 · Opus', '7 days · Opus'), 10080, limits?.seven_day_opus, 'Opus');
   const context = payload.context_window;
   const contextPercent = num(context?.used_percentage)
     ?? (num(context?.total_input_tokens) !== undefined && num(context?.context_window_size)
@@ -64,6 +66,7 @@ export function codexFromRateLimits(data, account) {
       label: windowLabel(w.windowDurationMins),
       usedPercent: w.usedPercent,
       resetsAt: seconds(w.resetsAt),
+      durationMs: num(w.windowDurationMins) ? w.windowDurationMins * 60_000 : undefined,
     }));
   const credits = bucket?.credits?.hasCredits
     ? { balance: bucket.credits.balance ?? undefined, unlimited: !!bucket.credits.unlimited }
@@ -77,10 +80,9 @@ export function codexFromRateLimits(data, account) {
 
 // ───────────────────────── Grok: no official quota source ─────────────────────────
 
-export function grokSnapshot(statusLine) {
+export function grokSnapshot() {
   return {
     windows: [],
-    session: statusLine ? { costUsd: num(statusLine.cost?.total_cost_usd ?? statusLine.cost_usd), contextPercent: num(statusLine.context_window?.used_percentage) } : undefined,
     source: 'official',
     unavailable: {
       reason: 'noOfficialSource',
@@ -104,36 +106,17 @@ export function cursorFromAbout(data) {
   };
 }
 
-// ───────────────────────── OpenCode: session.usage.updated ─────────────────────────
+// ───────────────────────── OpenCode: no quota of its own ─────────────────────────
 
-/** Sessions add up: one OpenCode window can run several sessions, each reporting its own running totals. */
-export function opencodeFromSessions(sessions) {
-  let costUsd = 0;
-  let tokens = 0;
-  for (const s of sessions.values()) {
-    costUsd += s.cost ?? 0;
-    tokens += s.tokens ?? 0;
-  }
+export function opencodeSnapshot() {
   return {
     windows: [],
-    session: { costUsd, tokens },
     source: 'official',
     unavailable: {
       reason: 'noOfficialSource',
-      hint: t('OpenCode 不转述服务商的额度；若用的是 Claude 或 Codex 账户，额度在对应的一栏。', 'OpenCode does not pass on provider quotas; a Claude or Codex account shows its quota in its own row.'),
+      hint: t('OpenCode 不转述服务商的额度；Claude、Codex 账户的额度在各自的标签里，API 服务商的余额在“API 余额”里。', 'OpenCode does not pass on provider quotas; Claude and Codex accounts have their own tabs, API providers are under “API balance”.'),
     },
   };
-}
-
-/** The event's payload: { properties: { sessionID, cost, tokens: { input, output, reasoning, cache: { read, write } } } }. */
-export function opencodeUsageEvent(payload) {
-  const p = payload?.properties ?? payload ?? {};
-  const id = p.sessionID ?? p.sessionId ?? p.info?.id;
-  if (!id) return undefined;
-  const tk = p.tokens ?? p.info?.tokens ?? {};
-  const tokens = typeof tk === 'number' ? tk
-    : (num(tk.input) ?? 0) + (num(tk.output) ?? 0) + (num(tk.reasoning) ?? 0) + (num(tk.cache?.read) ?? 0) + (num(tk.cache?.write) ?? 0);
-  return { id, cost: num(p.cost ?? p.info?.cost), tokens };
 }
 
 /** `claude auth status --json` → "Max 20x", "Pro"…; undefined for an API key or a third-party provider. */
@@ -173,7 +156,10 @@ export function fromCustom(data) {
       const used = num(w?.usedPercent ?? w?.used_percentage ?? w?.percent);
       if (used === undefined) return undefined;
       const minutes = num(w.windowMinutes ?? w.windowDurationMins);
-      return { id: String(w.id ?? `w${i}`), label: typeof w.label === 'string' ? w.label : windowLabel(minutes), usedPercent: used, resetsAt: when(w.resetsAt ?? w.resets_at) };
+      return {
+        id: String(w.id ?? `w${i}`), label: typeof w.label === 'string' ? w.label : windowLabel(minutes), usedPercent: used,
+        resetsAt: when(w.resetsAt ?? w.resets_at), durationMs: minutes ? minutes * 60_000 : undefined,
+      };
     })
     .filter(Boolean);
   const session = data.session && typeof data.session === 'object'

@@ -15,6 +15,7 @@ public sealed class PixelIcon
     public const int Size = 24;
 
     private readonly uint[] _rows;
+    private IReadOnlyList<PixelRect>? _rects;
 
     internal PixelIcon(string id, string name, string category, string source, uint[] rows)
     {
@@ -23,7 +24,6 @@ public sealed class PixelIcon
         Category = category;
         Source = source;
         _rows = rows;
-        Rects = Merge(rows);
     }
 
     /// <summary>Unique: the pixelarticons name, or "hn-" and the HackerNoon name.</summary>
@@ -38,7 +38,7 @@ public sealed class PixelIcon
     /// <summary>"pixelarticons" or "hackernoon".</summary>
     public string Source { get; }
 
-    public IReadOnlyList<PixelRect> Rects { get; }
+    public IReadOnlyList<PixelRect> Rects => _rects ??= Merge(_rows);
 
     /// <summary>Whether the pixel at column <paramref name="x"/>, row <paramref name="y"/> is set.</summary>
     public bool this[int x, int y] => (_rows[y] >> (Size - 1 - x) & 1) != 0;
@@ -47,44 +47,40 @@ public sealed class PixelIcon
     private static List<PixelRect> Merge(uint[] rows)
     {
         var done = new List<PixelRect>();
-        var open = new Dictionary<(int Start, int End), PixelRect>();
-        for (var y = 0; y <= Size; y++)
+        var open = new List<PixelRect>(8);
+        var next = new List<PixelRect>(8);
+        for (var y = 0; y < Size; y++)
         {
-            var runs = new HashSet<(int Start, int End)>();
-            if (y < Size)
+            var row = rows[y];
+            for (var x = 0; x < Size;)
             {
-                for (var x = 0; x < Size;)
+                if ((row >> (Size - 1 - x) & 1) == 0)
                 {
-                    if ((rows[y] >> (Size - 1 - x) & 1) == 0)
+                    x++;
+                    continue;
+                }
+                var start = x;
+                while (x < Size && (row >> (Size - 1 - x) & 1) != 0) x++;
+                var width = x - start;
+                var matched = false;
+                for (var i = 0; i < open.Count; i++)
+                {
+                    var rect = open[i];
+                    if (rect.X == start && rect.Width == width)
                     {
-                        x++;
-                        continue;
+                        next.Add(rect with { Height = rect.Height + 1 });
+                        open.RemoveAt(i);
+                        matched = true;
+                        break;
                     }
-                    var start = x;
-                    while (x < Size && (rows[y] >> (Size - 1 - x) & 1) != 0)
-                    {
-                        x++;
-                    }
-                    runs.Add((start, x));
                 }
+                if (!matched) next.Add(new PixelRect(start, y, width, 1));
             }
-            foreach (var (run, rect) in open.ToList())
-            {
-                if (runs.Remove(run))
-                {
-                    open[run] = rect with { Height = rect.Height + 1 };
-                }
-                else
-                {
-                    done.Add(rect);
-                    open.Remove(run);
-                }
-            }
-            foreach (var run in runs)
-            {
-                open[run] = new PixelRect(run.Start, y, run.End - run.Start, 1);
-            }
+            done.AddRange(open);
+            open.Clear();
+            (open, next) = (next, open);
         }
+        done.AddRange(open);
         return done;
     }
 }

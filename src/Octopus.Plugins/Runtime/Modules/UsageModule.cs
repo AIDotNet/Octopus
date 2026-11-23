@@ -38,7 +38,8 @@ public sealed class UsageModule : IPluginApiModule
             var agent = DeclaredAgent(call);
             if (_registry.ProviderOf(agent) != call.Plugin.Id) return;
             if (call["snapshot"] is not JsonObject snapshot) throw PluginApiException.Invalid("The snapshot must be an object.");
-            _registry.Update(agent, call.Plugin.Id, (JsonObject)snapshot.DeepClone());
+            var approxBytes = System.Text.Encoding.UTF8.GetByteCount(call.Json);
+            _registry.Update(agent, call.Plugin.Id, (JsonObject)snapshot.DeepClone(), approxBytes <= UsageRegistry.MaxSnapshotBytes ? approxBytes : null);
         });
         router.Notify("usage.clear", call =>
         {

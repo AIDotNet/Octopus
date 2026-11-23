@@ -1,3 +1,4 @@
+using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Core.Settings;
 
@@ -35,5 +36,21 @@ public sealed class InMemoryProjectStore(ProjectsDocument? initial = null) : IPr
     {
         _document = document;
         return Task.CompletedTask;
+    }
+}
+
+/// <summary>An account store that keeps <c>accounts.json</c> in memory (headless tests).</summary>
+public sealed class InMemoryAccountStore(AccountsDocument? initial = null) : IAccountStore
+{
+    public AccountsDocument Current { get; private set; } = JsonAccountStore.Normalize(initial);
+    public event EventHandler? Changed;
+
+    public void Load() => Changed?.Invoke(this, EventArgs.Empty);
+
+    public void Update(Action<AccountsDocument> mutate)
+    {
+        mutate(Current);
+        Current = JsonAccountStore.Normalize(Current);
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 }

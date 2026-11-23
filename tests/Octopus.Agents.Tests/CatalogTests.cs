@@ -62,6 +62,8 @@ public class CatalogTests
             }
             if (c.Prompt is { Mode: "flag" } p)
                 Assert.Contains(p.Args!, a => a.Contains("{value}"));
+            if (c.AdditionalDirs is { } dirs)
+                Assert.Contains(dirs.Args, a => a.Contains("{value}"));
         }
     }
 

@@ -27,9 +27,15 @@ public sealed class AgentUsagePluginTests
         Assert.Empty(result.Issues);
         var manifest = result.Manifest!;
         Assert.Equal(5, manifest.Contributes.UsageProviders.Count);
-        // Official sources only: no network, no process, no credential files (design 12 §9 is undecided). The model
-        // prices of the cost estimate come from the host, which syncs them from models.dev.
-        Assert.DoesNotContain(manifest.Permissions.Requests, r => r.Key is "net" or "process.run" or "fs.external");
+        // No process and no credential files of other tools (design 12 §9 is undecided). The network is optional and
+        // only reaches the API hosts of the providers the user gives a key for (design 12 §9.3, the "paste a key" path).
+        Assert.DoesNotContain(manifest.Permissions.Requests, r => r.Key is "process.run" or "fs.external");
+        var net = Assert.Single(manifest.Permissions.Requests, r => r.Key == "net");
+        Assert.True(net.Optional);
+        Assert.Equal(
+            ["api.deepseek.com", "api.moonshot.cn", "api.moonshot.ai", "openrouter.ai", "api.siliconflow.cn", "api.siliconflow.com", "open.bigmodel.cn", "api.z.ai"],
+            net.Details);
+        Assert.Contains(manifest.Permissions.Requests, r => r.Key == "secrets" && r.Optional);
     }
 
     private static async Task<(Harness Harness, PluginManager Manager, FakeAgents Agents)> StartAsync(Action<Harness, FakeAgents>? arrange = null)
@@ -65,7 +71,7 @@ public sealed class AgentUsagePluginTests
     }
 
     [Fact]
-    public async Task Claude_StatusLine_BecomesSnapshot_AndPopoverRendersEveryAgent()
+    public async Task Claude_StatusLine_BecomesSnapshot_AndPopoverHasATabPerAgent()
     {
         var (harness, manager, agents) = await StartAsync();
         await using var _ = harness;
@@ -90,12 +96,84 @@ public sealed class AgentUsagePluginTests
         Assert.Equal("danger", agents.Indicator!["level"]!.GetValue<string>());
 
         var json = await manager.Find(Id)!.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5));
-        var tree = JsonNode.Parse(json)!["tree"]!.ToJsonString();
-        Assert.Contains("Claude", tree);
-        Assert.Contains("Cursor", tree);
-        // Grok and Cursor say why there is no quota instead of showing 0%.
-        Assert.Contains("/usage", tree);
-        Assert.Contains("\"Progress\"", tree);
+        var tree = JsonNode.Parse(json)!["tree"]!;
+        var tabs = Find(tree, "Tabs")!;
+        var titles = tabs["p"]!["tabs"]!.AsArray().Select(tab => tab!["title"]!.GetValue<string>()).ToList();
+        // One tab per installed agent, the tightest window in its title; Claude (92%) is open.
+        Assert.Contains("Claude 92%", titles);
+        Assert.Contains("Codex", titles[1]);
+        Assert.Contains(titles, title => title.StartsWith("Cursor"));
+        Assert.Contains(titles, title => title.StartsWith("Grok"));
+        Assert.Equal("claude", tabs["p"]!["selected"]!.GetValue<string>());
+        var text = tree.ToJsonString();
+        Assert.Contains("\"Progress\"", text);
+        // Only usage: the session cost is not shown.
+        Assert.DoesNotContain("1.84", text);
+    }
+
+    [Fact]
+    public async Task SwitchingTabs_ShowsThatAgent_AndTheApiTabOffersToAddAKey()
+    {
+        var (harness, manager, _) = await StartAsync();
+        await using var _ = harness;
+        var plugin = manager.Find(Id)!;
+        var clicked = JsonNode.Parse(await plugin.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5)))!;
+        var instance = clicked["instanceId"]!.GetValue<string>();
+        var onSelect = Find(clicked["tree"], "Tabs")!["p"]!["onSelect"]!["$h"]!.GetValue<string>();
+
+        async Task<string> Select(string tab)
+        {
+            await plugin.InvokeAsync("view.event", [instance, onSelect, new JsonArray(tab)], TimeSpan.FromSeconds(5));
+            var tree = JsonNode.Parse(await plugin.InvokeAsync("view.render", [instance], TimeSpan.FromSeconds(5)))!;
+            Assert.Equal(tab, Find(tree, "Tabs")!["p"]!["selected"]!.GetValue<string>());
+            return tree.ToJsonString(new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+        }
+
+        // Grok says why there is no quota instead of showing 0%.
+        Assert.Contains("/usage", await Select("grok"));
+        var api = await Select("api");
+        Assert.True(api.Contains("Add an API key") || api.Contains("添加 API 密钥"), api);
+    }
+
+    [Fact]
+    public async Task ThePopover_IsCompactByDefault_AndComfortableWhenChosen()
+    {
+        var (harness, manager, agents) = await StartAsync();
+        await using var _ = harness;
+        var resets = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds();
+        agents.Signal("claude", "statusline", StatusLine(40, resets), account: "a1b2c3d4e5f6");
+        await Harness.WaitUntil(() => harness.Usage.Get("claude", "a1b2c3d4e5f6") is not null);
+        await Harness.WaitUntil(() => harness.Usage.Get("claude", "a1b2c3d4e5f6")?.Snapshot["plan"] is not null, 10_000);
+
+        async Task<JsonNode> Popover() =>
+            JsonNode.Parse(await manager.Find(Id)!.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5)))!["tree"]!;
+
+        // Compact: short window labels ("5h"), the plan as plain text, no footnote line.
+        var compact = await Popover();
+        var compactText = compact.ToJsonString();
+        Assert.Contains("\"value\":\"5h\"", compactText);
+        Assert.Null(Find(compact, "Badge"));
+        Assert.Equal(400, compact["p"]!["width"]!.GetValue<int>());
+
+        var manifest = PluginManifestReader.ReadPackage(Path.Combine(harness.BuiltinRoot, Id), PluginSource.Builtin, requireDirectoryName: true).Manifest!;
+        harness.Config.Set(manifest, "octopus.agent-usage.style", JsonValue.Create("comfortable"), byUser: true);
+        await Task.Delay(200);
+        var comfortable = await Popover();
+        Assert.NotNull(Find(comfortable, "Badge"));
+        Assert.DoesNotContain("\"value\":\"5h\"", comfortable.ToJsonString());
+        Assert.Equal(440, comfortable["p"]!["width"]!.GetValue<int>());
+    }
+
+    /// <summary>The first node of a rendered tree with the type <paramref name="type"/>, depth first.</summary>
+    private static JsonNode? Find(JsonNode? node, string type)
+    {
+        if (node is not JsonObject obj) return null;
+        if (obj["t"]?.GetValue<string>() == type) return obj;
+        foreach (var child in obj["c"]?.AsArray() ?? [])
+        {
+            if (Find(child, type) is { } found) return found;
+        }
+        return null;
     }
 
     [Fact]
@@ -257,7 +335,7 @@ public sealed class AgentUsagePluginTests
     }
 
     [Fact]
-    public async Task ClaudeAccounts_ThatHaveNotReportedYet_AreListedWithWhatToDo()
+    public async Task ClaudeAccounts_ThatHaveNotReportedYet_AreNamedOnOneLine()
     {
         var (harness, manager, _) = await StartAsync((h, a) =>
         {
@@ -271,7 +349,7 @@ public sealed class AgentUsagePluginTests
         var tree = JsonNode.Parse(json)!["tree"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         Assert.Contains("55232/config", tree);
         Assert.Contains("47196/config", tree);
-        Assert.True(tree.Contains("No usage from this configuration") || tree.Contains("还没有这个配置的用量"), tree);
+        Assert.True(tree.Contains("No data yet: 47196/config") || tree.Contains("还没有数据：47196/config"), tree);
     }
 
     [Fact]

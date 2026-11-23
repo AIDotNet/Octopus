@@ -1,6 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Octopus.App.Localization;
 using Octopus.Terminal.Avalonia;
 using TKCode.Arc;
@@ -10,13 +12,50 @@ namespace Octopus.App.Terminals;
 /// <summary>The small search bar at the top right of a terminal. Enter and Shift+Enter step through the matches, Esc closes.</summary>
 public partial class TerminalSearchBar : UserControl
 {
+    private static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(90);
+
     private TerminalControl? _terminal;
+    private DispatcherTimer? _debounce;
 
     public TerminalSearchBar()
     {
         InitializeComponent();
-        Field.TextChanged += (_, _) => _terminal?.SetSearchQuery(Field.Text ?? "");
+        Field.TextChanged += (_, _) => ScheduleSearch(Field.Text ?? "");
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _debounce?.Stop();
+    }
+
+    private void ScheduleSearch(string query)
+    {
+        if (query.Length == 0)
+        {
+            _debounce?.Stop();
+            _terminal?.SetSearchQuery("");
+            return;
+        }
+        if (_debounce is null)
+        {
+            _debounce = new DispatcherTimer { Interval = SearchDebounce };
+            _debounce.Tick += (_, _) =>
+            {
+                _debounce.Stop();
+                _terminal?.SetSearchQuery(Field.Text ?? "");
+            };
+        }
+        _debounce.Stop();
+        _debounce.Start();
+    }
+
+    private void FlushSearch()
+    {
+        if (_debounce is not { IsEnabled: true }) return;
+        _debounce.Stop();
+        _terminal?.SetSearchQuery(Field.Text ?? "");
     }
 
     /// <summary>Connects the bar to the terminal it searches in.</summary>
@@ -62,15 +101,28 @@ public partial class TerminalSearchBar : UserControl
                 break;
             case Key.Enter:
                 e.Handled = true;
+                FlushSearch();
                 if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) _terminal?.SearchPrevious();
                 else _terminal?.SearchNext();
                 break;
         }
     }
 
-    private void OnPrevious(object? sender, RoutedEventArgs e) => _terminal?.SearchPrevious();
+    private void OnPrevious(object? sender, RoutedEventArgs e)
+    {
+        FlushSearch();
+        _terminal?.SearchPrevious();
+    }
 
-    private void OnNext(object? sender, RoutedEventArgs e) => _terminal?.SearchNext();
+    private void OnNext(object? sender, RoutedEventArgs e)
+    {
+        FlushSearch();
+        _terminal?.SearchNext();
+    }
 
-    private void OnClose(object? sender, RoutedEventArgs e) => _terminal?.CloseSearch();
+    private void OnClose(object? sender, RoutedEventArgs e)
+    {
+        _debounce?.Stop();
+        _terminal?.CloseSearch();
+    }
 }

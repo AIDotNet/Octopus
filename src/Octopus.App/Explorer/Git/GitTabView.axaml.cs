@@ -15,6 +15,7 @@ namespace Octopus.App.Explorer.Git;
 public partial class GitTabView : UserControl
 {
     private GitPanelViewModel? _model;
+    private bool _subscribed;
 
     public GitTabView()
     {
@@ -26,13 +27,40 @@ public partial class GitTabView : UserControl
         MessageBox.AddHandler(KeyDownEvent, OnMessageKeyDown, RoutingStrategies.Tunnel);
     }
 
+    protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (_model is not null && !_subscribed)
+        {
+            _model.PropertyChanged += OnModelChanged;
+            _subscribed = true;
+            BuildBranchMenu();
+            BuildMoreMenu();
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        if (_model is not null && _subscribed)
+        {
+            _model.PropertyChanged -= OnModelChanged;
+            _subscribed = false;
+        }
+    }
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_model is not null) _model.PropertyChanged -= OnModelChanged;
+        if (_model is not null && _subscribed)
+        {
+            _model.PropertyChanged -= OnModelChanged;
+            _subscribed = false;
+        }
         _model = DataContext as GitPanelViewModel;
         if (_model is null) return;
         _model.PropertyChanged += OnModelChanged;
+        _subscribed = true;
         BuildBranchMenu();
         BuildMoreMenu();
     }

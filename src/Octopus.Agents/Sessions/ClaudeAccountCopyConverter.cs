@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -59,7 +60,26 @@ public sealed class ClaudeAccountCopyConverter(string? home = null) : ISessionCo
     private static bool SameContent(string a, string b)
     {
         if (new FileInfo(a).Length != new FileInfo(b).Length) return false;
-        return File.ReadAllBytes(a).AsSpan().SequenceEqual(File.ReadAllBytes(b));
+        var bufA = ArrayPool<byte>.Shared.Rent(16 * 1024);
+        var bufB = ArrayPool<byte>.Shared.Rent(16 * 1024);
+        try
+        {
+            using var streamA = new FileStream(a, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var streamB = new FileStream(b, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            while (true)
+            {
+                var readA = streamA.ReadAtLeast(bufA, bufA.Length, throwOnEndOfStream: false);
+                var readB = streamB.ReadAtLeast(bufB, bufB.Length, throwOnEndOfStream: false);
+                if (readA != readB) return false;
+                if (readA == 0) return true;
+                if (!bufA.AsSpan(0, readA).SequenceEqual(bufB.AsSpan(0, readB))) return false;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(bufA);
+            ArrayPool<byte>.Shared.Return(bufB);
+        }
     }
 
     /// <summary>Temp file plus move, so a half-written transcript is never resumed.</summary>

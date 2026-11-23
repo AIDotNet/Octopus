@@ -53,11 +53,30 @@ public sealed class PolicyContext
         SystemLocations = [.. SensitiveFiles.DefaultSystemLocations(), AppContext.BaseDirectory],
     };
 
-    internal Resolved Real => _resolved ??= new Resolved(
-        [.. ProtectedDirectories.Select(Resolve)],
-        [.. OtherPluginDirectories.Select(Resolve)],
-        [.. AgentCredentials.Select(a => new AgentCredentialLocation(Resolve(a.DataDirectory), a.Files))],
-        [.. SystemLocations.Select(Resolve)]);
+    internal Resolved Real => _resolved ??= BuildResolved();
+
+    private Resolved BuildResolved()
+    {
+        var agents = AgentCredentials.Select(a => new AgentCredentialLocation(Resolve(a.DataDirectory), a.Files)).ToArray();
+        var credentialFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var agent in agents)
+        {
+            foreach (var name in SensitiveFiles.AgentCredentialNames)
+            {
+                credentialFiles.Add(Path.TrimEndingDirectorySeparator(Path.Combine(agent.DataDirectory, name)));
+            }
+            foreach (var name in agent.Files)
+            {
+                credentialFiles.Add(Path.TrimEndingDirectorySeparator(Path.Combine(agent.DataDirectory, name.Replace('/', Path.DirectorySeparatorChar))));
+            }
+        }
+        return new Resolved(
+            [.. ProtectedDirectories.Select(Resolve)],
+            [.. OtherPluginDirectories.Select(Resolve)],
+            agents,
+            credentialFiles,
+            [.. SystemLocations.Select(Resolve)]);
+    }
 
     /// <summary>A configured path with links resolved, so it compares with the resolved paths being checked.</summary>
     internal static string Resolve(string path)
@@ -76,5 +95,6 @@ public sealed class PolicyContext
         IReadOnlyList<string> Protected,
         IReadOnlyList<string> OtherPlugins,
         IReadOnlyList<AgentCredentialLocation> Agents,
+        HashSet<string> AgentCredentialFiles,
         IReadOnlyList<string> System);
 }

@@ -81,4 +81,33 @@ public class ShellCommandBuilderTests
         var line = _b.Build("prog", [argument, "tail"], ShellKind.Posix);
         Assert.Equal(["prog", argument, "tail"], _b.Split(line));
     }
+
+    [Fact]
+    public void WrapEnvironment_handles_posix_fish_powershell_and_cmd()
+    {
+        var unsets = new[] { "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "BAD;NAME" };
+        var sets = new Dictionary<string, string>
+        {
+            ["CLAUDE_CONFIG_DIR"] = "/Users/me/Library/App Support/Octopus/accounts/claude/a1",
+            ["INVALID-KEY"] = "ignored",
+        };
+
+        Assert.Equal(
+            "unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN; export CLAUDE_CONFIG_DIR='/Users/me/Library/App Support/Octopus/accounts/claude/a1'; claude",
+            _b.WrapEnvironment("claude", ShellKind.Posix, unsets, sets));
+
+        Assert.Equal(
+            "set -e ANTHROPIC_API_KEY; set -e ANTHROPIC_AUTH_TOKEN; set -gx CLAUDE_CONFIG_DIR '/Users/me/Library/App Support/Octopus/accounts/claude/a1'; claude",
+            _b.WrapEnvironment("claude", ShellKind.Fish, unsets, sets));
+
+        Assert.Equal(
+            "Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue; Remove-Item Env:ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue; $env:CLAUDE_CONFIG_DIR = '/Users/me/Library/App Support/Octopus/accounts/claude/a1'; & claude",
+            _b.WrapEnvironment("& claude", ShellKind.PowerShell, unsets, sets));
+
+        Assert.Equal(
+            "set \"ANTHROPIC_API_KEY=\" & set \"ANTHROPIC_AUTH_TOKEN=\" & set \"CLAUDE_CONFIG_DIR=/Users/me/Library/App Support/Octopus/accounts/claude/a1\" & claude",
+            _b.WrapEnvironment("claude", ShellKind.Cmd, unsets, sets));
+
+        Assert.Equal("claude", _b.WrapEnvironment("claude", ShellKind.Posix, [], new Dictionary<string, string>()));
+    }
 }

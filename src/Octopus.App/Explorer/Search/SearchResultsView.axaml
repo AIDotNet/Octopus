@@ -53,21 +53,21 @@
                 <DataTemplate x:DataType="search:SearchRowViewModel">
                     <Grid>
                         <!-- A file or folder found by name: the name whole, the folder after it, its middle segments cut when the row is short. -->
-                        <Grid IsVisible="{Binding IsName}" ColumnDefinitions="Auto,Auto,*" Height="28" Margin="8,0">
-                            <lucide:LucideIcon Kind="{Binding IconKind}" Size="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <Grid IsVisible="{Binding IsName}" ColumnDefinitions="Auto,Auto,*" Height="{DynamicResource OctopusSearchRowHeight}" Margin="6,0">
+                            <lucide:LucideIcon Kind="{Binding IconKind}" Size="{DynamicResource OctopusFileTreeIconSize}" Margin="{DynamicResource OctopusFileTreeIconMargin}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Classes="ex-body" VerticalAlignment="Center" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="2" Classes="ex-hint" Margin="8,0,0,0" VerticalAlignment="Center"
+                            <TextBlock Grid.Column="2" Classes="ex-hint" Margin="6,0,0,0" VerticalAlignment="Center"
                                        Text="{Binding Subtitle}" TextTrimming="PathSegmentEllipsis" />
                         </Grid>
                         <!-- The file above its matching lines -->
-                        <Grid IsVisible="{Binding IsHeader}" ColumnDefinitions="Auto,Auto,*" Height="28" Margin="8,6,8,0">
-                            <lucide:LucideIcon Kind="{Binding IconKind}" Size="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <Grid IsVisible="{Binding IsHeader}" ColumnDefinitions="Auto,Auto,*" Height="{DynamicResource OctopusSearchRowHeight}" Margin="6,4,6,0">
+                            <lucide:LucideIcon Kind="{Binding IconKind}" Size="{DynamicResource OctopusFileTreeIconSize}" Margin="{DynamicResource OctopusFileTreeIconMargin}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Classes="ex-body" FontWeight="Medium" VerticalAlignment="Center" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="2" Classes="ex-hint" Margin="8,0,0,0" VerticalAlignment="Center"
+                            <TextBlock Grid.Column="2" Classes="ex-hint" Margin="6,0,0,0" VerticalAlignment="Center"
                                        Text="{Binding Subtitle}" TextTrimming="PathSegmentEllipsis" />
                         </Grid>
                         <!-- A matching line -->
-                        <Grid IsVisible="{Binding IsMatch}" ColumnDefinitions="32,*" Height="24" Margin="8,0">
+                        <Grid IsVisible="{Binding IsMatch}" ColumnDefinitions="28,*" Height="{DynamicResource OctopusSearchMatchHeight}" Margin="6,0">
                             <TextBlock Classes="ex-hint" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"
                                        FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Text="{Binding LineText}" />
                             <search:HighlightedTextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"

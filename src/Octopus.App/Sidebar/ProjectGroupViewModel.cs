@@ -26,6 +26,7 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
     private readonly Func<ProjectGroupViewModel, Task> _rename;
     private readonly Action<ProjectGroupViewModel> _remove;
     private readonly Action<ProjectGroupViewModel, string> _setColor;
+    private readonly Action<ProjectGroupViewModel, bool> _setMergeWorkspaces;
 
     public ProjectGroupViewModel(
         ProjectGroup group,
@@ -34,15 +35,18 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
         Action<ProjectGroupViewModel> toggle,
         Func<ProjectGroupViewModel, Task> rename,
         Action<ProjectGroupViewModel> remove,
-        Action<ProjectGroupViewModel, string> setColor)
+        Action<ProjectGroupViewModel, string> setColor,
+        Action<ProjectGroupViewModel, bool> setMergeWorkspaces)
     {
         _toggle = toggle;
         _rename = rename;
         _remove = remove;
         _setColor = setColor;
+        _setMergeWorkspaces = setMergeWorkspaces;
         Id = group.Id;
         Name = group.Name;
         Color = group.Color;
+        MergeWorkspaces = group.MergeWorkspaces;
         IsExpanded = isExpanded;
         Chips = chips;
         var tint = Avalonia.Media.Color.TryParse(group.Color, out var color) ? color : Colors.Gray;
@@ -64,6 +68,8 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
     public string Name { get; }
     /// <summary>The group's color as stored; null: none chosen.</summary>
     public string? Color { get; }
+    /// <summary>True when agents launched in this group receive the group's other local project folders as additional directories.</summary>
+    public bool MergeWorkspaces { get; }
     /// <summary>Open on the rail. Changed in place when another group opens, so the view can animate the change.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCollapsed), nameof(HasCurrent), nameof(FolderOpacity), nameof(Tip))]
@@ -110,10 +116,15 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
     public IBrush FolderBackground { get; }
     public IBrush CapsuleBackground { get; }
 
-    public string Tip => _summary + "\n" + AppLangResources.Get(IsExpanded ? AppLangResourceKind.CloseGroup : AppLangResourceKind.OpenGroup);
+    public string Tip =>
+        (MergeWorkspaces
+            ? _summary + " · " + AppLangResources.Get(AppLangResourceKind.GroupMergedWorkspacesTag)
+            : _summary)
+        + "\n" + AppLangResources.Get(IsExpanded ? AppLangResourceKind.CloseGroup : AppLangResourceKind.OpenGroup);
 
     [RelayCommand] private void Toggle() => _toggle(this);
     [RelayCommand] private Task RenameAsync() => _rename(this);
     [RelayCommand] private void Remove() => _remove(this);
     [RelayCommand] private void SetColor(string color) => _setColor(this, color);
+    [RelayCommand] private void ToggleMergeWorkspaces() => _setMergeWorkspaces(this, !MergeWorkspaces);
 }

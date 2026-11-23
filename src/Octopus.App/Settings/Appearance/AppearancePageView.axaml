@@ -5,7 +5,7 @@
              xmlns:appearance="using:Octopus.App.Settings.Appearance"
              x:Class="Octopus.App.Settings.Appearance.AppearancePageView"
              x:DataType="appearance:AppearanceSettingsViewModel">
-    <StackPanel Spacing="16">
+    <StackPanel Spacing="{DynamicResource OctopusSettingsPageSpacing}">
         <StackPanel Spacing="4">
             <TextBlock Classes="title" Text="{l:AppLangResource SettingsNavAppearance}" />
             <TextBlock Classes="subtitle" Text="{l:AppLangResource AppearanceDescription}" />
@@ -16,6 +16,13 @@
                     <arc:SegmentedOption Value="system" Label="{l:AppLangResource AppearanceSystem}" />
                     <arc:SegmentedOption Value="light" Label="{l:AppLangResource AppearanceLight}" />
                     <arc:SegmentedOption Value="dark" Label="{l:AppLangResource AppearanceDark}" />
+                </arc:SegmentedControl>
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsDensity}"
+                             Description="{l:AppLangResource SettingsDensityHint}">
+                <arc:SegmentedControl x:Name="DensityControl" AutoScrollToSelectedItem="False" SelectedValue="{Binding Density, Mode=TwoWay}">
+                    <arc:SegmentedOption Value="compact" Label="{l:AppLangResource DensityCompact}" />
+                    <arc:SegmentedOption Value="comfortable" Label="{l:AppLangResource DensityComfortable}" />
                 </arc:SegmentedControl>
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource Accent}">

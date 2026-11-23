@@ -66,7 +66,7 @@ public sealed class AgentSessionService : IAgentSessionService
 
     public async Task<IReadOnlyList<AgentSessionAccount>> AccountsAsync(AgentDefinition agent, CancellationToken cancellationToken = default)
     {
-        var defaultDirectory = SignalAccounts.ResolveDirectory(agent, null, _home);
+        var defaultDirectory = ResolveDefaultDirectory(agent);
         var directories = await DirectoriesAsync(agent, defaultDirectory, cancellationToken).ConfigureAwait(false);
         return [.. directories
             .Select(d => new AgentSessionAccount(d, Label(agent, d, defaultDirectory), PathKey.Comparer.Equals(d, defaultDirectory), []))
@@ -74,9 +74,26 @@ public sealed class AgentSessionService : IAgentSessionService
             .ThenBy(a => a.Label, StringComparer.CurrentCultureIgnoreCase)];
     }
 
+    private string ResolveDefaultDirectory(AgentDefinition agent)
+    {
+        var resolved = SignalAccounts.ResolveDirectory(agent, null, _home);
+        if (resolved.Length > 0) return resolved;
+        return _sources.TryGetValue(agent.Id, out var source) && source.DefaultDirectory(_home) is { Length: > 0 } fallback
+            ? SignalAccounts.NormalizeDirectory(fallback, _home)
+            : "";
+    }
+
+    private static string? AccountEnvOf(AgentDefinition agent) =>
+        agent.Signals?.Account is { Env.Length: > 0 } sig ? sig.Env :
+        agent.Accounts is { Mode: AccountModes.EnvDir, Env.Length: > 0 } acc ? acc.Env :
+        null;
+
     private async Task<List<string>> DirectoriesAsync(AgentDefinition agent, string defaultDirectory, CancellationToken cancellationToken)
     {
-        if (agent.Signals?.Account is not { Env.Length: > 0 }) return [];
+        if (AccountEnvOf(agent) is null)
+        {
+            return defaultDirectory.Length > 0 && Directory.Exists(defaultDirectory) ? [defaultDirectory] : [];
+        }
         return (await _accounts.DiscoverAsync(agent.Id, cancellationToken).ConfigureAwait(false))
             .Select(a => a.Directory)
             .Prepend(defaultDirectory)
@@ -88,7 +105,7 @@ public sealed class AgentSessionService : IAgentSessionService
     public async Task<AgentSessionGroup> ListAsync(AgentDefinition agent, string projectPath, CancellationToken cancellationToken = default)
     {
         if (!_sources.TryGetValue(agent.Id, out var source)) return new AgentSessionGroup(agent, false, []);
-        var defaultDirectory = SignalAccounts.ResolveDirectory(agent, null, _home);
+        var defaultDirectory = ResolveDefaultDirectory(agent);
         var directories = await DirectoriesAsync(agent, defaultDirectory, cancellationToken).ConfigureAwait(false);
         var lists = await Task.WhenAll(directories.Select(async directory =>
         {
@@ -132,18 +149,21 @@ public sealed class AgentSessionService : IAgentSessionService
     {
         var converter = _converters.FirstOrDefault(c => c.Kind == kind && c.CanConvert(session.AgentId, request.TargetAgentId))
             ?? throw new InvalidOperationException($"No {kind} converter from '{session.AgentId}' to '{request.TargetAgentId}'.");
-        var transcript = await ReadAsync(session, cancellationToken).ConfigureAwait(false);
+        // Direct file copy between Claude accounts only needs the session metadata, not the parsed JSONL turns.
+        var transcript = converter is ClaudeAccountCopyConverter
+            ? new SessionTranscript(session, [])
+            : await ReadAsync(session, cancellationToken).ConfigureAwait(false);
         return await converter.ConvertAsync(transcript, request, cancellationToken).ConfigureAwait(false);
     }
 
     public Dictionary<string, string>? AccountEnvironment(AgentDefinition agent, string accountDirectory, IReadOnlyDictionary<string, string>? inherited)
     {
-        if (agent.Signals?.Account is not { Env.Length: > 0 } spec || accountDirectory.Length == 0) return null;
-        var current = SignalAccounts.ResolveDirectory(agent, inherited?.GetValueOrDefault(spec.Env), _home);
+        if (AccountEnvOf(agent) is not { } envName || accountDirectory.Length == 0) return null;
+        var current = SignalAccounts.ResolveDirectory(agent, inherited?.GetValueOrDefault(envName), _home);
         // Claude reads ~/.claude.json only while CLAUDE_CONFIG_DIR is unset: the variable is set only when the tab would
         // otherwise run in another account.
         if (PathKey.Comparer.Equals(current, accountDirectory)) return null;
-        return new Dictionary<string, string>(StringComparer.Ordinal) { [spec.Env] = accountDirectory };
+        return new Dictionary<string, string>(StringComparer.Ordinal) { [envName] = accountDirectory };
     }
 
     private string Label(AgentDefinition agent, string directory, string defaultDirectory)

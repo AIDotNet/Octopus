@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Octopus.Core.Agents;
 using Octopus.Platform;
+using Octopus.Storage;
 
 namespace Octopus.Agents.Signals;
 
@@ -25,13 +27,14 @@ public interface IAgentAccountDiscovery
 public sealed class AgentAccountDiscovery : IAgentAccountDiscovery
 {
     /// <summary>A scan walks the home directory's hidden folders: not worth repeating on every query.</summary>
-    public static readonly TimeSpan ScanEvery = TimeSpan.FromMinutes(5);
+    public static readonly TimeSpan ScanEvery = TimeSpan.FromMinutes(30);
 
     private const string FileName = "agent-accounts.json";
 
     private readonly ISignalHub _hub;
     private readonly IAgentCatalog _catalog;
     private readonly ILoginEnvironment _login;
+    private readonly IAccountStore? _accountStore;
     private readonly string _file;
     private readonly string _home;
     private readonly TimeProvider _time;
@@ -39,11 +42,19 @@ public sealed class AgentAccountDiscovery : IAgentAccountDiscovery
     private readonly Dictionary<string, DateTimeOffset> _scanned = new(StringComparer.Ordinal);
     private Dictionary<string, HashSet<string>>? _remembered;
 
-    public AgentAccountDiscovery(ISignalHub hub, IAgentCatalog catalog, ILoginEnvironment login, IAppPaths paths, TimeProvider? time = null, string? home = null)
+    public AgentAccountDiscovery(
+        ISignalHub hub,
+        IAgentCatalog catalog,
+        ILoginEnvironment login,
+        IAppPaths paths,
+        TimeProvider? time = null,
+        string? home = null,
+        IAccountStore? accountStore = null)
     {
         _hub = hub;
         _catalog = catalog;
         _login = login;
+        _accountStore = accountStore;
         _file = Path.Combine(paths.DataDirectory, FileName);
         _home = home ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _time = time ?? TimeProvider.System;
@@ -52,11 +63,27 @@ public sealed class AgentAccountDiscovery : IAgentAccountDiscovery
     public async Task<IReadOnlyList<AgentAccount>> DiscoverAsync(string agentId, CancellationToken cancellationToken = default)
     {
         var definition = _catalog.Find(agentId);
-        if (definition?.Signals?.Account is not { Env.Length: > 0 }) return _hub.Accounts(agentId);
+        var envVar = definition?.Signals?.Account?.Env;
+        if (string.IsNullOrEmpty(envVar) && definition?.Accounts is { Mode: AccountModes.EnvDir, Env.Length: > 0 } acc)
+        {
+            envVar = acc.Env;
+        }
+        if (definition is null || string.IsNullOrEmpty(envVar)) return _hub.Accounts(agentId);
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            var configured = (_accountStore?.Current.Accounts ?? [])
+                .Where(a => a.AgentId == definition.Id && !string.IsNullOrWhiteSpace(a.Directory))
+                .ToList();
+            foreach (var record in configured)
+            {
+                if (Directory.Exists(record.Directory))
+                {
+                    _hub.RegisterAccount(definition.Id, record.Directory!, record.Label);
+                }
+            }
+
             var now = _time.GetUtcNow();
             if (_scanned.TryGetValue(definition.Id, out var last) && now - last < ScanEvery) return _hub.Accounts(definition.Id);
 
@@ -69,17 +96,24 @@ public sealed class AgentAccountDiscovery : IAgentAccountDiscovery
             }
 
             Add(SignalAccounts.ResolveDirectory(definition, null, _home));
-            Add(SignalAccounts.ResolveDirectory(definition, environment.GetValueOrDefault(definition.Signals.Account.Env), _home));
+            Add(SignalAccounts.ResolveDirectory(definition, environment.GetValueOrDefault(envVar), _home));
             foreach (var directory in remembered.GetValueOrDefault(definition.Id) ?? []) Add(directory);
             foreach (var account in _hub.Accounts(definition.Id)) Add(account.Directory);
             if (definition.Id == "claude")
             {
-                var variable = environment.GetValueOrDefault(definition.Signals.Account.Env);
+                var variable = environment.GetValueOrDefault(envVar);
                 var found = await Task.Run(() => ClaudeConfigDirectories.Find(_home, variable), cancellationToken).ConfigureAwait(false);
                 foreach (var directory in found) Add(directory);
             }
 
-            foreach (var directory in candidates) _hub.RegisterAccount(definition.Id, directory);
+            foreach (var directory in candidates)
+            {
+                var named = configured.FirstOrDefault(r => string.Equals(
+                    SignalAccounts.NormalizeDirectory(r.Directory!, _home),
+                    SignalAccounts.NormalizeDirectory(directory, _home),
+                    OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase));
+                _hub.RegisterAccount(definition.Id, directory, named?.Label);
+            }
             _scanned[definition.Id] = now;
 
             var accounts = _hub.Accounts(definition.Id);

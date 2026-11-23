@@ -31,7 +31,7 @@ public sealed class ProjectDockController : IDisposable
     /// the UI thread busy) then skips ahead instead of slowing the ring down. At Render priority, so output being drawn
     /// does not starve it.
     /// </summary>
-    private readonly DispatcherTimer _spin = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 60) };
+    private readonly DispatcherTimer _spin = new(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(1000.0 / 30) };
     private readonly System.Diagnostics.Stopwatch _spinClock = new();
     /// <summary>One turn, as long as Arc's spinner in the sidebar takes, so the two rings turn alike.</summary>
     private const double SpinTurnMs = 700;
@@ -53,7 +53,7 @@ public sealed class ProjectDockController : IDisposable
         {
             _activity.Changed += OnActivityChanged;
         }
-        _spin.Tick += (_, _) => Spin();
+        _spin.Tick += OnSpinTick;
         _project = project;
         _projects = projects;
         _registry = registry;
@@ -88,17 +88,21 @@ public sealed class ProjectDockController : IDisposable
         }
         _loading = false;
 
-        Layout.LayoutChanged += (_, _) =>
-        {
-            if (!_loading)
-            {
-                _projects.SetDockLayout(_project, Layout.SaveLayout());
-            }
-        };
+        Layout.LayoutChanged += OnLayoutChanged;
         Layout.ActivePaneChanged += OnActivePaneChanged;
         Layout.PaneClosing += OnPaneClosing;
         Layout.PaneClosed += OnPaneClosed;
         _projects.Changed += OnProjectsChanged;
+    }
+
+    private void OnSpinTick(object? sender, EventArgs e) => Spin();
+
+    private void OnLayoutChanged(object? sender, EventArgs e)
+    {
+        if (!_loading)
+        {
+            _projects.SetDockLayout(_project, Layout.SaveLayout());
+        }
     }
 
     public DockLayout Layout { get; }
@@ -219,6 +223,11 @@ public sealed class ProjectDockController : IDisposable
     public void Dispose()
     {
         _spin.Stop();
+        _spin.Tick -= OnSpinTick;
+        Layout.LayoutChanged -= OnLayoutChanged;
+        Layout.ActivePaneChanged -= OnActivePaneChanged;
+        Layout.PaneClosing -= OnPaneClosing;
+        Layout.PaneClosed -= OnPaneClosed;
         if (_activity is not null)
         {
             _activity.Changed -= OnActivityChanged;
@@ -303,8 +312,26 @@ public sealed class ProjectDockController : IDisposable
         SetSpinning(_panes.Keys.Any(IsWorking));
     }
 
+    private bool _active = true;
+
+    /// <summary>Only the project on screen spins its tab rings: a hidden project's tabs are not drawn.</summary>
+    public void SetActive(bool active)
+    {
+        if (_active == active) return;
+        _active = active;
+        SetSpinning(active && _panes.Keys.Any(IsWorking));
+        if (active)
+        {
+            foreach (var (id, pane) in _panes)
+            {
+                if (IsWorking(id)) pane.Icon = s_spinFrames[_spinFrame];
+            }
+        }
+    }
+
     private void SetSpinning(bool on)
     {
+        on &= _active;
         if (on == _spin.IsEnabled) return;
         if (on) _spinClock.Restart();
         else _spinClock.Stop();

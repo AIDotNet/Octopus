@@ -22,6 +22,9 @@ public interface IRemoteWorkspace
     /// </summary>
     ITerminalConnectionFactory OpenTerminal(RemoteSession session);
 
+    /// <summary>Releases any state held for an open terminal page when the page closes.</summary>
+    void CloseTerminal(RemoteSession session) { }
+
     /// <summary>
     /// True when the terminals are those of another computer: the phone's terminal then only mirrors (it follows the
     /// size and answers nothing to the program; design/12 §4.4).

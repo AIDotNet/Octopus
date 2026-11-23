@@ -15,6 +15,7 @@
   },
   "capabilities": {
     "resume": { "continueLatest": ["--continue"] },
+    "additionalDirs": { "mode": "comma", "args": ["--include-directories", "{value}"] },
     "extraArgs": true,
     "env": {
       "known": [

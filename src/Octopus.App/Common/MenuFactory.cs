@@ -16,6 +16,8 @@ public static class MenuFactory
     {
         public object? CommandParameter { get; init; }
         public bool? IsChecked { get; init; }
+        /// <summary>When <see cref="IsChecked"/> is set, uses a check box instead of a radio dot.</summary>
+        public bool IsCheckBox { get; init; }
         /// <summary>A small control in the icon slot (a color swatch); wins over <see cref="Glyph"/>.</summary>
         public Control? Icon { get; init; }
         public IReadOnlyList<Entry>? Children { get; init; }
@@ -53,8 +55,12 @@ public static class MenuFactory
         }
         if (entry.IsChecked is { } isChecked)
         {
-            row.ToggleType = MenuEntryToggleType.Radio;
+            row.ToggleType = entry.IsCheckBox ? MenuEntryToggleType.CheckBox : MenuEntryToggleType.Radio;
             row.IsChecked = isChecked;
+            if (entry.IsCheckBox)
+            {
+                row.StaysOpenOnClick = false;
+            }
         }
         // A row without an icon shows Arc's placeholder (three dots): every row names what it does with a glyph.
         if (entry.Icon is { } icon)

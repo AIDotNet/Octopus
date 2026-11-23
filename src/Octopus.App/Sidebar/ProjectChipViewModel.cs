@@ -11,6 +11,15 @@ namespace Octopus.App.Sidebar;
 /// <summary>A group a project can be moved into, as its menu lists it.</summary>
 public sealed record GroupChoice(string Id, string Name);
 
+/// <summary>One selectable subscription account for an agent in a project's right-click menu.</summary>
+public sealed record ProjectAgentAccountOption(string? AccountId, string Label, bool IsChecked);
+
+/// <summary>An agent and its available subscription accounts for a project's right-click menu.</summary>
+public sealed record ProjectAgentAccountMenu(string AgentId, string AgentName, IReadOnlyList<ProjectAgentAccountOption> Options);
+
+/// <summary>Command parameter for setting a project's agent account override.</summary>
+public sealed record ProjectAgentAccountSelection(string AgentId, string? AccountId);
+
 /// <summary>One square of the project rail.</summary>
 public sealed partial class ProjectChipViewModel(
     Project project,
@@ -23,7 +32,9 @@ public sealed partial class ProjectChipViewModel(
     Bitmap? image = null,
     IReadOnlyList<GroupChoice>? groups = null,
     Action<ProjectChipViewModel, string?>? moveToGroup = null,
-    Func<ProjectChipViewModel, Task>? newGroup = null) : ObservableObject
+    Func<ProjectChipViewModel, Task>? newGroup = null,
+    IReadOnlyList<ProjectAgentAccountMenu>? agentAccounts = null,
+    Action<ProjectChipViewModel, ProjectAgentAccountSelection>? setAgentAccount = null) : ObservableObject
 {
     public string Id { get; } = project.Id;
     public string Name { get; } = project.Name;
@@ -64,6 +75,11 @@ public sealed partial class ProjectChipViewModel(
     /// <summary>The groups of the rail, for the "Move to group" menu.</summary>
     public IReadOnlyList<GroupChoice> Groups { get; } = groups ?? [];
 
+    /// <summary>Per-agent subscription account choices for local projects when an agent has multiple accounts.</summary>
+    public IReadOnlyList<ProjectAgentAccountMenu> AgentAccounts { get; } = agentAccounts ?? [];
+
+    public bool HasAgentAccounts => AgentAccounts.Count > 0;
+
     /// <summary>An agent (or terminal) of the project is working: the square carries a loading ring. Set in place by the rail.</summary>
     [ObservableProperty] public partial bool IsWorking { get; set; }
 
@@ -86,6 +102,11 @@ public sealed partial class ProjectChipViewModel(
     [RelayCommand] private void MoveToGroup(string? groupId) => moveToGroup?.Invoke(this, groupId);
     /// <summary>Asks for a name and puts the project into a new group of that name.</summary>
     [RelayCommand] private Task NewGroupAsync() => newGroup?.Invoke(this) ?? Task.CompletedTask;
+    /// <summary>Sets or clears a project-level default subscription account for an agent.</summary>
+    [RelayCommand] private void SetAgentAccount(ProjectAgentAccountSelection? selection)
+    {
+        if (selection is not null) setAgentAccount?.Invoke(this, selection);
+    }
 
     /// <summary>A folder on an SSH host has nothing to show in this computer's file manager.</summary>
     private bool CanReveal => !IsRemote;

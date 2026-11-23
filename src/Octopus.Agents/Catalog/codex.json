@@ -54,6 +54,7 @@
     },
     "prompt": { "mode": "positional" },
     "resume": { "continueLatest": ["resume", "--last"], "byId": ["resume", "{id}"] },
+    "additionalDirs": { "mode": "repeat", "args": ["--add-dir", "{value}"] },
     "extraArgs": true,
     "env": {
       "known": [
@@ -97,6 +98,21 @@
       "timeoutMs": 30000,
       "minIntervalSec": 120,
       "exclusivePer": "account"
+    }
+  },
+  "accounts": {
+    "mode": "envDir",
+    "env": "CODEX_HOME",
+    "defaultDir": "~/.codex",
+    "loginArgs": ["login"],
+    "logoutArgs": ["logout"],
+    "unsetEnv": ["OPENAI_API_KEY"],
+    "initFiles": {
+      "config.toml": "cli_auth_credentials_store = \"file\"\n"
+    },
+    "identityFile": {
+      "path": "auth.json",
+      "kind": "codexAuthJwt"
     }
   }
 }

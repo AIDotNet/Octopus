@@ -19,8 +19,7 @@ namespace Octopus.App.Shell;
 /// </summary>
 public class MainWindow : ArcWindow
 {
-    private const double TopRowHeight = 40;
-
+    private readonly ThemeService _theme;
     private readonly ShellViewModel _shell;
     private readonly IAppKeymap _keymap;
     private bool _closing;
@@ -44,9 +43,12 @@ public class MainWindow : ArcWindow
         MinHeight = 460;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        // No Arc title bar: the content reaches the window's top edge. The system buttons are centered in a 40 px band.
+        _theme = AppHost.Get<ThemeService>();
+        // No Arc title bar: the content reaches the window's top edge. The system buttons are centered in the top row band.
         IsTitleBarVisible = false;
-        ExtendClientAreaTitleBarHeightHint = TopRowHeight;
+        ExtendClientAreaTitleBarHeightHint = _theme.Metrics.TopRowHeight;
+        _theme.DensityChanged += OnDensityChanged;
+        Closed += (_, _) => _theme.DensityChanged -= OnDensityChanged;
 
         AppHost.Get<IWindowAccessor>().Window = this;
         _shell = AppHost.Get<ShellViewModel>();
@@ -60,6 +62,9 @@ public class MainWindow : ArcWindow
         WindowPlacementTracker.Track(this, AppHost.Get<ISettingsStore>());
     }
 
+    private void OnDensityChanged(object? sender, UiDensityMetrics metrics) =>
+        ExtendClientAreaTitleBarHeightHint = metrics.TopRowHeight;
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
         if (_keymap.Match(e) is { } command)
@@ -71,7 +76,7 @@ public class MainWindow : ArcWindow
 
     private void OnTopRowPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (e.Handled || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || e.GetPosition(this).Y >= TopRowHeight)
+        if (e.Handled || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed || e.GetPosition(this).Y >= _theme.Metrics.TopRowHeight)
         {
             return;
         }

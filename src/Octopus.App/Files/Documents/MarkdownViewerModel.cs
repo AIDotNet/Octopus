@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -47,7 +48,8 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     private int _version;
     private int _dirtyVersion;
     private MarkdownFileText _document = MarkdownFileText.Empty;
-    private byte[]? _diskBytes;
+    private byte[]? _diskHash;
+    private long _diskLength = -1;
     private FileRead? _pendingDisk;
     private string? _baseline;
     private string? _assessedText;
@@ -218,7 +220,8 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     {
         var read = await Task.Run(() => FileReader.Read(Path, MaxBytes));
         if (Disposed) return;
-        if (read.Bytes is { } bytes && _diskBytes is { } known && bytes.AsSpan().SequenceEqual(known)) return;
+        if (read.Bytes is { } bytes && bytes.Length == _diskLength && _diskHash is { } known
+            && CryptographicOperations.FixedTimeEquals(SHA256.HashData(bytes), known)) return;
         if (!HasUnsavedChanges)
         {
             _version++;
@@ -253,7 +256,8 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
         _baseline = null;
         if (read.Problem is { } problem)
         {
-            _diskBytes = null;
+            _diskHash = null;
+            _diskLength = -1;
             Text = "";
             FileSize = 0;
             IsEditing = false;
@@ -264,7 +268,8 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
         }
         Notice = null;
         var bytes = read.Bytes!;
-        _diskBytes = bytes;
+        _diskHash = SHA256.HashData(bytes);
+        _diskLength = bytes.Length;
         FileSize = bytes.Length;
         var utf8 = MarkdownFileText.TryDecode(bytes, out var document);
         if (!utf8) document = MarkdownFileText.Empty with { Text = Encoding.UTF8.GetString(bytes) };
@@ -360,7 +365,16 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     [RelayCommand]
     private void KeepMine()
     {
-        _diskBytes = _pendingDisk?.Bytes;
+        if (_pendingDisk?.Bytes is { } bytes)
+        {
+            _diskHash = SHA256.HashData(bytes);
+            _diskLength = bytes.Length;
+        }
+        else
+        {
+            _diskHash = null;
+            _diskLength = -1;
+        }
         _pendingDisk = null;
         SetBanner(MarkdownBanner.None, "");
     }
@@ -420,7 +434,8 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
             SetBanner(MarkdownBanner.SaveFailed, AppLangResources.Format(AppLangResourceKind.MdSaveFailed, e.Message));
             return false;
         }
-        _diskBytes = bytes;
+        _diskHash = SHA256.HashData(bytes);
+        _diskLength = bytes.Length;
         _pendingDisk = null;
         _baseline = markdown;
         FileSize = bytes.Length;

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 
@@ -77,34 +78,43 @@ public static class SessionName
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var start = Math.Max(0, stream.Length - TailBytes);
+            var length = (int)(stream.Length - start);
+            if (length <= 0) return null;
             stream.Seek(start, SeekOrigin.Begin);
-            var buffer = new byte[stream.Length - start];
-            stream.ReadExactly(buffer);
-            var span = buffer.AsSpan();
-            // The first line may be cut in half when the tail starts mid-file.
-            if (start > 0 && span.IndexOf((byte)'\n') is var first and >= 0) span = span[(first + 1)..];
-            string? title = null;
-            while (span.Length > 0)
+            var rented = ArrayPool<byte>.Shared.Rent(length);
+            try
             {
-                var end = span.IndexOf((byte)'\n');
-                var line = end < 0 ? span : span[..end];
-                span = end < 0 ? default : span[(end + 1)..];
-                if (line.IndexOf(AiTitleMarker) < 0) continue;
-                try
+                stream.ReadExactly(rented.AsSpan(0, length));
+                var span = rented.AsSpan(0, length);
+                // The first line may be cut in half when the tail starts mid-file.
+                if (start > 0 && span.IndexOf((byte)'\n') is var first and >= 0) span = span[(first + 1)..];
+                string? title = null;
+                while (span.Length > 0)
                 {
-                    var reader = new Utf8JsonReader(line);
-                    using var document = JsonDocument.ParseValue(ref reader);
-                    var root = document.RootElement;
-                    if (StringOf(root, "type") == "ai-title" && StringOf(root, "aiTitle") is { Length: > 0 } found)
+                    var end = span.IndexOf((byte)'\n');
+                    var line = end < 0 ? span : span[..end];
+                    span = end < 0 ? default : span[(end + 1)..];
+                    if (line.IndexOf(AiTitleMarker) < 0) continue;
+                    try
                     {
-                        title = found.Trim();
+                        var reader = new Utf8JsonReader(line);
+                        using var document = JsonDocument.ParseValue(ref reader);
+                        var root = document.RootElement;
+                        if (StringOf(root, "type") == "ai-title" && StringOf(root, "aiTitle") is { Length: > 0 } found)
+                        {
+                            title = found.Trim();
+                        }
+                    }
+                    catch (JsonException)
+                    {
                     }
                 }
-                catch (JsonException)
-                {
-                }
+                return string.IsNullOrWhiteSpace(title) ? null : title;
             }
-            return string.IsNullOrWhiteSpace(title) ? null : title;
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {

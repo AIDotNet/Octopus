@@ -6,6 +6,7 @@ using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Settings;
 using Octopus.Core.Agents;
+using TKCode.Arc;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Launcher;
@@ -20,6 +21,7 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
     private readonly IAgentCommandCompiler _compiler;
     private readonly Action<AgentLaunchOptions> _launch;
     private readonly List<AgentOption> _known = [];
+    private readonly IReadOnlyList<AgentAccountRecord> _accounts;
     private readonly string _permissionId;
 
     public AgentLaunchViewModel(
@@ -29,17 +31,21 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         IAgentCommandCompiler compiler,
         IModelDiscovery discovery,
         string? executable,
-        Action<AgentLaunchOptions> launch)
+        Action<AgentLaunchOptions> launch,
+        IReadOnlyList<AgentAccountRecord>? accounts = null,
+        string? preferredAccountId = null)
     {
         _definition = definition;
         _compiler = compiler;
         _launch = launch;
+        _accounts = accounts ?? [];
 
         var capabilities = definition.Capabilities;
         HasModel = capabilities.Model is not null;
         HasEffort = capabilities.Effort is not null;
         HasFast = capabilities.Fast is not null;
         HasPrompt = capabilities.Prompt is not null;
+        HasAccounts = _accounts.Count >= 2;
         AllowCustomModel = capabilities.Model?.AllowCustom ?? false;
         AgentName = definition.Name;
 
@@ -56,6 +62,10 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         SelectedModelId = string.IsNullOrEmpty(profile.Model) ? null : profile.Model;
         Fast = profile.Fast ?? false;
         SelectedEffortId = profile.Effort ?? "";
+        SelectedAccountId = HasAccounts
+            ? (_accounts.FirstOrDefault(a => a.Id == preferredAccountId)?.Id ?? _accounts[0].Id)
+            : null;
+        RebuildAccounts();
         RebuildModels();
         RebuildEfforts();
         ArcLanguage.Changed += OnLanguageChanged;
@@ -71,6 +81,7 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
     public bool HasEffort { get; }
     public bool HasFast { get; }
     public bool HasPrompt { get; }
+    public bool HasAccounts { get; }
     public bool AllowCustomModel { get; }
     public string EffortCaption => EffortCaptionOf(_definition.Capabilities.Effort?.Label);
 
@@ -80,10 +91,12 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ModelOptionViewModel> Models { get; } = [];
     public ObservableCollection<EffortChoiceViewModel> Efforts { get; } = [];
+    public ObservableCollection<SelectOption> AccountOptions { get; } = [];
 
     [ObservableProperty] public partial string ModelQuery { get; set; } = "";
     [ObservableProperty] public partial string? SelectedModelId { get; set; }
     [ObservableProperty] public partial string SelectedEffortId { get; set; } = "";
+    [ObservableProperty] public partial string? SelectedAccountId { get; set; }
     [ObservableProperty] public partial bool Fast { get; set; }
     [ObservableProperty] public partial string Prompt { get; set; } = "";
     [ObservableProperty] public partial bool IsDiscovering { get; set; }
@@ -145,8 +158,26 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         Model = HasModel ? SelectedModelId ?? "" : null,
         Effort = HasEffort ? SelectedEffortId : null,
         Fast = HasFast ? Fast : null,
+        AccountId = HasAccounts && !string.IsNullOrWhiteSpace(SelectedAccountId) ? SelectedAccountId : null,
         Prompt = HasPrompt && !string.IsNullOrWhiteSpace(Prompt) ? Prompt.Trim() : null,
     };
+
+    private void RebuildAccounts()
+    {
+        AccountOptions.Clear();
+        if (!HasAccounts) return;
+        foreach (var account in _accounts)
+        {
+            var label = account.IsDefaultOrigin && account.Label == "Default"
+                ? AppLangResources.Get(AppLangResourceKind.AccountDefaultName)
+                : account.Label;
+            if (!string.IsNullOrWhiteSpace(account.Identity))
+            {
+                label = $"{label} ({account.Identity})";
+            }
+            AccountOptions.Add(new SelectOption(account.Id, label));
+        }
+    }
 
     private void RebuildModels()
     {
@@ -229,6 +260,7 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
 
     private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.PostToUi(() =>
     {
+        RebuildAccounts();
         RebuildModels();
         RebuildEfforts();
         OnPropertyChanged(nameof(EffortCaption));

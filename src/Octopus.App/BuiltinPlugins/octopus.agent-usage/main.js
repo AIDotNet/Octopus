@@ -1,11 +1,13 @@
-// Agent usage (design/plugins/12-内置插件-智能体用量.md): subscription windows and session cost of the coding agents
-// installed here, from their official sources. The host collects (signals, probes); this plugin converts, decides
-// when to ask, warns at thresholds and shows the results (an indicator with a popover, and a history tab).
+// Agent usage (design/plugins/12-内置插件-智能体用量.md): subscription windows of the coding agents installed here,
+// from their official sources, and the balance and quota of the API providers the user added a key for. The host
+// collects (signals, probes); this plugin converts, decides when to ask, warns at thresholds and shows the results
+// (an indicator with a tabbed popover, and a history tab).
 
-import { agents, app, commands, config, env, indicators, notifications, permissions, scheduler, ui, views, workspace } from 'octopus';
+import { agents, app, commands, config, env, indicators, notifications, permissions, scheduler, secrets, ui, views, workspace } from 'octopus';
 import * as adapters from './adapters.js';
-import { renderPopover } from './popover.js';
-import { HistoryView, costSummary, ensureScanned, onChange as onHistoryChange } from './history.js';
+import { API_TAB, renderPopover } from './popover.js';
+import { PROVIDERS, providerById } from './providers.js';
+import { HistoryView } from './history.js';
 
 const AGENTS = ['claude', 'codex', 'grok', 'cursor', 'opencode'];
 const CODEX_INTERVAL = 5 * 60_000;
@@ -14,16 +16,24 @@ const CURSOR_INTERVAL = 24 * 60 * 60_000;
 // refresh interval, so a scheduled run (which may come a little early) still finds the reading stale.
 const CODEX_FRESH = 3 * 60_000;
 const CURSOR_FRESH = 20 * 60 * 60_000;
+// API providers: every 10 minutes while the window is visible; a reading younger than 8 minutes is not asked again.
+const API_INTERVAL = 10 * 60_000;
+const API_FRESH = 8 * 60_000;
 
 const t = (zh, en) => ((env.language ?? '').startsWith('zh') ? zh : en);
 
-/** agentId → { name, installed, snapshots: Map<account, {snapshot, updatedAt}>, error? } */
+/**
+ * agentId → { name, installed, snapshots: Map<account, {snapshot, updatedAt}>, error? }. API providers live here too,
+ * as `api:<provider id>` with one snapshot under '' (and `busy` while a query runs): thresholds and resets cover them.
+ */
 const state = new Map();
 let indicator;
 let invalidatePopover = () => {};
 let providers = {};
 let lastUsed = {};          // agentId → ms of the latest activity we heard of
-const opencodeSessions = new Map();
+// The popover's tab: what the user picked, and the agent of the active tab at that moment. Switching to another
+// agent's terminal makes that agent the default again.
+let picked = { tab: undefined, active: undefined };
 const claudePlans = new Map(); // account key → "Max 20x"
 const signedOut = new Set();  // Claude accounts whose login is gone: no row waiting for data that cannot come
 // `${agent}:${account}:${window}` → { level, at, resetsAt, sent }: the highest threshold handled in this window cycle, when
@@ -32,11 +42,15 @@ const signedOut = new Set();  // Claude accounts whose login is gone: no row wai
 const notices = new Map();
 let store;
 const NOTICES_KEY = 'notices';
+const API_IDS_KEY = 'apiProviders';   // providers with a key in the secret store
+const API_CACHE_KEY = 'apiCache';     // provider id → { snapshot, updatedAt }: shown at start, before asking again
+let apiIds = [];
 const CYCLE_SLACK = 10 * 60_000; // two readings of one window may disagree on its reset time by a little
 
 export async function activate(ctx) {
   store = ctx.globalState;
   await loadNotices();
+  await loadApi();
   const list = await agents.list();
   for (const a of list) {
     if (AGENTS.includes(a.id)) state.set(a.id, { name: a.name, installed: a.installed, snapshots: new Map() });
@@ -57,16 +71,13 @@ export async function activate(ctx) {
       // A state made during render belongs to this popover: setting it re-renders the popover while it is open.
       const tick = ui.state(0);
       invalidatePopover = () => tick.set(tick.get() + 1);
-      // The cost lines come from the history totals: an opened popover brings them up to date (at most every 5 minutes).
-      ensureScanned();
-      return renderPopover(view());
+      return renderPopover(popoverModel());
     },
   };
   ctx.subscriptions.push(indicator);
-  ctx.subscriptions.push(onHistoryChange(() => refreshViews()));
 
   // Claude: every status line refresh of a running session carries the windows (official, design 12 §4.1). With a
-  // custom command as the source, the windows come from the command and the status line only adds the session cost.
+  // custom command as the source, the windows come from the command and the status line only adds the session numbers.
   if (state.get('claude')?.installed && permissions.has('agents.signals.claude.statusline')) {
     ctx.subscriptions.push(agents.onSignal('claude', 'statusline', e => {
       lastUsed.claude = Date.now();
@@ -95,30 +106,9 @@ export async function activate(ctx) {
     ctx.subscriptions.push(app.onDidWake(() => refreshClaudeCommand()));
   }
 
-  // Grok: no quota source; a status line, if Grok ever lets one be attached, gives the session cost.
-  if (state.get('grok')?.installed) {
-    publish('grok', '', adapters.grokSnapshot());
-    if (permissions.has('agents.signals.grok.statusline')) {
-      ctx.subscriptions.push(agents.onSignal('grok', 'statusline', e => {
-        lastUsed.grok = Date.now();
-        publish('grok', e.account, adapters.grokSnapshot(e.payload));
-      }));
-    }
-  }
-
-  // OpenCode: the forwarder plugin reports session.usage.updated; sessions are summed.
-  if (state.get('opencode')?.installed) {
-    publish('opencode', '', adapters.opencodeFromSessions(opencodeSessions));
-    if (permissions.has('agents.signals.opencode.session-usage')) {
-      ctx.subscriptions.push(agents.onSignal('opencode', 'session-usage', e => {
-        const usage = adapters.opencodeUsageEvent(e.payload);
-        if (!usage) return;
-        lastUsed.opencode = Date.now();
-        opencodeSessions.set(usage.id, usage);
-        publish('opencode', '', adapters.opencodeFromSessions(opencodeSessions));
-      }));
-    }
-  }
+  // Grok and OpenCode: no quota source of their own; the popover says where their usage can be seen.
+  if (state.get('grok')?.installed) publish('grok', '', adapters.grokSnapshot());
+  if (state.get('opencode')?.installed) publish('opencode', '', adapters.opencodeSnapshot());
 
   // Codex: the app-server probe, soon after start, then every 5 minutes while the window is visible.
   if (state.get('codex')?.installed) {
@@ -131,6 +121,10 @@ export async function activate(ctx) {
     setTimeout(() => refreshCursor(), 5_000);
     ctx.subscriptions.push(scheduler.every(CURSOR_INTERVAL, () => refreshCursor(), { whenVisible: true }));
   }
+
+  // API providers with a key: soon after start, then every 10 minutes while the window is visible.
+  setTimeout(() => refreshProviders(), 6_000);
+  ctx.subscriptions.push(scheduler.every(API_INTERVAL, () => refreshProviders(), { whenVisible: true, runOnWake: true, jitter: 0.2 }));
 
   // The indicator follows the agent of the active tab.
   ctx.subscriptions.push(workspace.onDidChangeActiveItem(() => updateIndicator()));
@@ -346,7 +340,7 @@ function mergeSession(agentId, session) {
 /** The refresh button and the command: ask everything again, whatever the cache says. */
 async function refreshAll() {
   const force = { force: true };
-  await Promise.all([refreshCodex(force), refreshCursor(force), refreshClaudeCommand(force), refreshClaudePlans(force)]);
+  await Promise.all([refreshCodex(force), refreshCursor(force), refreshClaudeCommand(force), refreshClaudePlans(force), refreshProviders(force)]);
   refreshViews();
 }
 
@@ -408,6 +402,7 @@ function publish(agentId, account, snapshot, at) {
   entry.snapshots.set(key, { snapshot, updatedAt: at ?? Date.now() });
   providers[agentId]?.update({ ...snapshot, account: key || undefined });
   warn(agentId, key, previous, snapshot);
+  if (entry.api) saveApiCache();
   refreshViews();
 }
 
@@ -519,10 +514,159 @@ export function formatReset(ms) {
   return date.toLocaleString(env.language, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// ───────────────────────── API providers ─────────────────────────
+
+const secretName = id => `apiKey.${id}`;
+
+function apiAvailable() {
+  return permissions.has('net') && permissions.has('secrets');
+}
+
+function apiEntry(id) {
+  const key = `api:${id}`;
+  let entry = state.get(key);
+  if (!entry) {
+    entry = { name: providerById(id)?.name ?? id, installed: true, api: true, snapshots: new Map() };
+    state.set(key, entry);
+  }
+  return entry;
+}
+
+async function loadApi() {
+  let ids;
+  let cache;
+  try {
+    ids = await store?.get(API_IDS_KEY);
+    cache = await store?.get(API_CACHE_KEY);
+  } catch { /* nothing remembered */ }
+  apiIds = (Array.isArray(ids) ? ids : []).filter(id => providerById(id));
+  for (const id of apiIds) {
+    const entry = apiEntry(id);
+    const cached = cache?.[id];
+    if (!cached?.snapshot) continue;
+    entry.snapshots.set('', { snapshot: cached.snapshot, updatedAt: cached.updatedAt });
+    warn(`api:${id}`, '', undefined, cached.snapshot); // the baseline
+  }
+}
+
+function saveApiIds() {
+  try { Promise.resolve(store?.set(API_IDS_KEY, apiIds)).catch(() => {}); } catch { /* kept for this run */ }
+}
+
+function saveApiCache() {
+  const cache = {};
+  for (const id of apiIds) {
+    const value = state.get(`api:${id}`)?.snapshots.get('');
+    if (value) cache[id] = value;
+  }
+  try { Promise.resolve(store?.set(API_CACHE_KEY, cache)).catch(() => {}); } catch { /* kept for this run */ }
+}
+
+async function refreshProviders({ force = false } = {}) {
+  if (!apiAvailable()) return;
+  await Promise.all(apiIds.filter(id => force || !isFresh(`api:${id}`, '', API_FRESH)).map(id => queryProvider(id)));
+}
+
+/** Asks one provider; with `key` it checks a key that is not stored yet. Resolves to 'ok', 'refused' or 'failed'. */
+async function queryProvider(id, key) {
+  const provider = providerById(id);
+  const entry = apiEntry(id);
+  if (!provider || entry.busy) return 'failed';
+  entry.busy = true;
+  refreshViews();
+  try {
+    const secret = key ?? await secrets.get(secretName(id));
+    if (!secret) {
+      entry.error = t('没有找到密钥，请重新添加。', 'The key is missing; add it again.');
+      return 'failed';
+    }
+    const snapshot = await provider.query(secret);
+    entry.error = undefined;
+    publish(`api:${id}`, '', { ...snapshot, source: provider.unofficial ? 'unofficial' : 'official' });
+    return 'ok';
+  } catch (e) {
+    entry.error = e?.message ?? String(e);
+    return e?.kind === 'auth' ? 'refused' : 'failed';
+  } finally {
+    entry.busy = false;
+    refreshViews();
+  }
+}
+
+/** Adds (or, given an id, replaces) a provider's key: asked in a password field, checked, then stored. */
+async function addProvider(id) {
+  if (!apiAvailable()) return;
+  if (!id) {
+    const items = PROVIDERS.filter(p => !apiIds.includes(p.id)).map(p => ({ id: p.id, label: p.name, description: p.hint }));
+    const choice = await ui.pick(items, { placeholder: t('选择服务商', 'Choose a provider') });
+    if (!choice) return;
+    id = choice.id;
+  }
+  const provider = providerById(id);
+  const typed = await ui.prompt({
+    title: t(`${provider.name} 的 API 密钥`, `${provider.name} API key`),
+    description: [
+      provider.hint,
+      provider.unofficial ? t('这家的用量接口没有公开文档，可能随时失效。', 'This provider’s usage endpoint is undocumented and may stop working at any time.') : '',
+      t('密钥存进系统密钥库，只发往这家服务商的接口。', 'The key goes into the system keychain and is sent only to this provider’s API.'),
+    ].filter(Boolean).join('\n'),
+    label: t('API 密钥', 'API key'),
+    placeholder: 'sk-…',
+    password: true,
+    confirmLabel: t('保存', 'Save'),
+  });
+  const key = typeof typed === 'string' ? typed.trim() : '';
+  if (!key) return;
+  const known = apiIds.includes(id);
+  // A refused key is not kept; one that could not be checked (offline, a busy server) is, with the error shown.
+  const result = await queryProvider(id, key);
+  if (result === 'refused') {
+    ui.toast(t(`${provider.name} 拒绝了这个密钥：${state.get(`api:${id}`)?.error ?? ''}`, `${provider.name} refused the key: ${state.get(`api:${id}`)?.error ?? ''}`), { kind: 'warning' });
+    if (!known) state.delete(`api:${id}`);
+    else state.get(`api:${id}`).error = undefined;
+    refreshViews();
+    return;
+  }
+  try {
+    await secrets.set(secretName(id), key);
+  } catch (e) {
+    ui.toast(t(`密钥没有保存：${e?.message ?? e}`, `The key was not saved: ${e?.message ?? e}`), { kind: 'warning' });
+    if (!known) state.delete(`api:${id}`);
+    refreshViews();
+    return;
+  }
+  if (!known) {
+    apiIds = [...apiIds, id];
+    saveApiIds();
+  }
+  saveApiCache();
+  picked = { tab: API_TAB, active: workspace.activeItem?.agentId };
+  refreshViews();
+}
+
+async function removeProvider(id) {
+  const provider = providerById(id);
+  const ok = await ui.confirm({
+    title: t(`移除 ${provider?.name ?? id}？`, `Remove ${provider?.name ?? id}?`),
+    description: t('它的密钥会从系统密钥库删除。', 'Its key is deleted from the system keychain.'),
+    confirmLabel: t('移除', 'Remove'),
+    danger: true,
+  });
+  if (!ok) return;
+  try { await secrets.delete(secretName(id)); } catch { /* gone already */ }
+  apiIds = apiIds.filter(x => x !== id);
+  state.delete(`api:${id}`);
+  for (const key of [...notices.keys()]) if (key.startsWith(`api:${id}:`)) notices.delete(key);
+  saveNotices();
+  saveApiIds();
+  saveApiCache();
+  refreshViews();
+}
+
 // ───────────────────────── showing ─────────────────────────
 
-/** What the popover and the indicator show: installed agents in a fixed order, without the hidden ones. */
-function view() {
+/** The installed agents in a fixed order, without the hidden ones: their accounts with data, and those still waiting. */
+function agentRows() {
   const hide = hidden();
   const rows = [];
   for (const id of AGENTS) {
@@ -531,25 +675,72 @@ function view() {
     const accounts = accountsOf(id);
     // Accounts by their names ("55232/config"), not their keys, when an agent has several.
     const labels = new Map(accounts.map(a => [a.key, a.label]));
+    const byName = (a, b) => (labels.get(a.account) ?? a.account).localeCompare(labels.get(b.account) ?? b.account);
     const snapshots = [...entry.snapshots.entries()]
-      .map(([account, value]) => ({ account, ...value, snapshot: withoutPassed(value.snapshot) }));
-    // Claude reports only while one of its sessions runs: an account that has not yet is listed with what to do.
-    if (id === 'claude' && claudeSource() !== 'command') {
-      for (const { key } of accounts) {
-        if (entry.snapshots.has(key) || signedOut.has(key)) continue;
-        snapshots.push({
-          account: key, updatedAt: undefined,
-          snapshot: {
-            windows: [], plan: claudePlans.get(key) ?? undefined,
-            unavailable: { reason: 'noRecentSession', hint: t('还没有这个配置的用量：用它启动一个 Claude 会话，或在设置 → 插件 → 智能体用量里接入。', 'No usage from this configuration yet: start a Claude session with it, or connect it in Settings → Plugins → Agent Usage.') },
-          },
-        });
-      }
-    }
-    snapshots.sort((a, b) => (labels.get(a.account) ?? a.account).localeCompare(labels.get(b.account) ?? b.account));
-    rows.push({ id, name: entry.name, snapshots: snapshots.map(s => ({ ...s, label: labels.get(s.account) })), error: entry.error });
+      .map(([account, value]) => ({ account, ...value, snapshot: withoutPassed(value.snapshot), label: labels.get(account) }))
+      .sort(byName);
+    // Claude reports only while one of its sessions runs: accounts that have not yet are named, with what to do.
+    const waiting = id === 'claude' && claudeSource() !== 'command'
+      ? accounts.filter(a => !entry.snapshots.has(a.key) && !signedOut.has(a.key)).map(a => ({ account: a.key, label: a.label })).sort(byName)
+      : [];
+    rows.push({ id, name: entry.name, snapshots, waiting, error: entry.error });
   }
-  return { rows, costs: costSummary(), refresh: () => refreshAll(), t, formatReset };
+  return rows;
+}
+
+function highest(snapshots) {
+  let best;
+  for (const { snapshot } of snapshots) {
+    const w = adapters.tightest(snapshot);
+    if (w && (best === undefined || w.usedPercent > best)) best = w.usedPercent;
+  }
+  return best;
+}
+
+function apiModel() {
+  return {
+    available: apiAvailable(),
+    providers: apiIds.map(id => {
+      const provider = providerById(id);
+      const entry = state.get(`api:${id}`);
+      const value = entry?.snapshots.get('');
+      return {
+        id, name: provider.name, unofficial: !!provider.unofficial, console: provider.console,
+        snapshot: value && withoutPassed(value.snapshot), updatedAt: value?.updatedAt, error: entry?.error, busy: !!entry?.busy,
+      };
+    }),
+    addable: PROVIDERS.filter(p => !apiIds.includes(p.id)),
+    add: () => addProvider(),
+    replace: id => addProvider(id),
+    remove: id => removeProvider(id),
+  };
+}
+
+/** What the popover shows: a tab per agent (with its tightest window) and one for the API providers. */
+function popoverModel() {
+  const rows = agentRows();
+  const api = apiModel();
+  // "Claude Code", "Codex CLI": the product word is dropped in the tab, where width is short.
+  const tabs = rows.map(r => ({ id: r.id, name: r.name.replace(/\s+(Code|CLI)$/i, ''), percent: highest(r.snapshots) }));
+  if (api.available && !hidden().includes('api')) {
+    tabs.push({ id: API_TAB, name: t('API 余额', 'API balance'), percent: highest(api.providers.filter(p => p.snapshot)) });
+  }
+  const active = workspace.activeItem?.agentId;
+  const keep = tabs.some(tab => tab.id === picked.tab) && (picked.active === active || !tabs.some(tab => tab.id === active));
+  const selected = keep ? picked.tab
+    : tabs.find(tab => tab.id === active)?.id ?? tabs.find(tab => tab.percent !== undefined)?.id ?? tabs[0]?.id;
+  return {
+    // Compact unless the user chose comfortable (Settings → Plugins → Agent Usage).
+    style: config.get('octopus.agent-usage.style') === 'comfortable' ? 'comfortable' : 'compact',
+    tabs, selected, api, t,
+    agent: id => rows.find(r => r.id === id),
+    select: id => {
+      if (id === picked.tab && picked.active === active) return;
+      picked = { tab: id, active };
+      invalidatePopover();
+    },
+    refresh: () => refreshAll(),
+  };
 }
 
 /** Windows whose reset time has passed are shown as reset (0%), not as the stale value. */
@@ -607,6 +798,6 @@ function refreshViews() {
   });
 }
 
-// For tests and the history view.
-export const _internal = { state, view, publish };
+// For tests.
+export const _internal = { state, popoverModel, publish };
 void app;

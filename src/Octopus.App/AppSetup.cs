@@ -20,9 +20,10 @@ public static class AppSetup
                .WithArcFonts()
                .UseArc(arc => arc
                    .UseLanguages(AppLanguages.Initial, AppLanguages.Supported)
-                   .UseArcBlocks()   // Arc's controls and blocks (SettingsPage); registers UseArcControls() too
-                   .UseArcDock()     // the workspace: tab groups and splits
-                   .UseArcCorners()  // compact corners: the whole app is a dense tool, not a landing page
+                   .UseArcBlocks()       // Arc's controls and blocks (SettingsPage); registers UseArcControls() and UseArcMarkdown() too
+                   .UseArcHighlighting() // TextMate syntax highlighting for CodeBlock, the Markdown editor and fenced code
+                   .UseArcDock()         // the workspace: tab groups and splits
+                   .UseArcCorners()      // compact corners: the whole app is a dense tool, not a landing page
                    // The app's own package: its text (Localization/) and any Arc controls of its own.
                    .UsePackage("Octopus", static p => TKCode.Arc.Generated.Octopus.ArcGeneratedAssets.AddTo(p))
                    // The saved appearance and accent, read from settings.json before the first frame.

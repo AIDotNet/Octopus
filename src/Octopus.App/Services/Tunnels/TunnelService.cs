@@ -451,6 +451,13 @@ public sealed partial class TunnelService : ITunnelService
                     process.Kill();
                     break;
                 }
+                if (cameUp)
+                {
+                    // Up: nothing left to poll for; sleep until the process ends or the tunnel is stopped.
+                    try { await exited.Task.WaitAsync(token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { }
+                    break;
+                }
                 await Task.WhenAny(exited.Task, Task.Delay(_timings.PollInterval, CancellationToken.None)).ConfigureAwait(false);
             }
             if (token.IsCancellationRequested) process.Kill();
@@ -509,7 +516,7 @@ public sealed partial class TunnelService : ITunnelService
         if (text.Length == 0) return;
         entry.Run.AppendLog(text);
         log.Say(text);
-        var value = SshTunnelLog.EventOf(line);
+        var value = SshTunnelLog.EventOfCleaned(text);
         switch (value)
         {
             case SshTunnelEvent.Authenticated:

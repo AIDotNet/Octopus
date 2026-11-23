@@ -8,6 +8,9 @@ internal sealed class TreeWatcher : IDisposable
 {
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(200);
 
+    private const int MaxPendingDirectories = 64;
+    private static readonly char[] Separators = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+
     private readonly string _root;
     private readonly Action<string> _onChanged;
     private readonly FileSystemWatcher? _watcher;
@@ -28,6 +31,7 @@ internal sealed class TreeWatcher : IDisposable
             {
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                InternalBufferSize = 64 * 1024,
             };
             _watcher.Created += (_, e) => Add(e.FullPath);
             _watcher.Deleted += (_, e) => Add(e.FullPath);
@@ -62,7 +66,15 @@ internal sealed class TreeWatcher : IDisposable
         lock (_gate)
         {
             if (_disposed) return;
-            _pending.Add(directory);
+            if (_pending.Count >= MaxPendingDirectories && !_pending.Contains(directory))
+            {
+                _pending.Clear();
+                _pending.Add(_root);
+            }
+            else
+            {
+                _pending.Add(directory);
+            }
             _timer.Change(Debounce, Timeout.InfiniteTimeSpan);
         }
     }
@@ -70,10 +82,16 @@ internal sealed class TreeWatcher : IDisposable
     private bool IsInsideGit(string path)
     {
         if (path.Length <= _root.Length) return false;
-        var relative = path.Substring(_root.Length);
-        var separator = Path.DirectorySeparatorChar;
-        return relative.Contains(separator + ".git" + separator, StringComparison.Ordinal)
-               || relative.EndsWith(separator + ".git", StringComparison.Ordinal);
+        var rest = path.AsSpan(_root.Length).TrimStart(Separators);
+        while (rest.Length > 0)
+        {
+            var cut = rest.IndexOfAny(Separators);
+            var segment = cut < 0 ? rest : rest[..cut];
+            if (segment is ".git") return true;
+            if (cut < 0) break;
+            rest = rest[(cut + 1)..];
+        }
+        return false;
     }
 
     private void Flush()

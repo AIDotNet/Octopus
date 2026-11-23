@@ -48,6 +48,18 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
+        if (e.Kind == ProjectChangeKind.Items && e.Item is { } removed && _projects.FindItem(removed.Id) is null
+            && (e.Project is null || !_controllers.ContainsKey(e.Project.Id)))
+        {
+            // A session started remotely in a project never shown here has no controller: release it directly.
+            _ = _registry.ReleaseAsync(removed.Id);
+            return;
+        }
+        if (e.Kind == ProjectChangeKind.Projects && e.Project is { } goneProject
+            && _projects.Projects.All(p => p.Id != goneProject.Id) && !_controllers.ContainsKey(goneProject.Id))
+        {
+            foreach (var item in goneProject.Items) _ = _registry.ReleaseAsync(item.Id);
+        }
         if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.CurrentProject)
         {
             Refresh();
@@ -73,6 +85,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
             existing = Create(current);
             _controllers[current.Id] = existing;
         }
+        foreach (var controller in _controllers.Values) controller.SetActive(ReferenceEquals(controller, existing));
         var changed = !ReferenceEquals(CurrentLayout, existing.Layout);
         CurrentLayout = existing.Layout;
         if (changed)

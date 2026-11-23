@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.TextFormatting;
 using Avalonia.Media.TextFormatting.Unicode;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.Utilities;
 using Avalonia.VisualTree;
@@ -99,6 +100,12 @@ public sealed class CodeView : Control, ILogicalScrollable
     private readonly Dictionary<(string, CodeLineTint), TextLayout> _markers = [];
     private GenericTextRunProperties?[] _roleProps = new GenericTextRunProperties?[10];
     private IBrush?[] _roleBrushes = new IBrush?[10];
+    private IBrush? _tintedAdded;
+    private IBrush? _tintedRemoved;
+    private IBrush? _tintedHunk;
+    private ThemeVariant? _lastPaletteVariant;
+    private bool _paletteLoaded;
+    private bool _highlightIncomplete;
 
     // Interaction.
     private (int Line, int Col) _anchor;
@@ -267,7 +274,7 @@ public sealed class CodeView : Control, ILogicalScrollable
             if (change.OldValue is IReadOnlyList<CodeLineMark> before && change.NewValue is IReadOnlyList<CodeLineMark> after && before.SequenceEqual(after)) return;
             _metricsDirty = true;
             _layoutDirty = true;
-            _rows.Clear();
+            ClearRows();
             ClearGutterLayouts();
             QueueHighlight();
             InvalidateMeasure();
@@ -276,7 +283,7 @@ public sealed class CodeView : Control, ILogicalScrollable
         else if (property == WrapLinesProperty)
         {
             _layoutDirty = true;
-            _rows.Clear();
+            ClearRows();
             SetOffset(new Vector(0, _offset.Y), false);
             InvalidateMeasure();
         }
@@ -284,7 +291,7 @@ public sealed class CodeView : Control, ILogicalScrollable
         {
             _metricsDirty = true;
             _layoutDirty = true;
-            _rows.Clear();
+            ClearRows();
             ClearGutterLayouts();
             InvalidateMeasure();
             InvalidateVisual();
@@ -293,14 +300,17 @@ public sealed class CodeView : Control, ILogicalScrollable
         {
             _roleProps = new GenericTextRunProperties?[10];
             _roleBrushes = new IBrush?[10];
-            _rows.Clear();
+            ClearRows();
             // The numbers fall back to the text color when the gutter has none.
             if (property == ForegroundProperty) ClearGutterLayouts();
             InvalidateVisual();
         }
-        else if (property == GutterForegroundProperty || property == AddedBrushProperty || property == RemovedBrushProperty)
+        else if (property == GutterForegroundProperty || property == AddedBrushProperty || property == RemovedBrushProperty || property == HunkBrushProperty)
         {
-            ClearGutterLayouts();
+            if (property == AddedBrushProperty) _tintedAdded = null;
+            else if (property == RemovedBrushProperty) _tintedRemoved = null;
+            else if (property == HunkBrushProperty) _tintedHunk = null;
+            if (property != HunkBrushProperty) ClearGutterLayouts();
         }
         else if (property.Name == "ActualThemeVariant")
         {
@@ -313,7 +323,14 @@ public sealed class CodeView : Control, ILogicalScrollable
         base.OnAttachedToVisualTree(e);
         ArcTheme.Manager.StateChanged += OnArcThemeChanged;
         _unsubscribeTheme = true;
-        RefreshPalette();
+        if (!_paletteLoaded || !Equals(_lastPaletteVariant, ActualThemeVariant))
+        {
+            RefreshPalette();
+        }
+        if (_highlightIncomplete)
+        {
+            QueueHighlight();
+        }
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -321,16 +338,25 @@ public sealed class CodeView : Control, ILogicalScrollable
         base.OnDetachedFromVisualTree(e);
         if (_unsubscribeTheme) ArcTheme.Manager.StateChanged -= OnArcThemeChanged;
         _unsubscribeTheme = false;
-        _highlightCts?.Cancel();
+        if (_highlightCts is { } cts)
+        {
+            _highlightCts = null;
+            cts.Cancel();
+            cts.Dispose();
+        }
+        ClearRows();
+        ClearGutterLayouts();
     }
 
     private void OnArcThemeChanged(object? sender, ArcThemeChangedEventArgs e) => Dispatcher.UIThread.Post(RefreshPalette, DispatcherPriority.Background);
 
     private void RefreshPalette()
     {
+        _paletteLoaded = true;
+        _lastPaletteVariant = ActualThemeVariant;
         _roleProps = new GenericTextRunProperties?[10];
         _roleBrushes = new IBrush?[10];
-        _rows.Clear();
+        ClearRows();
         InvalidateVisual();
     }
 
@@ -363,7 +389,7 @@ public sealed class CodeView : Control, ILogicalScrollable
 
         _hasSelection = false;
         _hoverLine = -1;
-        _rows.Clear();
+        ClearRows();
         ClearGutterLayouts();
         _layoutsCreated = 0;
         _metricsDirty = true;
@@ -475,7 +501,7 @@ public sealed class CodeView : Control, ILogicalScrollable
         if (!_layoutDirty && cols == _wrapCols) return;
         _layoutDirty = false;
         _wrapCols = cols;
-        _rows.Clear();
+        ClearRows();
         _maxCells = 0;
         if (!wrap)
         {
@@ -698,7 +724,8 @@ public sealed class CodeView : Control, ILogicalScrollable
             CellStart = cellStart,
             CellEnd = cellEnd,
         };
-        if (_rows.Count > 600) _rows.Clear();
+        if (_rows.TryGetValue(row, out var previous)) previous.Layout.Dispose();
+        else if (_rows.Count > 600) ClearRows();
         _rows[row] = result;
         return result;
     }
@@ -800,12 +827,21 @@ public sealed class CodeView : Control, ILogicalScrollable
             var rowRect = new Rect(0, y, bounds.Width, _rowHeight);
             if (marks is not null && line < marks.Count && marks[line].Tint != CodeLineTint.None)
             {
-                var brush = marks[line].Tint switch { CodeLineTint.Added => AddedBrush, CodeLineTint.Removed => RemovedBrush, _ => HunkBrush };
-                if (brush is not null)
+                var tint = marks[line].Tint;
+                var tinted = TintBrushFor(tint);
+                if (tinted is not null)
                 {
-                    using (context.PushOpacity(marks[line].Tint == CodeLineTint.Hunk ? 0.10 : 0.16))
+                    context.FillRectangle(tinted, rowRect);
+                }
+                else
+                {
+                    var brush = tint switch { CodeLineTint.Added => AddedBrush, CodeLineTint.Removed => RemovedBrush, _ => HunkBrush };
+                    if (brush is not null)
                     {
-                        context.FillRectangle(brush, rowRect);
+                        using (context.PushOpacity(tint == CodeLineTint.Hunk ? 0.10 : 0.16))
+                        {
+                            context.FillRectangle(brush, rowRect);
+                        }
                     }
                 }
             }
@@ -909,10 +945,33 @@ public sealed class CodeView : Control, ILogicalScrollable
         layout.Draw(context, new Point(right - layout.Width, y + (_rowHeight - layout.Height) / 2));
     }
 
+    private IBrush? TintBrushFor(CodeLineTint tint)
+    {
+        static IBrush? PreMultiply(IBrush? source, double opacity, ref IBrush? cached)
+        {
+            if (cached is not null) return cached;
+            if (source is not ISolidColorBrush solid) return null;
+            var c = solid.Color;
+            var alpha = (byte)Math.Clamp(Math.Round(c.A * solid.Opacity * opacity), 0, 255);
+            cached = new ImmutableSolidColorBrush(Color.FromArgb(alpha, c.R, c.G, c.B));
+            return cached;
+        }
+        return tint switch
+        {
+            CodeLineTint.Added => PreMultiply(AddedBrush, 0.16, ref _tintedAdded),
+            CodeLineTint.Removed => PreMultiply(RemovedBrush, 0.16, ref _tintedRemoved),
+            _ => PreMultiply(HunkBrush, 0.10, ref _tintedHunk),
+        };
+    }
+
     private TextLayout NumberLayout(int number)
     {
         if (_numbers.TryGetValue(number, out var layout)) return layout;
-        if (_numbers.Count > 2000) _numbers.Clear();
+        if (_numbers.Count > 2000)
+        {
+            foreach (var item in _numbers.Values) item.Dispose();
+            _numbers.Clear();
+        }
         layout = new TextLayout(number.ToString(CultureInfo.InvariantCulture), _typeface, FontSize is > 0 and < 200 ? FontSize : 13, GutterForeground ?? Foreground);
         _numbers[number] = layout;
         return layout;
@@ -921,7 +980,11 @@ public sealed class CodeView : Control, ILogicalScrollable
     private TextLayout NumberLayoutFor(string text)
     {
         if (_markNumbers.TryGetValue(text, out var layout)) return layout;
-        if (_markNumbers.Count > 2000) _markNumbers.Clear();
+        if (_markNumbers.Count > 2000)
+        {
+            foreach (var item in _markNumbers.Values) item.Dispose();
+            _markNumbers.Clear();
+        }
         layout = new TextLayout(text, _typeface, FontSize is > 0 and < 200 ? FontSize : 13, GutterForeground ?? Foreground);
         _markNumbers[text] = layout;
         return layout;
@@ -936,11 +999,20 @@ public sealed class CodeView : Control, ILogicalScrollable
         return layout;
     }
 
+    private void ClearRows()
+    {
+        foreach (var row in _rows.Values) row.Layout.Dispose();
+        _rows.Clear();
+    }
+
     /// <summary>The gutter's laid out numbers and signs are kept between frames; a change of text, font or color drops them.</summary>
     private void ClearGutterLayouts()
     {
+        foreach (var item in _numbers.Values) item.Dispose();
         _numbers.Clear();
+        foreach (var item in _markNumbers.Values) item.Dispose();
         _markNumbers.Clear();
+        foreach (var item in _markers.Values) item.Dispose();
         _markers.Clear();
     }
 
@@ -1097,37 +1169,41 @@ public sealed class CodeView : Control, ILogicalScrollable
 
     private void StartHighlight()
     {
-        _highlightCts?.Cancel();
+        if (_highlightCts is { } oldCts)
+        {
+            _highlightCts = null;
+            oldCts.Cancel();
+            oldCts.Dispose();
+        }
+        _highlightIncomplete = false;
         var version = ++_highlightVersion;
         var language = Language;
         if (!_highlightDone.Task.IsCompleted) _highlightDone.TrySetResult();
         _highlightDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var done = _highlightDone;
-        if (_lineCount == 0 || _text.Length == 0 || !CodeSyntax.Supports(language))
+        if (_lineCount == 0 || _text.Length == 0 || string.IsNullOrEmpty(language))
         {
             done.TrySetResult();
             return;
         }
 
+        var text = _text;
+        var lineStarts = _lineStarts;
+        var lineCount = _lineCount;
         var marks = Marks;
-        var lines = new string[_lineCount];
-        for (var i = 0; i < lines.Length; i++)
-        {
-            var length = Math.Min(LineEnd(i) - _lineStarts[i], HighlightLineLimit);
-            lines[i] = _text.Substring(_lineStarts[i], length);
-        }
         var cts = _highlightCts = new CancellationTokenSource();
         var token = cts.Token;
+        _highlightIncomplete = true;
         var streams = new List<(List<int> Lines, bool OnlyOld)>();
         if (marks is null)
         {
-            streams.Add((Enumerable.Range(0, _lineCount).ToList(), false));
+            streams.Add((Enumerable.Range(0, lineCount).ToList(), false));
         }
         else
         {
             var oldSide = new List<int>();
             var newSide = new List<int>();
-            for (var i = 0; i < _lineCount && i < marks.Count; i++)
+            for (var i = 0; i < lineCount && i < marks.Count; i++)
             {
                 if ((marks[i].Sides & 1) != 0) oldSide.Add(i);
                 if ((marks[i].Sides & 2) != 0) newSide.Add(i);
@@ -1138,20 +1214,39 @@ public sealed class CodeView : Control, ILogicalScrollable
 
         _ = Task.Run(() =>
         {
+            var completed = false;
             try
             {
+                if (!CodeSyntax.Supports(language))
+                {
+                    completed = true;
+                    return;
+                }
+                var lines = new string[lineCount];
+                for (var i = 0; i < lines.Length; i++)
+                {
+                    var end = LineEndIn(text, lineStarts, lineCount, i);
+                    var length = Math.Min(end - lineStarts[i], HighlightLineLimit);
+                    lines[i] = text.Substring(lineStarts[i], length);
+                }
                 foreach (var (indexes, onlyOld) in streams)
                 {
                     RunStream(version, language, lines, indexes, onlyOld ? marks : null, token);
                 }
+                completed = true;
             }
+            catch (OperationCanceledException) { }
             catch (Exception)
             {
-                // A grammar that fails leaves the text plain.
+                completed = true; // A grammar that fails leaves the text plain.
             }
             finally
             {
-                Dispatcher.UIThread.Post(() => done.TrySetResult(), DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (completed && version == _highlightVersion) _highlightIncomplete = false;
+                    done.TrySetResult();
+                }, DispatcherPriority.Background);
             }
         }, token);
     }
@@ -1194,16 +1289,46 @@ public sealed class CodeView : Control, ILogicalScrollable
 
     private void ApplySpans(int version, (int Line, SyntaxSpan[] Spans)[] batch, IReadOnlyList<CodeLineMark>? onlyOldOf)
     {
-        if (version != _highlightVersion) return;
+        if (version != _highlightVersion || batch.Length == 0) return;
+        var minLine = int.MaxValue;
+        var maxLine = -1;
         foreach (var (line, spans) in batch)
         {
             if (line >= _spans.Length) continue;
             // The old side only colors the removed lines: a context line took its colors from the new side.
             if (onlyOldOf is not null && line < onlyOldOf.Count && (onlyOldOf[line].Sides & 2) != 0) continue;
             _spans[line] = spans;
+            if (line < minLine) minLine = line;
+            if (line > maxLine) maxLine = line;
         }
-        _rows.Clear();
-        InvalidateVisual();
+        if (maxLine < minLine) return;
+        var firstCachedRow = FirstRowOf(minLine);
+        var lastCachedRow = maxLine + 1 < _lineCount ? FirstRowOf(maxLine + 1) - 1 : _totalRows - 1;
+        if (_rows.Count > 0)
+        {
+            List<int>? stale = null;
+            foreach (var row in _rows.Keys)
+            {
+                if (row >= firstCachedRow && row <= lastCachedRow)
+                {
+                    stale ??= [];
+                    stale.Add(row);
+                }
+            }
+            if (stale is not null)
+            {
+                foreach (var row in stale)
+                {
+                    if (_rows.Remove(row, out var removed)) removed.Layout.Dispose();
+                }
+            }
+        }
+        var firstVisible = Math.Max(0, (int)Math.Floor(_offset.Y / _rowHeight));
+        var lastVisible = Math.Min(_totalRows - 1, (int)Math.Ceiling((_offset.Y + Bounds.Height) / _rowHeight));
+        if (lastCachedRow >= firstVisible && firstCachedRow <= lastVisible)
+        {
+            InvalidateVisual();
+        }
     }
 
     // ---- ILogicalScrollable ----

@@ -40,7 +40,11 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         IFileOpener opener,
         IPathPicker pathPicker,
         IAgentDefinitionStore? store = null,
-        Services.IDialogService? dialogs = null)
+        Services.IDialogService? dialogs = null,
+        Octopus.Agents.Accounts.IAgentAccountService? accounts = null,
+        Octopus.Terminal.ITerminalLaunchPlanner? launchPlanner = null,
+        Services.IProjectService? projects = null,
+        Octopus.Terminal.Avalonia.TerminalSessionRegistry? sessions = null)
     {
         _settings = settings;
         _catalog = catalog;
@@ -48,7 +52,7 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         _opener = opener;
         _store = store;
         _dialogs = dialogs;
-        _services = new AgentServices(settings, compiler, discovery, opener, pathPicker);
+        _services = new AgentServices(settings, compiler, discovery, opener, pathPicker, accounts, dialogs, launchPlanner, projects, sessions);
         _isScanning = scanner.IsScanning;
         BuildPermissionOptions();
         Rebuild(expandFirst: true);

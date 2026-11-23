@@ -222,11 +222,12 @@ globalThis.structuredClone = value => (value === undefined ? undefined : JSON.pa
 // ───────────────────────── env, l10n, permissions ─────────────────────────
 
 const envSnapshot = sync('env') ?? {};
+let currentLanguage = envSnapshot.language;
 export const env = Object.freeze({
   appVersion: envSnapshot.appVersion,
   apiVersion: envSnapshot.apiVersion,
   platform: envSnapshot.platform,
-  get language() { return sync('env')?.language ?? envSnapshot.language; },
+  get language() { return currentLanguage; },
   isDev: !!envSnapshot.isDev,
   onDidChangeLanguage: onHost('env.language'),
 });
@@ -240,7 +241,11 @@ export const l10n = Object.freeze({
     return text;
   },
 });
-onHost('env.language')(() => { bundle = undefined; });
+onHost('env.language')(lang => {
+  if (typeof lang === 'string' && lang.length > 0) currentLanguage = lang;
+  else currentLanguage = sync('env')?.language ?? currentLanguage;
+  bundle = undefined;
+});
 
 export const permissions = Object.freeze({
   has: permission => !!sync('permissions.has', { permission }),

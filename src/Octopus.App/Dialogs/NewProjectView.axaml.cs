@@ -1,16 +1,21 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
+using Octopus.FileSystem;
 using Octopus.Ssh;
 using TKCode.Arc;
 
 namespace Octopus.App.Dialogs;
 
+/// <summary>Which machine the new project dialog is browsing folders on.</summary>
+public sealed record FolderBrowserTarget(string? SshHost, string? RemoteHost, string DisplayName);
+
 /// <summary>
-/// The form of the new project dialog: a location (this computer or an SSH host), a folder (typed or browsed) and a name
-/// that follows the folder until it is edited.
+/// The form of the new project dialog: a location (this computer, a paired Octopus host, or an SSH host), a folder
+/// (typed or picked via the built-in folder browser in the same dialog), and a name that follows the folder until edited.
 /// </summary>
 public partial class NewProjectView : UserControl
 {
@@ -22,18 +27,23 @@ public partial class NewProjectView : UserControl
     private const string RemotePrefix = "octopus:";
 
     private readonly IPickerService? _pickers;
+    private readonly Func<FolderBrowserTarget, IFolderBrowser?>? _browserFactory;
+    private readonly Dictionary<string, string> _remoteNames = new(StringComparer.Ordinal);
     private string _suggestedName = "";
 
     public NewProjectView() : this(null, null)
     {
     }
 
-    /// <param name="hosts">The SSH hosts offered as locations; with none, the location is not shown.</param>
+    /// <param name="hosts">The SSH hosts offered as locations; with none (and no remote hosts), the location is not shown.</param>
     /// <param name="remoteHosts">The paired Octopus hosts offered as locations: device id and name.</param>
+    /// <param name="browserFactory">Creates the built-in folder browser for the selected location (local, Octopus host, or SSH host).</param>
     public NewProjectView(IPickerService? pickers, NewProjectChoice? initial, IReadOnlyList<SshHost>? hosts = null,
-        IReadOnlyList<(string Id, string Name)>? remoteHosts = null)
+        IReadOnlyList<(string Id, string Name)>? remoteHosts = null,
+        Func<FolderBrowserTarget, IFolderBrowser?>? browserFactory = null)
     {
         _pickers = pickers;
+        _browserFactory = browserFactory;
         InitializeComponent();
         ConfigureLocation(hosts ?? [], initial?.SshHost, remoteHosts ?? [], initial?.RemoteHost);
         PathInput.Text = initial?.Path ?? "";
@@ -50,8 +60,25 @@ public partial class NewProjectView : UserControl
             if (e.Property.Name == nameof(LocationSelect.SelectedValue)) OnLocationChanged();
         };
         BrowseButton.Click += OnBrowseClick;
+        BrowserView.SelectionChanged += () => BrowseSelectionChanged?.Invoke();
+        BrowserView.FolderConfirmed += path => ApplyPickedFolder(path);
+        BrowserView.CancelRequested += CancelBrowse;
+        AddHandler(KeyDownEvent, OnViewKeyDown, RoutingStrategies.Tunnel);
         OnLocationChanged();
     }
+
+    /// <summary>Raised when switching between the form view and the in-dialog folder browser view.</summary>
+    public event Action? BrowseModeChanged;
+
+    /// <summary>Raised when the folder browser's selection or confirmability changes.</summary>
+    public event Action? BrowseSelectionChanged;
+
+    /// <summary>Raised when the selected location changes (so the host dialog can update its description).</summary>
+    public event Action? LocationChanged;
+
+    public bool IsBrowsing => BrowserView.IsVisible;
+
+    public bool CanConfirmBrowse => IsBrowsing && BrowserView.CanConfirm;
 
     public string FolderPath => (PathInput.Text ?? "").Trim();
 
@@ -69,6 +96,24 @@ public partial class NewProjectView : UserControl
             ? value[RemotePrefix.Length..]
             : null;
 
+    /// <summary>Human-readable name of the currently chosen machine.</summary>
+    public string LocationDisplayName =>
+        RemoteHost is { } remoteId && _remoteNames.TryGetValue(remoteId, out var remoteName) ? remoteName
+        : SshHost is { } sshAlias ? sshAlias
+        : AppLangResources.Get(AppLangResourceKind.NewProjectLocalMachine);
+
+    /// <summary>Dialog description text matching the currently selected location.</summary>
+    public string DialogDescription =>
+        RemoteHost is not null ? AppLangResources.Format(AppLangResourceKind.NewProjectRemoteDescription, LocationDisplayName)
+        : SshHost is not null ? AppLangResources.Format(AppLangResourceKind.NewProjectSshDescription, LocationDisplayName)
+        : AppLangResources.Get(AppLangResourceKind.NewProjectDescription);
+
+    /// <summary>Dialog title when browsing folders for the currently selected location.</summary>
+    public string BrowseDialogTitle =>
+        RemoteHost is not null || SshHost is not null
+            ? AppLangResources.Format(AppLangResourceKind.FolderBrowserHostTitle, LocationDisplayName)
+            : AppLangResources.Get(AppLangResourceKind.FolderBrowserTitle);
+
     /// <summary>
     /// The message for a folder that cannot be used, or null when it can. A folder on another machine is not on this
     /// computer, so only its emptiness is checked; that machine says the rest (an SSH host when a terminal opens there,
@@ -81,16 +126,67 @@ public partial class NewProjectView : UserControl
 
     /// <summary>A leading ~ stands for the home folder, as in a shell.</summary>
     public static string ExpandHome(string path) =>
-        path == "~" || path.StartsWith("~/", StringComparison.Ordinal)
-            ? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[1..].TrimStart('/'))
+        path == "~" || path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal)
+            ? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[1..].TrimStart('/', '\\'))
             : path;
 
     public void ShowError(string? message) => PathInput.ErrorMessage = message;
 
+    /// <summary>Switches the dialog into folder browser mode for the currently selected location.</summary>
+    public Task OpenBrowseAsync()
+    {
+        var target = new FolderBrowserTarget(SshHost, RemoteHost, LocationDisplayName);
+        var browser = _browserFactory?.Invoke(target)
+            ?? (SshHost is null && RemoteHost is null ? new LocalFolderBrowser(LocationDisplayName) : null);
+        if (browser is null) return Task.CompletedTask;
+
+        FormPanel.IsVisible = false;
+        BrowserView.IsVisible = true;
+        BrowseModeChanged?.Invoke();
+        return BrowserView.OpenAsync(browser, FolderPath);
+    }
+
+    /// <summary>Applies the currently selected folder in the browser and returns to the form view.</summary>
+    public void ConfirmBrowse()
+    {
+        if (!IsBrowsing || BrowserView.SelectedPath is not { Length: > 0 } picked) return;
+        ApplyPickedFolder(picked);
+    }
+
+    /// <summary>Cancels folder browsing and returns to the form view without changing the path.</summary>
+    public void CancelBrowse()
+    {
+        if (!IsBrowsing) return;
+        BrowserView.CancelPending();
+        BrowserView.IsVisible = false;
+        FormPanel.IsVisible = true;
+        BrowseModeChanged?.Invoke();
+        PathInput.Focus();
+    }
+
+    /// <summary>Handles Escape while browsing: closes inline editors first, or returns to the form view.</summary>
+    public bool HandleEscape() => IsBrowsing && BrowserView.HandleEscape();
+
     protected override void OnLoaded(RoutedEventArgs e)
     {
         base.OnLoaded(e);
-        PathInput.Focus();
+        if (!IsBrowsing) PathInput.Focus();
+    }
+
+    protected override void OnUnloaded(RoutedEventArgs e)
+    {
+        BrowserView.CancelPending();
+        base.OnUnloaded(e);
+    }
+
+    private void ApplyPickedFolder(string picked)
+    {
+        BrowserView.CancelPending();
+        BrowserView.IsVisible = false;
+        FormPanel.IsVisible = true;
+        PathInput.Text = picked;
+        BrowseModeChanged?.Invoke();
+        NameInput.Focus();
     }
 
     /// <summary>Offers this computer and each host; the location is shown only when there is a host to choose.</summary>
@@ -102,6 +198,7 @@ public partial class NewProjectView : UserControl
         // Computers that run Octopus first: there the project gets agents too.
         foreach (var (id, name) in remoteHosts)
         {
+            _remoteNames[id] = name;
             options.Add(new SelectOption(RemotePrefix + id, string.Format(AppLangResources.Get(AppLangResourceKind.NewProjectOctopusHost), name)));
         }
         foreach (var host in hosts)
@@ -115,16 +212,21 @@ public partial class NewProjectView : UserControl
         LocationSelect.SelectedValue = chosen;
     }
 
-    /// <summary>A folder on a host is a path there: the label, the hint and the browse button follow that.</summary>
+    /// <summary>A folder on a host is a path there: the label, placeholder, hint and browse availability follow that.</summary>
     private void OnLocationChanged()
     {
         var remote = SshHost is not null || RemoteHost is not null;
         PathInput.Label = AppLangResources.Get(remote ? AppLangResourceKind.NewProjectRemoteFolder : AppLangResourceKind.NewProjectFolder);
         PathInput.Placeholder = AppLangResources.Get(remote ? AppLangResourceKind.NewProjectRemoteFolderPlaceholder : AppLangResourceKind.NewProjectFolderPlaceholder);
-        PathInput.Description = RemoteHost is not null ? AppLangResources.Get(AppLangResourceKind.NewProjectOctopusHint)
-            : remote ? AppLangResources.Get(AppLangResourceKind.NewProjectRemoteHint) : null;
-        BrowseButton.IsVisible = !remote;
+        var hint = RemoteHost is not null ? AppLangResources.Get(AppLangResourceKind.NewProjectOctopusHint)
+            : remote ? AppLangResources.Get(AppLangResourceKind.NewProjectRemoteHint)
+            : null;
+        PathHint.Text = hint ?? "";
+        PathHint.IsVisible = !string.IsNullOrEmpty(hint);
+        // Built-in folder browser is available for local, paired Octopus hosts, and SSH hosts alike.
+        BrowseButton.IsVisible = true;
         PathInput.ErrorMessage = null;
+        LocationChanged?.Invoke();
     }
 
     private void OnPathChanged()
@@ -138,9 +240,24 @@ public partial class NewProjectView : UserControl
 
     private async void OnBrowseClick(object? sender, RoutedEventArgs e)
     {
-        if (_pickers is null) return;
-        var picked = await _pickers.PickFolderAsync();
-        if (picked is not null) PathInput.Text = picked;
+        if (_browserFactory is not null || (SshHost is null && RemoteHost is null))
+        {
+            await OpenBrowseAsync();
+            return;
+        }
+        if (_pickers is not null && SshHost is null && RemoteHost is null)
+        {
+            var picked = await _pickers.PickFolderAsync();
+            if (picked is not null) PathInput.Text = picked;
+        }
+    }
+
+    private void OnViewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && IsBrowsing)
+        {
+            e.Handled = BrowserView.HandleEscape();
+        }
     }
 
     private static string SuggestName(string? path) =>

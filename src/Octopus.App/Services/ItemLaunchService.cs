@@ -1,5 +1,7 @@
 using Octopus.Agents;
+using Octopus.Agents.Accounts;
 using Octopus.Agents.Signals;
+using Octopus.App.Common;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Core.Terminals;
@@ -21,7 +23,9 @@ public sealed class ItemLaunchService(
     ILoginEnvironment? login = null,
     RemoteFiles? remote = null,
     Octopus.Ssh.ISshHostCatalog? hosts = null,
-    ISystemProxy? systemProxy = null) : IItemLaunchService
+    ISystemProxy? systemProxy = null,
+    PathComparer? paths = null,
+    IAgentAccountService? accounts = null) : IItemLaunchService
 {
     /// <summary>Points at an <c>octopus-signal</c> build when it is not next to the app (development).</summary>
     public const string ForwarderVariable = "OCTOPUS_SIGNAL_FORWARDER";
@@ -66,21 +70,31 @@ public sealed class ItemLaunchService(
         {
             throw new InvalidOperationException($"Unknown agent '{item.AgentId}'.");
         }
-        // The prompt is for the first start only; a restored tab continues the last session instead.
+        // The prompt is for the first start only; a restored tab continues its session instead.
+        var restored = projects.WasRestored(item.Id);
+        var resume = allowResume && Resumes(item);
         var launch = new AgentLaunchOptions
         {
             Model = item.Launch?.Model,
             Effort = item.Launch?.Effort,
             Fast = item.Launch?.Fast,
+            AccountId = item.Launch?.AccountId,
             Prompt = item.Launch?.Prompt,
-            Resume = allowResume && Resumes(item),
+            Resume = resume,
+            SessionId = allowResume && (!restored || resume) ? item.Launch?.SessionId : null,
+            Env = item.Launch?.Env,
         };
+        var profile = current.Agents.ProfileOf(definition.Id);
+        var resolvedAccount = accounts?.Resolve(definition, profile, project, launch);
         var request = new AgentCompileRequest(
             definition,
-            current.Agents.ProfileOf(definition.Id),
+            profile,
             launch,
             current.Agents.DefaultPermission,
-            scanner.Find(definition.Id)?.Path);
+            scanner.Find(definition.Id)?.Path,
+            AdditionalDirectories: ResolveAdditionalDirectories(project, cwd),
+            AccountEnvironment: resolvedAccount?.Environment,
+            UnsetEnvironment: resolvedAccount?.UnsetEnvironment);
         var command = compiler.Compile(request);
         // The signal channel (design/plugins/11-补充能力.md §1): status line, hooks and notify reach Octopus through
         // the forwarder. Nothing of the user's own configuration is changed; without a hub or forwarder the agent
@@ -90,6 +104,43 @@ public sealed class ItemLaunchService(
             command = compiler.Compile(request with { Signals = signal });
         }
         return planner.PlanAgent(UseSystemProxy(command, current.Agents.UseSystemProxy), cwd, current.Terminal.Shell);
+    }
+
+    /// <summary>
+    /// Other existing local project directories in the same group when the group merges workspaces; null otherwise.
+    /// Excludes <paramref name="cwd"/> and deduplicates by platform path rules.
+    /// </summary>
+    private IReadOnlyList<string>? ResolveAdditionalDirectories(Project project, string cwd)
+    {
+        if (!ProjectLocation.IsOnThisComputer(project) || project.GroupId is not { } groupId)
+        {
+            return null;
+        }
+        var group = projects.Groups.FirstOrDefault(g => g.Id == groupId);
+        if (group is null || !group.MergeWorkspaces)
+        {
+            return null;
+        }
+        var comparer = paths ?? new PathComparer(OperatingSystem.IsMacOS() || OperatingSystem.IsWindows());
+        var seen = new HashSet<string>(comparer);
+        if (!string.IsNullOrWhiteSpace(cwd))
+        {
+            seen.Add(cwd);
+        }
+        var result = new List<string>();
+        foreach (var member in projects.Projects)
+        {
+            if (member.GroupId != groupId || !ProjectLocation.IsOnThisComputer(member))
+            {
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(member.Path) || !seen.Add(member.Path) || !Directory.Exists(member.Path))
+            {
+                continue;
+            }
+            result.Add(member.Path);
+        }
+        return result.Count == 0 ? null : result;
     }
 
     /// <summary>ssh does not take an alias like <c>香港主服务器</c> on its command line; it is given an ASCII name for it (see <see cref="Octopus.Ssh.SshAlias"/>).</summary>

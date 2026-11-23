@@ -91,7 +91,9 @@ public sealed class MiniPtyConnection : ITerminalConnection
             if (!_session.HasExited)
             {
                 try { _session.Kill(PtySignal.Hangup); } catch (ObjectDisposedException) { }
-                await Task.WhenAny(_exited, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
+                using var wait = new CancellationTokenSource();
+                var finished = await Task.WhenAny(_exited, Task.Delay(TimeSpan.FromSeconds(2), wait.Token)).ConfigureAwait(false);
+                if (ReferenceEquals(finished, _exited)) wait.Cancel();
                 if (!_session.HasExited)
                 {
                     try { _session.Kill(PtySignal.Kill); } catch (ObjectDisposedException) { }

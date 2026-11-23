@@ -31,6 +31,20 @@ public sealed partial class PluginIndicator(PluginHost plugin, string id, int or
     [ObservableProperty] public partial bool IsShown { get; set; } = true;
     /// <summary>0…1 for a small ring before the text; null for none.</summary>
     [ObservableProperty] public partial double? Value { get; set; }
+
+    public event EventHandler? Updated;
+
+    internal void ApplyUpdate(JsonObject state)
+    {
+        var changed = false;
+        if (state.ContainsKey("text")) { var v = PluginIndicators.Trim(Str(state, "text")); if (Text != v) { Text = v; changed = true; } }
+        if (state.ContainsKey("icon")) { var v = Str(state, "icon"); if (Icon != v) { Icon = v; changed = true; } }
+        if (state.ContainsKey("tooltip")) { var v = Str(state, "tooltip"); if (Tooltip != v) { Tooltip = v; changed = true; } }
+        if (state.ContainsKey("level")) { var v = Str(state, "level"); if (Level != v) { Level = v; changed = true; } }
+        if (state.ContainsKey("visible")) { var v = Bool(state, "visible") ?? true; if (IsShown != v) { IsShown = v; changed = true; } }
+        if (state.ContainsKey("value")) { var v = Num(state, "value") is { } n ? (double?)Math.Clamp(n, 0, 1) : null; if (Value != v) { Value = v; changed = true; } }
+        if (changed) Updated?.Invoke(this, EventArgs.Empty);
+    }
 }
 
 /// <summary>
@@ -67,12 +81,7 @@ public sealed class PluginIndicators
     public void Update(PluginHost plugin, string id, JsonObject state) => Dispatcher.UIThread.Post(() =>
     {
         if (Items.FirstOrDefault(i => i.Plugin.Id == plugin.Id && i.Id == id) is not { } indicator) return;
-        if (state.ContainsKey("text")) indicator.Text = Trim(Str(state, "text"));
-        if (state.ContainsKey("icon")) indicator.Icon = Str(state, "icon");
-        if (state.ContainsKey("tooltip")) indicator.Tooltip = Str(state, "tooltip");
-        if (state.ContainsKey("level")) indicator.Level = Str(state, "level");
-        if (state.ContainsKey("visible")) indicator.IsShown = Bool(state, "visible") ?? true;
-        if (state.ContainsKey("value")) indicator.Value = Num(state, "value") is { } v ? Math.Clamp(v, 0, 1) : null;
+        indicator.ApplyUpdate(state);
     });
 
     public void Remove(PluginHost plugin, string id) => Dispatcher.UIThread.Post(() =>
@@ -85,7 +94,7 @@ public sealed class PluginIndicators
         foreach (var indicator in Items.Where(i => i.Plugin.Id == plugin.Id).ToList()) Items.Remove(indicator);
     });
 
-    private static string? Trim(string? text) => text is { Length: > MaxText } ? text[..(MaxText - 1)] + "…" : text;
+    internal static string? Trim(string? text) => text is { Length: > MaxText } ? text[..(MaxText - 1)] + "…" : text;
 }
 
 /// <summary>The top bar strip that shows the indicators; a click opens the plugin's popover or runs its handler.</summary>
@@ -114,6 +123,7 @@ public sealed class IndicatorStrip : Panel
 
     private void Rebuild()
     {
+        foreach (var old in _row.Children.OfType<IndicatorButton>()) old.Release();
         _row.Children.Clear();
         foreach (var indicator in _indicators!.Items) _row.Children.Add(new IndicatorButton(indicator, _popover));
     }
@@ -129,6 +139,7 @@ public sealed class IndicatorStrip : Panel
         private UiRenderer? _renderer;
         private string? _instanceId;
         private readonly List<IDisposable> _bindings = [];
+        private ArcDesignTokenKind? _boundColor;
 
         protected override Type StyleKeyOverride => typeof(TKCode.Arc.Button);
 
@@ -140,9 +151,22 @@ public sealed class IndicatorStrip : Panel
             Size = ControlSize.Small;
             VerticalAlignment = VerticalAlignment.Center;
             Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Children = { _ring, _icon, _text } };
-            indicator.PropertyChanged += (_, _) => Apply();
+            indicator.Updated += OnIndicatorUpdated;
             Click += async (_, _) => await OnClickAsync();
             Apply();
+        }
+
+        private void OnIndicatorUpdated(object? sender, EventArgs e) => Apply();
+
+        public void Release()
+        {
+            _indicator.Updated -= OnIndicatorUpdated;
+            foreach (var b in _bindings) b.Dispose();
+            _bindings.Clear();
+            _boundColor = null;
+            _ring.Release();
+            UiRenderer.DisposeTree(_rendered);
+            _rendered = null;
         }
 
         private void Apply()
@@ -162,11 +186,15 @@ public sealed class IndicatorStrip : Panel
                 "success" => ArcDesignTokenKind.Success,
                 _ => ArcDesignTokenKind.TextSecondary,
             };
-            foreach (var b in _bindings) b.Dispose();
-            _bindings.Clear();
             var color = UiLayout.ColorToken(_indicator.Level is "success" or "warning" or "danger" ? _indicator.Level : null) ?? ArcDesignTokenKind.TextSecondary;
-            _bindings.Add(ArcTokens.Bind(_text, TextBlock.ForegroundProperty, color, Avalonia.Data.BindingPriority.LocalValue));
-            _bindings.Add(ArcTokens.Bind(_icon, LucideIcon.ForegroundProperty, color, Avalonia.Data.BindingPriority.LocalValue));
+            if (_boundColor != color)
+            {
+                _boundColor = color;
+                foreach (var b in _bindings) b.Dispose();
+                _bindings.Clear();
+                _bindings.Add(ArcTokens.Bind(_text, TextBlock.ForegroundProperty, color, Avalonia.Data.BindingPriority.LocalValue));
+                _bindings.Add(ArcTokens.Bind(_icon, LucideIcon.ForegroundProperty, color, Avalonia.Data.BindingPriority.LocalValue));
+            }
             ToolTip.SetTip(this, _indicator.Tooltip is { } tip ? $"{tip}\n— {PluginWorkbench.NameOf(_indicator.Plugin)}" : PluginWorkbench.NameOf(_indicator.Plugin));
         }
 
@@ -189,6 +217,7 @@ public sealed class IndicatorStrip : Panel
             var host = new Border { Padding = new Thickness(12) };
             var scroll = new ScrollArea { Content = host, MinWidth = 280, MaxWidth = 420, MaxHeight = 560, FadeLength = 0 };
             var surface = new PopoverSurface(this, host);
+            UiRenderer.DisposeTree(_rendered);
             _rendered = null;
             surface.Update(tree.DeepClone());
             workbench.Attach(plugin.Id, instanceId, surface);
@@ -198,6 +227,9 @@ public sealed class IndicatorStrip : Panel
             {
                 _popover.Closed -= closed;
                 workbench.Detach(plugin.Id, instanceId, surface);
+                UiRenderer.DisposeTree(_rendered);
+                _rendered = null;
+                _popover.Content = null;
                 _ = PluginWorkbench.InvokeQuietlyAsync(plugin, "view.close", new JsonArray(JsonValue.Create(instanceId)));
             };
             _popover.Closed += closed;
@@ -223,7 +255,9 @@ internal sealed class MiniRing : Panel
 {
     private readonly Avalonia.Controls.Shapes.Arc _track = new() { StartAngle = 0, SweepAngle = 360, StrokeThickness = 2 };
     private readonly Avalonia.Controls.Shapes.Arc _fill = new() { StartAngle = -90, StrokeThickness = 2, StrokeLineCap = PenLineCap.Round };
+    private IDisposable? _trackColor;
     private IDisposable? _fillColor;
+    private ArcDesignTokenKind? _color;
 
     public MiniRing()
     {
@@ -231,8 +265,17 @@ internal sealed class MiniRing : Panel
         Height = 14;
         Children.Add(_track);
         Children.Add(_fill);
-        ArcTokens.Bind(_track, Avalonia.Controls.Shapes.Shape.StrokeProperty, ArcDesignTokenKind.BorderStrong, Avalonia.Data.BindingPriority.LocalValue);
+        _trackColor = ArcTokens.Bind(_track, Avalonia.Controls.Shapes.Shape.StrokeProperty, ArcDesignTokenKind.BorderStrong, Avalonia.Data.BindingPriority.LocalValue);
         Color = ArcDesignTokenKind.TextSecondary;
+    }
+
+    public void Release()
+    {
+        _trackColor?.Dispose();
+        _trackColor = null;
+        _fillColor?.Dispose();
+        _fillColor = null;
+        _color = null;
     }
 
     /// <summary>0…1.</summary>
@@ -246,6 +289,8 @@ internal sealed class MiniRing : Panel
     {
         set
         {
+            if (_color == value) return;
+            _color = value;
             _fillColor?.Dispose();
             _fillColor = ArcTokens.Bind(_fill, Avalonia.Controls.Shapes.Shape.StrokeProperty, value, Avalonia.Data.BindingPriority.LocalValue);
         }

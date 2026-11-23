@@ -145,6 +145,8 @@ public class SessionsPanelTests
         var rows = panel.Groups[0].Rows;
         Assert.False(rows[0].IsLive);
         Assert.Equal(item.Id, rows[1].LiveItemId);
+        Assert.Equal("conv-9", SessionsPanelViewModel.SessionIdOf("""{"conversation_id":"conv-9"}"""));
+        Assert.Equal("conv-10", SessionsPanelViewModel.SessionIdOf("""{"conversationId":"conv-10"}"""));
     }
 
     [AvaloniaFact, FreshApp]

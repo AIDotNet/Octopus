@@ -26,9 +26,10 @@ public sealed class MacAppIcon : IAppIcon
                 {
                     return; // not a decodable image
                 }
-                // NSApplication keeps the image; the reference taken by alloc is its to keep.
+                // NSApplication retains the image; balance the +1 retain count from alloc/initWithData:.
                 var app = Send(GetClass("NSApplication"), Sel("sharedApplication"));
                 Send(app, Sel("setApplicationIconImage:"), image);
+                Send(image, Sel("release"));
             }
             finally
             {

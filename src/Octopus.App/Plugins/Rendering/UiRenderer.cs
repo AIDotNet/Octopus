@@ -65,9 +65,20 @@ public sealed class UiRenderer(IUiEventSink sink)
         _nodes = 0;
         if (tree is not JsonObject node)
         {
+            DisposeTree(previous);
             return Placeholder("The view rendered nothing.");
         }
         return Reconcile(previous, node);
+    }
+
+    /// <summary>Releases design-token subscriptions of a rendered control subtree when it is discarded.</summary>
+    public static void DisposeTree(Control? root)
+    {
+        if (root?.Tag is not NodeState state) return;
+        foreach (var binding in state.Bindings.Values) binding.Subscription.Dispose();
+        state.Bindings.Clear();
+        foreach (var child in state.Children) DisposeTree(child);
+        state.Children.Clear();
     }
 
     internal Control Reconcile(Control? existing, JsonObject node)
@@ -91,6 +102,7 @@ public sealed class UiRenderer(IUiEventSink sink)
         }
         else
         {
+            DisposeTree(existing);
             var component = UiComponents.Find(type) ?? new UnknownComponent(type);
             state = new NodeState(type, component);
             control = component.Create(state, this);
@@ -106,7 +118,7 @@ public sealed class UiRenderer(IUiEventSink sink)
                 state.Children = ReconcileChildren(state.Children, node["c"] as JsonArray);
                 state.Component.SetChildren(control, state, state.Children);
             }
-            UiLayout.ApplyCommon(control, props);
+            if (!unchanged) UiLayout.ApplyCommon(control, props);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException or FormatException or OverflowException)
         {
@@ -139,6 +151,7 @@ public sealed class UiRenderer(IUiEventSink sink)
         var result = new List<Control>();
         if (nodes is null)
         {
+            foreach (var child in old) DisposeTree(child);
             return result;
         }
         var byKey = new Dictionary<string, Control>(StringComparer.Ordinal);
@@ -165,6 +178,8 @@ public sealed class UiRenderer(IUiEventSink sink)
             }
             result.Add(Reconcile(previous, child));
         }
+        foreach (var unused in byKey.Values) DisposeTree(unused);
+        while (unkeyed.Count > 0) DisposeTree(unkeyed.Dequeue());
         return result;
     }
 

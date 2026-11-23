@@ -21,12 +21,18 @@ public static class SignalAccounts
     /// </summary>
     public static string ResolveDirectory(AgentDefinition definition, string? value, string? home = null)
     {
-        var spec = definition.Signals?.Account;
-        if (spec is null || string.IsNullOrEmpty(spec.Env))
+        var env = definition.Signals?.Account?.Env;
+        var defaultDir = definition.Signals?.Account?.Default;
+        if (string.IsNullOrEmpty(env) && definition.Accounts is { Mode: AccountModes.EnvDir, Env.Length: > 0 } accounts)
+        {
+            env = accounts.Env;
+            defaultDir = accounts.DefaultDir;
+        }
+        if (string.IsNullOrEmpty(env))
         {
             return "";
         }
-        var raw = string.IsNullOrWhiteSpace(value) ? spec.Default : value;
+        var raw = string.IsNullOrWhiteSpace(value) ? defaultDir : value;
         return string.IsNullOrWhiteSpace(raw) ? "" : NormalizeDirectory(raw, home);
     }
 

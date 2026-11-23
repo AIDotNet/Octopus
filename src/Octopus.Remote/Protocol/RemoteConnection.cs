@@ -104,6 +104,10 @@ public sealed class RemoteConnection : IAsyncDisposable
     public ValueTask SendDataAsync(FrameType type, uint channel, ReadOnlySpan<byte> payload, CancellationToken cancellationToken = default) =>
         _channel.SendAsync(new FrameHeader(type, FrameFlags.None, channel).Wrap(payload), cancellationToken);
 
+    /// <summary>Sends a terminal data frame on a channel (async-friendly overload avoiding temporary array copies at call sites).</summary>
+    public ValueTask SendDataAsync(FrameType type, uint channel, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken = default) =>
+        _channel.SendAsync(new FrameHeader(type, FrameFlags.None, channel).Wrap(payload.Span), cancellationToken);
+
     public async ValueTask DisposeAsync()
     {
         await _closed.CancelAsync().ConfigureAwait(false);

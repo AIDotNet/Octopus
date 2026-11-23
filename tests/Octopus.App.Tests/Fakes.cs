@@ -143,6 +143,18 @@ public sealed class FakeDialogService : IDialogService
         return Task.FromResult(NameAnswer);
     }
 
+    public bool LoginResult { get; set; } = true;
+    public int LoginsRun { get; private set; }
+    public LaunchSpec? LastLoginSpec { get; private set; }
+    public Func<LaunchSpec, Task<bool>>? OnRunAccountLogin { get; set; }
+
+    public Task<bool> RunAccountLoginAsync(string title, string description, LaunchSpec spec, bool autoCloseOnSuccess = true)
+    {
+        LoginsRun++;
+        LastLoginSpec = spec;
+        return OnRunAccountLogin is not null ? OnRunAccountLogin(spec) : Task.FromResult(LoginResult);
+    }
+
     public Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false)
     {
         Asked++;

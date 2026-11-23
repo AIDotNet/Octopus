@@ -38,9 +38,11 @@ public enum SshTunnelEvent
 public static class SshTunnelLog
 {
     /// <summary>The event a line reports, or <see cref="SshTunnelEvent.None"/>.</summary>
-    public static SshTunnelEvent EventOf(string line)
+    public static SshTunnelEvent EventOf(string line) => EventOfCleaned(SshProtocol.Clean(line));
+
+    /// <summary>As <see cref="EventOf"/>, when the caller already ran <see cref="SshProtocol.Clean"/>.</summary>
+    public static SshTunnelEvent EventOfCleaned(string text)
     {
-        var text = SshProtocol.Clean(line);
 
         // A single forwarded connection failing is not the tunnel failing: these lines come after the tunnel is up.
         if (text.Contains("open failed: administratively prohibited", StringComparison.Ordinal))

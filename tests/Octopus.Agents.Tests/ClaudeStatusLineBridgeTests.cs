@@ -141,6 +141,7 @@ public sealed class ClaudeStatusLineBridgeTests : IDisposable
             Registered.Add(directory);
             return "key-1";
         }
+        public string RegisterAccount(string agentId, string directory, string? label) => RegisterAccount(agentId, directory);
         public SignalHubStatistics Statistics => new(0, 0);
         public void Dispose() { }
         private sealed class Nothing : IDisposable { public void Dispose() { } }

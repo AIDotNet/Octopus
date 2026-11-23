@@ -3,6 +3,19 @@ using System.Collections.Concurrent;
 namespace Octopus.Platform;
 
 /// <summary>
+/// Names a third-party CLI's OS keyring slot (such as <c>go-keyring</c> used by Antigravity CLI), whose naming on
+/// Windows (<c>service:account</c>) and Linux (<c>username</c>) differs from Octopus's own <c>service/name</c> entries.
+/// </summary>
+public sealed record ExternalKeyringSlot(
+    string Service,
+    string Account,
+    string? WindowsTarget = null,
+    string LinuxUserAttribute = "username")
+{
+    public string EffectiveWindowsTarget => string.IsNullOrWhiteSpace(WindowsTarget) ? $"{Service}:{Account}" : WindowsTarget!;
+}
+
+/// <summary>
 /// The system's keystore (macOS Keychain, Windows Credential Manager, the Secret Service on Linux): small secrets kept
 /// outside Octopus's own files. A secret is named by a service (<c>Octopus/&lt;plugin id&gt;</c>) and a name inside it.
 /// </summary>
@@ -19,6 +32,18 @@ public interface ISecretStore
 
     /// <summary>Removes the secret; nothing happens when there is none.</summary>
     Task DeleteAsync(string service, string name, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads a third-party CLI's OS keyring slot; defaults to <see cref="GetAsync"/>.</summary>
+    Task<string?> GetExternalAsync(ExternalKeyringSlot slot, CancellationToken cancellationToken = default) =>
+        GetAsync(slot.Service, slot.Account, cancellationToken);
+
+    /// <summary>Writes a third-party CLI's OS keyring slot; defaults to <see cref="SetAsync"/>.</summary>
+    Task SetExternalAsync(ExternalKeyringSlot slot, string value, CancellationToken cancellationToken = default) =>
+        SetAsync(slot.Service, slot.Account, value, cancellationToken);
+
+    /// <summary>Deletes a third-party CLI's OS keyring slot; defaults to <see cref="DeleteAsync"/>.</summary>
+    Task DeleteExternalAsync(ExternalKeyringSlot slot, CancellationToken cancellationToken = default) =>
+        DeleteAsync(slot.Service, slot.Account, cancellationToken);
 }
 
 /// <summary>Secrets in memory only: the stand-in for tests.</summary>

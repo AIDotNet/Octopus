@@ -10,6 +10,7 @@ public static class StorageServiceCollectionExtensions
     {
         services.AddSingleton<IProjectStore, JsonProjectStore>();
         services.AddSingleton<ISettingsStore, JsonSettingsStore>();
+        services.AddSingleton<IAccountStore, JsonAccountStore>();
         return services;
     }
 }

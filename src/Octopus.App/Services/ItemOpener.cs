@@ -1,4 +1,5 @@
 using Octopus.Agents;
+using Octopus.Agents.Accounts;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.Core.Agents;
@@ -21,7 +22,8 @@ public sealed class ItemOpener(
     RemoteFiles remote,
     Octopus.App.Remote.RemoteProjects? remoteProjects = null,
     Octopus.App.Remote.RemoteClientRuntime? remoteHosts = null,
-    Octopus.App.Remote.RemoteProjectAccess? access = null) : IItemOpener
+    Octopus.App.Remote.RemoteProjectAccess? access = null,
+    IAgentAccountService? accounts = null) : IItemOpener
 {
     public ProjectItem? OpenTerminal()
     {
@@ -62,6 +64,23 @@ public sealed class ItemOpener(
         if (project is null || definition is null || !ProjectLocation.CanRunAgents(project))
         {
             return null;
+        }
+        // For globalKeyring agents (Antigravity CLI), ensure the active keychain snapshot matches the resolved account before the PTY starts.
+        if (accounts is not null && definition.Accounts is { Mode: AccountModes.GlobalKeyring })
+        {
+            var profile = settings.Current.Agents.ProfileOf(definition.Id);
+            var resolved = accounts.Resolve(definition, profile, project, launch);
+            if (resolved.Account is { } targetAccount && accounts.GetActiveGlobalAccountId(definition.Id) != targetAccount.Id)
+            {
+                try
+                {
+                    accounts.SwitchGlobalKeyringAsync(definition, targetAccount.Id).GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    // If the snapshot is missing or keychain refuses, still open the terminal so the CLI can report or re-login.
+                }
+            }
         }
         var item = new ProjectItem
         {

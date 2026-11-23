@@ -289,6 +289,55 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     public async Task<IDisposable> WatchAsync(string folder, Action changed) =>
         _files.WatchChanges(await InsideProjectAsync(folder).ConfigureAwait(false), changed, WatchDelay);
 
+    public async Task<BrowseFolderResultMessage> BrowseFolderAsync(BrowseFolderMessage request)
+    {
+        var projects = await OnUi<IReadOnlyList<Octopus.FileSystem.FolderBrowseProject>>(() =>
+            [.. _projects.Projects.Where(ProjectLocation.IsOnThisComputer).Select(p => new Octopus.FileSystem.FolderBrowseProject(p.Name, p.Path))]).ConfigureAwait(false);
+        var browser = new Octopus.FileSystem.LocalFolderBrowser(Environment.MachineName, () => projects, _paths);
+        try
+        {
+            var page = await browser.BrowseAsync(request.Path, request.ListRoots, request.FallbackToParent).ConfigureAwait(false);
+            return new BrowseFolderResultMessage
+            {
+                Path = page.CurrentPath,
+                Parent = page.ParentPath,
+                Separator = page.Separator,
+                Home = page.HomePath,
+                Roots = [.. page.Roots.Select(ToBrowseEntry)],
+                Entries = [.. page.Entries.Select(ToBrowseEntry)],
+            };
+        }
+        catch (DirectoryNotFoundException e) { throw new RemoteException(RemoteMethods.NotFound, e.Message); }
+        catch (ArgumentException e) { throw new RemoteException(RemoteProtocol.InvalidParams, e.Message); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new RemoteException(RemoteMethods.NotAllowed, e.Message); }
+    }
+
+    public async Task<string> BrowseCreateDirectoryAsync(CreateBrowseFolderMessage request)
+    {
+        var browser = new Octopus.FileSystem.LocalFolderBrowser(Environment.MachineName, pathComparer: _paths);
+        try
+        {
+            return await browser.CreateFolderAsync(request.ParentPath, request.Name).ConfigureAwait(false);
+        }
+        catch (DirectoryNotFoundException e) { throw new RemoteException(RemoteMethods.NotFound, e.Message); }
+        catch (ArgumentException e) { throw new RemoteException(RemoteProtocol.InvalidParams, e.Message); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new RemoteException(RemoteMethods.NotAllowed, e.Message); }
+    }
+
+    private static BrowseEntryMessage ToBrowseEntry(Octopus.FileSystem.FolderBrowseEntry entry) => new()
+    {
+        Name = entry.Name,
+        Path = entry.Path,
+        IsHidden = entry.IsHidden,
+        IsExistingProject = entry.IsExistingProject,
+        Kind = entry.Kind switch
+        {
+            Octopus.FileSystem.FolderEntryKind.Drive => "drive",
+            Octopus.FileSystem.FolderEntryKind.Home => "home",
+            _ => "folder",
+        },
+    };
+
     public async Task<string> GitAsync(string method, string arguments)
     {
         // The repository a project sits in may be above the project's folder (a subfolder of a larger repository): what
@@ -445,7 +494,8 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             _tap = session.Tap(this, native ? TerminalSnapshotFormat.Native : TerminalSnapshotFormat.Vt, out var start);
             Position = start.Position;
             IsNative = start.Format == TerminalSnapshotFormat.Native;
-            Snapshot = start.Snapshot;
+            _snapshot = start.Snapshot;
+            SnapshotLength = start.Snapshot.Length;
             (Columns, Rows) = (start.Size.Columns, start.Size.Rows);
             Title = start.Title;
             IsRunning = session.IsRunning;
@@ -454,9 +504,12 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             session.SizeOwnerChanged += OnSizeOwnerChanged;
         }
 
+        private byte[]? _snapshot;
+
         public ulong Position { get; }
         public bool IsNative { get; }
-        public byte[] Snapshot { get; }
+        public int SnapshotLength { get; }
+        public byte[] TakeSnapshot() => Interlocked.Exchange(ref _snapshot, null) ?? [];
         public int Columns { get; }
         public int Rows { get; }
         public string? Title { get; }

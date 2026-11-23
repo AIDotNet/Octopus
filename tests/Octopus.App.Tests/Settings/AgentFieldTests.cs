@@ -20,7 +20,7 @@ public class AgentFieldTests
 
         Assert.Equal(
             ["command", "model", "effort", "permission", "extraArgs", "env",
-             "feature:appendSystemPrompt", "feature:mcpConfig", "feature:strictMcp", "feature:settings"],
+             "feature:appendSystemPrompt", "feature:mcpConfig", "feature:strictMcp", "feature:settings", "feature:additionalDirsClaudeMd"],
             row.Keys());
         Assert.IsType<CommandFieldViewModel>(row.Fields[0]);
         Assert.IsType<ChoiceFieldViewModel>(row.Field<ChoiceFieldViewModel>("model"));
@@ -30,6 +30,7 @@ public class AgentFieldTests
         Assert.IsType<ArgsFieldViewModel>(row.Fields.Single(f => f.Key == "feature:mcpConfig"));
         Assert.IsType<ToggleFieldViewModel>(row.Fields.Single(f => f.Key == "feature:strictMcp"));
         Assert.Equal(TextFieldKind.File, row.Field<TextFieldViewModel>("feature:settings").Kind);
+        Assert.IsType<ToggleFieldViewModel>(row.Fields.Single(f => f.Key == "feature:additionalDirsClaudeMd"));
     }
 
     [AvaloniaFact]

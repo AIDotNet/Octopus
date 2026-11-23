@@ -1,12 +1,29 @@
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Octopus.App.Common;
 using Octopus.App.Localization;
+using Octopus.App.Remote;
 using Octopus.App.Services;
+using Octopus.Core.Projects;
+using Octopus.FileSystem;
 using Octopus.Ssh;
 using TKCode.Arc;
 
 namespace Octopus.App.Dialogs;
 
 /// <summary>Confirmations as Arc dialogs over the main window.</summary>
-public sealed class DialogService(IWindowAccessor windows, IPickerService pickers, ISshHostCatalog sshHosts, IProjectIconStore? icons = null, ILocalPorts? ports = null, ISshHostTester? sshTester = null) : IDialogService
+public sealed class DialogService(
+    IWindowAccessor windows,
+    IPickerService pickers,
+    ISshHostCatalog sshHosts,
+    IProjectIconStore? icons = null,
+    ILocalPorts? ports = null,
+    ISshHostTester? sshTester = null,
+    RemoteFiles? remoteFiles = null,
+    IProjectService? projects = null,
+    PathComparer? pathComparer = null) : IDialogService
 {
     public async Task<Octopus.Core.Projects.TunnelSpec?> AskTunnelAsync(Octopus.Core.Projects.TunnelSpec? initial, string host)
     {
@@ -168,20 +185,114 @@ public sealed class DialogService(IWindowAccessor windows, IPickerService picker
         sshHosts.Refresh();
         var hosts = sshHosts.Current.Hosts;
         // The Octopus hosts this computer is paired with. Looked up here, not injected: the hosts need the window too.
-        var remoteHosts = Composition.AppHost.Get<Remote.RemoteClientRuntime>().Hosts.Peers.Select(peer => (peer.Id, peer.Name)).ToList();
+        var remoteRuntime = Composition.AppHost.Get<RemoteClientRuntime>();
+        var remoteHosts = remoteRuntime.Hosts.Peers.Select(peer => (peer.Id, peer.Name)).ToList();
+        var sshFiles = remoteFiles ?? Composition.AppHost.Get<RemoteFiles>();
+        var localProjects = projects ?? Composition.AppHost.Get<IProjectService>();
+        var comparer = pathComparer ?? Composition.AppHost.Get<PathComparer>();
+
+        IFolderBrowser? CreateBrowser(FolderBrowserTarget target)
+        {
+            if (target.RemoteHost is { } hostId)
+            {
+                return new HostFolderBrowser(remoteRuntime, hostId, target.DisplayName,
+                    AppLangResources.Get(AppLangResourceKind.FolderBrowserUnsupportedHost));
+            }
+            if (target.SshHost is { } alias)
+            {
+                return sshFiles.BrowserFor(alias, target.DisplayName);
+            }
+            return new LocalFolderBrowser(
+                target.DisplayName,
+                () => [.. localProjects.Projects.Where(ProjectLocation.IsOnThisComputer).Select(p => new FolderBrowseProject(p.Name, p.Path))],
+                comparer);
+        }
+
         NewProjectChoice? typed = null;
         string? error = null;
         while (true)
         {
-            var form = new NewProjectView(pickers, typed, hosts, remoteHosts);
+            var form = new NewProjectView(pickers, typed, hosts, remoteHosts, CreateBrowser);
             form.ShowError(error);
-            var result = await Dialog.ShowAsync(
-                windows.Window,
-                AppLangResources.Get(AppLangResourceKind.NewProject),
-                form,
-                AppLangResources.Get(AppLangResourceKind.NewProjectDescription),
+
+            var formActions = Dialog.BuildActions(
+            [
                 new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
-                new DialogAction(AppLangResources.Get(AppLangResourceKind.NewProjectAdd), true, ButtonVariant.Primary));
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.NewProjectAdd), true, ButtonVariant.Primary),
+            ]);
+
+            var browseCancel = new TKCode.Arc.Button
+            {
+                Content = AppLangResources.Get(AppLangResourceKind.Cancel),
+                Variant = ButtonVariant.Secondary,
+                Size = ControlSize.Small,
+            };
+            browseCancel.Click += (_, _) => form.CancelBrowse();
+
+            var browseSelect = new TKCode.Arc.Button
+            {
+                Content = AppLangResources.Get(AppLangResourceKind.FolderBrowserSelect),
+                Variant = ButtonVariant.Primary,
+                Size = ControlSize.Small,
+                IsEnabled = false,
+            };
+            browseSelect.Click += (_, _) => form.ConfirmBrowse();
+
+            var browseActions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Spacing = 8,
+            };
+            browseActions.Children.Add(browseCancel);
+            browseActions.Children.Add(browseSelect);
+
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Medium,
+                Title = AppLangResources.Get(AppLangResourceKind.NewProject),
+                Description = form.DialogDescription,
+                Content = form,
+                Actions = formActions,
+            };
+
+            void SyncDialogChrome()
+            {
+                if (form.IsBrowsing)
+                {
+                    dialog.Size = ControlSize.Large;
+                    dialog.Title = form.BrowseDialogTitle;
+                    dialog.Description = "";
+                    dialog.Actions = browseActions;
+                    dialog.CloseOnEscape = false;
+                    browseSelect.IsEnabled = form.CanConfirmBrowse;
+                }
+                else
+                {
+                    dialog.Size = ControlSize.Medium;
+                    dialog.Title = AppLangResources.Get(AppLangResourceKind.NewProject);
+                    dialog.Description = form.DialogDescription;
+                    dialog.Actions = formActions;
+                    dialog.CloseOnEscape = true;
+                }
+            }
+
+            dialog.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+            {
+                if (e.Key == Key.Escape && form.IsBrowsing)
+                {
+                    e.Handled = form.HandleEscape();
+                }
+            }, RoutingStrategies.Tunnel);
+
+            form.BrowseModeChanged += SyncDialogChrome;
+            form.LocationChanged += () =>
+            {
+                if (!form.IsBrowsing) dialog.Description = form.DialogDescription;
+            };
+            form.BrowseSelectionChanged += () => browseSelect.IsEnabled = form.CanConfirmBrowse;
+
+            var result = await dialog.ShowAsync(windows.Window);
             if (result is not true)
             {
                 return null;
@@ -215,5 +326,51 @@ public sealed class DialogService(IWindowAccessor windows, IPickerService picker
         // Thumbnails made while choosing and then not kept (or the whole dialog dismissed) are not left behind.
         form.DiscardUnused(choice?.Image);
         return choice;
+    }
+
+    public async Task<bool> RunAccountLoginAsync(string title, string description, Octopus.Core.Terminals.LaunchSpec spec, bool autoCloseOnSuccess = true)
+    {
+        if (windows.Window is null)
+        {
+            return false;
+        }
+
+        var factory = Composition.AppHost.Get<Octopus.Terminal.ITerminalConnectionFactory>();
+        var settings = Composition.AppHost.Get<Octopus.Storage.ISettingsStore>();
+        var view = new AccountLoginTerminalView(spec, factory, settings);
+        var completedByExit = false;
+
+        var dialog = new Dialog
+        {
+            Size = ControlSize.Large,
+            Title = title,
+            Description = description,
+            Content = view,
+            Actions = Dialog.BuildActions(
+            [
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.AccountLoginDone), true, ButtonVariant.Primary),
+            ]),
+        };
+
+        view.Exited += (_, code) =>
+        {
+            if (autoCloseOnSuccess && code == 0)
+            {
+                completedByExit = true;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => dialog.Close(true));
+            }
+        };
+
+        object? result;
+        try
+        {
+            result = await dialog.ShowAsync(windows.Window);
+        }
+        finally
+        {
+            await view.StopAsync();
+        }
+        return completedByExit || result is true;
     }
 }

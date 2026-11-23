@@ -23,7 +23,11 @@ public sealed partial class FileNodeViewModel : ObservableObject
     public bool IsDirectory { get; }
     public bool IsHidden { get; }
 
-    public ObservableCollection<FileNodeViewModel> Children { get; } = [];
+    private static readonly ObservableCollection<FileNodeViewModel> EmptyChildren = [];
+    private ObservableCollection<FileNodeViewModel>? _children;
+
+    public ObservableCollection<FileNodeViewModel> Children =>
+        IsDirectory ? (_children ??= []) : EmptyChildren;
 
     /// <summary>True once the folder's children were read. The tree draws the arrow of a folder that has children.</summary>
     public bool IsLoaded { get; internal set; }

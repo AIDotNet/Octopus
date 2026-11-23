@@ -22,7 +22,14 @@
         <PublishAot>true</PublishAot>
         <!-- Symbols go into a separate file next to the executable (.dSYM, .dbg, .pdb); the packaging leaves them out. -->
         <StripSymbols>true</StripSymbols>
+        <EventSourceSupport>false</EventSourceSupport>
+        <DebuggerSupport>false</DebuggerSupport>
+        <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+        <UseSystemResourceKeys>true</UseSystemResourceKeys>
     </PropertyGroup>
+    <ItemGroup>
+        <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+    </ItemGroup>
     <ItemGroup Condition="'$(PublishAot)' == 'true'">
         <!-- The SVG library looks up unit converters by reflection (TypeDescriptor); kept whole, so trimming never drops one. -->
         <TrimmerRootAssembly Include="Svg.Custom" />
@@ -40,6 +47,7 @@
         <PackageReference Include="TKCode.Arc.Blocks" />
         <PackageReference Include="TKCode.Arc.Dock" />
         <PackageReference Include="TKCode.Arc.Fonts" />
+        <PackageReference Include="TKCode.Arc.Highlighting" />
         <PackageReference Include="TKCode.Arc.Icons.Lucide" />
         <PackageReference Include="TKCode.Arc.Themes.Corners" />
         <PackageReference Include="CommunityToolkit.Mvvm" />

@@ -30,6 +30,7 @@
       }
     },
     "resume": { "continueLatest": ["-c"] },
+    "additionalDirs": { "mode": "repeat", "args": ["--add-dir", "{value}"] },
     "extraArgs": true,
     "env": {
       "known": [

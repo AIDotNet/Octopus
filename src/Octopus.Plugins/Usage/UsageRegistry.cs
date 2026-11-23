@@ -19,7 +19,7 @@ public sealed record UsageState(string AgentId, string? Account, string Provider
 /// the registry keeps the last snapshot per agent and account, survives restarts in <c>usage-cache.json</c>, and
 /// blanks windows whose reset time has passed so an old percentage is never shown as current.
 /// </summary>
-public sealed class UsageRegistry
+public sealed class UsageRegistry : IDisposable
 {
     public const int MaxSnapshotBytes = 16 * 1024;
 
@@ -28,6 +28,8 @@ public sealed class UsageRegistry
     private readonly ConcurrentDictionary<string, string> _providers = new(StringComparer.Ordinal);
     private readonly Func<DateTimeOffset> _clock;
     private readonly object _writeGate = new();
+    private Timer? _saveTimer;
+    private int _savePending;
 
     public UsageRegistry(PluginPaths paths, Func<DateTimeOffset>? clock = null)
     {
@@ -52,15 +54,16 @@ public sealed class UsageRegistry
 
     public string? ProviderOf(string agentId) => _providers.GetValueOrDefault(agentId);
 
-    public void Update(string agentId, string pluginId, JsonObject snapshot)
+    public void Update(string agentId, string pluginId, JsonObject snapshot, int? knownUtf8Bytes = null)
     {
-        if (System.Text.Encoding.UTF8.GetByteCount(snapshot.ToJsonString()) > MaxSnapshotBytes)
+        var bytes = knownUtf8Bytes ?? System.Text.Encoding.UTF8.GetByteCount(snapshot.ToJsonString());
+        if (bytes > MaxSnapshotBytes)
         {
             throw new ArgumentException($"A usage snapshot is limited to {MaxSnapshotBytes / 1024} KB.");
         }
         var account = snapshot["account"]?.GetValue<string>();
         _states[(agentId, account ?? "")] = new UsageState(agentId, account, pluginId, snapshot, _clock());
-        Save();
+        ScheduleSave();
         Changed?.Invoke(this, (agentId, account));
     }
 
@@ -70,8 +73,36 @@ public sealed class UsageRegistry
             ? _states.Keys.Where(k => k.Agent == agentId).ToList().Count(k => _states.TryRemove(k, out _))
             : _states.TryRemove((agentId, account), out _) ? 1 : 0;
         if (removed == 0) return;
-        Save();
+        ScheduleSave();
         Changed?.Invoke(this, (agentId, account));
+    }
+
+    /// <summary>Writes any pending usage updates to <c>usage-cache.json</c> immediately.</summary>
+    public void Flush()
+    {
+        if (Interlocked.Exchange(ref _savePending, 0) != 0) Save();
+    }
+
+    public void Dispose()
+    {
+        Timer? timer;
+        lock (_writeGate)
+        {
+            timer = _saveTimer;
+            _saveTimer = null;
+        }
+        timer?.Dispose();
+        Flush();
+    }
+
+    private void ScheduleSave()
+    {
+        Interlocked.Exchange(ref _savePending, 1);
+        lock (_writeGate)
+        {
+            _saveTimer ??= new Timer(_ => Flush(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _saveTimer.Change(TimeSpan.FromMilliseconds(1500), Timeout.InfiniteTimeSpan);
+        }
     }
 
     /// <summary>The usage of an agent: the given account, or the most recently updated one.</summary>

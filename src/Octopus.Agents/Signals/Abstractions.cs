@@ -83,6 +83,11 @@ public interface ISignalHub : IDisposable
     /// </summary>
     string RegisterAccount(string agentId, string directory);
 
+    /// <summary>
+    /// Makes an account directory known and sets or updates its user-facing label when <paramref name="label"/> is given.
+    /// </summary>
+    string RegisterAccount(string agentId, string directory, string? label) => RegisterAccount(agentId, directory);
+
     SignalHubStatistics Statistics { get; }
 }
 

@@ -44,10 +44,10 @@ public readonly record struct PluginReply(string Json, string Text = "")
 }
 
 /// <summary>One call from a plugin, with lenient accessors over its JSON arguments.</summary>
-public sealed class PluginCall(PluginHost plugin, string method, string json, string text)
+public sealed class PluginCall(PluginHost plugin, string method, string json, string text, JsonNode? parsedArgs = null, bool alreadyParsed = false)
 {
-    private JsonNode? _args;
-    private bool _parsed;
+    private JsonNode? _args = parsedArgs;
+    private bool _parsed = alreadyParsed;
 
     public PluginHost Plugin { get; } = plugin;
     public string Method { get; } = method;

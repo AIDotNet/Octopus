@@ -33,6 +33,8 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     /// thousand wide, fully styled lines (4 MB kept under two thousand, too little to read back).
     /// </summary>
     public const long MaxScrollbackBytes = 8L * 1024 * 1024;
+    private static readonly TimeSpan MinFrameInterval = TimeSpan.FromMilliseconds(16);
+    private static readonly TimeSpan MaxRenderHold = TimeSpan.FromMilliseconds(150);
 
     private readonly int _scrollbackLines;
     private ColorScheme _initialScheme;
@@ -46,8 +48,15 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     private TerminalCore? _core;
     private TerminalSize _size;
     private Link? _link;
+    private InputModes _cachedInputModes = InputModes.Defaults;
+    private volatile bool _visible;
     private int _flushPending;
-    private bool _dirtyWhileHidden;
+    private long _lastFlushTick;
+    private Timer? _coalesceTimer;
+    private Timer? _renderHoldTimer;
+    private volatile bool _renderHeld;
+    private volatile bool _dirtyDuringHold;
+    private volatile bool _dirtyWhileHidden;
     private bool _disposed;
 
     /// <param name="spec">What to run.</param>
@@ -67,6 +76,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
         _initialScheme = scheme;
         _scrollbackLines = scrollbackLines;
         _isVisible = isVisible;
+        _visible = isVisible();
     }
 
     /// <summary>A new frame is ready to show.</summary>
@@ -113,7 +123,16 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     public void SetViewer(Func<bool>? isVisible)
     {
         _isVisible = isVisible ?? (static () => false);
-        if (isVisible is not null) ForceFlush();
+        _visible = _isVisible();
+        if (isVisible is not null && _visible) ForceFlush();
+    }
+
+    /// <summary>Updates the cached visibility flag from the UI thread so hidden sessions avoid posting render callbacks.</summary>
+    public void SetVisible(bool visible)
+    {
+        var wasVisible = _visible;
+        _visible = visible;
+        if (visible && !wasVisible && _dirtyWhileHidden) RequestFlush();
     }
 
     /// <summary>
@@ -169,6 +188,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
             _core = TerminalCore.Create(Options(_size), this);
             _core.SetDefaultColors(_initialPalette, _initialScheme);
+            _cachedInputModes = _core.ReadInputModes();
             _requested = _size;
         }
         try { StartLink(); }
@@ -188,6 +208,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
             if (_disposed || _core is null) return;
             _core.Reset();
             _core.SetDefaultColors(_initialPalette, _initialScheme);
+            _cachedInputModes = _core.ReadInputModes();
             foreach (var tap in _taps) tap.OnReset(_head);
             _head++;
         }
@@ -212,6 +233,9 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
         }
         RequestFlush();
     }
+
+    /// <summary>The terminal's latest cached input modes without acquiring the lock or calling native interop.</summary>
+    public InputModes CachedInputModes => _cachedInputModes;
 
     /// <summary>The terminal's current input modes (cursor keys, mouse, bracketed paste ...).</summary>
     public InputModes ReadInputModes() => Read(c => c.ReadInputModes(), InputModes.Defaults);
@@ -349,6 +373,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     {
         ScrollbackMaxLines = _scrollbackLines,
         ScrollbackMaxBytes = MaxScrollbackBytes,
+        ContinuationMaxBytes = IsMirror ? 0 : 256 * 1024,
         Replies = new TerminalReplyProfile("Octopus", AdvertiseOsc52: false, _initialScheme),
     };
 
@@ -367,6 +392,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
                 case TerminalMirrorEventKind.Reset:
                     _core.Reset();
                     _core.SetDefaultColors(_initialPalette, _initialScheme);
+                    _cachedInputModes = _core.ReadInputModes();
                     break;
                 case TerminalMirrorEventKind.Snapshot when change.Snapshot is { } snapshot:
                     // The whole terminal as the owning side has it, in place of this one; the colors stay this side's.
@@ -375,6 +401,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
                     _core = restored;
                     _size = restored.Size;
                     _core.SetDefaultColors(_initialPalette, _initialScheme);
+                    _cachedInputModes = _core.ReadInputModes();
                     _dirtyWhileHidden = true;
                     break;
             }
@@ -398,11 +425,19 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     /// <summary>Sends hangup, waits up to two seconds, kills, and frees the core.</summary>
     public async ValueTask DisposeAsync()
     {
+        Timer? coalesce;
+        Timer? hold;
         lock (_gate)
         {
             if (_disposed) return;
             _disposed = true;
+            coalesce = _coalesceTimer;
+            _coalesceTimer = null;
+            hold = _renderHoldTimer;
+            _renderHoldTimer = null;
         }
+        coalesce?.Dispose();
+        hold?.Dispose();
         await StopLinkAsync().ConfigureAwait(false);
         lock (_gate)
         {
@@ -431,6 +466,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
         link.Writes.Writer.TryComplete();
         try { await link.Connection.DisposeAsync().ConfigureAwait(false); } catch { }
         link.Cancel.Cancel();
+        link.Cancel.Dispose();
     }
 
     private async Task WriteLoopAsync(Link link)
@@ -458,6 +494,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
                     if (!chunk.IsEmpty && _core is not null)
                     {
                         _core.Write(chunk.Span);
+                        _cachedInputModes = _core.ReadInputModes();
                         foreach (var tap in _taps) tap.OnOutput(_head, chunk.Span);
                         _head += (ulong)chunk.Length;
                     }
@@ -484,24 +521,71 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
         });
     }
 
-    // One UI frame per burst of output. While hidden only a dirty flag is kept.
+    // One UI frame per burst of output, coalesced to ~60 Hz. While hidden or held by Mode 2026 only a dirty flag is kept.
     private void RequestFlush()
     {
-        if (Interlocked.Exchange(ref _flushPending, 1) == 0)
+        if (_disposed) return;
+        if (!_visible)
+        {
+            _dirtyWhileHidden = true;
+            return;
+        }
+        if (_renderHeld)
+        {
+            _dirtyDuringHold = true;
+            return;
+        }
+        if (Interlocked.Exchange(ref _flushPending, 1) != 0) return;
+        var elapsedMs = Environment.TickCount64 - Interlocked.Read(ref _lastFlushTick);
+        if (elapsedMs >= (long)MinFrameInterval.TotalMilliseconds)
+        {
             Dispatcher.UIThread.Post(Flush, DispatcherPriority.Render);
+        }
+        else
+        {
+            var delay = Math.Max(1, (long)MinFrameInterval.TotalMilliseconds - elapsedMs);
+            lock (_gate)
+            {
+                if (_disposed) return;
+                _coalesceTimer ??= new Timer(static s => ((TerminalSession)s!).OnCoalesceTimer(), this, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+                _coalesceTimer.Change(TimeSpan.FromMilliseconds(delay), Timeout.InfiniteTimeSpan);
+            }
+        }
+    }
+
+    private void OnCoalesceTimer()
+    {
+        if (_disposed) return;
+        if (!_visible)
+        {
+            _dirtyWhileHidden = true;
+            Volatile.Write(ref _flushPending, 0);
+            return;
+        }
+        Dispatcher.UIThread.Post(Flush, DispatcherPriority.Render);
     }
 
     private void Flush()
     {
-        Volatile.Write(ref _flushPending, 0);
         if (!_isVisible())
         {
+            _visible = false;
             _dirtyWhileHidden = true;
+            Volatile.Write(ref _flushPending, 0);
+            return;
+        }
+        _visible = true;
+        if (_renderHeld)
+        {
+            _dirtyDuringHold = true;
+            Volatile.Write(ref _flushPending, 0);
             return;
         }
         FrameSnapshot? frame;
         lock (_gate)
         {
+            Volatile.Write(ref _flushPending, 0);
+            Interlocked.Exchange(ref _lastFlushTick, Environment.TickCount64);
             if (_core is null) return;
             _core.ActiveSearch?.Update(); // matches must be current before the frame takes its highlights
             frame = _core.CaptureFrame(force: _dirtyWhileHidden);
@@ -510,7 +594,38 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
         if (frame is not null) FrameReady?.Invoke(frame);
     }
 
+    private void ReleaseRenderHold()
+    {
+        if (!_renderHeld) return;
+        _renderHeld = false;
+        if (_dirtyDuringHold)
+        {
+            _dirtyDuringHold = false;
+            RequestFlush();
+        }
+    }
+
     // ---- ITerminalEffects: called inside Write/Resize with the lock held ----
+
+    void ITerminalEffects.RenderHold(bool hold)
+    {
+        if (hold)
+        {
+            _renderHeld = true;
+            _renderHoldTimer ??= new Timer(static s => ((TerminalSession)s!).ReleaseRenderHold(), this, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _renderHoldTimer.Change(MaxRenderHold, Timeout.InfiniteTimeSpan);
+        }
+        else
+        {
+            _renderHoldTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _renderHeld = false;
+            if (_dirtyDuringHold)
+            {
+                _dirtyDuringHold = false;
+                RequestFlush();
+            }
+        }
+    }
 
     void ITerminalEffects.WriteToPty(ReadOnlySpan<byte> reply)
     {
@@ -519,6 +634,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
 
     void ITerminalEffects.TitleChanged(string title)
     {
+        if (_title == title) return;
         _title = title;
         Dispatcher.UIThread.Post(() => TitleChanged?.Invoke(title));
     }

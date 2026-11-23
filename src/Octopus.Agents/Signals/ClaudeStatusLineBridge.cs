@@ -262,6 +262,8 @@ public static class ClaudeConfigDirectories
     {
         "node_modules", ".git", ".Trash", "Library", ".cache", ".npm", ".nuget", ".cargo", ".rustup", ".gradle", ".m2",
         ".vscode", ".cursor", ".docker", ".local", "projects", "sessions", "shell-snapshots", "todos", "file-history",
+        ".nvm", ".pyenv", ".conda", ".bun", ".pnpm-store", ".yarn", ".android", ".cocoapods", ".oh-my-zsh",
+        ".venv", "venv", "__pycache__", ".tox", ".mypy_cache", ".pytest_cache", ".gemini", ".codex",
     };
 
     public static IReadOnlyList<string> Find(string home, string? configDirVariable)
@@ -345,6 +347,7 @@ public sealed class ClaudeStatusLineWatcher(ClaudeStatusLineBridge bridge, ISign
     private FileSystemWatcher? _watcher;
     private readonly object _gate = new();
     private readonly Dictionary<string, long> _published = new(StringComparer.Ordinal);
+    private Dictionary<string, string>? _hashToDir;
 
     public void Start()
     {
@@ -365,20 +368,49 @@ public sealed class ClaudeStatusLineWatcher(ClaudeStatusLineBridge bridge, ISign
     public void Publish(string configDir)
     {
         var key = hub.RegisterAccount("claude", configDir);
-        if (bridge.Read(configDir) is not { } report) return;
+        var outPath = bridge.OutputPath(configDir);
+        long mtimeMs;
+        try
+        {
+            if (!File.Exists(outPath)) return;
+            mtimeMs = new DateTimeOffset(File.GetLastWriteTimeUtc(outPath)).ToUnixTimeMilliseconds();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
         lock (_gate)
         {
-            var stamp = report.At.ToUnixTimeMilliseconds();
+            if (_published.TryGetValue(configDir, out var last) && last == mtimeMs) return;
+        }
+        if (bridge.Read(configDir) is not { } report) return;
+        var stamp = report.At.ToUnixTimeMilliseconds();
+        lock (_gate)
+        {
             if (_published.TryGetValue(configDir, out var last) && last == stamp) return;
             _published[configDir] = stamp;
         }
-        hub.Publish(new AgentSignal("claude", "statusline", "", key, report.At.ToUnixTimeMilliseconds(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), report.Json));
+        hub.Publish(new AgentSignal("claude", "statusline", "", key, stamp, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), report.Json));
     }
 
     private void PublishFile(string path)
     {
-        if (Path.GetFileName(path) == "directories.json") return;
-        if (bridge.DirectoryOfOutput(path) is { } dir) Publish(dir);
+        if (Path.GetFileName(path) == "directories.json")
+        {
+            lock (_gate) _hashToDir = null;
+            return;
+        }
+        var hash = Path.GetFileNameWithoutExtension(path);
+        string? dir;
+        lock (_gate)
+        {
+            if (_hashToDir is null || !_hashToDir.TryGetValue(hash, out dir))
+            {
+                _hashToDir = bridge.InstalledDirectories().ToDictionary(ClaudeStatusLineBridge.Hash, StringComparer.Ordinal);
+                _hashToDir.TryGetValue(hash, out dir);
+            }
+        }
+        if (dir is not null) Publish(dir);
     }
 
     public void Dispose()

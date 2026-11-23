@@ -89,11 +89,82 @@ public class NewProjectDialogTests
 
         location.SelectedValue = "ssh:prod";
         Assert.Equal("prod", form.SshHost);
-        Assert.False(browse.IsVisible);
+        Assert.True(browse.IsVisible);
 
         location.SelectedValue = "local";
         Assert.Null(form.SshHost);
         Assert.True(browse.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void Windows_paths_also_suggest_only_the_last_folder_name()
+    {
+        var form = new NewProjectView(null, new NewProjectChoice("", "", RemoteHost: "win1"), [], [("win1", "Win")]);
+        var path = form.FindControl<Input>("PathInput")!;
+        var name = form.FindControl<Input>("NameInput")!;
+
+        path.Text = @"C:\Users\token\code\Octopus";
+        Assert.Equal("Octopus", name.Text);
+
+        path.Text = @"D:\work\api\";
+        Assert.Equal("api", name.Text);
+    }
+
+    [AvaloniaFact]
+    public async Task In_dialog_folder_browser_picks_and_creates_folders_and_returns_to_form()
+    {
+        var root = Directory.CreateTempSubdirectory("octopus-browse-ui-").FullName;
+        var alpha = Path.Combine(root, "alpha");
+        var hidden = Path.Combine(root, ".secret");
+        Directory.CreateDirectory(alpha);
+        Directory.CreateDirectory(hidden);
+
+        try
+        {
+            var browser = new Octopus.FileSystem.LocalFolderBrowser(
+                "This computer",
+                () => [new Octopus.FileSystem.FolderBrowseProject("Alpha", alpha)]);
+            var form = new NewProjectView(null, new NewProjectChoice(root, ""), browserFactory: _ => browser);
+            var window = new Window { Width = 640, Height = 560, Content = form };
+            window.Show();
+            Frames.Pump();
+
+            Assert.False(form.IsBrowsing);
+            await form.OpenBrowseAsync();
+            Frames.Pump();
+
+            Assert.True(form.IsBrowsing);
+            var browserView = form.FindControl<FolderBrowserView>("BrowserView")!;
+            var list = browserView.FindControl<ListBox>("FolderList")!;
+            // Hidden folder is excluded by default.
+            var visibleRows = list.Items.Cast<FolderBrowserRow>().ToList();
+            Assert.Single(visibleRows);
+            Assert.Equal("alpha", visibleRows[0].Name);
+            Assert.True(visibleRows[0].IsExistingProject);
+
+            // Create a new subfolder inline.
+            browserView.FindControl<Input>("NewFolderNameBox")!.Text = "created-here";
+            browserView.FindControl<Border>("NewFolderBar")!.IsVisible = true;
+            await browserView.CommitNewFolderAsync();
+            Frames.Pump();
+
+            var created = Path.Combine(root, "created-here");
+            Assert.True(Directory.Exists(created));
+            Assert.Equal(Path.GetFullPath(created), Path.GetFullPath(browserView.SelectedPath!));
+
+            // Confirming returns to the form and populates PathInput + suggested NameInput.
+            form.ConfirmBrowse();
+            Frames.Pump();
+
+            Assert.False(form.IsBrowsing);
+            Assert.Equal(Path.GetFullPath(created), Path.GetFullPath(form.FolderPath));
+            Assert.Equal("created-here", form.ProjectName);
+            window.Close();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [AvaloniaFact]
@@ -116,6 +187,13 @@ public class NewProjectDialogTests
             form.FindControl<Input>("PathInput")!.Text = "~/code/Octopus";
             Frames.Pump();
             Frames.Save(window, Path.Combine(AppContext.BaseDirectory, "shots", $"new-project-{theme}.png"));
+
+            // Also capture the in-dialog folder browser view.
+            _ = form.OpenBrowseAsync();
+            Frames.Pump();
+            Thread.Sleep(400);
+            Frames.Pump();
+            Frames.Save(window, Path.Combine(AppContext.BaseDirectory, "shots", $"new-project-browse-{theme}.png"));
             window.Close();
             Dispatcher.UIThread.RunJobs();
         }

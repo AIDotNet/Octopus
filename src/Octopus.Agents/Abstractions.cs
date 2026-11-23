@@ -57,13 +57,28 @@ public interface IAgentScanner
 /// could end option parsing, such as a prompt after <c>--</c>); its variables go last, because an overlay variable
 /// the profile also sets was already merged with the profile's value by the planner.
 /// </param>
+/// <param name="AdditionalDirectories">
+/// Extra working directories to pass alongside <c>cwd</c> (for example, the other local folders of a merged project
+/// group). Ignored when the agent definition does not declare <see cref="AgentCapabilities.AdditionalDirs"/>.
+/// </param>
+/// <param name="AccountEnvironment">
+/// Environment variables chosen for the resolved subscription account (e.g. <c>CLAUDE_CONFIG_DIR</c>, <c>CODEX_HOME</c>).
+/// Applied before <paramref name="Profile"/> and <paramref name="Launch"/> environment entries so explicit user overrides still win.
+/// </param>
+/// <param name="UnsetEnvironment">
+/// Host/shell environment variables to unset for this launch (e.g. <c>ANTHROPIC_API_KEY</c> when using a subscription account),
+/// excluding any variable explicitly set in <paramref name="Profile"/> or <paramref name="Launch"/>.
+/// </param>
 public sealed record AgentCompileRequest(
     AgentDefinition Definition,
     AgentProfile Profile,
     AgentLaunchOptions? Launch,
     string GlobalPermission,
     string? InstalledPath,
-    SignalAttachment? Signals = null);
+    SignalAttachment? Signals = null,
+    IReadOnlyList<string>? AdditionalDirectories = null,
+    IReadOnlyDictionary<string, string>? AccountEnvironment = null,
+    IReadOnlyList<string>? UnsetEnvironment = null);
 
 /// <summary>
 /// Pure function from a definition, the user's profile and one launch's options to a command. No IO.

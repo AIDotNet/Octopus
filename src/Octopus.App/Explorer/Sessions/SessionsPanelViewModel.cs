@@ -23,7 +23,7 @@ namespace Octopus.App.Explorer.Sessions;
 public sealed partial class SessionsPanelViewModel : ObservableObject
 {
     /// <summary>Signal channels whose payload names the session a tab runs.</summary>
-    private static readonly string[] SessionChannels = ["statusline", "session-start", "prompt-submit", "stop"];
+    private static readonly string[] SessionChannels = ["statusline", "session-start", "prompt-submit", "invocation", "stop"];
 
     /// <summary>The handoff's "only the last turns" option.</summary>
     public const int RecentTurns = 20;
@@ -308,7 +308,7 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
         try
         {
             using var document = JsonDocument.Parse(payload);
-            foreach (var key in (string[])["session_id", "sessionId", "thread_id"])
+            foreach (var key in (string[])["session_id", "sessionId", "thread_id", "conversation_id", "conversationId"])
             {
                 if (document.RootElement.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } id) return id;
             }

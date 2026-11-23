@@ -29,6 +29,8 @@ public interface IProjectService
     void SetProjectColor(string projectId, string? color);
     /// <summary>Sets what the project's square shows: a color, a Lucide icon (null: the initial) and a thumbnail file (null: none).</summary>
     void SetProjectAppearance(string projectId, string? color, string? icon, string? image);
+    /// <summary>Binds an agent's default subscription account for one project; null or empty clears the override so the project follows global defaults.</summary>
+    void SetProjectAgentAccount(string projectId, string agentId, string? accountId);
     void SetCurrent(string projectId);
 
     /// <summary>Adds a port forward to a project on an SSH host (design/11-SSH隧道.md); saved after a pause.</summary>
@@ -45,6 +47,8 @@ public interface IProjectService
     ProjectGroup AddGroup(string name, IEnumerable<string>? projectIds = null);
     void RenameGroup(string groupId, string name);
     void SetGroupColor(string groupId, string? color);
+    /// <summary>Enables or disables merging the group's local project directories when launching agents that support multiple directories.</summary>
+    void SetGroupMergeWorkspaces(string groupId, bool merge);
     /// <summary>Removes the group only: its projects stay, in no group.</summary>
     void RemoveGroup(string groupId);
     /// <summary>Opens a group, closing the one that was open; null closes the open one.</summary>

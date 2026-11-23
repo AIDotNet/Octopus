@@ -135,6 +135,8 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     public Task RenameAsync(string path, string newPath) => throw NotHere();
     public Task DeleteAsync(string path, bool isDirectory) => throw NotHere();
     public Task<IDisposable> WatchAsync(string folder, Action changed) => throw NotHere();
+    public Task<BrowseFolderResultMessage> BrowseFolderAsync(BrowseFolderMessage request) => throw NotHere();
+    public Task<string> BrowseCreateDirectoryAsync(CreateBrowseFolderMessage request) => throw NotHere();
     public Task<string> GitAsync(string method, string arguments) => throw NotHere();
 }
 
@@ -210,10 +212,12 @@ internal sealed class FakeTerminal(string screen)
 
     private sealed class View(FakeTerminal terminal, ISessionSink sink, (int Columns, int Rows) wanted) : ISessionAttachment
     {
+        private byte[]? _snapshot = [];
         public ISessionSink Sink { get; } = sink;
         public ulong Position { get; private set; }
         public bool IsNative => false;
-        public byte[] Snapshot { get; private set; } = [];
+        public int SnapshotLength { get; private set; }
+        public byte[] TakeSnapshot() => Interlocked.Exchange(ref _snapshot, null) ?? [];
         public int Columns { get; private set; }
         public int Rows { get; private set; }
         public string? Title => null;
@@ -221,7 +225,7 @@ internal sealed class FakeTerminal(string screen)
         public int? ExitCode => null;
         public bool OwnsSize => ReferenceEquals(terminal._owner, this);
 
-        public void Begin(byte[] snapshot, ulong position, int columns, int rows) => (Snapshot, Position, Columns, Rows) = (snapshot, position, columns, rows);
+        public void Begin(byte[] snapshot, ulong position, int columns, int rows) => (_snapshot, SnapshotLength, Position, Columns, Rows) = (snapshot, snapshot.Length, position, columns, rows);
 
         public void Input(ReadOnlySpan<byte> bytes)
         {

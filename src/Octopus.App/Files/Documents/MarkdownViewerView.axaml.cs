@@ -41,11 +41,26 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
             _model.ReadEditor = null;
         }
         _model = DataContext as MarkdownViewerModel;
-        if (_model is null) return;
+        if (_model is null)
+        {
+            DetachEditor();
+            return;
+        }
         _model.ReadEditor = () => Editor?.GetMarkdown() ?? _model.Text;
         _model.PropertyChanged += OnModelPropertyChanged;
         LoadEditorIfNeeded();
     }
+
+    private void DetachEditor()
+    {
+        if (Editor is not { } old) return;
+        old.ImageLoading -= OnImageLoading;
+        old.ContentChanged -= OnEditorContentChanged;
+        EditorHost.Child = null;
+        Editor = null;
+    }
+
+    private void OnEditorContentChanged(object? sender, EventArgs e) => _model?.EditorChanged();
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -65,6 +80,7 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
     {
         if (_model is not { IsEditing: true } model || model.LoadId == _loadedId || model.LoadId == 0) return;
         _loadedId = model.LoadId;
+        DetachEditor();
         model.BeginEditorLoad();
         var editor = new RichTextEditor { Profile = RichTextEditorProfile.Docs };
         // Set before the editor is in the tree: a start-up value is not an undo step, so Undo never steps back to an empty document.
@@ -75,7 +91,7 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
         // The fidelity check already exported this text from an editor like this one: no second export of a large file.
         model.EditorLoaded(model.ExportOfEditorText ?? editor.GetMarkdown());
         // Edits are reported from here on; the load itself raised nothing the model could mistake for one.
-        editor.ContentChanged += (_, _) => _model?.EditorChanged();
+        editor.ContentChanged += OnEditorContentChanged;
     }
 
     /// <summary>A relative picture address (./img.png) starts at the Markdown file's own folder.</summary>

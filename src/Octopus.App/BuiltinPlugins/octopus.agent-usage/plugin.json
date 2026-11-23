@@ -3,7 +3,7 @@
   "id": "octopus.agent-usage",
   "name": "Agent Usage",
   "version": "1.0.0",
-  "description": "Subscription windows and session cost of the coding agents installed on this machine, from their official sources only.",
+  "description": "Subscription windows of the coding agents installed on this machine, from their official sources, and the balance and quota of API providers you add a key for.",
   "publisher": "Octopus",
   "icon": "lucide:gauge",
   "engines": { "api": 0 },
@@ -18,9 +18,7 @@
   "permissions": {
     "agents": {
       "signals": {
-        "claude": ["statusline"],
-        "grok": ["statusline"],
-        "opencode": ["session-usage"]
+        "claude": ["statusline"]
       },
       "probes": {
         "claude": ["account"],
@@ -39,7 +37,15 @@
       ]
     },
     "projects": "read",
-    "shell": { "open": ["cursor.com"] },
+    "net": {
+      "hosts": [
+        "api.deepseek.com", "api.moonshot.cn", "api.moonshot.ai", "openrouter.ai",
+        "api.siliconflow.cn", "api.siliconflow.com", "open.bigmodel.cn", "api.z.ai"
+      ],
+      "optional": true
+    },
+    "secrets": { "optional": true },
+    "shell": { "open": ["cursor.com", "platform.deepseek.com", "platform.moonshot.cn", "openrouter.ai", "cloud.siliconflow.cn", "bigmodel.cn"] },
     "notifications": { "optional": true }
   },
 
@@ -66,6 +72,20 @@
     ],
     "configuration": {
       "properties": {
+        "octopus.agent-usage.style": {
+          "type": "enum", "options": ["compact", "comfortable"], "default": "compact",
+          "label": "Popover style",
+          "description": "Compact fits a window on one short line (5h, 4h07) and keeps the details in tooltips, so more accounts fit at once. Comfortable spells everything out with more room.",
+          "localized": {
+            "zh-CN": {
+              "label": "弹窗风格",
+              "description": "紧凑风格把每个窗口压成一行短文字（5h、4h07），细节放进悬停提示，一屏能看更多账户；宽松风格把信息写全，留白更多。",
+              "option.compact": "紧凑",
+              "option.comfortable": "宽松"
+            },
+            "en": { "option.compact": "Compact", "option.comfortable": "Comfortable" }
+          }
+        },
         "octopus.agent-usage.claude.source": {
           "type": "enum", "options": ["statusline", "command"], "default": "statusline",
           "label": "Claude usage source",
@@ -114,8 +134,8 @@
           "localized": { "zh-CN": { "label": "窗口重置时提醒" } }
         },
         "octopus.agent-usage.hidden": {
-          "type": "list", "default": [], "label": "Hide usage of these agents (ids)",
-          "localized": { "zh-CN": { "label": "不显示这些智能体（id）" } }
+          "type": "list", "default": [], "label": "Hide these tabs (agent ids, or \"api\" for API balances)",
+          "localized": { "zh-CN": { "label": "不显示这些标签（智能体 id；填 api 隐藏 API 余额）" } }
         }
       }
     }
@@ -124,7 +144,7 @@
   "localized": {
     "zh-CN": {
       "name": "智能体用量",
-      "description": "本机已安装的编程智能体的订阅窗口与会话成本，只用官方来源。"
+      "description": "本机已安装的编程智能体的订阅窗口（只用官方来源），以及你添加了密钥的 API 服务商的余额和额度。"
     }
   }
 }

@@ -44,6 +44,13 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
         {
             env[k] = v;
         }
+        if (request.AccountEnvironment is { } accountEnv)
+        {
+            foreach (var (k, v) in accountEnv)
+            {
+                env[k] = v;
+            }
+        }
         if (request.Signals is { } signals)
         {
             args.AddRange(signals.Arguments);
@@ -110,6 +117,8 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
             ApplyFeature(feature, profile, args, env);
         }
 
+        var variadicAdditionalDirs = ApplyAdditionalDirs(caps.AdditionalDirs, request.AdditionalDirectories, args);
+
         if (caps.ExtraArgs)
         {
             args.AddRange(profile.ExtraArgs);
@@ -135,7 +144,7 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
             }
             else
             {
-                if (promptCap.Separator)
+                if (promptCap.Separator || variadicAdditionalDirs)
                 {
                     args.Add("--");
                 }
@@ -164,7 +173,27 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
             }
         }
 
-        return new AgentCommand(executable, args, env);
+        IReadOnlyList<string>? unsets = null;
+        if (request.UnsetEnvironment is { Count: > 0 } requestedUnsets)
+        {
+            var filtered = new List<string>();
+            foreach (var name in requestedUnsets)
+            {
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                // Never unset a variable the user explicitly configured in Profile.Env, Launch.Env, or BaseEnv.
+                if (env.ContainsKey(name)) continue;
+                if (!filtered.Contains(name, StringComparer.Ordinal))
+                {
+                    filtered.Add(name);
+                }
+            }
+            if (filtered.Count > 0)
+            {
+                unsets = filtered;
+            }
+        }
+
+        return new AgentCommand(executable, args, env, unsets);
     }
 
     public string Preview(AgentCompileRequest request)
@@ -238,7 +267,7 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
                 AddTemplate(args, feature.Args, "true");
                 if (!string.IsNullOrEmpty(feature.Env))
                 {
-                    env[feature.Env] = "true";
+                    env[feature.Env] = string.IsNullOrEmpty(feature.EnvValue) ? "true" : feature.EnvValue;
                 }
                 break;
             case "list":
@@ -264,6 +293,61 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
                 }
                 break;
         }
+    }
+
+    private static bool ApplyAdditionalDirs(
+        AdditionalDirsCapability? capability,
+        IReadOnlyList<string>? directories,
+        List<string> args)
+    {
+        if (capability is null || capability.Args.Count == 0 || directories is null || directories.Count == 0)
+        {
+            return false;
+        }
+        var items = directories
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Select(d => d.Trim())
+            .ToList();
+        if (capability.MaxCount is > 0 and var cap && items.Count > cap)
+        {
+            items.RemoveRange(cap, items.Count - cap);
+        }
+        if (items.Count == 0)
+        {
+            return false;
+        }
+
+        var isVariadic = false;
+        if (string.Equals(capability.Mode, "variadic", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var part in capability.Args)
+            {
+                if (part.Contains("{value}", StringComparison.Ordinal))
+                {
+                    foreach (var item in items)
+                    {
+                        args.Add(Substitute(part, item));
+                    }
+                }
+                else
+                {
+                    args.Add(part);
+                }
+            }
+            isVariadic = true;
+        }
+        else if (string.Equals(capability.Mode, "comma", StringComparison.OrdinalIgnoreCase))
+        {
+            AddTemplate(args, capability.Args, string.Join(',', items));
+        }
+        else
+        {
+            foreach (var item in items)
+            {
+                AddTemplate(args, capability.Args, item);
+            }
+        }
+        return isVariadic;
     }
 
     private static void AddTemplate(List<string> args, IEnumerable<string>? template, string value)

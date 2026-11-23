@@ -2,12 +2,18 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Octopus.Agents;
+using Octopus.Agents.Accounts;
 using Octopus.App.Activity;
+using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.App.Shell;
+using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Platform;
+using Octopus.Storage;
+using TKCode.Arc.Localization;
 
 namespace Octopus.App.Sidebar;
 
@@ -21,6 +27,10 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     private readonly ISettingsNavigator _navigator;
     private readonly IProjectIconStore? _icons;
     private readonly IItemActivityService? _activity;
+    private readonly IAgentCatalog? _catalog;
+    private readonly IAgentScanner? _scanner;
+    private readonly ISettingsStore? _settings;
+    private readonly IAgentAccountService? _accounts;
     /// <summary>The open group as the rail last showed it; null before the first build and when all are closed.</summary>
     private string? _shownExpanded;
     private bool _built;
@@ -32,16 +42,28 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         IFileOpener files,
         ISettingsNavigator navigator,
         IProjectIconStore? icons = null,
-        IItemActivityService? activity = null)
+        IItemActivityService? activity = null,
+        IAgentCatalog? catalog = null,
+        IAgentScanner? scanner = null,
+        ISettingsStore? settings = null,
+        IAgentAccountService? accounts = null)
     {
         _icons = icons;
         _activity = activity;
+        _catalog = catalog;
+        _scanner = scanner;
+        _settings = settings;
+        _accounts = accounts;
         _projects = projects;
         _opener = opener;
         _dialogs = dialogs;
         _files = files;
         _navigator = navigator;
         _projects.Changed += OnProjectsChanged;
+        if (_accounts is not null) _accounts.Changed += (_, _) => UiContext.Run(Rebuild);
+        if (_settings is not null) _settings.Changed += (_, _) => UiContext.Run(Rebuild);
+        if (_scanner is not null) _scanner.Changed += (_, _) => UiContext.Run(Rebuild);
+        ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
         if (_activity is not null)
         {
             // The rail lives as long as the shell, like the activity service: no unsubscribe.
@@ -77,7 +99,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
-        if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.Groups)
+        if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.Groups or ProjectChangeKind.ProjectAccounts)
         {
             Rebuild();
         }
@@ -151,7 +173,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         {
             var chip = new ProjectChipViewModel(
                 project, project.Id == current, Select, Rename, Reveal, RemoveAsync, ChangeIconAsync, _icons?.Load(project.Image),
-                choices, MoveToGroup, NewGroupAsync)
+                choices, MoveToGroup, NewGroupAsync, BuildAgentAccountMenus(project), SetProjectAgentAccount)
             {
                 IsWorking = IsWorking(project),
                 NeedsInput = NeedsInput(project),
@@ -172,7 +194,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         {
             var isExpanded = group.Id == expanded;
             Entries.Add(new ProjectGroupViewModel(
-                group, isExpanded, members[group.Id], ToggleGroup, RenameGroupAsync, RemoveGroup, SetGroupColor)
+                group, isExpanded, members[group.Id], ToggleGroup, RenameGroupAsync, RemoveGroup, SetGroupColor, SetGroupMergeWorkspaces)
             {
                 // A group that opened or closed with this change (a new group opens as it is made) plays it.
                 AnimateOnAttach = _built && isExpanded != (group.Id == _shownExpanded),
@@ -234,6 +256,64 @@ public sealed partial class ProjectRailViewModel : ObservableObject
 
     private void MoveToGroup(ProjectChipViewModel chip, string? groupId) => _projects.MoveProjectToGroup(chip.Id, groupId);
 
+    private void SetProjectAgentAccount(ProjectChipViewModel chip, ProjectAgentAccountSelection selection) =>
+        _projects.SetProjectAgentAccount(chip.Id, selection.AgentId, selection.AccountId);
+
+    private IReadOnlyList<ProjectAgentAccountMenu> BuildAgentAccountMenus(Project project)
+    {
+        if (!ProjectLocation.IsOnThisComputer(project)
+            || _accounts is null
+            || _catalog is null
+            || _scanner is null
+            || _settings is null)
+        {
+            return [];
+        }
+
+        var menus = new List<ProjectAgentAccountMenu>();
+        var agentSettings = _settings.Current.Agents;
+        foreach (var installation in _scanner.Current.Installations)
+        {
+            var definition = _catalog.Find(installation.AgentId);
+            if (definition?.Accounts is null || !agentSettings.ProfileOf(definition.Id).Enabled)
+            {
+                continue;
+            }
+            var accounts = _accounts.GetAccounts(definition);
+            if (accounts.Count < 2)
+            {
+                continue;
+            }
+
+            var profile = agentSettings.ProfileOf(definition.Id);
+            var globalPreferredId = _accounts.ResolvePreferredAccountId(definition, profile, project: null);
+            var globalPreferred = accounts.FirstOrDefault(a => a.Id == globalPreferredId) ?? accounts[0];
+            var globalLabel = DisplayAccountLabel(globalPreferred);
+
+            project.AgentAccounts.TryGetValue(definition.Id, out var projectOverrideId);
+            if (!string.IsNullOrWhiteSpace(projectOverrideId) && accounts.All(a => a.Id != projectOverrideId))
+            {
+                projectOverrideId = null;
+            }
+
+            var options = new List<ProjectAgentAccountOption>
+            {
+                new(null, AppLangResources.Format(AppLangResourceKind.ProjectAccountFollowDefault, globalLabel), string.IsNullOrEmpty(projectOverrideId)),
+            };
+            foreach (var account in accounts)
+            {
+                options.Add(new ProjectAgentAccountOption(account.Id, DisplayAccountLabel(account), account.Id == projectOverrideId));
+            }
+            menus.Add(new ProjectAgentAccountMenu(definition.Id, definition.Name, options));
+        }
+        return menus;
+    }
+
+    private static string DisplayAccountLabel(AgentAccountRecord account) =>
+        account.IsDefaultOrigin && account.Label == "Default"
+            ? AppLangResources.Get(AppLangResourceKind.AccountDefaultName)
+            : account.Label;
+
     private Task NewGroupAsync(ProjectChipViewModel chip) => NewGroupWithAsync([chip.Id]);
 
     /// <summary>Asks for a name, then makes a group of the projects (it opens); nothing happens when the dialog is dismissed.</summary>
@@ -270,6 +350,8 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     private void RemoveGroup(ProjectGroupViewModel group) => _projects.RemoveGroup(group.Id);
 
     private void SetGroupColor(ProjectGroupViewModel group, string color) => _projects.SetGroupColor(group.Id, color);
+
+    private void SetGroupMergeWorkspaces(ProjectGroupViewModel group, bool merge) => _projects.SetGroupMergeWorkspaces(group.Id, merge);
 
     // ---- dragging a square ----
 

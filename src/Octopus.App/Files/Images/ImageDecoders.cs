@@ -70,7 +70,8 @@ public static class ImageDecoders
         var width = Math.Max(1, (int)Math.Ceiling(bounds.Width));
         var height = Math.Max(1, (int)Math.Ceiling(bounds.Height));
         var longest = Math.Max(bounds.Width, bounds.Height);
-        var scale = Math.Min(MaxSvgPixels / longest, Math.Max(2, 2048 / longest));
+        // Up to 8x for small icon SVGs (24 px -> 192 px instead of 2048 px = 16 MB), up to 2048 px for medium SVGs, capped at MaxSvgPixels.
+        var scale = Math.Min(MaxSvgPixels / longest, Math.Max(2, Math.Min(8, 2048 / longest)));
         var pixelWidth = Math.Max(1, (int)Math.Round(bounds.Width * scale));
         var pixelHeight = Math.Max(1, (int)Math.Round(bounds.Height * scale));
 
@@ -125,7 +126,16 @@ public static class ImageDecoders
         // The decoder's frames (some are the basis of later ones, so they stay until the end) and the copies handed to
         // Avalonia live together for a moment: count both.
         var keptBytes = (long)kept.Width * kept.Height * 4;
-        if (frames.Length > MaxFrames || (long)frames.Length * (info.BytesSize64 + keptBytes) > MaxAnimationBytes) return null;
+        if (frames.Length > MaxFrames || (long)frames.Length * keptBytes > MaxAnimationBytes) return null;
+
+        // Track the last frame that depends on each earlier frame so intermediate SKBitmaps can be freed as soon as possible.
+        var lastUsedBy = new int[frames.Length];
+        for (var i = 0; i < frames.Length; i++) lastUsedBy[i] = i;
+        for (var i = 0; i < frames.Length; i++)
+        {
+            var req = frames[i].RequiredFrame;
+            if (req >= 0 && req < i) lastUsedBy[req] = i;
+        }
 
         var decoded = new SKBitmap?[frames.Length];
         var result = new List<Bitmap>(frames.Length);
@@ -149,8 +159,18 @@ public static class ImageDecoders
                 var status = codec.GetPixels(info, bitmap.GetPixels(), new SKCodecOptions(i, required));
                 // A frame cut short shows what was read, as a browser does; anything else is a broken picture.
                 if (status is not (SKCodecResult.Success or SKCodecResult.IncompleteInput)) return Dispose(result);
+                result.Add(ToAvalonia(bitmap, kept));
+                if (required >= 0 && lastUsedBy[required] == i)
+                {
+                    decoded[required]?.Dispose();
+                    decoded[required] = null;
+                }
+                if (lastUsedBy[i] == i)
+                {
+                    decoded[i]?.Dispose();
+                    decoded[i] = null;
+                }
             }
-            foreach (var bitmap in decoded) result.Add(ToAvalonia(bitmap!, kept));
         }
         finally
         {

@@ -84,6 +84,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
         OwnHello.TerminalBuild is { Length: > 0 } own && own == HostHello.TerminalBuild
         && RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityNativeSnapshot);
 
+    /// <summary>The host supports browsing folders for picking a new project (<see cref="RemoteMethods.FsBrowse"/>).</summary>
+    public bool SupportsBrowse =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityBrowse);
+
     /// <summary>Projects or their items changed on the host. Raised on the receiving thread.</summary>
     public event Action? WorkspaceChanged;
     /// <summary>One item's title or activity changed. Raised on the receiving thread.</summary>
@@ -173,6 +177,16 @@ public sealed class RemoteHostClient : IAsyncDisposable
 
     public Task UnwatchFolderAsync(string folder, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.FsUnwatch, new PathMessage { Path = folder }, RemoteJsonContext.Default.PathMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    /// <summary>Lists folders (directories only) anywhere on the host for choosing a project folder.</summary>
+    public Task<BrowseFolderResultMessage> BrowseFolderAsync(string? path = null, bool listRoots = false, bool fallbackToParent = false, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.FsBrowse, new BrowseFolderMessage { Path = path, ListRoots = listRoots, FallbackToParent = fallbackToParent },
+            RemoteJsonContext.Default.BrowseFolderMessage, RemoteJsonContext.Default.BrowseFolderResultMessage, cancellationToken);
+
+    /// <summary>Creates a new empty folder under <paramref name="parentPath"/> on the host and returns its full path.</summary>
+    public async Task<string> BrowseCreateDirectoryAsync(string parentPath, string name, CancellationToken cancellationToken = default) =>
+        (await CallAsync(RemoteMethods.FsBrowseCreateDirectory, new CreateBrowseFolderMessage { ParentPath = parentPath, Name = name },
+            RemoteJsonContext.Default.CreateBrowseFolderMessage, RemoteJsonContext.Default.ResolvedMessage, cancellationToken).ConfigureAwait(false)).Path;
 
     /// <summary>A call of the host's git service; arguments and result are JSON the two apps agree on.</summary>
     public async Task<string> GitAsync(string method, string arguments, CancellationToken cancellationToken = default) =>

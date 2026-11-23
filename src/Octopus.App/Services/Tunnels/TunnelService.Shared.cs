@@ -22,6 +22,7 @@ public sealed partial class TunnelService
 {
     private readonly HashSet<string> _sharedHosts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Anchor> _anchors = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Task<ProcessResult>> _hostChecks = new(StringComparer.Ordinal);
     private readonly List<Task> _pendingCancels = [];
 
     private bool CanUseSharedConnection => _runner is not null && _shared is { ClientOptions.Count: > 0 };
@@ -165,6 +166,36 @@ public sealed partial class TunnelService
     private Task<ProcessResult> RunSharedCommandAsync(IReadOnlyList<string> arguments, CancellationToken token) =>
         _runner!.RunAsync("ssh", arguments, timeout: _timings.SharedCommandTimeout, cancellationToken: token);
 
+    /// <summary>Shares an in-flight <c>ssh -O check</c> across all tunnels waiting on the same host.</summary>
+    private async Task<ProcessResult> CheckSharedHostAsync(string host, IReadOnlyList<string> client, CancellationToken token)
+    {
+        Task<ProcessResult>? task;
+        var owner = false;
+        lock (_gate)
+        {
+            if (!_hostChecks.TryGetValue(host, out task) || task.IsCompleted)
+            {
+                task = RunSharedCommandAsync(SshSharedCommand.Check(host, client), CancellationToken.None);
+                _hostChecks[host] = task;
+                owner = true;
+            }
+        }
+        try
+        {
+            return await task.WaitAsync(token).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (owner)
+            {
+                lock (_gate)
+                {
+                    if (_hostChecks.TryGetValue(host, out var current) && ReferenceEquals(current, task)) _hostChecks.Remove(host);
+                }
+            }
+        }
+    }
+
     private void SetWaiting(Entry entry, int generation)
     {
         var applied = false;
@@ -215,7 +246,7 @@ public sealed partial class TunnelService
         var cameUp = false;
         while (!token.IsCancellationRequested)
         {
-            var check = await RunSharedCommandAsync(SshSharedCommand.Check(host, client), token).ConfigureAwait(false);
+            var check = await CheckSharedHostAsync(host, client, token).ConfigureAwait(false);
             if (!check.Succeeded)
             {
                 SetWaiting(entry, generation);

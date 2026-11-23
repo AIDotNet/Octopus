@@ -146,9 +146,11 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
                 existing.RefreshState();
                 return existing;
             }
+            existing?.Detach();
             return new PluginRowViewModel(p, this) { IsExpanded = existing?.IsExpanded ?? false };
         }).OrderBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
         if (rows.SequenceEqual(wanted)) return;
+        foreach (var removed in rows.Except(wanted)) removed.Detach();
         rows.Clear();
         foreach (var row in wanted) rows.Add(row);
     }

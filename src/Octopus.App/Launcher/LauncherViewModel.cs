@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Agents;
+using Octopus.Agents.Accounts;
 using Octopus.App.Common;
 using Octopus.App.Services;
 using Octopus.App.Shell;
@@ -22,6 +23,7 @@ public sealed partial class LauncherViewModel : ObservableObject
     private readonly IModelDiscovery _discovery;
     private readonly IItemOpener _opener;
     private readonly ISettingsNavigator _navigator;
+    private readonly IAgentAccountService? _accounts;
     private readonly Dictionary<string, AgentLaunchViewModel> _panels = [];
     private readonly Plugins.PluginWorkbench? _plugins;
 
@@ -35,9 +37,11 @@ public sealed partial class LauncherViewModel : ObservableObject
         ISettingsNavigator navigator,
         IAppKeymap keymap,
         IProjectService projects,
-        Plugins.PluginWorkbench? plugins = null)
+        Plugins.PluginWorkbench? plugins = null,
+        IAgentAccountService? accounts = null)
     {
         _plugins = plugins;
+        _accounts = accounts;
         _scanner = scanner;
         _catalog = catalog;
         _settings = settings;
@@ -48,12 +52,13 @@ public sealed partial class LauncherViewModel : ObservableObject
         _projects = projects;
         _projects.Changed += (_, e) =>
         {
-            if (e.Kind == ProjectChangeKind.CurrentProject) UiContext.PostToUi(Refresh);
+            if (e.Kind is ProjectChangeKind.CurrentProject or ProjectChangeKind.ProjectAccounts) UiContext.PostToUi(Refresh);
         };
         NewTerminalHint = keymap.Hint(AppCommand.NewTerminal);
         _scanner.Changed += (_, _) => UiContext.PostToUi(Refresh);
         _catalog.Changed += (_, _) => UiContext.PostToUi(Refresh);
         _settings.Changed += (_, _) => UiContext.PostToUi(Refresh);
+        if (_accounts is not null) _accounts.Changed += (_, _) => UiContext.PostToUi(Refresh);
         if (plugins is not null) plugins.Manager.HostChanged += (_, _) => UiContext.PostToUi(RefreshViews);
         Refresh();
     }
@@ -215,9 +220,17 @@ public sealed partial class LauncherViewModel : ObservableObject
             return null;
         }
         var current = _settings.Current.Agents;
+        var profile = current.ProfileOf(agent.Id);
+        IReadOnlyList<AgentAccountRecord>? accounts = null;
+        string? preferredAccountId = null;
+        if (_accounts is not null && _projects.Current is { RemoteHost: null } localProject)
+        {
+            accounts = _accounts.GetAccounts(definition);
+            preferredAccountId = _accounts.ResolvePreferredAccountId(definition, profile, localProject);
+        }
         var panel = new AgentLaunchViewModel(
             definition,
-            current.ProfileOf(agent.Id),
+            profile,
             current.DefaultPermission,
             _compiler,
             _discovery,
@@ -226,7 +239,9 @@ public sealed partial class LauncherViewModel : ObservableObject
             {
                 _opener.OpenAgent(agent.Id, options);
                 Close();
-            });
+            },
+            accounts,
+            preferredAccountId);
         _panels[agent.Id] = panel;
         return panel;
     }

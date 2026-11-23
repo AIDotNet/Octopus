@@ -35,6 +35,7 @@
     "resume": {
       "continueLatest": ["--continue"]
     },
+    "additionalDirs": { "mode": "variadic", "args": ["--add-dir", "{value}"] },
     "extraArgs": true
   },
   // CodeBuddy Code is a Claude Code compatible CLI: hooks and plugins use its formats, and --plugin-dir loads a

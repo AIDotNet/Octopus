@@ -95,6 +95,9 @@ public sealed class FileTreeService(ITrashService? trash = null) : IFileTreeServ
 
     public IDisposable WatchChanges(string root, Action onAnyChange, TimeSpan debounce) => new ChangeWatcher(root, onAnyChange, debounce);
 
+    public IDisposable WatchChanges(string root, Action<bool> onChanged, TimeSpan debounce) =>
+        new ChangeWatcher(root, static () => { }, debounce, onTypedChange: onChanged);
+
     public IDisposable WatchFile(string path, Action onChanged, TimeSpan debounce)
     {
         var full = Path.GetFullPath(path);

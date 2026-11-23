@@ -66,12 +66,6 @@ public static class GitDiffParser
         var newNumber = 0;
         var inHunk = false;
 
-        void Add(GitDiffLine line)
-        {
-            total++;
-            if (lines.Count < MaxLines) lines.Add(line);
-        }
-
         var start = 0;
         while (start < output.Length)
         {
@@ -84,8 +78,12 @@ public static class GitDiffParser
             if (text.StartsWith("@@"))
             {
                 inHunk = true;
-                ParseHunkHeader(text, out oldNumber, out newNumber);
-                Add(new GitDiffLine(GitDiffLineKind.Hunk, null, null, Cut(text)));
+                if (lines.Count < MaxLines)
+                {
+                    ParseHunkHeader(text, out oldNumber, out newNumber);
+                    lines.Add(new GitDiffLine(GitDiffLineKind.Hunk, null, null, Cut(text)));
+                }
+                total++;
                 continue;
             }
             if (!inHunk)
@@ -99,24 +97,29 @@ public static class GitDiffParser
             {
                 // A context line that is empty has its single space; a bare empty line only ends the output.
                 if (start >= output.Length) break;
-                Add(new GitDiffLine(GitDiffLineKind.Context, oldNumber++, newNumber++, ""));
+                if (lines.Count < MaxLines) lines.Add(new GitDiffLine(GitDiffLineKind.Context, oldNumber++, newNumber++, ""));
+                total++;
                 continue;
             }
             switch (text[0])
             {
                 case '+':
                     added++;
-                    Add(new GitDiffLine(GitDiffLineKind.Added, null, newNumber++, Cut(text[1..])));
+                    if (lines.Count < MaxLines) lines.Add(new GitDiffLine(GitDiffLineKind.Added, null, newNumber++, Cut(text[1..])));
+                    total++;
                     break;
                 case '-':
                     removed++;
-                    Add(new GitDiffLine(GitDiffLineKind.Removed, oldNumber++, null, Cut(text[1..])));
+                    if (lines.Count < MaxLines) lines.Add(new GitDiffLine(GitDiffLineKind.Removed, oldNumber++, null, Cut(text[1..])));
+                    total++;
                     break;
                 case '\\':
-                    Add(new GitDiffLine(GitDiffLineKind.Note, null, null, text.ToString()));
+                    if (lines.Count < MaxLines) lines.Add(new GitDiffLine(GitDiffLineKind.Note, null, null, text.ToString()));
+                    total++;
                     break;
                 default:
-                    Add(new GitDiffLine(GitDiffLineKind.Context, oldNumber++, newNumber++, Cut(text.Length > 0 ? text[1..] : text)));
+                    if (lines.Count < MaxLines) lines.Add(new GitDiffLine(GitDiffLineKind.Context, oldNumber++, newNumber++, Cut(text.Length > 0 ? text[1..] : text)));
+                    total++;
                     break;
             }
         }
@@ -127,15 +130,27 @@ public static class GitDiffParser
     public static GitFileDiff AllAdded(string content)
     {
         if (content.Length == 0) return GitFileDiff.Of(GitFileDiffKind.Empty);
-        var all = content.Split('\n');
-        var count = all.Length - (content.EndsWith('\n') ? 1 : 0);
-        var lines = new List<GitDiffLine>(Math.Min(count, MaxLines) + 2)
+        var count = 0;
+        for (var pos = 0; pos < content.Length;)
+        {
+            count++;
+            var nl = content.IndexOf('\n', pos);
+            if (nl < 0) break;
+            pos = nl + 1;
+        }
+        var lines = new List<GitDiffLine>(Math.Min(count, MaxLines) + 1)
         {
             new(GitDiffLineKind.Hunk, null, null, $"@@ -0,0 +1,{count.ToString(CultureInfo.InvariantCulture)} @@"),
         };
+        var start = 0;
         for (var i = 0; i < count && lines.Count < MaxLines; i++)
         {
-            lines.Add(new GitDiffLine(GitDiffLineKind.Added, null, i + 1, Cut(all[i].TrimEnd('\r'))));
+            var end = content.IndexOf('\n', start);
+            if (end < 0) end = content.Length;
+            var span = content.AsSpan(start, end - start);
+            if (span.Length > 0 && span[^1] == '\r') span = span[..^1];
+            lines.Add(new GitDiffLine(GitDiffLineKind.Added, null, i + 1, Cut(span)));
+            start = end + 1;
         }
         return new GitFileDiff(GitFileDiffKind.Text, lines, count + 1, count, 0);
     }

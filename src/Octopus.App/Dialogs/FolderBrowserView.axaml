@@ -1,0 +1,297 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:dialogs="using:Octopus.App.Dialogs"
+             x:Class="Octopus.App.Dialogs.FolderBrowserView">
+    <UserControl.Styles>
+        <!-- ArcTheme has no default template for ListBox / ListBoxItem, so template them explicitly (same as SearchResultsView). -->
+        <Style Selector="ListBox.folder-list">
+            <Setter Property="ItemsPanel">
+                <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <arc:ScrollArea Name="PART_ScrollViewer" FadeLength="0"
+                                    HorizontalScrollBarVisibility="Disabled">
+                        <ItemsPresenter Name="PART_ItemsPresenter"
+                                        Margin="4"
+                                        ItemsPanel="{TemplateBinding ItemsPanel}" />
+                    </arc:ScrollArea>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ListBox.folder-list ListBoxItem">
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Background="{TemplateBinding Background}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                      Padding="{TemplateBinding Padding}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ListBox.folder-list ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+        <Style Selector="ListBox.folder-list ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        </Style>
+        <Style Selector="TextBlock.folder-name.hidden">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="Button.crumb">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="5,2" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Crumb"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          VerticalContentAlignment="Center"
+                                          HorizontalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.crumb:pointerover /template/ Border#PART_Crumb">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="10">
+        <!-- Top navigation: up, home, refresh, and clickable breadcrumb / editable path bar. -->
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <arc:Button x:Name="UpButton" Classes="icon" Variant="Secondary"
+                            arc:Tooltip.Tip="{l:AppLangResource FolderBrowserUp}">
+                    <lucide:LucideIcon Kind="ChevronUp" Size="14" />
+                </arc:Button>
+                <arc:Button x:Name="HomeButton" Classes="icon" Variant="Secondary"
+                            arc:Tooltip.Tip="{l:AppLangResource FolderBrowserHome}">
+                    <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                </arc:Button>
+                <arc:Button x:Name="RefreshButton" Classes="icon" Variant="Secondary"
+                            arc:Tooltip.Tip="{l:AppLangResource FolderBrowserRefresh}">
+                    <lucide:LucideIcon Kind="RefreshCw" Size="13" />
+                </arc:Button>
+            </StackPanel>
+
+            <Panel Grid.Column="1" VerticalAlignment="Center">
+                <Border x:Name="BreadcrumbBar"
+                        Height="32"
+                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                        BorderThickness="1"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusControl}">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <ScrollViewer x:Name="BreadcrumbScroller"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="BreadcrumbPanel"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        Spacing="2"
+                                        Margin="6,0" />
+                        </ScrollViewer>
+                        <arc:Button x:Name="EditPathButton" Grid.Column="1" Classes="icon" Variant="Ghost"
+                                    Width="24" Height="24" Margin="3,0"
+                                    arc:Tooltip.Tip="{l:AppLangResource FolderBrowserEditPath}">
+                            <lucide:LucideIcon Kind="Pencil" Size="12" />
+                        </arc:Button>
+                    </Grid>
+                </Border>
+
+                <Grid x:Name="PathEditBar" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" IsVisible="False">
+                    <arc:Input x:Name="PathEditBox" Size="Small"
+                               Placeholder="{l:AppLangResource FolderBrowserPathPlaceholder}" />
+                    <arc:Button x:Name="PathGoButton" Grid.Column="1" Classes="icon" Variant="Primary" VerticalAlignment="Center">
+                        <lucide:LucideIcon Kind="Check" Size="13" />
+                    </arc:Button>
+                    <arc:Button x:Name="PathCancelButton" Grid.Column="2" Classes="icon" Variant="Ghost" VerticalAlignment="Center">
+                        <lucide:LucideIcon Kind="X" Size="13" />
+                    </arc:Button>
+                </Grid>
+            </Panel>
+        </Grid>
+
+        <!-- Main body: quick places & existing projects on the left, filterable subfolder list on the right. -->
+        <Grid ColumnDefinitions="144,*" ColumnSpacing="10" Height="280">
+            <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Padding="6">
+                <arc:ScrollArea FadeLength="0">
+                    <StackPanel Spacing="10">
+                        <StackPanel Spacing="2">
+                            <TextBlock Classes="caption" Margin="6,2,6,4" Text="{l:AppLangResource FolderBrowserPlaces}" />
+                            <Button x:Name="QuickHomeButton" Classes="row" Padding="6,5">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                                    <TextBlock Classes="body" FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                               Text="{l:AppLangResource FolderBrowserHome}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
+                            <StackPanel x:Name="QuickRootsPanel" Spacing="2" />
+                        </StackPanel>
+
+                        <StackPanel x:Name="ExistingProjectsSection" Spacing="2" IsVisible="False">
+                            <TextBlock Classes="caption" Margin="6,2,6,4" Text="{l:AppLangResource FolderBrowserExistingProjects}" />
+                            <StackPanel x:Name="QuickProjectsPanel" Spacing="2" />
+                        </StackPanel>
+                    </StackPanel>
+                </arc:ScrollArea>
+            </Border>
+
+            <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*" RowSpacing="8">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                    <arc:SearchField x:Name="FilterInput" Size="Small" IsLabelVisible="False"
+                                     Label="{l:AppLangResource FolderBrowserFilterPlaceholder}"
+                                     Placeholder="{l:AppLangResource FolderBrowserFilterPlaceholder}" />
+                    <arc:Button x:Name="NewFolderButton" Grid.Column="1" Variant="Secondary" Size="Small"
+                                VerticalAlignment="Center"
+                                arc:Tooltip.Tip="{l:AppLangResource FolderBrowserNewFolder}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <lucide:LucideIcon Kind="Plus" Size="13" />
+                            <TextBlock Text="{l:AppLangResource FolderBrowserNewFolder}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </arc:Button>
+                    <arc:Button x:Name="HiddenToggleButton" Grid.Column="2" Classes="icon header"
+                                VerticalAlignment="Center"
+                                arc:Tooltip.Tip="{l:AppLangResource FolderBrowserShowHidden}">
+                        <lucide:LucideIcon Kind="Eye" Size="14" />
+                    </arc:Button>
+                </Grid>
+
+                <!-- Inline new folder creation bar. -->
+                <Border x:Name="NewFolderBar" Grid.Row="1" IsVisible="False"
+                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                        BorderBrush="{arc:ArcDesignTokenResource Border}"
+                        BorderThickness="1"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                        Padding="8">
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                            <arc:Input x:Name="NewFolderNameBox" Size="Small"
+                                       Placeholder="{l:AppLangResource FolderBrowserNewFolderPlaceholder}" />
+                            <arc:Button x:Name="CreateFolderConfirmButton" Grid.Column="1" Variant="Primary" Size="Small"
+                                        VerticalAlignment="Center"
+                                        Content="{l:AppLangResource FolderBrowserCreate}" />
+                            <arc:Button x:Name="CreateFolderCancelButton" Grid.Column="2" Classes="icon" Variant="Ghost"
+                                        VerticalAlignment="Center">
+                                <lucide:LucideIcon Kind="X" Size="13" />
+                            </arc:Button>
+                        </Grid>
+                        <TextBlock x:Name="NewFolderError" Classes="hint"
+                                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                                   TextWrapping="Wrap" IsVisible="False" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="2"
+                        Background="{arc:ArcDesignTokenResource Surface}"
+                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                        BorderThickness="1"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                        ClipToBounds="True">
+                    <Panel>
+                        <ListBox x:Name="FolderList"
+                                 Classes="folder-list"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 SelectionMode="Single"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="dialogs:FolderBrowserRow">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                        <lucide:LucideIcon Kind="{Binding Icon}" Size="15"
+                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                           VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1"
+                                                   Classes="body folder-name"
+                                                   Classes.hidden="{Binding IsHidden}"
+                                                   Text="{Binding Name}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <Border Grid.Column="2"
+                                                IsVisible="{Binding IsExistingProject}"
+                                                Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                                                CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                                                Padding="6,1"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{l:AppLangResource FolderBrowserExistingProjectBadge}"
+                                                       Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                       FontSize="10" FontWeight="Medium" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <TextBlock x:Name="EmptyStateText" Classes="hint"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   TextWrapping="Wrap" Margin="16" IsVisible="False" />
+
+                        <Border x:Name="LoadingOverlay"
+                                Background="{arc:ArcDesignTokenResource Surface}"
+                                Opacity="0.92" IsVisible="False">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                                <arc:ArcSpinner HorizontalAlignment="Center" />
+                                <TextBlock Classes="hint" Text="{l:AppLangResource FolderBrowserLoading}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="ErrorOverlay"
+                                Background="{arc:ArcDesignTokenResource Surface}"
+                                Padding="16" IsVisible="False">
+                            <StackPanel Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="320">
+                                <lucide:LucideIcon Kind="CircleAlert" Size="22"
+                                                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                                                   HorizontalAlignment="Center" />
+                                <TextBlock x:Name="ErrorText" Classes="body" TextWrapping="Wrap" TextAlignment="Center" />
+                                <arc:Button x:Name="RetryButton" Variant="Secondary" Size="Small" HorizontalAlignment="Center"
+                                            Content="{l:AppLangResource FolderBrowserRetry}" />
+                            </StackPanel>
+                        </Border>
+                    </Panel>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Bottom preview of the exact path that confirming will choose. -->
+        <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="10,6">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                <TextBlock Classes="caption" VerticalAlignment="Center"
+                           Text="{l:AppLangResource FolderBrowserSelectedPrefix}" />
+                <TextBlock x:Name="SelectedPathText" Grid.Column="1" Classes="body"
+                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                           VerticalAlignment="Center"
+                           TextTrimming="PrefixCharacterEllipsis" />
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>

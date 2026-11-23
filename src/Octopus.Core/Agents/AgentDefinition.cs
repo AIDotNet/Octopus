@@ -21,6 +21,8 @@ public sealed class AgentDefinition
     public AgentCapabilities Capabilities { get; set; } = new();
     /// <summary>How Octopus listens to the agent's status line, hooks or events; null when it does not.</summary>
     public AgentSignals? Signals { get; set; }
+    /// <summary>How Octopus isolates or switches subscription accounts for this agent; null when unsupported.</summary>
+    public AgentAccountsCapability? Accounts { get; set; }
     /// <summary>Probe name to the fixed query Octopus may run with the agent's executable; null when there are none.</summary>
     public Dictionary<string, AgentProbe>? Probes { get; set; }
 
@@ -75,6 +77,8 @@ public sealed class AgentCapabilities
     public PermissionCapability? Permission { get; set; }
     public PromptCapability? Prompt { get; set; }
     public ResumeCapability? Resume { get; set; }
+    /// <summary>How the CLI accepts extra working directories alongside <c>cwd</c>; null when unsupported.</summary>
+    public AdditionalDirsCapability? AdditionalDirs { get; set; }
     public bool ExtraArgs { get; set; } = true;
     public EnvCapability? Env { get; set; }
     public List<AgentFeature> Features { get; set; } = [];
@@ -185,6 +189,23 @@ public sealed class ResumeCapability
     public List<string>? ById { get; set; }
 }
 
+/// <summary>How an agent CLI accepts extra working directories alongside its primary working directory.</summary>
+public sealed class AdditionalDirsCapability
+{
+    /// <summary>
+    /// <c>repeat</c>: repeat <see cref="Args"/> once per directory (replacing <c>{value}</c>).
+    /// <c>variadic</c>: emit <see cref="Args"/> once, expanding <c>{value}</c> to every directory (one argument each).
+    /// <c>comma</c>: emit <see cref="Args"/> once, replacing <c>{value}</c> with all directories joined by commas.
+    /// </summary>
+    public string Mode { get; set; } = "repeat";
+
+    /// <summary>Argument template containing <c>{value}</c>, e.g. <c>["--add-dir", "{value}"]</c>.</summary>
+    public List<string> Args { get; set; } = [];
+
+    /// <summary>Optional cap on how many additional directories the CLI accepts; null or &lt;= 0 means no cap.</summary>
+    public int? MaxCount { get; set; }
+}
+
 public sealed class EnvCapability
 {
     public List<KnownEnvVar> Known { get; set; } = [];
@@ -214,6 +235,8 @@ public sealed class AgentFeature
     public List<string> Args { get; set; } = [];
     /// <summary>Environment variable set to the value instead of (or in addition to) arguments.</summary>
     public string? Env { get; set; }
+    /// <summary>For <c>bool</c> features that set <see cref="Env"/>: the value written when enabled (defaults to <c>"true"</c>).</summary>
+    public string? EnvValue { get; set; }
     /// <summary><c>enum</c>: the choices.</summary>
     public List<AgentOption>? Options { get; set; }
     /// <summary>Interface text per language (BCP 47 tag, e.g. <c>zh-CN</c>); see <see cref="LocalizedTextExtensions"/>.</summary>

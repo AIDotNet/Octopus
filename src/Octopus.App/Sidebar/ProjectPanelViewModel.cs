@@ -3,12 +3,15 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Octopus.Agents;
+using Octopus.Agents.Accounts;
 using Octopus.App.Common;
+using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.App.Settings;
 using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
+using Octopus.Storage;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Sidebar;
@@ -22,6 +25,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     private readonly IWorkspaceCommands _workspace;
     private readonly Activity.IItemActivityService _activity;
     private readonly Activity.ISubagentService? _subagents;
+    private readonly IAgentAccountService? _accounts;
+    private readonly ISettingsStore? _settings;
     /// <summary>Per item, outliving the rows: a rebuild (a filter, a new tab) keeps what the user opened.</summary>
     private readonly Dictionary<string, SubagentListViewModel> _subagentLists = [];
     private bool _updatingName;
@@ -33,9 +38,15 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         IAgentCatalog catalog,
         IWorkspaceCommands workspace,
         Activity.IItemActivityService activity,
-        Activity.ISubagentService? subagents = null)
+        Activity.ISubagentService? subagents = null,
+        IAgentAccountService? accounts = null,
+        ISettingsStore? settings = null)
     {
         _subagents = subagents;
+        _accounts = accounts;
+        _settings = settings;
+        if (_accounts is not null) _accounts.Changed += (_, _) => UiContext.Run(Rebuild);
+        if (_settings is not null) _settings.Changed += (_, _) => UiContext.Run(Rebuild);
         if (_subagents is not null)
         {
             _subagents.Changed += (_, id) => SyncSubagents(id);
@@ -70,6 +81,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     [ObservableProperty] public partial string Filter { get; set; } = "";
     /// <summary>The name of the group the project is in; empty when it is in none.</summary>
     [ObservableProperty] public partial string GroupName { get; private set; } = "";
+    /// <summary>True when the project is local and shares working directories with at least one other local project in its group.</summary>
+    [ObservableProperty] public partial bool IsGroupMerged { get; private set; }
 
     public bool HasNoProject => !HasProject;
     public bool HasGroup => GroupName.Length > 0;
@@ -155,7 +168,12 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         ProjectName = project?.Name ?? "";
         _updatingName = false;
         ProjectPath = project?.Path ?? "";
-        GroupName = _projects.Groups.FirstOrDefault(g => g.Id == project?.GroupId)?.Name ?? "";
+        var group = _projects.Groups.FirstOrDefault(g => g.Id == project?.GroupId);
+        GroupName = group?.Name ?? "";
+        IsGroupMerged = project is not null
+            && group is { MergeWorkspaces: true }
+            && ProjectLocation.IsOnThisComputer(project)
+            && _projects.Projects.Any(p => p.Id != project.Id && p.GroupId == group.Id && ProjectLocation.IsOnThisComputer(p));
         Items.Clear();
         if (project is not null)
         {
@@ -173,7 +191,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
                 }
                 var row = new ItemRowViewModel(
                     item,
-                    ModelNameOf(item),
+                    SubtitleOf(project, item),
                     item.Id == project.ActiveItemId,
                     r => _projects.ActivateItem(r.Id),
                     (r, title) => _projects.RenameItem(r.Id, title),
@@ -211,6 +229,35 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         {
             row.Subagents = list;
         }
+    }
+
+    /// <summary>Combines the non-default / multi-account label (if any) with the model's short name.</summary>
+    private string? SubtitleOf(Project project, ProjectItem item)
+    {
+        var model = ModelNameOf(item);
+        var account = AccountBadgeOf(project, item);
+        if (string.IsNullOrEmpty(account)) return model;
+        if (string.IsNullOrEmpty(model)) return account;
+        return $"{account} · {model}";
+    }
+
+    private string? AccountBadgeOf(Project project, ProjectItem item)
+    {
+        if (item.Kind != ProjectItemKind.Agent || item.AgentId is null || _accounts is null || _settings is null)
+        {
+            return null;
+        }
+        var definition = _catalog.Find(item.AgentId);
+        if (definition?.Accounts is null) return null;
+        var list = _accounts.GetAccounts(definition);
+        if (list.Count < 2) return null;
+
+        var profile = _settings.Current.Agents.ProfileOf(definition.Id);
+        var resolved = _accounts.Resolve(definition, profile, project, item.Launch);
+        if (resolved.Account is not { } acc) return null;
+        return acc.IsDefaultOrigin && acc.Label == "Default"
+            ? AppLangResources.Get(AppLangResourceKind.AccountDefaultName)
+            : acc.Label;
     }
 
     /// <summary>The model's short name: its label without the agent's own name in front ("Fable 5.2"), or the custom id.</summary>

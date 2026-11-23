@@ -388,51 +388,50 @@ public sealed class PluginHost : IPluginRuntimeSink, IAsyncDisposable
 
     private void HandleNotify(string method, string json, string text)
     {
-        var args = Parse(json);
         switch (method)
         {
             case "timer.set":
-                SetTimer(args);
+                SetTimer(Parse(json));
                 return;
             case "timer.clear":
-                if (args?["id"]?.GetValue<double>() is { } clearId && _timers.TryRemove((long)clearId, out var t)) t.Dispose();
+                if (Parse(json)?["id"]?.GetValue<double>() is { } clearId && _timers.TryRemove((long)clearId, out var t)) t.Dispose();
                 return;
             case "request.cancel":
-                if (args?["id"]?.GetValue<double>() is { } requestId && _requests.TryGetValue((long)requestId, out var cts)) cts.Cancel();
+                if (Parse(json)?["id"]?.GetValue<double>() is { } requestId && _requests.TryGetValue((long)requestId, out var cts)) cts.Cancel();
                 return;
             case "events.subscribe":
-                if (args?["key"]?.GetValue<string>() is { } key && args["event"]?.GetValue<string>() is { } ev)
+                if (Parse(json) is { } subArgs && subArgs["key"]?.GetValue<string>() is { } key && subArgs["event"]?.GetValue<string>() is { } ev)
                 {
-                    var subscription = new PluginSubscription(ev, key, args["args"]?.DeepClone());
+                    var subscription = new PluginSubscription(ev, key, subArgs["args"]?.DeepClone());
                     _subscriptions[key] = subscription;
                     foreach (var module in _owner.Router.Modules) module.Subscribed(this, subscription);
                 }
                 return;
             case "events.unsubscribe":
-                if (args?["key"]?.GetValue<string>() is { } oldKey && _subscriptions.TryRemove(oldKey, out var old))
+                if (Parse(json)?["key"]?.GetValue<string>() is { } oldKey && _subscriptions.TryRemove(oldKey, out var old))
                 {
                     foreach (var module in _owner.Router.Modules) module.Unsubscribed(this, old);
                 }
                 return;
             case "commands.register":
-                if (args?["id"]?.GetValue<string>() is { } command)
+                if (Parse(json)?["id"]?.GetValue<string>() is { } command)
                 {
                     if (IsOwnCommand(command)) { _commands[command] = 0; _owner.OnRegistrationsChanged(this); }
                     else Write(PluginLogLevel.Warn, $"commands.register: \"{command}\" must be declared in plugin.json contributes.commands");
                 }
                 return;
             case "commands.unregister":
-                if (args?["id"]?.GetValue<string>() is { } gone && _commands.TryRemove(gone, out _)) _owner.OnRegistrationsChanged(this);
+                if (Parse(json)?["id"]?.GetValue<string>() is { } gone && _commands.TryRemove(gone, out _)) _owner.OnRegistrationsChanged(this);
                 return;
             case "providers.register":
-                if (args?["kind"]?.GetValue<string>() is { } kind && args["id"]?.GetValue<string>() is { } providerId)
+                if (Parse(json) is { } regArgs && regArgs["kind"]?.GetValue<string>() is { } kind && regArgs["id"]?.GetValue<string>() is { } providerId)
                 {
                     if (IsDeclaredProvider(kind, providerId)) { _providers[(kind, providerId)] = 0; _owner.OnRegistrationsChanged(this); }
                     else Write(PluginLogLevel.Warn, $"{kind} \"{providerId}\" must be declared in plugin.json contributes");
                 }
                 return;
             case "providers.unregister":
-                if (args?["kind"]?.GetValue<string>() is { } k && args["id"]?.GetValue<string>() is { } p && _providers.TryRemove((k, p), out _))
+                if (Parse(json) is { } unregArgs && unregArgs["kind"]?.GetValue<string>() is { } k && unregArgs["id"]?.GetValue<string>() is { } p && _providers.TryRemove((k, p), out _))
                     _owner.OnRegistrationsChanged(this);
                 return;
         }
@@ -485,13 +484,20 @@ public sealed class PluginHost : IPluginRuntimeSink, IAsyncDisposable
             return;
         }
         var period = repeat ? TimeSpan.FromMilliseconds(ms) : Timeout.InfiniteTimeSpan;
-        var timer = new Timer(state =>
+        Timer? timer = null;
+        timer = new Timer(_ =>
         {
-            if (!repeat) _timers.TryRemove(id, out _);
+            if (!repeat)
+            {
+                if (_timers.TryRemove(id, out var removed)) removed.Dispose();
+                else timer?.Dispose();
+            }
             _runtime?.Post(new PluginInbound(InboundKind.Timer, id, "", ""));
-        }, null, TimeSpan.FromMilliseconds(ms), period);
-        if (_timers.TryGetValue(id, out var previous)) previous.Dispose();
+        }, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        if (_timers.TryRemove(id, out var previous)) previous.Dispose();
         _timers[id] = timer;
+        try { timer.Change(TimeSpan.FromMilliseconds(ms), period); }
+        catch (ObjectDisposedException) { }
     }
 
     string IPluginRuntimeSink.OnSync(string method, string json)

@@ -30,9 +30,17 @@ public static partial class QuickReplies
     /// </summary>
     public static IReadOnlyList<QuickReply> Parse(string screenText)
     {
-        var lines = screenText.Split('\n');
+        // Only the last lines matter: cut them off the end instead of splitting the whole screen and scrollback.
+        var start = screenText.Length;
+        for (var seen = 0; seen < LinesRead && start > 0; seen++)
+        {
+            var prev = screenText.LastIndexOf('\n', start - 1);
+            start = prev < 0 ? 0 : prev;
+            if (prev < 0) break;
+        }
+        var lines = screenText[(start > 0 && screenText[start] == '\n' ? start + 1 : start)..].Split('\n');
         var replies = new List<QuickReply>();
-        for (var i = Math.Max(0, lines.Length - LinesRead); i < lines.Length; i++)
+        for (var i = 0; i < lines.Length; i++)
         {
             var match = Option().Match(lines[i].TrimEnd('\r'));
             if (!match.Success)

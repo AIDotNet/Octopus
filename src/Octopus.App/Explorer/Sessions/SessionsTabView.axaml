@@ -66,7 +66,7 @@
     <Panel>
         <!-- ============ Page 1: the agents ============ -->
         <Grid RowDefinitions="Auto,*" IsVisible="{Binding IsAgentsPage}">
-            <Grid ColumnDefinitions="*,Auto,Auto" Margin="14,0,8,2" Height="32">
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="{DynamicResource OctopusExplorerHeaderMargin}" Height="{DynamicResource OctopusExplorerHeaderHeight}">
                 <TextBlock Classes="ex-caption" VerticalAlignment="Center" Text="{l:AppLangResource SessionsAgentsCaption}"
                            TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="1" Classes="ex-hint" VerticalAlignment="Center" Margin="8,0,4,0" Text="{Binding InstalledCountText}" />
@@ -92,8 +92,8 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="s:SessionAgentRowViewModel">
                                 <Button Classes="ses-row" Command="{Binding OpenCommand}" AutomationProperties.Name="{Binding Name}">
-                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="9,7">
-                                        <common:AgentIcon AgentId="{Binding AgentId}" AgentName="{Binding Name}" Size="22" VerticalAlignment="Center" />
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" Margin="{DynamicResource OctopusSessionAgentMargin}">
+                                        <common:AgentIcon AgentId="{Binding AgentId}" AgentName="{Binding Name}" Size="20" VerticalAlignment="Center" />
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Classes="ex-body" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Classes="ex-hint" Text="{Binding Summary}" TextTrimming="CharacterEllipsis" />
@@ -155,7 +155,7 @@
 
         <!-- ============ Page 2: one agent's sessions, by account ============ -->
         <Grid RowDefinitions="Auto,Auto,*" IsVisible="{Binding IsSessionsPage}">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6" Margin="6,0,8,2" Height="34">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6" Margin="6,0,8,2" Height="{DynamicResource OctopusExplorerHeaderHeight}">
                 <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding BackCommand}"
                             AutomationProperties.Name="{l:AppLangResource SessionsBack}"
                             arc:Tooltip.Tip="{l:AppLangResource SessionsBack}">
@@ -172,7 +172,7 @@
                     <lucide:LucideIcon Kind="RefreshCw" Size="14" />
                 </arc:Button>
             </Grid>
-            <arc:SearchField Grid.Row="1" Margin="10,0,10,6" Size="Small" IsLabelVisible="False"
+            <arc:SearchField Grid.Row="1" Margin="{DynamicResource OctopusExplorerSearchMargin}" Size="Small" IsLabelVisible="False"
                              Label="{l:AppLangResource SessionsSearch}" Placeholder="{l:AppLangResource SessionsSearch}"
                              Text="{Binding Filter, Mode=TwoWay}" />
 
@@ -202,7 +202,7 @@
                                     <ItemsControl ItemsSource="{Binding Rows}" IsVisible="{Binding IsExpanded}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="s:SessionRowViewModel">
-                                                <Border Classes="ex-row ses-session" Padding="10,6,6,7" Margin="0,1"
+                                                <Border Classes="ex-row ses-session" Padding="{DynamicResource OctopusSessionRowPadding}" Margin="0,1"
                                                         Cursor="Arrow" DoubleTapped="OnSessionDoubleTapped"
                                                         arc:Tooltip.Tip="{Binding Tip}">
                                                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="6">

@@ -9,19 +9,19 @@
              x:DataType="vm:ItemRowViewModel">
     <StackPanel>
     <Grid>
-        <Button x:Name="RowButton" Classes="row" Classes.selected="{Binding IsActive}" Height="30"
+        <Button x:Name="RowButton" Classes="row" Classes.selected="{Binding IsActive}" Height="{DynamicResource OctopusItemRowHeight}"
                 Command="{Binding ActivateCommand}" DoubleTapped="OnDoubleTapped"
                 AutomationProperties.Name="{Binding Title}"
                 IsVisible="{Binding !IsRenaming}">
-            <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,0,8,0">
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="{DynamicResource OctopusItemRowMargin}">
                 <common:AgentIcon IsVisible="{Binding IsAgent}" AgentId="{Binding AgentId}" AgentName="{Binding Title}"
-                                  Size="18" Margin="0,0,8,0" />
-                <lucide:LucideIcon IsVisible="{Binding IsTerminal}" Kind="SquareTerminal" Size="16" Margin="1,0,9,0" />
-                <lucide:LucideIcon IsVisible="{Binding IsFile}" Kind="FileText" Size="16" Margin="1,0,9,0" />
-                <lucide:LucideIcon IsVisible="{Binding IsPlugin}" Kind="LayoutGrid" Size="16" Margin="1,0,9,0" />
+                                  Size="{DynamicResource OctopusItemAgentIconSize}" Margin="{DynamicResource OctopusItemAgentIconMargin}" />
+                <lucide:LucideIcon IsVisible="{Binding IsTerminal}" Kind="SquareTerminal" Size="{DynamicResource OctopusItemIconSize}" Margin="{DynamicResource OctopusItemIconMargin}" />
+                <lucide:LucideIcon IsVisible="{Binding IsFile}" Kind="FileText" Size="{DynamicResource OctopusItemIconSize}" Margin="{DynamicResource OctopusItemIconMargin}" />
+                <lucide:LucideIcon IsVisible="{Binding IsPlugin}" Kind="LayoutGrid" Size="{DynamicResource OctopusItemIconSize}" Margin="{DynamicResource OctopusItemIconMargin}" />
                 <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Title}"
                            TextTrimming="CharacterEllipsis" />
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" Margin="6,0,0,0" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" Margin="4,0,0,0" VerticalAlignment="Center">
                     <!-- Subagents: finished/all, and a chevron that opens the cards below. -->
                     <Button Classes="row" Height="18" VerticalAlignment="Center"
                             IsVisible="{Binding Subagents.HasAny, FallbackValue=False}"

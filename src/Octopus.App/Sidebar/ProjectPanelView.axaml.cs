@@ -39,6 +39,11 @@ public partial class ProjectPanelView : UserControl
     private void OnRenameRequested(object? sender, EventArgs e) =>
         UiContext.PostToUi(() => NameEdit.BeginEdit(), DispatcherPriority.Input);
 
+    private static readonly AttachedProperty<bool> s_compactWiredProperty =
+        AvaloniaProperty.RegisterAttached<ProjectPanelView, TemplatedControl, bool>("CompactWired");
+    private static readonly AttachedProperty<IDisposable?> s_rowBackgroundSubProperty =
+        AvaloniaProperty.RegisterAttached<ProjectPanelView, TemplatedControl, IDisposable?>("RowBackgroundSub");
+
     /// <summary>
     /// Arc's reorderable row is a card with a large grip on the left and a position number; a sidebar row is flat and
     /// 30px high, with a small grip at its right end that shows under the pointer. The parts are Arc's own (its grip
@@ -46,19 +51,48 @@ public partial class ProjectPanelView : UserControl
     /// </summary>
     private void MakeCompact(Control container)
     {
-        if (container is not TemplatedControl item)
+        if (container is not TemplatedControl item || item.GetValue(s_compactWiredProperty))
         {
             return;
         }
+        item.SetValue(s_compactWiredProperty, true);
+        Control? currentHandle = null;
+        void Show()
+        {
+            if (currentHandle is { } h) h.Opacity = item.IsPointerOver || h.IsKeyboardFocusWithin ? 1 : 0;
+        }
+        void OnHandleFocus(object? s, RoutedEventArgs _) => Show();
+
+        item.PropertyChanged += (_, change) =>
+        {
+            if (change.Property == IsPointerOverProperty) Show();
+        };
+        item.DetachedFromVisualTree += (_, _) =>
+        {
+            item.GetValue(s_rowBackgroundSubProperty)?.Dispose();
+            item.SetValue(s_rowBackgroundSubProperty, null);
+        };
         item.TemplateApplied += (_, e) =>
         {
+            item.GetValue(s_rowBackgroundSubProperty)?.Dispose();
+            item.SetValue(s_rowBackgroundSubProperty, null);
+            if (currentHandle is not null)
+            {
+                currentHandle.GotFocus -= OnHandleFocus;
+                currentHandle.LostFocus -= OnHandleFocus;
+                currentHandle = null;
+            }
             if (e.NameScope.Find<Border>("PART_Row") is not { } row
                 || e.NameScope.Find<Control>("PART_Handle") is not { } handle)
             {
                 return;
             }
+            currentHandle = handle;
             // The panel's own color: invisible at rest, and it covers the rows a lifted row passes over.
-            row.Bind(Border.BackgroundProperty, PanelRoot.GetObservable(Panel.BackgroundProperty));
+            if (item.IsAttachedToVisualTree())
+            {
+                item.SetValue(s_rowBackgroundSubProperty, row.Bind(Border.BackgroundProperty, PanelRoot.GetObservable(Panel.BackgroundProperty)));
+            }
             row.BorderThickness = default;
             row.BoxShadow = default;
             row.MinHeight = 0;
@@ -80,16 +114,8 @@ public partial class ProjectPanelView : UserControl
             handle.Width = 18;
             handle.Height = 24;
             handle.Margin = new Thickness(0, 0, 2, 0);
-            void Show() => handle.Opacity = item.IsPointerOver || handle.IsKeyboardFocusWithin ? 1 : 0;
-            item.PropertyChanged += (_, change) =>
-            {
-                if (change.Property == IsPointerOverProperty)
-                {
-                    Show();
-                }
-            };
-            handle.GotFocus += (_, _) => Show();
-            handle.LostFocus += (_, _) => Show();
+            handle.GotFocus += OnHandleFocus;
+            handle.LostFocus += OnHandleFocus;
             Show();
         };
     }

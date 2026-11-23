@@ -89,11 +89,16 @@ public sealed class ImageCanvas : Control
         _model = null;
     }
 
+    private static readonly Cursor s_panCursor = new(StandardCursorType.SizeAll);
+    private IPen? _edgePen;
+    private IBrush? _edgeBrush;
+
     private void OnFrameChanged(object? sender, EventArgs e) => InvalidateVisual();
 
     private void OnViewChanged(object? sender, EventArgs e)
     {
-        Cursor = _model?.Viewport is { CanPan: true } ? new Cursor(StandardCursorType.SizeAll) : null;
+        var next = _model?.Viewport is { CanPan: true } ? s_panCursor : null;
+        if (!ReferenceEquals(Cursor, next)) Cursor = next;
         InvalidateVisual();
     }
 
@@ -126,7 +131,15 @@ public sealed class ImageCanvas : Control
         {
             context.DrawImage(image, new Rect(0, 0, image.PixelSize.Width, image.PixelSize.Height), target);
         }
-        if (Edge is { } edge) context.DrawRectangle(null, new Pen(edge, 1), target.Inflate(0.5));
+        if (Edge is { } edge)
+        {
+            if (!ReferenceEquals(_edgeBrush, edge) || _edgePen is null)
+            {
+                _edgeBrush = edge;
+                _edgePen = new Pen(edge, 1).ToImmutable();
+            }
+            context.DrawRectangle(null, _edgePen, target.Inflate(0.5));
+        }
     }
 
     /// <summary>The corners on whole device pixels, so a small picture shows sharp edges instead of a blurred rim.</summary>

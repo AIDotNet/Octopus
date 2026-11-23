@@ -83,7 +83,9 @@ public sealed class TerminalControl : Decorator
     };
     private FrameSnapshot? _frame;
     private LinkHit? _hoverLink;
-    private ViewportPoint _hoverCell;
+    private ViewportPoint _hoverCell = new(-1, -1);
+    private bool _lastLinkHeld;
+    private readonly Dictionary<string, (string? Resolved, long ExpiresAt)> _pathCache = new(StringComparer.Ordinal);
     private string? _pendingLink;
     private bool _searchOpen;
     private string _searchQuery = string.Empty;
@@ -97,6 +99,7 @@ public sealed class TerminalControl : Decorator
 
     public TerminalControl()
     {
+        _view.GlyphProviders.Add(RecordCircleGlyph.Instance);
         _overlay = new SelectionOverlay(_view);
         _messageBar = new Border
         {
@@ -127,6 +130,7 @@ public sealed class TerminalControl : Decorator
         _view.SizeChanged += (_, _) => RecomputeGrid();
         _view.GotFocus += (_, _) => _router?.HandleFocus(true);
         _view.LostFocus += (_, _) => _router?.HandleFocus(false);
+        EffectiveViewportChanged += (_, _) => _session?.SetVisible(IsOnScreen());
         ActualThemeVariantChanged += (_, _) => ApplyTheme();
     }
 
@@ -339,6 +343,64 @@ public sealed class TerminalControl : Decorator
     /// <summary>Screen and scrollback as plain text. Empty when nothing runs.</summary>
     public string ReadScreenText() => _session?.ReadText() ?? string.Empty;
 
+    /// <summary>The last non-empty lines currently rendered in the viewport, without exporting scrollback history.</summary>
+    public string ReadVisibleTailText(int maxLines = 16)
+    {
+        var frame = _frame ?? _session?.Read(static c => c.CaptureFrame(force: true));
+        if (frame is null || frame.Rows.Length == 0 || maxLines <= 0) return string.Empty;
+        var rows = frame.Rows;
+        var lastRow = rows.Length - 1;
+        while (lastRow >= 0 && IsRowBlank(rows[lastRow])) lastRow--;
+        if (lastRow < 0) return string.Empty;
+        var firstRow = Math.Max(0, lastRow - maxLines + 1);
+        var sb = new System.Text.StringBuilder((lastRow - firstRow + 1) * 64);
+        for (var r = firstRow; r <= lastRow; r++)
+        {
+            if (r > firstRow) sb.Append('\n');
+            AppendRowTrimmed(sb, rows[r]);
+        }
+        return sb.ToString();
+    }
+
+    private static bool IsRowBlank(RowSnapshot row)
+    {
+        var cells = row.Cells;
+        for (var i = 0; i < cells.Length; i++)
+        {
+            var cp = TCell.Codepoint(cells[i]);
+            if (cp > ' ') return false;
+        }
+        return true;
+    }
+
+    private static void AppendRowTrimmed(System.Text.StringBuilder sb, RowSnapshot row)
+    {
+        var cells = row.Cells;
+        var end = cells.Length - 1;
+        while (end >= 0)
+        {
+            var w = TCell.Width(cells[end]);
+            if (w is CellWidth.SpacerTail or CellWidth.SpacerHead) { end--; continue; }
+            var cp = TCell.Codepoint(cells[end]);
+            if (cp == 0 || cp == ' ') { end--; continue; }
+            break;
+        }
+        for (var c = 0; c <= end; c++)
+        {
+            var cell = cells[c];
+            if (TCell.Width(cell) is CellWidth.SpacerTail or CellWidth.SpacerHead) continue;
+            if (TCell.HasGrapheme(cell))
+            {
+                sb.Append(row.TextAt(c) ?? " ");
+                continue;
+            }
+            var cp = TCell.Codepoint(cell);
+            if (cp == 0) sb.Append(' ');
+            else if (cp <= 0xFFFF) sb.Append((char)cp);
+            else sb.Append(char.ConvertFromUtf32((int)cp));
+        }
+    }
+
     /// <summary>
     /// The grid this view holds at its present size, whatever grid the terminal has: for a mirror the two differ while
     /// another view decides the size. Null before the control is laid out.
@@ -360,6 +422,7 @@ public sealed class TerminalControl : Decorator
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty) _session?.SetVisible(IsOnScreen());
         if (change.Property == SearchBarProperty) _searchHost.Child = SearchBar;
         if (change.Property == FontFamilyProperty)
         {
@@ -381,10 +444,9 @@ public sealed class TerminalControl : Decorator
         ApplyTheme();
         if (_session is not null)
         {
-            // Back in the tree (tab switch): the process kept running. Metrics may belong to another top level.
-            ResetMetrics();
             RecomputeGrid();
-            _session.ForceFlush();
+            _session.SetVisible(IsOnScreen());
+            if (_view.Snapshot is null) _session.ForceFlush();
         }
         else
         {
@@ -397,22 +459,14 @@ public sealed class TerminalControl : Decorator
         base.OnDetachedFromVisualTree(e);
         if (_topLevel is not null) _topLevel.ScalingChanged -= OnScalingChanged;
         _topLevel = null;
+        _session?.SetVisible(false);
         // The process is deliberately left alone: a tab that is switched away comes back.
     }
 
     private void OnScalingChanged(object? sender, EventArgs e)
     {
-        // The view only drops its cell metrics when font properties change, so make it do that.
-        ResetMetrics();
         RecomputeGrid();
         _session?.ForceFlush();
-    }
-
-    private void ResetMetrics()
-    {
-        var size = _view.FontSize;
-        _view.FontSize = size + 0.01;
-        _view.FontSize = size;
     }
 
     private void RefitGrid()
@@ -506,6 +560,9 @@ public sealed class TerminalControl : Decorator
         _frame = null;
         _scrollBar.IsVisible = false;
         _overlay.Update(null);
+        _hoverCell = new(-1, -1);
+        _lastLinkHeld = false;
+        _pathCache.Clear();
         SetHover(null);
         if (_searchOpen)
         {
@@ -532,7 +589,7 @@ public sealed class TerminalControl : Decorator
             _scrollBar.ViewportSize = scroll.Length;
             _scrollBar.LargeChange = Math.Max(1, scroll.Length - 1);
             _scrollBar.Value = scroll.Offset;
-            _scrollBar.IsVisible = _scrollBar.Maximum > 0 && _session?.ReadInputModes().AlternateScreen != true;
+            _scrollBar.IsVisible = _scrollBar.Maximum > 0 && _session?.CachedInputModes.AlternateScreen != true;
         }
         finally { _updatingScrollBar = false; }
         if (_hoverLink is not null) SetHover(FindLink(_hoverCell));
@@ -612,8 +669,12 @@ public sealed class TerminalControl : Decorator
         switch (e.Kind)
         {
             case TerminalPointerKind.Move:
-                _hoverCell = e.Cell;
-                SetHover(held ? FindLink(e.Cell) : null);
+                if (e.Cell != _hoverCell || held != _lastLinkHeld)
+                {
+                    _hoverCell = e.Cell;
+                    _lastLinkHeld = held;
+                    SetHover(held ? FindLink(e.Cell) : null);
+                }
                 break;
             case TerminalPointerKind.Press when e.Mouse.Button == MouseButton.Left && !held:
                 ReclaimSize();
@@ -653,19 +714,29 @@ public sealed class TerminalControl : Decorator
     /// <summary>The full path of an existing file or folder that <paramref name="path"/> names, or null.</summary>
     private string? ResolvePath(string path)
     {
+        var now = Environment.TickCount64;
+        if (_pathCache.TryGetValue(path, out var cached) && cached.ExpiresAt > now)
+        {
+            return cached.Resolved;
+        }
+        string? resolved = null;
         try
         {
-            if (path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
-                path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[2..]);
-            var full = Path.IsPathRooted(path)
-                ? Path.GetFullPath(path)
-                : _spec?.WorkingDirectory is { Length: > 0 } directory ? Path.GetFullPath(Path.Combine(directory, path)) : null;
-            return full is not null && (File.Exists(full) || Directory.Exists(full)) ? full : null;
+            var candidate = path;
+            if (candidate.StartsWith("~/", StringComparison.Ordinal) || candidate.StartsWith("~\\", StringComparison.Ordinal))
+                candidate = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), candidate[2..]);
+            var full = Path.IsPathRooted(candidate)
+                ? Path.GetFullPath(candidate)
+                : _spec?.WorkingDirectory is { Length: > 0 } directory ? Path.GetFullPath(Path.Combine(directory, candidate)) : null;
+            resolved = full is not null && (File.Exists(full) || Directory.Exists(full)) ? full : null;
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException)
         {
-            return null;
+            resolved = null;
         }
+        if (_pathCache.Count >= 256) _pathCache.Clear();
+        _pathCache[path] = (resolved, now + 3000);
+        return resolved;
     }
 
     private void SetHover(LinkHit? link)
@@ -700,9 +771,10 @@ public sealed class TerminalControl : Decorator
     private void ApplyColors()
     {
         var palette = TerminalPalettes.For(_dark);
-        _background.Background = new SolidColorBrush(ToColor(palette.Background));
-        _messageBar.Background = new SolidColorBrush(ToColor(palette.Foreground), 0.14);
-        _message.Foreground = new SolidColorBrush(ToColor(palette.Foreground));
+        var fg = ToColor(palette.Foreground);
+        _background.Background = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(ToColor(palette.Background));
+        _messageBar.Background = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg, 0.14);
+        _message.Foreground = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg);
     }
 
     private static Color ToColor(TerminalRgb rgb) => Color.FromRgb(rgb.R, rgb.G, rgb.B);

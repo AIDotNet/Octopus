@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Octopus.Core.Agents;
 using Octopus.Core.Plugins;
 using Octopus.Core.Projects;
 using Octopus.Core.Settings;
@@ -15,10 +16,11 @@ namespace Octopus.Storage;
     ReadCommentHandling = JsonCommentHandling.Skip,
     AllowTrailingCommas = true,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip,
-    Converters = [typeof(OctopusJsonContext.KindConverter), typeof(OctopusJsonContext.PluginSourceConverter), typeof(OctopusJsonContext.FileAccessConverter), typeof(OctopusJsonContext.TunnelKindConverter)])]
+    Converters = [typeof(OctopusJsonContext.KindConverter), typeof(OctopusJsonContext.PluginSourceConverter), typeof(OctopusJsonContext.FileAccessConverter), typeof(OctopusJsonContext.TunnelKindConverter), typeof(OctopusJsonContext.AccountOriginConverter)])]
 [JsonSerializable(typeof(ProjectsDocument))]
 [JsonSerializable(typeof(AppSettingsModel))]
 [JsonSerializable(typeof(PluginsDocument))]
+[JsonSerializable(typeof(AccountsDocument))]
 public sealed partial class OctopusJsonContext : JsonSerializerContext
 {
     /// <summary>Writes <see cref="ProjectItemKind"/> as a camelCase string.</summary>
@@ -29,6 +31,8 @@ public sealed partial class OctopusJsonContext : JsonSerializerContext
     public sealed class PluginSourceConverter() : JsonStringEnumConverter<PluginSource>(JsonNamingPolicy.CamelCase);
 
     public sealed class FileAccessConverter() : JsonStringEnumConverter<FileAccessKind>(JsonNamingPolicy.CamelCase);
+
+    public sealed class AccountOriginConverter() : JsonStringEnumConverter<AccountOrigin>(JsonNamingPolicy.CamelCase);
 
     /// <summary>The context's options with the computed <c>DisplayTitle</c> property removed from the contract.</summary>
     public static JsonSerializerOptions FileOptions => _fileOptions ??= CreateOptions();

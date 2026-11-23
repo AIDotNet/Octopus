@@ -20,6 +20,7 @@ public sealed class AgentCatalog : IAgentCatalog
     private readonly IAppPaths _paths;
     private readonly object _gate = new();
     private IReadOnlyList<AgentDefinition> _definitions = [];
+    private Dictionary<string, AgentDefinition> _byId = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<string> _loadErrors = [];
 
     private readonly IReadOnlyList<IAgentDefinitionSource> _sources;
@@ -40,7 +41,7 @@ public sealed class AgentCatalog : IAgentCatalog
     public event EventHandler? Changed;
 
     public AgentDefinition? Find(string agentId) =>
-        _definitions.FirstOrDefault(d => string.Equals(d.Id, agentId, StringComparison.OrdinalIgnoreCase));
+        _byId.TryGetValue(agentId, out var def) ? def : null;
 
     public void Reload()
     {
@@ -77,9 +78,13 @@ public sealed class AgentCatalog : IAgentCatalog
             }
         }
 
+        var byId = new Dictionary<string, AgentDefinition>(list.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var def in list) byId[def.Id] = def;
+
         lock (_gate)
         {
             _definitions = list;
+            _byId = byId;
             _loadErrors = errors;
         }
         Changed?.Invoke(this, EventArgs.Empty);

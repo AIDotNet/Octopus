@@ -38,6 +38,8 @@ public sealed class Project
     public List<ProjectItem> Items { get; set; } = [];
     /// <summary>The port forwards of a project on an SSH host (design/11-SSH隧道.md); empty for any other project.</summary>
     public List<TunnelSpec> Tunnels { get; set; } = [];
+    /// <summary>Project-level default account id per agent id (design/13-多账户切换.md §4.3); empty follows global profile defaults.</summary>
+    public Dictionary<string, string> AgentAccounts { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
@@ -92,6 +94,11 @@ public sealed class ProjectGroup
     public string Name { get; set; } = "";
     /// <summary>The tint of the folder and the capsule (data, like a project's color); null: a neutral one.</summary>
     public string? Color { get; set; }
+    /// <summary>
+    /// When true, launching an agent that supports multiple working directories in a local project of this group
+    /// automatically passes the group's other local project directories as additional working directories.
+    /// </summary>
+    public bool MergeWorkspaces { get; set; }
 }
 
 /// <summary>The content of projects.json.</summary>

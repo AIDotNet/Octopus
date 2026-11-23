@@ -9,7 +9,7 @@
     <StackPanel Spacing="0">
         <!-- model -->
         <StackPanel IsVisible="{Binding HasModel}">
-            <arc:SearchField Margin="8,8,8,4" Size="Small" IsLabelVisible="False"
+            <arc:SearchField Margin="6,6,6,4" Size="Small" IsLabelVisible="False"
                              Label="{l:AppLangResource SearchModels}"
                              Placeholder="{l:AppLangResource SearchModels}"
                              Text="{Binding ModelQuery, Mode=TwoWay}" x:Name="ModelSearch" />
@@ -22,9 +22,9 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ModelOptionViewModel">
-                            <Button Classes="row" Height="30" Command="{Binding SelectCommand}"
+                            <Button Classes="row" Height="{DynamicResource OctopusLauncherModelRowHeight}" Command="{Binding SelectCommand}"
                                     AutomationProperties.Name="{Binding Label}">
-                                <Grid ColumnDefinitions="*,Auto,20" Margin="9,0,4,0">
+                                <Grid ColumnDefinitions="*,Auto,20" Margin="8,0,4,0">
                                     <TextBlock Classes="body" VerticalAlignment="Center" Text="{Binding Label}"
                                                TextTrimming="CharacterEllipsis" />
                                     <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center" Margin="8,0,0,0"
@@ -39,9 +39,19 @@
             </arc:ScrollArea>
         </StackPanel>
 
-        <StackPanel Margin="12,10,12,0" Spacing="10">
+        <StackPanel Margin="{DynamicResource OctopusLauncherSectionMargin}" Spacing="{DynamicResource OctopusLauncherSectionSpacing}">
+            <!-- account -->
+            <StackPanel Spacing="4" IsVisible="{Binding HasAccounts}">
+                <TextBlock Classes="hint" Text="{l:AppLangResource AccountLauncherLabel}" />
+                <arc:Select AutoScrollToSelectedItem="False"
+                            Size="Small"
+                            HorizontalAlignment="Stretch"
+                            AutomationProperties.Name="{l:AppLangResource AccountLauncherLabel}"
+                            ItemsSource="{Binding AccountOptions}"
+                            SelectedValue="{Binding SelectedAccountId, Mode=TwoWay}" />
+            </StackPanel>
             <!-- effort -->
-            <StackPanel Spacing="5" IsVisible="{Binding HasEffort}">
+            <StackPanel Spacing="4" IsVisible="{Binding HasEffort}">
                 <TextBlock Classes="hint" Text="{Binding EffortCaption}" />
                 <ContentControl x:Name="EffortHost" />
             </StackPanel>
@@ -54,11 +64,11 @@
             <!-- prompt -->
             <arc:Textarea x:Name="PromptBox" IsVisible="{Binding HasPrompt}" IsLabelVisible="False"
                           Label="{l:AppLangResource AddPrompt}" Placeholder="{l:AppLangResource AddPrompt}"
-                          FrameMinHeight="66" IsResizable="False" Size="Small"
+                          FrameMinHeight="56" IsResizable="False" Size="Small"
                           Text="{Binding Prompt, Mode=TwoWay}" />
         </StackPanel>
 
-        <Grid ColumnDefinitions="*,Auto" Margin="12,10,12,10">
+        <Grid ColumnDefinitions="*,Auto" Margin="{DynamicResource OctopusLauncherFooterMargin}">
             <TextBlock Classes="hint" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                 <Run Text="{l:AppLangResource PermissionPrefix}" /><Run Text=" " /><Run Text="{Binding PermissionName}" />
             </TextBlock>

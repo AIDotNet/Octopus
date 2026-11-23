@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Octopus.App.Appearance;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using TKCode.Arc.Icons.Lucide;
@@ -12,20 +13,20 @@ using TKCode.Arc.Motion;
 namespace Octopus.App.Sidebar;
 
 /// <summary>
-/// A group on the rail. Opening and closing is animated: the frame's height springs between the folder's 42 px and the
-/// capsule's height while the folder and the capsule cross-fade, and the squares below slide along. Arc's motion value
-/// drives it, so it follows the window's motion level (Reduced and Off jump), and a second click mid-way turns it
+/// A group on the rail. Opening and closing is animated: the frame's height springs between the folder's slot height and
+/// the capsule's height while the folder and the capsule cross-fade, and the squares below slide along. Arc's motion
+/// value drives it, so it follows the window's motion level (Reduced and Off jump), and a second click mid-way turns it
 /// around from where it is.
 /// </summary>
 public partial class ProjectGroupView : UserControl
 {
-    /// <summary>The height of the closed folder: its 42 px slot.</summary>
-    private const double FolderHeight = 42;
+    /// <summary>The height of the closed folder slot in the active layout style.</summary>
+    private static double FolderHeight => ThemeService.CurrentMetrics.ProjectSlotSize;
 
     private ProjectGroupViewModel? _model;
     /// <summary>0 closed, 1 open; exists while the view is in the visual tree.</summary>
     private MotionValue<double>? _openness;
-    private double _openHeight = FolderHeight;
+    private double _openHeight;
     private int _generation;
 
     public ProjectGroupView() => InitializeComponent();
@@ -152,7 +153,7 @@ public partial class ProjectGroupView : UserControl
         Capsule.Opacity = 1;
     }
 
-    private static List<MenuFactory.Entry> MenuOf(ProjectGroupViewModel group) =>
+    internal static List<MenuFactory.Entry> MenuOf(ProjectGroupViewModel group) =>
     [
         new(AppLangResources.Get(AppLangResourceKind.RenameGroup), group.RenameCommand, Glyph: ArcIcons.Pencil),
         new(AppLangResources.Get(AppLangResourceKind.GroupColor), null, Glyph: ArcIcons.Palette)
@@ -164,6 +165,11 @@ public partial class ProjectGroupView : UserControl
                     Icon = Swatch(c.Value, string.Equals(c.Value, group.Color, StringComparison.OrdinalIgnoreCase)),
                 })
                 .ToList(),
+        },
+        new(AppLangResources.Get(AppLangResourceKind.GroupMergeWorkspaces), group.ToggleMergeWorkspacesCommand, SeparatorBefore: true)
+        {
+            IsChecked = group.MergeWorkspaces,
+            IsCheckBox = true,
         },
         new(AppLangResources.Get(AppLangResourceKind.RemoveGroup), group.RemoveCommand, IsDestructive: true, SeparatorBefore: true, Glyph: ArcIcons.Trash2),
     ];

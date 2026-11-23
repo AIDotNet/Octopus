@@ -1,3 +1,4 @@
+using Octopus.Core.Agents;
 using Octopus.Core.Plugins;
 using Octopus.Core.Projects;
 using Octopus.Core.Settings;
@@ -43,4 +44,19 @@ public interface IPluginStateStore
 
     /// <summary>Changes <see cref="Current"/> and writes the file.</summary>
     void Update(Action<PluginsDocument> mutate);
+}
+
+/// <summary>
+/// Reads and writes <c>accounts.json</c>: non-secret metadata for configured agent subscription accounts
+/// (design/13-多账户切换.md §4.2).
+/// </summary>
+public interface IAccountStore
+{
+    AccountsDocument Current { get; }
+    event EventHandler? Changed;
+
+    void Load();
+
+    /// <summary>Changes <see cref="Current"/>, normalizes it, and writes the file.</summary>
+    void Update(Action<AccountsDocument> mutate);
 }

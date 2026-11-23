@@ -29,6 +29,13 @@ public interface IFileTreeService
     IDisposable WatchChanges(string root, Action onAnyChange, TimeSpan debounce);
 
     /// <summary>
+    /// As <see cref="WatchChanges(string, Action, TimeSpan)"/>, passing true when a git reference or HEAD changed
+    /// (so commits/branches may have changed) and false when only working-tree files or the index changed.
+    /// </summary>
+    IDisposable WatchChanges(string root, Action<bool> onChanged, TimeSpan debounce) =>
+        WatchChanges(root, () => onChanged(true), debounce);
+
+    /// <summary>
     /// Watches the directory a git repository keeps its state in (found with <c>git rev-parse</c>, so it also works
     /// when the project is a sub-folder of the repository or a linked worktree): <c>HEAD</c>, <c>index</c>,
     /// <c>packed-refs</c> and <c>refs/</c>. <paramref name="commonDirectory"/> is the shared one of a worktree (may be the same).

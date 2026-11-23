@@ -136,6 +136,140 @@
                 <arc:Alert Tone="Info"
                            Title="{l:AppLangResource SettingsUnverified}"
                            IsVisible="{Binding IsUnverified}" />
+
+                <agents:FieldRow Label="{l:AppLangResource AccountSectionLabel}"
+                                 TopAligned="True"
+                                 IsVisible="{Binding HasAccountsSection}">
+                    <StackPanel DataContext="{Binding AccountsSection}"
+                                x:DataType="agents:AgentAccountsSectionViewModel"
+                                Spacing="8">
+                        <arc:Alert Tone="Warning"
+                                   IsVisible="{Binding IsGlobalKeyring}"
+                                   Title="{Binding GlobalWarningTitle}"
+                                   Content="{Binding GlobalWarningBody}" />
+                        <TextBlock Classes="hint"
+                                   IsVisible="{Binding IsEnvDir}"
+                                   Text="{Binding SectionHint}"
+                                   TextWrapping="Wrap" />
+
+                        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                BorderThickness="1"
+                                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                ClipToBounds="True"
+                                IsVisible="{Binding !!Items.Count}">
+                            <ItemsControl ItemsSource="{Binding Items}" Margin="0,-1,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="agents:AgentAccountItemViewModel">
+                                        <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                                BorderThickness="0,1,0,0"
+                                                Padding="10,6">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                <StackPanel VerticalAlignment="Center" Spacing="1">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Classes="label" FontWeight="Medium" Text="{Binding DisplayLabel}" VerticalAlignment="Center" />
+                                                        <arc:Badge Size="Small" Tone="Info"
+                                                                   Content="{l:AppLangResource AccountDefaultBadge}"
+                                                                   IsVisible="{Binding IsDefault}"
+                                                                   VerticalAlignment="Center" />
+                                                        <arc:Badge Size="Small" Tone="Success"
+                                                                   Content="{l:AppLangResource AccountActiveBadge}"
+                                                                   IsVisible="{Binding IsActiveGlobal}"
+                                                                   VerticalAlignment="Center" />
+                                                        <arc:Badge Size="Small" Tone="Neutral"
+                                                                   Content="{l:AppLangResource AccountExternalBadge}"
+                                                                   IsVisible="{Binding IsExternal}"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                    <TextBlock Classes="mono"
+                                                               Text="{Binding Subtitle}"
+                                                               IsVisible="{Binding HasSubtitle}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                    <arc:Button Variant="Ghost" Size="Small"
+                                                                IsVisible="{Binding CanLogin}"
+                                                                Content="{l:AppLangResource AccountLogin}"
+                                                                Command="{Binding LoginCommand}" />
+                                                    <arc:Button Variant="Ghost" Size="Small"
+                                                                IsVisible="{Binding CanSwitchGlobal}"
+                                                                Content="{l:AppLangResource AccountSwitchTo}"
+                                                                Command="{Binding SwitchGlobalCommand}" />
+                                                    <arc:Button Variant="Ghost" Size="Small"
+                                                                IsVisible="{Binding CanSetDefault}"
+                                                                Content="{l:AppLangResource AccountSetDefault}"
+                                                                Command="{Binding SetDefaultCommand}" />
+                                                    <arc:Button Variant="Ghost" Size="Small"
+                                                                IsVisible="{Binding CanUpdateSnapshot}"
+                                                                Command="{Binding UpdateSnapshotCommand}"
+                                                                AutomationProperties.Name="{l:AppLangResource AccountUpdateSnapshot}"
+                                                                arc:Tooltip.Tip="{l:AppLangResource AccountUpdateSnapshot}">
+                                                        <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+                                                    </arc:Button>
+                                                    <arc:Button Variant="Ghost" Size="Small"
+                                                                IsVisible="{Binding CanRevealFolder}"
+                                                                Command="{Binding RevealFolderCommand}"
+                                                                AutomationProperties.Name="{l:AppLangResource AccountRevealFolder}"
+                                                                arc:Tooltip.Tip="{l:AppLangResource AccountRevealFolder}">
+                                                        <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                                                    </arc:Button>
+                                                    <arc:Button Variant="Ghost" Size="Small"
+                                                                Command="{Binding RenameCommand}"
+                                                                AutomationProperties.Name="{l:AppLangResource AccountRename}"
+                                                                arc:Tooltip.Tip="{l:AppLangResource AccountRename}">
+                                                        <lucide:LucideIcon Kind="Pencil" Size="14" />
+                                                    </arc:Button>
+                                                    <arc:Button Variant="Ghost" Size="Small"
+                                                                IsVisible="{Binding CanRemove}"
+                                                                Command="{Binding RemoveCommand}"
+                                                                AutomationProperties.Name="{l:AppLangResource AccountRemove}"
+                                                                arc:Tooltip.Tip="{l:AppLangResource AccountRemove}">
+                                                        <lucide:LucideIcon Kind="Trash2" Size="14" />
+                                                    </arc:Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <arc:Button Variant="Secondary" Size="Small"
+                                        IsVisible="{Binding IsEnvDir}"
+                                        Command="{Binding AddManagedCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <lucide:LucideIcon Kind="Plus" Size="14" VerticalAlignment="Center" />
+                                    <TextBlock Text="{l:AppLangResource AccountAdd}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </arc:Button>
+                            <arc:Button Variant="Secondary" Size="Small"
+                                        IsVisible="{Binding IsEnvDir}"
+                                        Command="{Binding ImportFolderCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <lucide:LucideIcon Kind="FolderInput" Size="14" VerticalAlignment="Center" />
+                                    <TextBlock Text="{l:AppLangResource AccountImportFolder}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </arc:Button>
+                            <arc:Button Variant="Secondary" Size="Small"
+                                        IsVisible="{Binding IsGlobalKeyring}"
+                                        Command="{Binding SaveCurrentLoginCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <lucide:LucideIcon Kind="BookmarkPlus" Size="14" VerticalAlignment="Center" />
+                                    <TextBlock Text="{l:AppLangResource AccountSaveCurrentLogin}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </arc:Button>
+                            <arc:Button Variant="Secondary" Size="Small"
+                                        IsVisible="{Binding IsGlobalKeyring}"
+                                        Command="{Binding LoginNewGlobalCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <lucide:LucideIcon Kind="Plus" Size="14" VerticalAlignment="Center" />
+                                    <TextBlock Text="{l:AppLangResource AccountLoginNew}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </arc:Button>
+                        </StackPanel>
+                    </StackPanel>
+                </agents:FieldRow>
+
                 <ItemsControl ItemsSource="{Binding Fields}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>

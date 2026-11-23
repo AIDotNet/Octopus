@@ -137,6 +137,15 @@ public class ProjectGroupTests
         Assert.Equal(ProjectService.Palette[7], work.Color);
         Assert.Equal(ProjectService.Palette[7], GroupEntry(rail, work.Id).Color);
 
+        // Merge working directories checkbox in the group menu.
+        var beforeMenu = ProjectGroupView.MenuOf(GroupEntry(rail, work.Id));
+        var mergeEntry = Assert.Single(beforeMenu, e => e.IsCheckBox);
+        Assert.False(mergeEntry.IsChecked);
+        GroupEntry(rail, work.Id).ToggleMergeWorkspacesCommand.Execute(null);
+        Assert.True(work.MergeWorkspaces);
+        Assert.True(GroupEntry(rail, work.Id).MergeWorkspaces);
+        Assert.True(ProjectGroupView.MenuOf(GroupEntry(rail, work.Id)).Single(e => e.IsCheckBox).IsChecked);
+
         GroupEntry(rail, work.Id).RemoveCommand.Execute(null);
         Assert.Empty(projects.Groups);
         Assert.Null(a.GroupId);
@@ -246,9 +255,13 @@ public class ProjectGroupTests
         var frame = view.FindControl<Border>("Frame")!;
         var folder = view.FindControl<Grid>("Folder")!;
         var capsule = view.FindControl<Panel>("Capsule")!;
+        var metrics = Octopus.App.Appearance.ThemeService.CurrentMetrics;
+        var slotSize = metrics.ProjectSlotSize;
+        var chipSize = metrics.ProjectChipSize;
+        var headerHeight = metrics.GroupHeaderHeight;
         Assert.True(folder.IsVisible);
         Assert.False(capsule.IsVisible);
-        Assert.Equal(42, view.Bounds.Height);
+        Assert.Equal(slotSize, view.Bounds.Height);
 
         var heights = new List<double>();
         projects.SetExpandedGroup(work.Id);
@@ -258,15 +271,15 @@ public class ProjectGroupTests
         Assert.True(double.IsNaN(frame.Height));
         var open = view.Bounds.Height;
         // The header and three squares.
-        Assert.True(open > 42 * 3 + 26, $"open height {open}");
-        Assert.Contains(heights, h => h > 42 && h < open);
+        Assert.True(open > chipSize * 3 + headerHeight, $"open height {open}");
+        Assert.Contains(heights, h => h > slotSize && h < open);
 
         projects.SetExpandedGroup(null);
         Assert.True(Frames.Until(() => !capsule.IsVisible));
         Frames.Pump();
         Assert.True(folder.IsVisible);
         Assert.Equal(1, folder.Opacity);
-        Assert.Equal(42, view.Bounds.Height);
+        Assert.Equal(slotSize, view.Bounds.Height);
         window.Close();
     }
 
@@ -321,11 +334,18 @@ public class ProjectGroupTests
         var work = projects.AddGroup("Work", [a.Id]);
         Assert.Equal("Work", panel.GroupName);
         Assert.True(panel.HasGroup);
+        Assert.False(panel.IsGroupMerged);
+
+        var b = Add("b");
+        projects.MoveProjectToGroup(b.Id, work.Id);
+        projects.SetGroupMergeWorkspaces(work.Id, true);
+        Assert.True(panel.IsGroupMerged);
 
         projects.RenameGroup(work.Id, "Clients");
         Assert.Equal("Clients", panel.GroupName);
-        projects.MoveProjectToGroup(a.Id, null);
+        projects.MoveProjectToGroup(b.Id, null);
         Assert.False(panel.HasGroup);
+        Assert.False(panel.IsGroupMerged);
     }
 
     [AvaloniaFact, FreshApp]

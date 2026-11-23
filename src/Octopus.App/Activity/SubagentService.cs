@@ -181,6 +181,14 @@ public sealed class SubagentService : ISubagentService, IDisposable
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
+        if (e.Kind == ProjectChangeKind.Projects)
+        {
+            // A removed project takes its items along without an Items event per item: drop their trackers too.
+            var gone = _trackers.Keys.Where(id => _projects.FindItem(id) is null).ToList();
+            foreach (var id in gone) _trackers.Remove(id);
+            if (gone.Count > 0) UpdateTimer();
+            return;
+        }
         if (e.Kind == ProjectChangeKind.Items && e.Item is { } item && _projects.FindItem(item.Id) is null && _trackers.Remove(item.Id))
         {
             UpdateTimer();

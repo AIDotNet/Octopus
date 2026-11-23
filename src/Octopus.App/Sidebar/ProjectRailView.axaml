@@ -6,14 +6,14 @@
              xmlns:vm="using:Octopus.App.Sidebar"
              x:Class="Octopus.App.Sidebar.ProjectRailView"
              x:DataType="vm:ProjectRailViewModel">
-    <Grid Width="54" RowDefinitions="*,Auto" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+    <Grid Width="{DynamicResource OctopusRailWidth}" RowDefinitions="*,Auto" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
         <arc:ScrollArea OverlayScrollbarMode="Auto" FadeLength="0">
-            <StackPanel Spacing="6" Margin="0,10,0,6">
+            <StackPanel Spacing="{DynamicResource OctopusRailSpacing}" Margin="{DynamicResource OctopusRailMargin}">
                 <!-- Squares of projects in no group, then the group folders (ProjectRailViewModel.Entries). -->
                 <ItemsControl ItemsSource="{Binding Entries}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Spacing="4" />
+                            <StackPanel Spacing="{DynamicResource OctopusRailSpacing}" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.DataTemplates>
@@ -29,15 +29,15 @@
                             Command="{Binding NewProjectCommand}"
                             AutomationProperties.Name="{l:AppLangResource NewProject}"
                             arc:Tooltip.Tip="{l:AppLangResource NewProject}" arc:Tooltip.Side="Right">
-                    <lucide:LucideIcon Kind="Plus" Size="16" />
+                    <lucide:LucideIcon Kind="Plus" Size="{DynamicResource OctopusTopIconSize}" />
                 </arc:Button>
             </StackPanel>
         </arc:ScrollArea>
-        <arc:Button Grid.Row="1" Classes="icon" Variant="Ghost" HorizontalAlignment="Center" Margin="0,0,0,10"
+        <arc:Button Grid.Row="1" Classes="icon" Variant="Ghost" HorizontalAlignment="Center" Margin="{DynamicResource OctopusRailBottomMargin}"
                     Command="{Binding OpenSettingsCommand}"
                     AutomationProperties.Name="{l:AppLangResource Settings}"
                     arc:Tooltip.Tip="{l:AppLangResource Settings}" arc:Tooltip.Side="Right">
-            <lucide:LucideIcon Kind="Settings" Size="16" />
+            <lucide:LucideIcon Kind="Settings" Size="{DynamicResource OctopusTopIconSize}" />
         </arc:Button>
     </Grid>
 </UserControl>

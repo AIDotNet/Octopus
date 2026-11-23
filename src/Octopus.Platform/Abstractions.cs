@@ -56,6 +56,17 @@ public interface IShellCommandBuilder
     /// <summary>The executable and its arguments, each quoted, joined into one command line.</summary>
     string Build(string executable, IEnumerable<string> arguments, ShellKind kind);
 
+    /// <summary>
+    /// Wraps <paramref name="commandLine"/> with shell-level environment unsetting and assignments so that variables
+    /// exported by the user's login/interactive rc files (<c>~/.zshrc</c>, <c>$PROFILE</c>) cannot override isolated
+    /// subscription sessions. Returns <paramref name="commandLine"/> unchanged when both collections are empty.
+    /// </summary>
+    string WrapEnvironment(
+        string commandLine,
+        ShellKind kind,
+        IReadOnlyList<string>? unsetVariables = null,
+        IReadOnlyDictionary<string, string>? setVariables = null) => commandLine;
+
     /// <summary>Splits a user-typed command such as <c>rec --profile work</c> into arguments (POSIX-like quoting rules).</summary>
     IReadOnlyList<string> Split(string commandLine);
 }

@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Octopus.App.Appearance;
 using Octopus.App.Launcher;
 using Octopus.App.Services;
 using Octopus.App.Shell.Chrome;
@@ -14,13 +15,13 @@ namespace Octopus.App.Shell;
 /// <summary>The main window: sidebar state, the settings overlay, and the keyboard shortcuts.</summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
-    public const double RailWidth = 54;
     public const double MinPanelWidth = 200;
     public const double MaxPanelWidth = 420;
     public const double MinRightPanelWidth = 220;
     public const double MaxRightPanelWidth = 520;
 
     private readonly ISettingsStore _settings;
+    private readonly ThemeService _theme;
     private readonly IAppKeymap _keymap;
     private readonly IItemOpener _opener;
     private readonly IWorkspaceCommands _workspaceCommands;
@@ -29,6 +30,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public ShellViewModel(
         ISettingsStore settings,
+        ThemeService theme,
         IWindowChrome chrome,
         IAppKeymap keymap,
         IItemOpener opener,
@@ -42,11 +44,17 @@ public sealed partial class ShellViewModel : ObservableObject
         Octopus.App.Updates.UpdateCardViewModel updateCard)
     {
         _settings = settings;
+        _theme = theme;
         _keymap = keymap;
         _opener = opener;
         _workspaceCommands = workspaceCommands;
         _navigator = navigator;
         _projects = projects;
+        _theme.DensityChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(RailWidth));
+            OnPropertyChanged(nameof(LeftColumnWidth));
+        };
         projects.Changed += (_, e) =>
         {
             if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.CurrentProject)
@@ -157,6 +165,9 @@ public sealed partial class ShellViewModel : ObservableObject
     private void ToggleRightPanel() => IsRightPanelOpen = !IsRightPanelOpen;
 
     public bool IsSidebarVisible => !IsSidebarCollapsed;
+
+    /// <summary>Width of the project rail in the active layout style.</summary>
+    public double RailWidth => _theme.Metrics.ProjectRailWidth;
 
     /// <summary>Width of the whole left column; zero when the sidebar is collapsed, so it takes no room at all.</summary>
     public GridLength LeftColumnWidth => IsSidebarCollapsed ? new GridLength(0) : new GridLength(RailWidth + PanelWidth);

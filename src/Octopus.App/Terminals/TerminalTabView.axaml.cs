@@ -50,21 +50,30 @@ public partial class TerminalTabView : UserControl, ITabContent
         }
     }
 
+    private TerminalTabViewModel? _boundModel;
     private TerminalTabViewModel? Model => DataContext as TerminalTabViewModel;
 
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        if (_boundModel is not null)
+        {
+            _boundModel.PropertyChanged -= OnModelPropertyChanged;
+            _boundModel = null;
+        }
         ApplyFont();
         if (Model is { } model)
         {
-            model.PropertyChanged += (_, args) =>
-            {
-                if (args.PropertyName == nameof(TerminalTabViewModel.TerminalFontFamily))
-                {
-                    ApplyFont();
-                }
-            };
+            _boundModel = model;
+            model.PropertyChanged += OnModelPropertyChanged;
+        }
+    }
+
+    private void OnModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(TerminalTabViewModel.TerminalFontFamily))
+        {
+            ApplyFont();
         }
     }
 

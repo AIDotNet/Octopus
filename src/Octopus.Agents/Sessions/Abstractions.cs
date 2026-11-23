@@ -56,6 +56,12 @@ public interface ISessionSource
     string AgentId { get; }
 
     /// <summary>
+    /// The default data directory for an agent that has no account environment variable (<c>signals.account</c>);
+    /// null when <c>signals.account</c> supplies it.
+    /// </summary>
+    string? DefaultDirectory(string home) => null;
+
+    /// <summary>
     /// The sessions of <paramref name="projectPath"/> (the working directory they were started in) kept under one
     /// account folder, newest first. Files that cannot be read are skipped; a missing folder gives an empty list.
     /// </summary>

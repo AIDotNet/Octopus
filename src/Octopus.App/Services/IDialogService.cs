@@ -36,6 +36,12 @@ public interface IDialogService
     /// Shows the agent editor until what it holds is a valid definition (then returns it) or the person cancels (null).
     /// </summary>
     Task<Octopus.Core.Agents.AgentDefinition?> AskAgentDefinitionAsync(Octopus.App.Settings.Agents.AgentEditorModel model);
+
+    /// <summary>
+    /// Runs an interactive OAuth login command inside an embedded terminal dialog. Returns true when the command exited
+    /// cleanly or the user clicked Done; false when cancelled.
+    /// </summary>
+    Task<bool> RunAccountLoginAsync(string title, string description, Octopus.Core.Terminals.LaunchSpec spec, bool autoCloseOnSuccess = true);
 }
 
 /// <summary>What the project icon dialog returns: the color, a Lucide icon name (null: the initial) and a thumbnail file (null: none).</summary>

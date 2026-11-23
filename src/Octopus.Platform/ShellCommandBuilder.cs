@@ -29,6 +29,89 @@ public sealed class ShellCommandBuilder : IShellCommandBuilder
         return builder.ToString();
     }
 
+    public string WrapEnvironment(
+        string commandLine,
+        ShellKind kind,
+        IReadOnlyList<string>? unsetVariables = null,
+        IReadOnlyDictionary<string, string>? setVariables = null)
+    {
+        var unsets = unsetVariables?.Where(IsValidEnvName).Distinct(StringComparer.Ordinal).ToList() ?? [];
+        var sets = setVariables?.Where(kv => IsValidEnvName(kv.Key)).ToList() ?? [];
+        if (unsets.Count == 0 && sets.Count == 0)
+        {
+            return commandLine;
+        }
+
+        var builder = new StringBuilder();
+        switch (kind)
+        {
+            case ShellKind.Posix:
+                if (unsets.Count > 0)
+                {
+                    builder.Append("unset");
+                    foreach (var name in unsets) builder.Append(' ').Append(name);
+                    builder.Append("; ");
+                }
+                foreach (var (name, value) in sets)
+                {
+                    builder.Append("export ").Append(name).Append('=').Append(QuotePosix(value)).Append("; ");
+                }
+                builder.Append(commandLine);
+                break;
+
+            case ShellKind.Fish:
+                foreach (var name in unsets)
+                {
+                    builder.Append("set -e ").Append(name).Append("; ");
+                }
+                foreach (var (name, value) in sets)
+                {
+                    builder.Append("set -gx ").Append(name).Append(' ').Append(QuoteFish(value)).Append("; ");
+                }
+                builder.Append(commandLine);
+                break;
+
+            case ShellKind.PowerShell:
+                foreach (var name in unsets)
+                {
+                    builder.Append("Remove-Item ").Append(QuotePowerShell("Env:" + name)).Append(" -ErrorAction SilentlyContinue; ");
+                }
+                foreach (var (name, value) in sets)
+                {
+                    builder.Append("$env:").Append(name).Append(" = ").Append(QuotePowerShell(value)).Append("; ");
+                }
+                builder.Append(commandLine);
+                break;
+
+            case ShellKind.Cmd:
+                foreach (var name in unsets)
+                {
+                    builder.Append("set \"").Append(name).Append("=\" & ");
+                }
+                foreach (var (name, value) in sets)
+                {
+                    builder.Append("set \"").Append(name).Append('=').Append(value.Replace("\"", "\"\"")).Append("\" & ");
+                }
+                builder.Append(commandLine);
+                break;
+
+            default:
+                return commandLine;
+        }
+        return builder.ToString();
+    }
+
+    private static bool IsValidEnvName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        if (!(name[0] is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or '_')) return false;
+        for (var i = 1; i < name.Length; i++)
+        {
+            if (!(name[i] is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '_')) return false;
+        }
+        return true;
+    }
+
     public IReadOnlyList<string> Split(string commandLine)
     {
         var result = new List<string>();

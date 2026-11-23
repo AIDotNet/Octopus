@@ -164,6 +164,10 @@ internal sealed class HostConnection : IAsyncDisposable
             if (_watches.TryRemove(request.Path, out var watch)) watch.Dispose();
             return Task.FromResult(new Nothing());
         });
+        _connection.Handle(RemoteMethods.FsBrowse, json.BrowseFolderMessage, json.BrowseFolderResultMessage,
+            (request, _) => _workspace.BrowseFolderAsync(request));
+        _connection.Handle(RemoteMethods.FsBrowseCreateDirectory, json.CreateBrowseFolderMessage, json.ResolvedMessage,
+            async (request, _) => new ResolvedMessage { Path = await _workspace.BrowseCreateDirectoryAsync(request).ConfigureAwait(false) });
         _connection.Handle(RemoteMethods.GitCall, json.CallMessage, json.CallResultMessage,
             async (request, _) => new CallResultMessage { Result = await _workspace.GitAsync(request.Method, request.Arguments).ConfigureAwait(false) });
     }
@@ -178,13 +182,14 @@ internal sealed class HostConnection : IAsyncDisposable
             // The library's own snapshot only between two builds of the same terminal library (design/12 §4.3).
             var native = request.Snapshot == SnapshotFormats.Native && _theirs?.TerminalBuild is { Length: > 0 } theirs && theirs == _hello.TerminalBuild;
             var attachment = await _workspace.AttachAsync(request.ItemId, request.Columns, request.Rows, native, request.ClaimSize, subscriber).ConfigureAwait(false);
+            var snapshotLength = attachment.SnapshotLength;
             subscriber.Begin(attachment);
             return new AttachedMessage
             {
                 Channel = request.Channel,
                 Position = attachment.Position,
                 Snapshot = attachment.IsNative ? SnapshotFormats.Native : SnapshotFormats.Vt,
-                SnapshotLength = attachment.Snapshot.Length,
+                SnapshotLength = snapshotLength,
                 Columns = attachment.Columns,
                 Rows = attachment.Rows,
                 Title = attachment.Title,
@@ -246,7 +251,8 @@ internal sealed class HostConnection : IAsyncDisposable
         {
             Attachment = attachment;
             lock (_gate) _acknowledged = attachment.Position;
-            _ = Task.Run(() => SendLoopAsync(attachment.Snapshot));
+            var snapshot = attachment.TakeSnapshot();
+            _ = Task.Run(() => SendLoopAsync(snapshot));
         }
 
         public void Acknowledge(ulong position)
@@ -322,7 +328,7 @@ internal sealed class HostConnection : IAsyncDisposable
                                     at += take;
                                     if (used == MaxFrame)
                                     {
-                                        await connection.SendDataAsync(FrameType.Output, channel, frame.AsSpan(0, 8 + used).ToArray()).ConfigureAwait(false);
+                                        await connection.SendDataAsync(FrameType.Output, channel, frame.AsMemory(0, 8 + used)).ConfigureAwait(false);
                                         BinaryPrimitives.WriteUInt64LittleEndian(frame, next.Position + (ulong)at);
                                         used = 0;
                                     }
@@ -330,7 +336,7 @@ internal sealed class HostConnection : IAsyncDisposable
                                 if (used == 0 || !_queue.Reader.TryPeek(out var peeked) || peeked.Kind != KindOutput) break;
                                 _queue.Reader.TryRead(out next);
                             }
-                            if (used > 0) await connection.SendDataAsync(FrameType.Output, channel, frame.AsSpan(0, 8 + used).ToArray()).ConfigureAwait(false);
+                            if (used > 0) await connection.SendDataAsync(FrameType.Output, channel, frame.AsMemory(0, 8 + used)).ConfigureAwait(false);
                             break;
                         case KindResize:
                             var resize = new byte[13];

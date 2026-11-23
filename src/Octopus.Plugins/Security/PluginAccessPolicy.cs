@@ -160,19 +160,13 @@ public sealed class PluginAccessPolicy : IPluginAccessPolicy
         StringComparison comparison)
     {
         if (SensitiveFiles.IsCredentialByName(real)) return true;
+        if (resolved.AgentCredentialFiles.Contains(real)) return true;
         foreach (var scope in scopes)
         {
             if (scope.Scope.Kind != FileScopeKind.AgentData) continue;
             foreach (var name in SensitiveFiles.AgentCredentialNames)
             {
                 if (SamePath(real, Path.Combine(scope.RealRoot, name))) return true;
-            }
-        }
-        foreach (var agent in resolved.Agents)
-        {
-            foreach (var name in SensitiveFiles.AgentCredentialNames.Concat(agent.Files))
-            {
-                if (SamePath(real, Path.Combine(agent.DataDirectory, name.Replace('/', Path.DirectorySeparatorChar)))) return true;
             }
         }
         return false;
@@ -211,9 +205,14 @@ public sealed class PluginAccessPolicy : IPluginAccessPolicy
 
     private static bool HasSegment(string path, string name, StringComparison comparison)
     {
-        foreach (var segment in path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries))
+        var rest = path.AsSpan();
+        while (rest.Length > 0)
         {
-            if (string.Equals(segment, name, comparison)) return true;
+            var cut = rest.IndexOfAny('/', '\\');
+            var segment = cut < 0 ? rest : rest[..cut];
+            if (segment.Length > 0 && segment.Equals(name.AsSpan(), comparison)) return true;
+            if (cut < 0) break;
+            rest = rest[(cut + 1)..];
         }
         return false;
     }
@@ -221,8 +220,10 @@ public sealed class PluginAccessPolicy : IPluginAccessPolicy
     internal static bool InsideOrEqual(string root, string path, StringComparison comparison)
     {
         if (string.Equals(root, path, comparison)) return true;
-        var prefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
-        return path.StartsWith(prefix, comparison);
+        if (Path.EndsInDirectorySeparator(root)) return path.StartsWith(root, comparison);
+        return path.Length > root.Length
+            && path.AsSpan(0, root.Length).Equals(root.AsSpan(), comparison)
+            && (path[root.Length] == Path.DirectorySeparatorChar || path[root.Length] == Path.AltDirectorySeparatorChar);
     }
 
     private static bool InsideAny(string path, IReadOnlyList<string> roots, StringComparison comparison)

@@ -152,8 +152,31 @@ public static partial class TerminalLinks
     {
         var cells = new string?[row.Cells.Length];
         for (var i = 0; i < cells.Length; i++)
-            cells[i] = TCell.Width(row.Cells[i]) is CellWidth.SpacerTail or CellWidth.SpacerHead ? "" : row.TextAt(i);
+        {
+            var cell = row.Cells[i];
+            if (TCell.Width(cell) is CellWidth.SpacerTail or CellWidth.SpacerHead)
+            {
+                cells[i] = "";
+                continue;
+            }
+            if (TCell.HasGrapheme(cell))
+            {
+                cells[i] = row.TextAt(i);
+                continue;
+            }
+            var cp = TCell.Codepoint(cell);
+            cells[i] = cp == 0 ? null : cp < 128 ? AsciiChars[cp] : cp <= 0xFFFF ? ((char)cp).ToString() : char.ConvertFromUtf32((int)cp);
+        }
         return new LinkRow(cells, row.Flags.HasFlag(RowFlags.SoftWrapped), row.Flags.HasFlag(RowFlags.WrapContinuation));
+    }
+
+    private static readonly string[] AsciiChars = CreateAsciiChars();
+
+    private static string[] CreateAsciiChars()
+    {
+        var table = new string[128];
+        for (var i = 0; i < 128; i++) table[i] = ((char)i).ToString();
+        return table;
     }
 
     /// <summary>

@@ -13,6 +13,8 @@ public sealed class AgentProfile
     public bool? Fast { get; set; }
     /// <summary>A <see cref="PermissionModes"/> id; null follows the global default.</summary>
     public string? Permission { get; set; }
+    /// <summary>Global default account id for this agent; null uses the implicit <c>default</c> account.</summary>
+    public string? DefaultAccountId { get; set; }
     public List<string> ExtraArgs { get; set; } = [];
     public Dictionary<string, string> Env { get; set; } = [];
     /// <summary>Feature id to value. bool: "true"; list: items separated by newlines.</summary>
@@ -25,6 +27,8 @@ public sealed class AgentLaunchOptions
     public string? Model { get; set; }
     public string? Effort { get; set; }
     public bool? Fast { get; set; }
+    /// <summary>Account chosen for this tab in the "+" launcher; overrides project and profile defaults when set.</summary>
+    public string? AccountId { get; set; }
 
     /// <summary>The initial prompt. Used for the first start only and never saved.</summary>
     [JsonIgnore]
@@ -66,4 +70,5 @@ public sealed class AgentScanResult
 public sealed record AgentCommand(
     string Executable,
     IReadOnlyList<string> Arguments,
-    IReadOnlyDictionary<string, string> Environment);
+    IReadOnlyDictionary<string, string> Environment,
+    IReadOnlyList<string>? UnsetEnvironment = null);

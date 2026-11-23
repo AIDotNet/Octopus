@@ -69,6 +69,10 @@ public sealed class HelloMessage
 [JsonSerializable(typeof(WriteFileMessage))]
 [JsonSerializable(typeof(MoveMessage))]
 [JsonSerializable(typeof(DeleteMessage))]
+[JsonSerializable(typeof(BrowseFolderMessage))]
+[JsonSerializable(typeof(BrowseFolderResultMessage))]
+[JsonSerializable(typeof(BrowseEntryMessage))]
+[JsonSerializable(typeof(CreateBrowseFolderMessage))]
 [JsonSerializable(typeof(CallMessage))]
 [JsonSerializable(typeof(CallResultMessage))]
 public sealed partial class RemoteJsonContext : JsonSerializerContext;

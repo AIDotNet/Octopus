@@ -1,7 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Octopus.Agents.Accounts;
 using Octopus.Agents.Probes;
 using Octopus.Agents.Sessions;
 using Octopus.Agents.Signals;
+using Octopus.Platform;
+using Octopus.Storage;
 
 namespace Octopus.Agents;
 
@@ -25,12 +29,26 @@ public static class AgentsServiceCollectionExtensions
         services.AddSingleton<ISignalHub, SignalHub>();
         services.AddSingleton<ISignalAttachPlanner, SignalAttachPlanner>();
         services.AddSingleton<IProbeRunner, ProbeRunner>();
-        services.AddSingleton<IAgentAccountDiscovery, AgentAccountDiscovery>();
+        services.TryAddSingleton<IAccountStore, InMemoryAccountStore>();
+        services.TryAddSingleton<ISecretStore, NoSecretStore>();
+        services.AddSingleton<IAgentAccountDiscovery>(sp => new AgentAccountDiscovery(
+            sp.GetRequiredService<ISignalHub>(),
+            sp.GetRequiredService<IAgentCatalog>(),
+            sp.GetRequiredService<ILoginEnvironment>(),
+            sp.GetRequiredService<IAppPaths>(),
+            accountStore: sp.GetService<IAccountStore>()));
+        services.AddSingleton<IAgentAccountService>(sp => new AgentAccountService(
+            sp.GetRequiredService<IAccountStore>(),
+            sp.GetRequiredService<IAppPaths>(),
+            sp.GetRequiredService<ISecretStore>(),
+            sp.GetRequiredService<IShellCommandBuilder>(),
+            sp.GetService<ISignalHub>()));
         services.AddSingleton<ClaudeStatusLineBridge>();
         services.AddSingleton<ClaudeStatusLineWatcher>();
         // Session management (design/ui/会话管理方案.html): one reader per agent whose files are understood, and the converters.
         services.AddSingleton<ISessionSource, ClaudeSessionSource>();
         services.AddSingleton<ISessionSource, CodexSessionSource>();
+        services.AddSingleton<ISessionSource, AgySessionSource>();
         services.AddSingleton<ISessionConverter, ClaudeAccountCopyConverter>(_ => new ClaudeAccountCopyConverter());
         services.AddSingleton<ISessionConverter, HandoffSessionConverter>(_ => new HandoffSessionConverter());
         services.AddSingleton<IAgentSessionService>(sp => new AgentSessionService(

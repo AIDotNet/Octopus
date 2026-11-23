@@ -10,7 +10,7 @@
              x:DataType="ex:ExplorerPanelViewModel">
     <Grid RowDefinitions="Auto,Auto,*">
         <!-- Title row: the project name and the folder actions. -->
-        <Grid ColumnDefinitions="*,Auto" Margin="14,0,8,2" Height="32">
+        <Grid ColumnDefinitions="*,Auto" Margin="{DynamicResource OctopusExplorerHeaderMargin}" Height="{DynamicResource OctopusExplorerHeaderHeight}">
             <TextBlock Classes="ex-body" FontWeight="SemiBold" VerticalAlignment="Center"
                        Text="{Binding ProjectName}" TextTrimming="CharacterEllipsis"
                        arc:Tooltip.Tip="{Binding ProjectPath}" />
@@ -34,7 +34,7 @@
         </Grid>
 
         <!-- Search mode and box. -->
-        <StackPanel Grid.Row="1" Margin="10,2,10,6" Spacing="6" DataContext="{Binding Search}" x:DataType="search:FileSearchViewModel" IsVisible="{Binding HasRoot}">
+        <StackPanel Grid.Row="1" Margin="{DynamicResource OctopusExplorerSearchMargin}" Spacing="{DynamicResource OctopusExplorerSearchSpacing}" DataContext="{Binding Search}" x:DataType="search:FileSearchViewModel" IsVisible="{Binding HasRoot}">
             <arc:SegmentedControl HorizontalAlignment="Stretch" SelectedValue="{Binding ModeKey, Mode=TwoWay}"
                                   AutomationProperties.Name="{l:AppLangResource ExplorerSearchMode}">
                 <arc:SegmentedOption Value="name" Label="{l:AppLangResource ExplorerSearchByName}" />
