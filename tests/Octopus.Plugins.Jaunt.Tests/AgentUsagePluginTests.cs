@@ -55,6 +55,13 @@ public sealed class AgentUsagePluginTests
     private static async Task<(Harness Harness, PluginManager Manager, FakeAgents Agents)> StartAsync(Action<Harness, FakeAgents>? arrange = null)
     {
         var harness = new Harness();
+        // Run the full built-in agent-usage plugin with production turn budgets so loaded CI runners don't trip the 500ms test budget.
+        harness.Options = new PluginManagerOptions
+        {
+            RestartDelays = harness.Options.RestartDelays,
+            MaxCrashes = harness.Options.MaxCrashes,
+            Budgets = TurnBudgets.Default,
+        };
         CopyDirectory(PackageSource(), Path.Combine(harness.BuiltinRoot, Id));
         var agents = new FakeAgents();
         harness.ExtraModules.Add(agents);

@@ -170,7 +170,7 @@ public class NavigationTests
     [AvaloniaFact]
     public void Cancelling_a_pairing_leaves_the_host_unpaired()
     {
-        using var phone = new Phone();
+        using var phone = new Phone(pairingDelay: TimeSpan.FromSeconds(2));
         var linux = phone.Workspace.Hosts.Single(host => !host.IsPaired);
         phone.Shell.ShowPairing(linux);
         var pairing = (PairingViewModel)phone.Top<PairingPage>().DataContext!;
