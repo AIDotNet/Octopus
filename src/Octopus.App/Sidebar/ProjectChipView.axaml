@@ -17,6 +17,11 @@
         <Border IsVisible="{Binding IsCurrent}" BorderThickness="2"
                 BorderBrush="{arc:ArcDesignTokenResource Accent}"
                 CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
+        <!-- Neutral backing behind inactive colored tiles so a group capsule's tint does not bleed into their color. -->
+        <Border IsVisible="{Binding ShowDimBackdrop}" IsHitTestVisible="False"
+                Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}"
+                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
         <Button x:Name="ChipButton" Classes="chip" Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}" Command="{Binding SelectCommand}"
                 Background="{Binding Background}"
                 arc:Tooltip.Tip="{Binding Tip}" arc:Tooltip.Side="Right"

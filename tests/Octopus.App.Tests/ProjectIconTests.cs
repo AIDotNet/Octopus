@@ -1,4 +1,9 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using Avalonia.VisualTree;
 using Octopus.App.Composition;
 using Octopus.App.Dialogs;
 using Octopus.App.Services;
@@ -133,6 +138,108 @@ public class ProjectIconTests
         await Chip().ChangeIconCommand.ExecuteAsync(null);
         Assert.True(Chip().ShowInitial);
         projects.RemoveProject(project.Id);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task A_custom_picture_clears_the_random_background_and_stays_full_opacity()
+    {
+        var projects = AppHost.Get<IProjectService>();
+        var store = (ProjectIconStore)AppHost.Get<IProjectIconStore>();
+        var rail = AppHost.Get<ProjectRailViewModel>();
+        var first = projects.AddProject(Directory.CreateTempSubdirectory("octopus-pic-a-").FullName, "Alpha");
+        var second = projects.AddProject(Directory.CreateTempSubdirectory("octopus-pic-b-").FullName, "Beta");
+        var picture = await store.ImportAsync(first.Id, WriteImage(256, 256));
+        projects.SetProjectAppearance(first.Id, first.Color, null, picture);
+        var group = projects.AddGroup("Apps", [first.Id, second.Id]);
+        projects.SetCurrent(second.Id);
+        projects.SetExpandedGroup(null);
+
+        var firstChip = rail.Chips.Single(c => c.Id == first.Id);
+        var secondChip = rail.Chips.Single(c => c.Id == second.Id);
+        Assert.True(firstChip.HasImage);
+        Assert.False(firstChip.IsCurrent);
+        // Custom pictures do not show the project's random color behind transparent edges and are not dimmed.
+        Assert.Equal(Colors.Transparent, ((ISolidColorBrush)firstChip.Background).Color);
+        Assert.Equal(1, firstChip.ChipOpacity);
+        Assert.False(firstChip.ShowDimBackdrop);
+
+        // Non-picture tiles keep the project color and show the neutral backdrop only while inactive.
+        Assert.Equal(Color.Parse(second.Color!), ((ISolidColorBrush)secondChip.Background).Color);
+        Assert.False(secondChip.ShowDimBackdrop);
+        projects.SetCurrent(first.Id);
+        Assert.True(secondChip.ShowDimBackdrop);
+
+        // Inside a collapsed folder preview, the picture tile also uses a transparent background while the color tile keeps its color.
+        var folder = rail.Entries.OfType<ProjectGroupViewModel>().Single(g => g.Id == group.Id);
+        Assert.Equal(Colors.Transparent, ((ISolidColorBrush)folder.Previews[0].Background).Color);
+        Assert.True(folder.Previews[0].HasImage);
+        Assert.Equal(Color.Parse(second.Color!), ((ISolidColorBrush)folder.Previews[1].Background).Color);
+
+        // In the appearance dialog preview, picking a picture clears the color background too.
+        var pickers = AppHost.Get<FakePickerService>();
+        var form = new ProjectAppearanceView(new Project { Name = "Alpha", Path = first.Path, Color = "#10B981" }, pickers, store);
+        var preview = form.FindControl<Border>("Preview")!;
+        Assert.Equal(Color.Parse("#10B981"), ((ISolidColorBrush)preview.Background!).Color);
+        pickers.Image = WriteImage(256, 256);
+        await form.ChoosePictureAsync();
+        Assert.Equal(Colors.Transparent, ((ISolidColorBrush)preview.Background!).Color);
+        form.SelectIcon("Rocket");
+        Assert.Equal(Color.Parse("#10B981"), ((ISolidColorBrush)preview.Background!).Color);
+        form.DiscardUnused(null);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task A_transparent_picture_renders_without_the_random_color_bleeding_through()
+    {
+        // A transparent PNG with a solid red square in the centre and transparent margins, placed on a project whose
+        // random fallback color is bright green (#00FF00): rendering the chip on a dark surface must never show green
+        // in the margins, and the centre must stay vivid red even when the project is not current.
+        var path = Path.Combine(Directory.CreateTempSubdirectory("octopus-transparent-icon-").FullName, "logo.png");
+        using (var src = new SKBitmap(new SKImageInfo(128, 128, SKColorType.Rgba8888, SKAlphaType.Premul)))
+        using (var canvas = new SKCanvas(src))
+        {
+            canvas.Clear(SKColors.Transparent);
+            using var paint = new SKPaint { Color = new SKColor(220, 30, 30, 255) };
+            canvas.DrawRect(32, 32, 64, 64, paint);
+            using var data = src.Encode(SKEncodedImageFormat.Png, 100);
+            File.WriteAllBytes(path, data.ToArray());
+        }
+
+        var store = (ProjectIconStore)AppHost.Get<IProjectIconStore>();
+        var imported = await store.ImportAsync("p-transparent", path);
+        var bitmap = store.Load(imported);
+        Assert.NotNull(bitmap);
+
+        var chip = new ProjectChipViewModel(
+            new Project { Name = "Logo", Path = "/code/logo", Color = "#00FF00", Image = imported },
+            isCurrent: false,
+            _ => { }, _ => { }, _ => { }, _ => Task.CompletedTask,
+            image: bitmap);
+
+        var view = new ProjectChipView { DataContext = chip };
+        var window = new Window
+        {
+            Width = 64,
+            Height = 64,
+            Background = new SolidColorBrush(Color.FromRgb(24, 24, 28)),
+            Content = view,
+        };
+        window.Show();
+        Frames.Pump();
+
+        var shot = Path.Combine(Directory.CreateTempSubdirectory("octopus-chip-shot-").FullName, "chip.png");
+        Frames.Save(window, shot);
+        window.Close();
+
+        using var rendered = SKBitmap.Decode(shot);
+        var cx = rendered.Width / 2;
+        var cy = rendered.Height / 2;
+        // Centre pixel: vivid red (not dimmed by 0.72 opacity).
+        var center = rendered.GetPixel(cx, cy);
+        Assert.True(center.Red > 200 && center.Green < 50 && center.Blue < 50, $"center={center}");
+        // Transparent margin inside the chip (just inside top-left corner of the 28px chip): dark window background, not green!
+        var margin = rendered.GetPixel(cx - 10, cy - 10);
+        Assert.True(margin.Green < 60, $"margin pixel leaked fallback green: {margin}");
     }
 
     [AvaloniaFact]

@@ -285,7 +285,9 @@ public partial class ProjectAppearanceView : UserControl
         var bitmap = _icons?.Load(Image);
         var kind = ProjectIcons.Parse(Icon);
         var pixel = PixelIcons.Parse(Icon);
-        Preview.Background = new SolidColorBrush(Avalonia.Media.Color.TryParse(Color, out var c) ? c : Colors.Gray);
+        Preview.Background = bitmap is not null
+            ? Brushes.Transparent
+            : new SolidColorBrush(Avalonia.Media.Color.TryParse(Color, out var c) ? c : Colors.Gray);
         PreviewImage.Source = bitmap;
         PreviewImage.IsVisible = bitmap is not null;
         PreviewIcon.IsVisible = bitmap is null && kind is not null;

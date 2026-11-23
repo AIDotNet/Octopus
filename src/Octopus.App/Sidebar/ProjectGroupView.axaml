@@ -65,7 +65,8 @@
 
                 <!-- Open: the projects in a tinted capsule; the folder icon on top closes it. -->
                 <Panel x:Name="Capsule" Width="{DynamicResource OctopusGroupCapsuleWidth}" HorizontalAlignment="Center" VerticalAlignment="Top">
-                    <Border CornerRadius="12" Background="{Binding CapsuleBackground}" />
+                    <Border CornerRadius="12" Background="{Binding CapsuleBackground}"
+                            BorderBrush="{Binding CapsuleBorder}" BorderThickness="1" />
                     <Border x:Name="CapsuleDropMark" IsVisible="False" CornerRadius="12" BorderThickness="2"
                             BorderBrush="{arc:ArcDesignTokenResource Accent}" />
                     <StackPanel Spacing="2" Margin="0,2,0,2">

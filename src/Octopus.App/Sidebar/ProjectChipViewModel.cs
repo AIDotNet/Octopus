@@ -41,8 +41,13 @@ public sealed partial class ProjectChipViewModel(
     public string Path { get; } = project.Path;
     public string Initial { get; } = InitialOf(project.Name);
 
-    /// <summary>The project's color: data chosen by the app, not a theme color.</summary>
-    public IBrush Background { get; } = Color.TryParse(project.Color, out var color) ? new SolidColorBrush(color) : Brushes.Gray;
+    /// <summary>
+    /// The square's fill: the project's color behind an initial or icon, or transparent when the project uses a custom
+    /// picture so transparent pixels and rounded edges never show the random fallback color underneath.
+    /// </summary>
+    public IBrush Background { get; } = image is not null
+        ? Brushes.Transparent
+        : (Color.TryParse(project.Color, out var color) ? new SolidColorBrush(color) : Brushes.Gray);
 
     /// <summary>The project's picture (a small thumbnail); shown instead of the icon, the initial and the color.</summary>
     public Bitmap? Image { get; } = image;
@@ -63,8 +68,14 @@ public sealed partial class ProjectChipViewModel(
 
     /// <summary>The square of the current project. Set in place by the rail when another project is chosen.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ChipOpacity))]
+    [NotifyPropertyChangedFor(nameof(ChipOpacity), nameof(ShowDimBackdrop))]
     public partial bool IsCurrent { get; set; } = isCurrent;
+
+    /// <summary>
+    /// Neutral opaque backing behind an inactive solid-color tile so dimming it inside a tinted group capsule never
+    /// mixes the group's color into the project's own color.
+    /// </summary>
+    public bool ShowDimBackdrop => !HasImage && !IsCurrent;
 
     /// <summary>The folder is on an SSH host, not on this computer.</summary>
     public bool IsRemote { get; } = !ProjectLocation.IsOnThisComputer(project);
@@ -91,7 +102,7 @@ public sealed partial class ProjectChipViewModel(
 
     public string Tip { get; } = project.Name + "\n" + ProjectLocation.Describe(project,
         project.RemoteHost is { } host ? Composition.AppHost.Get<Remote.RemoteClientRuntime>().HostName(host) : null);
-    public double ChipOpacity => IsCurrent ? 1 : 0.72;
+    public double ChipOpacity => IsCurrent || HasImage ? 1 : 0.72;
 
     [RelayCommand] private void Select() => select(this);
     [RelayCommand] private void Rename() => rename(this);

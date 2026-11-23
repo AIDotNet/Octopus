@@ -53,6 +53,7 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
         Tint = new SolidColorBrush(tint);
         FolderBackground = new SolidColorBrush(tint, 0.26);
         CapsuleBackground = new SolidColorBrush(tint, 0.14);
+        CapsuleBorder = new SolidColorBrush(tint, 0.30);
         Previews = Enumerable.Range(0, 4)
             .Select(i => i < chips.Count ? new GroupPreviewTile(chips[i].Background, chips[i].Image) : new GroupPreviewTile(s_emptyTile, null))
             .ToList();
@@ -115,6 +116,7 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
     public IBrush Tint { get; }
     public IBrush FolderBackground { get; }
     public IBrush CapsuleBackground { get; }
+    public IBrush CapsuleBorder { get; }
 
     public string Tip =>
         (MergeWorkspaces

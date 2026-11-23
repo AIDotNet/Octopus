@@ -56,6 +56,88 @@ public class AgentSearchPathsTests
     }
 
     [Fact]
+    public void Windows_mise_includes_shims_bin_versioned_node_and_npm_backend_tools()
+    {
+        var local = @"C:\Users\u\AppData\Local";
+        var mise = P(local, "mise");
+        var installs = P(mise, "installs");
+        var nodeRoot = P(installs, "node");
+        var claudePkg = P(installs, "npm-anthropic-ai-claude-code");
+        var customMise = @"D:\tools\mise";
+
+        var env = new Dictionary<string, string>
+        {
+            ["APPDATA"] = @"C:\Users\u\AppData\Roaming",
+            ["LOCALAPPDATA"] = local,
+            ["MISE_DATA_DIR"] = customMise,
+        };
+        var children = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            [installs] = [nodeRoot, claudePkg, P(installs, "python")],
+            [nodeRoot] = [P(nodeRoot, "20.18.0"), P(nodeRoot, "22.9.0"), P(nodeRoot, "22.14.0")],
+            [claudePkg] = [P(claudePkg, "2.1.0")],
+        };
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            P(customMise, "shims"),
+            P(mise, "shims"),
+            P(mise, "bin"),
+            P(nodeRoot, "20.18.0"),
+            P(nodeRoot, "22.9.0"),
+            P(nodeRoot, "22.14.0"),
+            P(claudePkg, "2.1.0", "node_modules", ".bin"),
+        };
+
+        var result = AgentSearchPaths.Compute(
+            @"C:\Users\u", true,
+            env.GetValueOrDefault,
+            existing.Contains,
+            dir => children.GetValueOrDefault(dir) ?? []);
+
+        Assert.Equal(
+        [
+            P(customMise, "shims"),
+            P(mise, "shims"),
+            P(mise, "bin"),
+            P(nodeRoot, "22.14.0"),
+            P(nodeRoot, "22.9.0"),
+            P(nodeRoot, "20.18.0"),
+            P(claudePkg, "2.1.0", "node_modules", ".bin"),
+        ], result);
+    }
+
+    [Fact]
+    public void Unix_mise_includes_shims_and_versioned_node_installs()
+    {
+        var mise = P("/home/u", ".local", "share", "mise");
+        var installs = P(mise, "installs");
+        var nodeRoot = P(installs, "node");
+        var codexPkg = P(installs, "npm-openai-codex");
+
+        var result = Unix(
+            [
+                P(mise, "shims"),
+                P(nodeRoot, "22.10.0", "bin"),
+                P(nodeRoot, "20.18.0", "bin"),
+                P(codexPkg, "0.50.0", "node_modules", ".bin"),
+            ],
+            children: new()
+            {
+                [installs] = [nodeRoot, codexPkg],
+                [nodeRoot] = [P(nodeRoot, "20.18.0"), P(nodeRoot, "22.10.0")],
+                [codexPkg] = [P(codexPkg, "0.50.0")],
+            });
+
+        Assert.Equal(
+        [
+            P(mise, "shims"),
+            P(nodeRoot, "22.10.0", "bin"),
+            P(nodeRoot, "20.18.0", "bin"),
+            P(codexPkg, "0.50.0", "node_modules", ".bin"),
+        ], result);
+    }
+
+    [Fact]
     public void Nothing_is_listed_without_a_home_directory() =>
         Assert.Empty(AgentSearchPaths.Compute("", false, _ => null, _ => true, _ => []));
 

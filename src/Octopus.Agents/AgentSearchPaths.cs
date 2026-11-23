@@ -45,6 +45,40 @@ public static class AgentSearchPaths
             }
         }
 
+        // mise manages both shims and versioned installs (e.g. `mise use -g node` + `npm -g install`, or `mise use -g npm:...`).
+        // A user activating mise in a shell profile may have no shims on the system PATH or may not have run `mise reshim`.
+        void AddMise(string? dataDir)
+        {
+            if (string.IsNullOrWhiteSpace(dataDir)) return;
+            Add(Path.Combine(dataDir, "shims"));
+            Add(Path.Combine(dataDir, "bin"));
+            var installs = Path.Combine(dataDir, "installs");
+            var nodeInstalls = Path.Combine(installs, "node");
+            if (isWindows)
+            {
+                AddVersioned(nodeInstalls, "");
+                AddVersioned(nodeInstalls, "bin");
+            }
+            else
+            {
+                AddVersioned(nodeInstalls, "bin");
+            }
+
+            IReadOnlyList<string> tools;
+            try { tools = subdirectories(installs); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }
+            foreach (var tool in tools)
+            {
+                var toolName = FileNameOf(tool);
+                if (toolName.StartsWith("npm-", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddVersioned(tool, Path.Combine("node_modules", ".bin"));
+                    AddVersioned(tool, "bin");
+                    if (isWindows) AddVersioned(tool, "");
+                }
+            }
+        }
+
         if (string.IsNullOrEmpty(home)) return result;
 
         // A user's own settings win over the defaults.
@@ -56,6 +90,9 @@ public static class AgentSearchPaths
         AddEnvDirectory(Add, getEnv("CARGO_HOME"), "bin");
         AddEnvDirectory(Add, getEnv("GOBIN"), "");
         AddEnvDirectory(Add, getEnv("GOPATH"), "bin");
+        AddMise(getEnv("MISE_DATA_DIR"));
+        var xdgDataHome = getEnv("XDG_DATA_HOME");
+        if (!string.IsNullOrWhiteSpace(xdgDataHome)) AddMise(Path.Combine(xdgDataHome, "mise"));
 
         if (isWindows)
         {
@@ -72,6 +109,8 @@ public static class AgentSearchPaths
             Add(Path.Combine(home, ".claude", "local"));
             Add(Path.Combine(home, "scoop", "shims"));
             Add(Path.Combine(home, "go", "bin"));
+            AddMise(Path.Combine(localAppData, "mise"));
+            AddMise(Path.Combine(home, ".local", "share", "mise"));
             var chocolatey = getEnv("ChocolateyInstall");
             if (!string.IsNullOrEmpty(chocolatey)) Add(Path.Combine(chocolatey, "bin"));
             var programData = getEnv("ProgramData");
@@ -99,7 +138,7 @@ public static class AgentSearchPaths
         Add(Path.Combine(home, ".config", "yarn", "global", "node_modules", ".bin"));
         Add(Path.Combine(home, ".local", "share", "pnpm"));
         Add(Path.Combine(home, "Library", "pnpm"));
-        Add(Path.Combine(home, ".local", "share", "mise", "shims"));
+        AddMise(Path.Combine(home, ".local", "share", "mise"));
         Add(Path.Combine(home, ".asdf", "shims"));
         var nvmDir = getEnv("NVM_DIR") ?? Path.Combine(home, ".nvm");
         AddVersioned(Path.Combine(nvmDir, "versions", "node"), "bin");
@@ -175,7 +214,7 @@ public static class AgentSearchPaths
     /// <summary>Sort key that puts v22.10.0 after v22.9.0: each number is zero padded.</summary>
     private static string VersionKey(string directory)
     {
-        var name = Path.GetFileName(directory.TrimEnd('/', '\\'));
+        var name = FileNameOf(directory);
         var sb = new System.Text.StringBuilder();
         var digits = 0;
         foreach (var c in name)
@@ -192,5 +231,12 @@ public static class AgentSearchPaths
         }
         if (digits > 0) sb.Insert(sb.Length - digits, new string('0', Math.Max(0, 8 - digits)));
         return sb.ToString();
+    }
+
+    private static string FileNameOf(string path)
+    {
+        var trimmed = path.TrimEnd('/', '\\');
+        var slash = trimmed.LastIndexOfAny(['/', '\\']);
+        return slash >= 0 ? trimmed[(slash + 1)..] : trimmed;
     }
 }
