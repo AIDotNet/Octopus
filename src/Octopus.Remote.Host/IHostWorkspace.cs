@@ -53,10 +53,37 @@ public interface IHostWorkspace
     /// <summary>A call of this computer's git service on a repository inside a project: arguments and result as JSON.</summary>
     Task<string> GitAsync(string method, string arguments);
 
+    // GUI conversations (AcpMessages.cs). A host that shows none refuses every call; the app's workspace overrides them.
+
+    /// <summary>
+    /// Shows a GUI conversation to a device: returns how it is now and reports every later change to
+    /// <paramref name="updated"/> (on any thread, in order, without <see cref="AcpUpdateMessage.Sequence"/>, which the
+    /// connection numbers) until the result is disposed. An item that is not a GUI conversation is answered with
+    /// <see cref="RemoteMethods.NotAllowed"/>.
+    /// </summary>
+    Task<IAcpAttachment> AttachConversationAsync(string itemId, Action<AcpUpdateMessage> updated) => throw NoConversations();
+    /// <summary>Sends a prompt as if typed at this computer; queued by the conversation while a turn runs.</summary>
+    Task PromptAsync(AcpPromptMessage prompt) => throw NoConversations();
+    /// <summary>Stops the turn that runs, as the stop button does.</summary>
+    Task CancelTurnAsync(string itemId) => throw NoConversations();
+    /// <summary>Answers a permission or question card; a card answered already (here or on another device) stays as it is.</summary>
+    Task RespondAsync(AcpRespondMessage answer) => throw NoConversations();
+    /// <summary>Chooses a model, mode or effort above the input.</summary>
+    Task SetConversationOptionAsync(AcpSetOptionMessage option) => throw NoConversations();
+
+    private static RemoteException NoConversations() => new(RemoteMethods.NotAllowed, "This host shows no GUI conversations.");
+
     /// <summary>Projects or their items were added, removed or reordered.</summary>
     event Action? Changed;
     /// <summary>One item's title or activity changed.</summary>
     event Action<ItemMessage>? ItemChanged;
+}
+
+/// <summary>One device's view of one GUI conversation. Disposing it ends the reports.</summary>
+public interface IAcpAttachment : IDisposable
+{
+    /// <summary>The conversation when the view began; the first report is the first change after it.</summary>
+    AcpSnapshotMessage Snapshot { get; }
 }
 
 /// <summary>

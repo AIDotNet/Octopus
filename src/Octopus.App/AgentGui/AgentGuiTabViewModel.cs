@@ -1261,6 +1261,41 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     /// <summary>Attaches dropped or picked file/image paths, honoring the current agent's image capability.</summary>
     public async Task AttachFilePathsAsync(IEnumerable<string> paths)
     {
+        foreach (var attachment in await ReadAttachmentsAsync(paths))
+        {
+            AddAttachment(attachment);
+        }
+    }
+
+    /// <summary>
+    /// Sends a prompt that comes from another device rather than this tab's composer (design/12 §6, G-A): it is
+    /// queued like the composer's while a turn runs, and whatever the person here is typing stays where it is.
+    /// Returns once the prompt is sent or queued, not when the turn ends; false when there is no session to send to.
+    /// </summary>
+    internal async Task<bool> SendExternalPromptAsync(string text, IEnumerable<string> attachmentPaths)
+    {
+        if (_disposed || _session is null) return false;
+        var attached = await ReadAttachmentsAsync(attachmentPaths);
+        text = text.Trim();
+        if (text.Length == 0 && attached.Count == 0) return true;
+        if (_session is null) return false;
+        if (text.Length > 0 && (_promptHistory.Count == 0 || _promptHistory[^1] != text))
+        {
+            _promptHistory.Add(text);
+        }
+        if (_isTurnActive || IsTurnActive)
+        {
+            EnqueuePrompt(text, attached);
+            return true;
+        }
+        // The turn runs on; the timeline shows the prompt before this returns.
+        _ = StartPumpAsync(CreateQueuedPrompt(text, attached));
+        return true;
+    }
+
+    private async Task<List<AcpPromptAttachment>> ReadAttachmentsAsync(IEnumerable<string> paths)
+    {
+        var result = new List<AcpPromptAttachment>();
         foreach (var path in paths)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) continue;
@@ -1278,7 +1313,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                         ".bmp" => "image/bmp",
                         _ => "image/png",
                     };
-                    AddAttachment(new AcpPromptAttachment
+                    result.Add(new AcpPromptAttachment
                     {
                         Kind = "image",
                         Path = path,
@@ -1297,7 +1332,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 var rel = path.StartsWith(WorkingDirectory, StringComparison.OrdinalIgnoreCase)
                     ? Path.GetRelativePath(WorkingDirectory, path).Replace('\\', '/')
                     : Path.GetFileName(path);
-                AddAttachment(new AcpPromptAttachment
+                result.Add(new AcpPromptAttachment
                 {
                     Kind = "file",
                     Path = path,
@@ -1305,6 +1340,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 });
             }
         }
+        return result;
     }
 
     /// <summary>Attaches an image directly from clipboard bytes (only when current agent supports images).</summary>

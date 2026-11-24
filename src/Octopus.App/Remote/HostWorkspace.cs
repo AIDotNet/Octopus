@@ -40,6 +40,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     private readonly PathComparer _paths;
     private readonly IWorkspaceManager? _workspaces;
     private readonly IGitHubTaskProvider? _taskProvider;
+    private readonly HostConversations _conversations;
 
     public HostWorkspace(IProjectService projects, IItemLaunchService launcher, ITerminalConnectionFactory factory, TerminalSessionRegistry sessions,
         ITabContentRegistry tabs, IItemActivityService activity, IAgentCatalog catalog, IAgentScanner scanner, ISettingsStore settings, IShellResolver shells,
@@ -61,6 +62,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         _scanner = scanner;
         _settings = settings;
         _shells = shells;
+        _conversations = new HostConversations(tabs);
         projects.Changed += OnProjectsChanged;
         activity.Changed += OnActivityChanged;
     }
@@ -387,6 +389,61 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         await OnUiAsync(session.RestartAsync).ConfigureAwait(false);
     }
 
+    // ---- GUI conversations (AcpMessages.cs) ----
+
+    public Task<IAcpAttachment> AttachConversationAsync(string itemId, Action<AcpUpdateMessage> updated) => OnUi(() =>
+    {
+        var (project, item) = FindConversation(itemId);
+        return _conversations.Attach(project, item, updated);
+    });
+
+    public async Task PromptAsync(AcpPromptMessage prompt)
+    {
+        var (project, item, roots) = await OnUi(() =>
+        {
+            var (project, item) = FindConversation(prompt.ItemId);
+            return (project, item, project.Workspaces.Select(w => w.Path).Prepend(project.Path).ToList());
+        }).ConfigureAwait(false);
+        // What is attached must be the conversation's own project: a device uploads a picture there first.
+        var paths = new List<string>();
+        foreach (var path in prompt.Attachments ?? [])
+        {
+            string full;
+            try { full = Path.GetFullPath(ExpandHome(path.Trim())); }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { throw new RemoteException(RemoteProtocol.InvalidParams, e.Message); }
+            if (!roots.Any(root => IsWithin(root, full))) throw new RemoteException(RemoteMethods.NotAllowed, "Only files of the conversation's project can be attached.");
+            if (!File.Exists(full)) throw new RemoteException(RemoteMethods.NotFound, $"The file '{full}' does not exist on the host.");
+            paths.Add(full);
+        }
+        await OnUiAsync(() => _conversations.PromptAsync(project, item, prompt.Text, paths)).ConfigureAwait(false);
+    }
+
+    public async Task CancelTurnAsync(string itemId)
+    {
+        var (project, item) = await OnUi(() => FindConversation(itemId)).ConfigureAwait(false);
+        await OnUiAsync(() => _conversations.CancelAsync(project, item)).ConfigureAwait(false);
+    }
+
+    public Task RespondAsync(AcpRespondMessage answer) => OnUi(() =>
+    {
+        var (project, item) = FindConversation(answer.ItemId);
+        _conversations.Respond(project, item, answer);
+        return true;
+    });
+
+    public Task SetConversationOptionAsync(AcpSetOptionMessage option) => OnUi(() =>
+    {
+        var (project, item) = FindConversation(option.ItemId);
+        _conversations.SetOption(project, item, option);
+        return true;
+    });
+
+    private (Project Project, ProjectItem Item) FindConversation(string itemId)
+    {
+        var found = FindItem(itemId);
+        return IsGui(found.Item) ? found : throw new RemoteException(RemoteMethods.NotAllowed, "This item runs in a terminal on the host; it has no GUI conversation to show.");
+    }
+
     // ---- files and git of the projects' folders ----
 
     /// <summary>How long changes under a watched folder collect before the device is told once.</summary>
@@ -578,6 +635,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     {
         _projects.Changed -= OnProjectsChanged;
         _activity.Changed -= OnActivityChanged;
+        _conversations.Dispose();
     }
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)

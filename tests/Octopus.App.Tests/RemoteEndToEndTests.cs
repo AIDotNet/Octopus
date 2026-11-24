@@ -315,6 +315,29 @@ public class RemoteEndToEndTests
     }
 
     [AvaloniaFact]
+    public async Task An_agent_that_runs_as_a_gui_conversation_says_so_and_has_no_terminal_to_attach_to()
+    {
+        await using var host = new HostSide();
+        using var device = DeviceIdentity.Create();
+        host.Devices.Add(device.PublicKey, Laptop);
+        var mine = AddHostProject();
+        var gui = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "接口文档", Surface = Octopus.Core.Agents.AgentSurface.Gui };
+        var cli = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "重构" };
+        host.Projects.AddItem(mine, gui, activate: false);
+        host.Projects.AddItem(mine, cli, activate: false);
+        await using var client = await Connect(host, device);
+
+        var items = await Wait(client.ListItemsAsync(mine.Id));
+        Assert.Equal(ItemSurfaces.Gui, items.Single(i => i.Id == gui.Id).Surface);
+        Assert.Equal(ItemSurfaces.Terminal, items.Single(i => i.Id == cli.Id).Surface);
+
+        // Planning it as a terminal would start a second copy of the agent beside the GUI tab's own.
+        var refused = await Assert.ThrowsAsync<RemoteException>(() => Wait(client.RestartItemAsync(gui.Id)));
+        Assert.Equal(RemoteMethods.NotAllowed, refused.Code);
+        Assert.Null(host.Sessions.Find(gui.Id));
+    }
+
+    [AvaloniaFact]
     public async Task An_agent_is_started_on_the_host_from_the_hosts_own_catalog()
     {
         await using var host = new HostSide();

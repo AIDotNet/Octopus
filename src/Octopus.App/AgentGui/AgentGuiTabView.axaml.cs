@@ -87,6 +87,19 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         }
     }
 
+    /// <summary>
+    /// Starts the ACP session if it has not been started yet, so a remote device attaching before this tab is ever
+    /// shown on screen still brings the conversation up without double-connecting when the tab is later opened here.
+    /// </summary>
+    internal void EnsureStarted()
+    {
+        if (!_started && _model is not null)
+        {
+            _started = true;
+            _ = _model.ConnectAsync();
+        }
+    }
+
     private void OnFocusComposerRequested(object? sender, EventArgs e)
     {
         Dispatcher.UIThread.Post(() =>
