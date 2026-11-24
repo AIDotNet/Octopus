@@ -30,15 +30,15 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder)
             .UseOctopusMobile()
-            .With(new Avalonia.Media.FontManagerOptions
+            .AfterSetup(_ =>
             {
-                // Android's system font matcher can miss CJK fallback for Normal-weight embedded Latin fonts (Inter);
-                // listing Noto Sans CJK SC and sans-serif explicitly restores fallback for all weights.
-                FontFallbacks =
-                [
-                    new Avalonia.Media.FontFallback { FontFamily = new Avalonia.Media.FontFamily("Noto Sans CJK SC") },
-                    new Avalonia.Media.FontFallback { FontFamily = new Avalonia.Media.FontFamily("sans-serif") },
-                ],
+                if (Avalonia.Application.Current is not { } app) return;
+                // Test using Android's system default font family instead of Inter.
+                app.Resources["BodyFontFamily"] = Avalonia.Media.FontFamily.Default;
+                app.Resources["DisplayFontFamily"] = Avalonia.Media.FontFamily.Default;
+                var s = new Avalonia.Styling.Style(x => Avalonia.Styling.Selectors.OfType<Avalonia.Controls.TextBlock>(x));
+                s.Setters.Add(new Avalonia.Styling.Setter(Avalonia.Controls.TextBlock.FontFamilyProperty, Avalonia.Media.FontFamily.Default));
+                app.Styles.Add(s);
             });
 
     private static void UseRealHosts(Context context)
