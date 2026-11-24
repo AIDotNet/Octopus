@@ -305,22 +305,30 @@ public sealed class SignalAttachPlannerTests : IDisposable
 
         var attachment = Plan(Builtins.Get("codex"), "0.167.0", new() { ["CODEX_HOME"] = codexHome });
 
-        Assert.Equal(["-c", $"notify=[\"{Forwarder}\",\"notify\",\"--agent\",\"codex\",\"--channel\",\"turn-complete\"]"], attachment.Arguments);
+        Assert.Equal(["-c", $"notify=['{Forwarder}','notify','--agent','codex','--channel','turn-complete']"], attachment.Arguments);
         Assert.Equal("{\"argv\":[\"python3\",\"/Users/x/.codex/notify.py\"]}", attachment.Environment[SignalAttachPlanner.ChainVariable]);
         Assert.Equal("CODEX_HOME", attachment.Environment[SignalAttachPlanner.AccountVariable]);
         Assert.False(Directory.Exists(AttachDirectory)); // notify needs no files
     }
 
     [Fact]
-    public void Codex_without_a_notify_program_chains_nothing_and_windows_paths_are_escaped_in_toml()
+    public void Codex_without_a_notify_program_chains_nothing_and_windows_paths_are_literal_in_toml()
     {
         var attachment = _planner.Plan(new SignalAttachRequest(Builtins.Get("codex"), "i", @"C:\Program Files\Octopus\octopus-signal.exe", Endpoint, "0.167.0",
             new Dictionary<string, string> { ["HOME"] = _home, ["USERPROFILE"] = _home }));
-        Assert.Equal("notify=[\"C:\\\\Program Files\\\\Octopus\\\\octopus-signal.exe\",\"notify\",\"--agent\",\"codex\",\"--channel\",\"turn-complete\"]", attachment.Arguments[1]);
+        Assert.Equal("notify=['C:\\Program Files\\Octopus\\octopus-signal.exe','notify','--agent','codex','--channel','turn-complete']", attachment.Arguments[1]);
         Assert.False(attachment.Environment.ContainsKey(SignalAttachPlanner.ChainVariable));
 
         var parsed = MiniToml.Parse(attachment.Arguments[1]);
         Assert.Equal(@"C:\Program Files\Octopus\octopus-signal.exe", ((List<object?>)parsed["notify"]!)[0]);
+    }
+
+    [Fact]
+    public void Toml_array_falls_back_to_basic_strings_for_single_quotes()
+    {
+        var toml = SignalAttachContent.TomlArray([@"C:\Users\O'Brien\x.exe", "n"]);
+        Assert.Equal("[\"C:\\\\Users\\\\O'Brien\\\\x.exe\",'n']", toml);
+        Assert.Equal(@"C:\Users\O'Brien\x.exe", ((List<object?>)MiniToml.Parse("notify=" + toml)["notify"]!)[0]);
     }
 
     // ---- Cursor ----

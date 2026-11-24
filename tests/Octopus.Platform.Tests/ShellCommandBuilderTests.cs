@@ -55,6 +55,31 @@ public class ShellCommandBuilderTests
             _b.Build("C:\\Program Files\\x.exe", ["-a", "b c"], ShellKind.PowerShell));
 
     [Fact]
+    public void Build_powershell_escapes_double_quotes_for_native_programs() =>
+        // Codex's notify: Windows PowerShell would drop the quotes and Codex would read a string, not an array (#18).
+        Assert.Equal(
+            "$PSNativeCommandArgumentPassing = 'Legacy'; & codex -c 'notify=[\\\"E:\\\\a b\\\\x.exe\\\",\\\"notify\\\"]' '\\\\\\\"' ''",
+            _b.Build("codex", ["-c", "notify=[\"E:\\\\a b\\\\x.exe\",\"notify\"]", "\\\"", ""], ShellKind.PowerShell));
+
+    [Fact]
+    public void Build_powershell_without_double_quotes_is_unchanged() =>
+        Assert.Equal("& codex -c 'model=gpt'", _b.Build("codex", ["-c", "model=gpt"], ShellKind.PowerShell));
+
+    [Fact]
+    public void WrapEnvironment_powershell_quotes_plain_words()
+    {
+        // A bare word after '=' is run as a command (#18): "810b… is not recognized as a cmdlet".
+        var sets = new Dictionary<string, string>
+        {
+            ["OCTOPUS_SIGNAL_TOKEN"] = "810b4320",
+            ["OCTOPUS_SIGNAL_ACCOUNT_VAR"] = "CODEX_HOME",
+        };
+        Assert.Equal(
+            "$env:OCTOPUS_SIGNAL_TOKEN = '810b4320'; $env:OCTOPUS_SIGNAL_ACCOUNT_VAR = 'CODEX_HOME'; & codex",
+            _b.WrapEnvironment("& codex", ShellKind.PowerShell, [], sets));
+    }
+
+    [Fact]
     public void Build_without_arguments() => Assert.Equal("ls", _b.Build("ls", [], ShellKind.Fish));
 
     [Theory]

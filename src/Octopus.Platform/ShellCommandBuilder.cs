@@ -20,9 +20,24 @@ public sealed class ShellCommandBuilder : IShellCommandBuilder
     public string Build(string executable, IEnumerable<string> arguments, ShellKind kind)
     {
         var builder = new StringBuilder();
-        // PowerShell treats a quoted first token as a string expression; the call operator makes it a command.
         if (kind == ShellKind.PowerShell)
-            builder.Append("& ");
+        {
+            var args = arguments.ToList();
+            // How PowerShell hands an embedded double quote to a native program depends on its version: Windows
+            // PowerShell and Legacy mode drop it, Standard mode escapes it. Pin Legacy and escape the quotes for the
+            // program's own (CRT) parser, so an argument like Codex's -c notify=["…"] arrives whole everywhere.
+            // Only then: Legacy also drops empty arguments, which Standard mode keeps.
+            if (args.Any(a => a.Contains('"')))
+            {
+                builder.Append("$PSNativeCommandArgumentPassing = 'Legacy'; ");
+                args = args.Select(EscapeNativeQuotes).ToList();
+            }
+            // PowerShell treats a quoted first token as a string expression; the call operator makes it a command.
+            builder.Append("& ").Append(Quote(executable, kind));
+            foreach (var argument in args)
+                builder.Append(' ').Append(Quote(argument, kind));
+            return builder.ToString();
+        }
         builder.Append(Quote(executable, kind));
         foreach (var argument in arguments)
             builder.Append(' ').Append(Quote(argument, kind));
@@ -78,7 +93,8 @@ public sealed class ShellCommandBuilder : IShellCommandBuilder
                 }
                 foreach (var (name, value) in sets)
                 {
-                    builder.Append("$env:").Append(name).Append(" = ").Append(QuotePowerShell(value)).Append("; ");
+                    // Always quoted: on the right of '=' a bare word is run as a command, not taken as text.
+                    builder.Append("$env:").Append(name).Append(" = ").Append(PowerShellLiteral(value)).Append("; ");
                 }
                 builder.Append(commandLine);
                 break;
@@ -189,6 +205,12 @@ public sealed class ShellCommandBuilder : IShellCommandBuilder
         if (s.Length == 0) return "''";
         // A comma would build an array; '=' and '@' have meaning too, so the safe set is small.
         if (IsSafe(s, "_.-/\\:+")) return s;
+        return PowerShellLiteral(s);
+    }
+
+    /// <summary>A single-quoted PowerShell string: taken literally, nothing expands.</summary>
+    private static string PowerShellLiteral(string s)
+    {
         var builder = new StringBuilder("'");
         foreach (var c in s)
         {
@@ -200,4 +222,34 @@ public sealed class ShellCommandBuilder : IShellCommandBuilder
         return builder.Append('\'').ToString();
     }
 
+    /// <summary>
+    /// Escapes each double quote for the Windows C runtime's argument parser (<c>\"</c>, doubling the backslashes
+    /// before it). Legacy-mode PowerShell passes the text through as it is and wraps it in quotes when it has spaces.
+    /// </summary>
+    private static string EscapeNativeQuotes(string s)
+    {
+        if (!s.Contains('"')) return s;
+        var builder = new StringBuilder(s.Length + 8);
+        var backslashes = 0;
+        foreach (var c in s)
+        {
+            if (c == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+            if (c == '"')
+            {
+                builder.Append('\\', backslashes * 2 + 1);
+            }
+            else
+            {
+                builder.Append('\\', backslashes);
+            }
+            backslashes = 0;
+            builder.Append(c);
+        }
+        builder.Append('\\', backslashes);
+        return builder.ToString();
+    }
 }
