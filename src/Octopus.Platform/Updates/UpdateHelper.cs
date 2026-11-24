@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -100,4 +101,70 @@ public static class UpdateHelper
           sleep 0.2
         done
         """;
+
+    /// <summary>
+    /// Unpacks a single installer file with <paramref name="expectedExtension"/> from a compressed <c>.zip</c> update
+    /// package into <paramref name="destinationDirectory"/>, rejecting corrupt archives and path traversal entries.
+    /// </summary>
+    public static async Task<string> ExtractSingleFileFromZipAsync(
+        string zipPath,
+        string destinationDirectory,
+        string expectedExtension,
+        CancellationToken cancellationToken)
+    {
+        if (Directory.Exists(destinationDirectory))
+        {
+            Directory.Delete(destinationDirectory, recursive: true);
+        }
+        Directory.CreateDirectory(destinationDirectory);
+        var rootPrefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(destinationDirectory)) + Path.DirectorySeparatorChar;
+
+        try
+        {
+            using var archive = ZipFile.OpenRead(zipPath);
+            ZipArchiveEntry? match = null;
+            foreach (var entry in archive.Entries)
+            {
+                if (string.IsNullOrEmpty(entry.Name)) continue; // directory entry
+                var fileName = Path.GetFileName(entry.FullName);
+                if (fileName != entry.FullName.TrimStart('/', '\\') || entry.FullName.Contains("..", StringComparison.Ordinal))
+                {
+                    throw new UpdateInstallException($"Unsafe path in update archive: {entry.FullName}");
+                }
+                if (fileName.EndsWith(expectedExtension, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (match is not null)
+                    {
+                        throw new UpdateInstallException($"The update archive contains more than one {expectedExtension} file.");
+                    }
+                    match = entry;
+                }
+            }
+
+            if (match is null)
+            {
+                throw new UpdateInstallException($"The update archive does not contain a {expectedExtension} installer.");
+            }
+
+            var outputPath = Path.GetFullPath(Path.Combine(destinationDirectory, match.Name));
+            if (!outputPath.StartsWith(rootPrefix, StringComparison.Ordinal))
+            {
+                throw new UpdateInstallException($"Unsafe path in update archive: {match.FullName}");
+            }
+
+            await using var input = match.Open();
+            await using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true);
+            await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+            await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+            return outputPath;
+        }
+        catch (UpdateInstallException)
+        {
+            throw;
+        }
+        catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            throw new UpdateInstallException($"The update archive could not be unpacked: {e.Message}", e);
+        }
+    }
 }

@@ -31,6 +31,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     private readonly IAgentScanner? _scanner;
     private readonly ISettingsStore? _settings;
     private readonly IAgentAccountService? _accounts;
+    private readonly DeviceSwitcherViewModel? _devices;
     /// <summary>The open group as the rail last showed it; null before the first build and when all are closed.</summary>
     private string? _shownExpanded;
     private bool _built;
@@ -46,7 +47,8 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         IAgentCatalog? catalog = null,
         IAgentScanner? scanner = null,
         ISettingsStore? settings = null,
-        IAgentAccountService? accounts = null)
+        IAgentAccountService? accounts = null,
+        DeviceSwitcherViewModel? devices = null)
     {
         _icons = icons;
         _activity = activity;
@@ -54,6 +56,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _scanner = scanner;
         _settings = settings;
         _accounts = accounts;
+        _devices = devices;
         _projects = projects;
         _opener = opener;
         _dialogs = dialogs;
@@ -78,7 +81,12 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         Rebuild();
     }
 
-    /// <summary>Every project's square, in or out of a group.</summary>
+    /// <summary>Device switcher bound to the top circular badge on the rail (Option B).</summary>
+    public DeviceSwitcherViewModel? Devices => _devices;
+
+    public bool HasDeviceSwitcher => _devices is not null;
+
+    /// <summary>Every project's square on the currently selected device, in or out of a group.</summary>
     public ObservableCollection<ProjectChipViewModel> Chips { get; } = [];
 
     /// <summary>What the rail shows, top to bottom: the squares of projects in no group, then the groups.</summary>
@@ -99,7 +107,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
-        if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.Groups or ProjectChangeKind.ProjectAccounts)
+        if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.Groups or ProjectChangeKind.ProjectAccounts or ProjectChangeKind.Device)
         {
             Rebuild();
         }
@@ -165,12 +173,17 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     private void Rebuild()
     {
         var current = _projects.Current?.Id;
+        var activeDeviceKey = _projects.ActiveDeviceKey;
         var choices = _projects.Groups.Select(g => new GroupChoice(g.Id, g.Name)).ToList();
         var members = _projects.Groups.ToDictionary(g => g.Id, _ => new List<ProjectChipViewModel>());
         Chips.Clear();
         Entries.Clear();
         foreach (var project in _projects.Projects)
         {
+            if (!DeviceKeys.Matches(project, activeDeviceKey))
+            {
+                continue;
+            }
             var chip = new ProjectChipViewModel(
                 project, project.Id == current, Select, Rename, Reveal, RemoveAsync, ChangeIconAsync, _icons?.Load(project.Image),
                 choices, MoveToGroup, NewGroupAsync, BuildAgentAccountMenus(project), SetProjectAgentAccount)
@@ -192,6 +205,10 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         var expanded = _projects.ExpandedGroupId;
         foreach (var group in _projects.Groups)
         {
+            if (members[group.Id].Count == 0 && _projects.Projects.Any(p => p.GroupId == group.Id))
+            {
+                continue;
+            }
             var isExpanded = group.Id == expanded;
             Entries.Add(new ProjectGroupViewModel(
                 group, isExpanded, members[group.Id], ToggleGroup, RenameGroupAsync, RemoveGroup, SetGroupColor, SetGroupMergeWorkspaces)

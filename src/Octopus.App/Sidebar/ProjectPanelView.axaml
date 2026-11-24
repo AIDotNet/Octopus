@@ -6,16 +6,68 @@
              xmlns:vm="using:Octopus.App.Sidebar"
              x:Class="Octopus.App.Sidebar.ProjectPanelView"
              x:DataType="vm:ProjectPanelViewModel">
-    <Grid x:Name="PanelRoot" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
-        <!-- No project yet -->
-        <StackPanel IsVisible="{Binding HasNoProject}" Margin="16,24" Spacing="10" VerticalAlignment="Top">
-            <TextBlock Classes="body" FontWeight="Medium" Text="{l:AppLangResource NoProjectTitle}" TextWrapping="Wrap" />
-            <TextBlock Classes="hint" Text="{l:AppLangResource NoProjectHint}" TextWrapping="Wrap" />
+    <Grid x:Name="PanelRoot" RowDefinitions="Auto,Auto,*" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+        <!-- Option B device echo pill: complements the circular rail badge with the full device name & status. -->
+        <StackPanel Grid.Row="0" IsVisible="{Binding ShowDeviceHeader}" Margin="10,8,10,0">
+            <Button x:Name="DeviceEchoButton" Classes="row" HorizontalAlignment="Left" Padding="6,3"
+                    Click="OnDeviceEchoClick"
+                    AutomationProperties.Name="{l:AppLangResource DeviceSwitchHeader}"
+                    arc:Tooltip.Tip="{l:AppLangResource DeviceSwitchHeader}" arc:Tooltip.Side="Bottom">
+                <StackPanel Orientation="Horizontal" Spacing="5">
+                    <Panel Width="7" Height="7" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Devices.CurrentDevice.IsOnlineStatus}"
+                                 Fill="{arc:ArcDesignTokenResource Success}" />
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Devices.CurrentDevice.IsConnecting}"
+                                 Fill="{arc:ArcDesignTokenResource Warning}" />
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Devices.CurrentDevice.IsOffline}"
+                                 Fill="{arc:ArcDesignTokenResource TextMuted}" Opacity="0.55" />
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Devices.CurrentDevice.IsSshStatus}"
+                                 Fill="{arc:ArcDesignTokenResource Accent}" />
+                    </Panel>
+                    <TextBlock Classes="caption" FontWeight="SemiBold"
+                               Foreground="{arc:ArcDesignTokenResource Foreground}"
+                               Text="{Binding Devices.CurrentDevice.Name}" TextTrimming="CharacterEllipsis" MaxWidth="130" />
+                    <TextBlock Classes="hint" Text="{Binding Devices.CurrentDevice.StatusText}" />
+                    <lucide:LucideIcon Kind="ChevronDown" Size="11" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+        <!-- Offline remote host banner with quick reconnect -->
+        <Border Grid.Row="1" IsVisible="{Binding ShowOfflineBanner}" Margin="10,6,10,0" Padding="8,7"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Background="{arc:ArcDesignTokenResource Surface}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+            <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <arc:ArcSpinner IsVisible="{Binding Devices.CurrentDevice.IsConnecting}" Width="12" Height="12"
+                                    Foreground="{arc:ArcDesignTokenResource Accent}" VerticalAlignment="Center" />
+                    <lucide:LucideIcon IsVisible="{Binding Devices.CurrentDevice.IsOffline}" Kind="WifiOff" Size="13"
+                                       Foreground="{arc:ArcDesignTokenResource Danger}" VerticalAlignment="Center" />
+                    <TextBlock Classes="caption" FontWeight="SemiBold" Foreground="{arc:ArcDesignTokenResource Foreground}"
+                               Text="{Binding Devices.OfflineBannerTitle}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Classes="hint" TextWrapping="Wrap" Text="{l:AppLangResource DeviceOfflineHint}" />
+                <arc:Button Size="Small" Variant="Secondary" HorizontalAlignment="Left"
+                            IsVisible="{Binding Devices.CurrentDevice.CanReconnect}"
+                            Command="{Binding Devices.ReconnectCurrentCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <lucide:LucideIcon Kind="RefreshCw" Size="12" />
+                        <TextBlock Text="{l:AppLangResource DeviceReconnect}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+            </StackPanel>
+        </Border>
+
+        <!-- No project yet (on this device) -->
+        <StackPanel Grid.Row="2" IsVisible="{Binding HasNoProject}" Margin="16,24" Spacing="10" VerticalAlignment="Top">
+            <TextBlock Classes="body" FontWeight="Medium" Text="{Binding EmptyTitle}" TextWrapping="Wrap" />
+            <TextBlock Classes="hint" Text="{Binding EmptyHint}" TextWrapping="Wrap" />
             <arc:Button Size="Small" HorizontalAlignment="Left" Content="{l:AppLangResource NewProject}"
                         Command="{Binding NewProjectCommand}" />
         </StackPanel>
 
-        <Grid IsVisible="{Binding HasProject}" RowDefinitions="Auto,Auto,Auto,Auto,*">
+        <Grid Grid.Row="2" IsVisible="{Binding HasProject}" RowDefinitions="Auto,Auto,Auto,Auto,*">
             <!-- The group the project is in: the rail shows a group's name only in its tooltip. -->
             <StackPanel Orientation="Horizontal" Spacing="5" Margin="{DynamicResource OctopusPanelGroupMargin}" IsVisible="{Binding HasGroup}">
                 <TextBlock Classes="caption" Text="{Binding GroupName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />

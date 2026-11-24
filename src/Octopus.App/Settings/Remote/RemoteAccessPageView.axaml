@@ -52,7 +52,7 @@
                     <arc:Input x:Name="RelayUrlInput" Size="Small" Width="260"
                                AutomationProperties.Name="{l:AppLangResource SettingsRemoteRelayUrl}"
                                Text="{Binding RelayUrl, Mode=TwoWay}"
-                               PlaceholderText="relay.example.com" />
+                               PlaceholderText="https://octoterm.si" />
                     <arc:Button x:Name="RelayApplyButton" Variant="Secondary" Size="Small"
                                 Content="{l:AppLangResource SettingsRemoteRelayApply}"
                                 Command="{Binding SaveRelayCommand}" />

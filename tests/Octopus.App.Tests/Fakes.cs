@@ -95,12 +95,32 @@ public sealed class FakeDialogService : IDialogService
     public string? LastTitle { get; private set; }
     public string? LastDescription { get; private set; }
     public NewProjectChoice? NewProject { get; set; }
+    public NewProjectChoice? LastNewProjectInitial { get; private set; }
 
-    public Task<NewProjectChoice?> AskNewProjectAsync() => Task.FromResult(NewProject);
+    public Task<NewProjectChoice?> AskNewProjectAsync(NewProjectChoice? initial = null)
+    {
+        LastNewProjectInitial = initial;
+        return Task.FromResult(NewProject);
+    }
 
     /// <summary>The answer of the project icon dialog; null: dismissed.</summary>
     public ProjectAppearanceChoice? Appearance { get; set; }
     public Task<ProjectAppearanceChoice?> AskProjectAppearanceAsync(Octopus.Core.Projects.Project project) => Task.FromResult(Appearance);
+
+    /// <summary>The answer of the device icon dialog; null: dismissed.</summary>
+    public ProjectAppearanceChoice? DeviceAppearance { get; set; }
+    public string? LastDeviceAppearanceKey { get; private set; }
+    public Task<ProjectAppearanceChoice?> AskDeviceAppearanceAsync(
+        string deviceKey,
+        string deviceName,
+        string subtitle,
+        Octopus.Core.Projects.DeviceAppearance? current,
+        string defaultColor,
+        string? defaultIcon)
+    {
+        LastDeviceAppearanceKey = deviceKey;
+        return Task.FromResult(DeviceAppearance);
+    }
 
     /// <summary>Fills the agent editor as a person would; false cancels. Null cancels too.</summary>
     public Func<Octopus.App.Settings.Agents.AgentEditorModel, bool>? AgentEditor { get; set; }

@@ -68,7 +68,9 @@ public sealed class TerminalInputRouter(
             return;
         }
 
-        if (input.Action != KeyAction.Release) session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
+        // A modifier on its own (Ctrl held before C, Cmd before a click) is not typing: it must not throw away the
+        // scrollback position the user is reading. Programs with the extended keyboard protocol still receive it.
+        if (input.Action != KeyAction.Release && !IsModifier(input.Key)) session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
         _encoder.Apply(modes);
         Span<byte> buffer = stackalloc byte[128];
         var n = _encoder.EncodeKey(input, buffer);
@@ -78,6 +80,14 @@ public sealed class TerminalInputRouter(
             e.Handled = true;
         }
     }
+
+    /// <summary>Shift, Control, Alt/Option, Meta/Command and Caps Lock.</summary>
+    public static bool IsModifier(TerminalKey key) => key is
+        TerminalKey.ShiftLeft or TerminalKey.ShiftRight
+        or TerminalKey.ControlLeft or TerminalKey.ControlRight
+        or TerminalKey.AltLeft or TerminalKey.AltRight
+        or TerminalKey.MetaLeft or TerminalKey.MetaRight
+        or TerminalKey.CapsLock;
 
     /// <summary>
     /// A key that did not come from the keyboard (a key of a touch key bar): sent as the same key press would be, in

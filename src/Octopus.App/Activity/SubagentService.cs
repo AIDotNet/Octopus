@@ -21,6 +21,9 @@ public interface ISubagentService
 
     /// <summary>The item's process exited: what still ran is interrupted.</summary>
     void ReportExit(string itemId);
+
+    /// <summary>Publishes a snapshot of subagents driven directly by an ACP GUI session (no hook transcript polling).</summary>
+    void ReportExternal(string itemId, IReadOnlyList<SubagentRun> runs);
 }
 
 /// <summary>
@@ -34,6 +37,7 @@ public sealed class SubagentService : ISubagentService, IDisposable
     private readonly IProjectService _projects;
     private readonly IDisposable? _subscription;
     private readonly Dictionary<string, SubagentTracker> _trackers = [];
+    private readonly Dictionary<string, IReadOnlyList<SubagentRun>> _external = [];
     private DispatcherTimer? _timer;
     private bool _polling;
     private bool _pollAgain;
@@ -49,13 +53,48 @@ public sealed class SubagentService : ISubagentService, IDisposable
     public event EventHandler? Tick;
 
     public IReadOnlyList<SubagentRun> Of(string itemId) =>
-        _trackers.TryGetValue(itemId, out var tracker) ? tracker.Runs : [];
+        _external.TryGetValue(itemId, out var ext) ? ext
+        : _trackers.TryGetValue(itemId, out var tracker) ? tracker.Runs
+        : [];
+
+    public void ReportExternal(string itemId, IReadOnlyList<SubagentRun> runs)
+    {
+        if (string.IsNullOrEmpty(itemId)) return;
+        UiContext.Run(() =>
+        {
+            if (runs.Count == 0)
+            {
+                if (!_external.Remove(itemId)) return;
+            }
+            else
+            {
+                _external[itemId] = runs;
+            }
+            Changed?.Invoke(this, itemId);
+            UpdateTimer();
+        });
+    }
 
     public void ReportExit(string itemId)
     {
+        var changed = false;
+        if (_external.TryGetValue(itemId, out var ext) && ext.Any(r => r.State == SubagentState.Running))
+        {
+            var now = DateTimeOffset.Now;
+            var updated = ext.Select(r => r.State == SubagentState.Running
+                ? SubagentRun.CreateExternal(r.Id, r.Type, r.Description, SubagentState.Interrupted, r.StartedAt, now, r.ToolCount, r.LastAction, r.Background)
+                : r).ToList();
+            _external[itemId] = updated;
+            changed = true;
+        }
         if (_trackers.TryGetValue(itemId, out var tracker) && tracker.EndSession(DateTimeOffset.Now))
         {
+            changed = true;
+        }
+        if (changed)
+        {
             Changed?.Invoke(this, itemId);
+            UpdateTimer();
         }
     }
 
@@ -89,8 +128,9 @@ public sealed class SubagentService : ISubagentService, IDisposable
 
     private void UpdateTimer()
     {
-        // Also while a finished one still has its last read to come.
-        var running = _trackers.Values.Any(t => t.HasRunning || t.Runs.Any(r => r.NeedsRead && r.TranscriptPath is not null));
+        // Also while a finished one still has its last read to come, or an ACP external subagent is running.
+        var running = _trackers.Values.Any(t => t.HasRunning || t.Runs.Any(r => r.NeedsRead && r.TranscriptPath is not null))
+            || _external.Values.Any(list => list.Any(r => r.State == SubagentState.Running));
         if (running && _timer is null)
         {
             _timer = new DispatcherTimer { Interval = s_pollInterval };
@@ -186,10 +226,13 @@ public sealed class SubagentService : ISubagentService, IDisposable
             // A removed project takes its items along without an Items event per item: drop their trackers too.
             var gone = _trackers.Keys.Where(id => _projects.FindItem(id) is null).ToList();
             foreach (var id in gone) _trackers.Remove(id);
-            if (gone.Count > 0) UpdateTimer();
+            var goneExt = _external.Keys.Where(id => _projects.FindItem(id) is null).ToList();
+            foreach (var id in goneExt) _external.Remove(id);
+            if (gone.Count > 0 || goneExt.Count > 0) UpdateTimer();
             return;
         }
-        if (e.Kind == ProjectChangeKind.Items && e.Item is { } item && _projects.FindItem(item.Id) is null && _trackers.Remove(item.Id))
+        if (e.Kind == ProjectChangeKind.Items && e.Item is { } item && _projects.FindItem(item.Id) is null
+            && (_trackers.Remove(item.Id) | _external.Remove(item.Id)))
         {
             UpdateTimer();
         }

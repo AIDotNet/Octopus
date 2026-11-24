@@ -59,6 +59,23 @@ internal static class ProjectsDocumentNormalizer
         }
         if (document.ExpandedGroupId is not null && !groupIds.Contains(document.ExpandedGroupId))
             document.ExpandedGroupId = null;
+
+        if (!string.IsNullOrWhiteSpace(document.ActiveDeviceKey))
+            document.ActiveDeviceKey = DeviceKeys.Normalize(document.ActiveDeviceKey);
+        else
+            document.ActiveDeviceKey = null;
+
+        document.LastProjectByDevice ??= [];
+        foreach (var key in document.LastProjectByDevice.Keys.Where(k => string.IsNullOrWhiteSpace(k) || !projectIds.Contains(document.LastProjectByDevice[k])).ToList())
+        {
+            document.LastProjectByDevice.Remove(key);
+        }
+
+        document.DeviceAppearances ??= [];
+        foreach (var key in document.DeviceAppearances.Keys.Where(k => string.IsNullOrWhiteSpace(k) || document.DeviceAppearances[k] is null).ToList())
+        {
+            document.DeviceAppearances.Remove(key);
+        }
         return document;
     }
 }

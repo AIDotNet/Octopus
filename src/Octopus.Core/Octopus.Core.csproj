@@ -2,4 +2,7 @@
     <PropertyGroup>
         <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
+    <ItemGroup>
+        <AssemblyMetadata Include="OctopusServiceUrl" Value="$(OctopusServiceUrl)" Condition="'$(OctopusServiceUrl)' != ''" />
+    </ItemGroup>
 </Project>

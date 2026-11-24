@@ -102,7 +102,8 @@ public sealed class TabContentRegistry(
             services.GetService<IPickerService>(),
             services.GetService<IItemActivityService>(),
             services.GetService<IAgentAccountService>(),
-            () => services.GetService<IWorkspaceCommands>());
+            () => services.GetService<IWorkspaceCommands>(),
+            services.GetService<ISubagentService>());
         return new AgentGuiTabView { DataContext = vm };
     }
 

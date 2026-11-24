@@ -7,7 +7,16 @@ public interface IProjectService
 {
     IReadOnlyList<Project> Projects { get; }
     Project? Current { get; }
+    /// <summary>Canonical key of the device currently shown on the sidebar rail (<see cref="DeviceKeys"/>).</summary>
+    string ActiveDeviceKey { get; }
     event EventHandler<ProjectChangedEventArgs>? Changed;
+
+    /// <summary>Switches the sidebar rail to show only projects on <paramref name="deviceKey"/> and restores its last active project.</summary>
+    void SetActiveDevice(string deviceKey);
+    /// <summary>Returns the saved custom appearance for <paramref name="deviceKey"/>, or null when uncustomized.</summary>
+    DeviceAppearance? GetDeviceAppearance(string deviceKey);
+    /// <summary>Sets the custom color, icon (Lucide or pixel) or picture thumbnail for a device badge.</summary>
+    void SetDeviceAppearance(string deviceKey, string? color, string? icon, string? image);
 
     Task LoadAsync();
     /// <summary>Writes pending changes now (at exit).</summary>

@@ -18,6 +18,8 @@ public sealed class AcpDialectRequestHandling
     public Func<IReadOnlyDictionary<string, IReadOnlyList<string>>?, JsonNode>? BuildQuestionReply { get; init; }
     /// <summary>Marks a <c>session/request_permission</c> call as user-required (never auto-approved in full mode).</summary>
     public bool RequireManualApproval { get; init; }
+    /// <summary>Marks a <c>session/request_permission</c> call as an interactive Plan Approval gate (e.g. Claude Code <c>ExitPlanMode</c>).</summary>
+    public bool IsPlanApproval { get; init; }
     /// <summary>Optional security warning or action summary to surface on the approval card.</summary>
     public string? ApprovalNotice { get; init; }
 }

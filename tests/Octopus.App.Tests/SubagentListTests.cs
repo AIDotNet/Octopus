@@ -48,11 +48,18 @@ public class SubagentListTests
         Frames.Pump();
         var list = Row().Subagents!;
         Assert.True(list.HasAny);
-        Assert.True(list.ShowList);
-        Assert.Equal("0/2", list.CountText);
+        // Collapsed by default: shown as compact [done|total icon] pill on the parent row until clicked.
+        Assert.False(list.ShowList);
+        Assert.Equal("0|2", list.CountText);
+        Assert.Equal("0", list.FinishedCountText);
+        Assert.Equal("2", list.TotalCountText);
         Assert.Equal(["构建 Studio 预览窗口", "查找模板生成代码"], list.Active.Select(c => c.Title));
         Assert.All(list.Active, c => Assert.True(c.IsRunning));
         Assert.Null(panel.Items.Single(r => r.Id == terminal.Id).Subagents);
+
+        // Clicking the [0|2 icon] pill expands the subagent list below the row.
+        list.ToggleExpandedCommand.Execute(null);
+        Assert.True(list.ShowList);
 
         // What it does comes from its own transcript.
         var subagents = Path.Combine(dir, "session", "subagents");
@@ -66,11 +73,14 @@ public class SubagentListTests
         panel.Filter = "Avalonia";
         panel.Filter = "";
         Assert.Same(list, Row().Subagents);
+        Assert.True(list.ShowList);
 
-        // One finishes: it goes behind the fold; the other still runs, so the list stays open.
+        // One finishes: it goes behind the fold; user's expanded state stays intact.
         Send("subagent-stop", new { agent_id = "a2" });
         Frames.Pump();
-        Assert.Equal("1/2", list.CountText);
+        Assert.Equal("1|2", list.CountText);
+        Assert.Equal("1", list.FinishedCountText);
+        Assert.Equal("2", list.TotalCountText);
         Assert.Single(list.Active);
         Assert.Single(list.Finished);
         Assert.True(list.HasFinished);
@@ -78,18 +88,20 @@ public class SubagentListTests
         list.ToggleFoldCommand.Execute(null);
         Assert.Same(list.Finished, list.VisibleFinished);
 
-        // All done: the list closes by itself; the user can open it again.
+        // All done: count updates to 2|2; clicking the pill collapses and re-expands cleanly.
         Send("subagent-stop", new { agent_id = "a1" });
         Frames.Pump();
+        Assert.Equal("2|2", list.CountText);
+        list.ToggleExpandedCommand.Execute(null);
         Assert.False(list.ShowList);
-        Assert.Equal("2/2", list.CountText);
         list.ToggleExpandedCommand.Execute(null);
         Assert.True(list.ShowList);
 
-        // The next prompt clears the finished ones.
+        // The next prompt clears the finished ones and resets expansion state.
         Send("prompt-submit", new { prompt = "next" });
         Frames.Pump();
         Assert.False(list.HasAny);
+        Assert.False(list.ShowList);
     }
 
     [AvaloniaFact]

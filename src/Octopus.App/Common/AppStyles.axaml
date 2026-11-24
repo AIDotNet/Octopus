@@ -48,6 +48,21 @@
         </Setter>
     </Style>
 
+    <!-- The circular device badge at the top of the rail (Option B): clearly distinguished from square project chips. -->
+    <Style Selector="Button.device-chip">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_Circle" Background="{TemplateBinding Background}" ClipToBounds="True"
+                        CornerRadius="999">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
     <!-- A small square icon button (the sidebar toggle, the "+" of the toolbar). -->
     <Style Selector="arc|Button.icon">
         <Setter Property="Width" Value="{DynamicResource OctopusIconButtonSize}" />

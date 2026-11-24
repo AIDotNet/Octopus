@@ -47,17 +47,28 @@ public sealed class LinuxUpdateInstaller : IUpdateInstaller
         }
     }
 
-    public Task<string> PrepareAsync(string package, string workDirectory, CancellationToken cancellationToken)
+    public async Task<string> PrepareAsync(string package, string workDirectory, CancellationToken cancellationToken)
     {
-        if (!package.EndsWith(".run", StringComparison.Ordinal))
+        string installer;
+        if (package.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            var extractedDir = Path.Combine(workDirectory, "installer");
+            installer = await UpdateHelper.ExtractSingleFileFromZipAsync(package, extractedDir, ".run", cancellationToken).ConfigureAwait(false);
+        }
+        else if (package.EndsWith(".run", StringComparison.Ordinal))
+        {
+            installer = package;
+        }
+        else
         {
             throw new UpdateInstallException($"Not a Linux installer: {Path.GetFileName(package)}");
         }
+
         if (!OperatingSystem.IsWindows())
         {
-            File.SetUnixFileMode(package, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(installer, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
-        return Task.FromResult(package);
+        return installer;
     }
 
     public void LaunchInstall(string prepared, InstallRequest request)

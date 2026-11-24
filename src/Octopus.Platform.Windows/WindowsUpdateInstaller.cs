@@ -32,13 +32,18 @@ public sealed class WindowsUpdateInstaller : IUpdateInstaller
     /// <summary>An install for all users lives under Program Files; its setup needs elevation (one UAC prompt).</summary>
     public bool IsAllUsersInstall => IsUnder(Location, _programFiles) || IsUnder(Location, _programFilesX86);
 
-    public Task<string> PrepareAsync(string package, string workDirectory, CancellationToken cancellationToken)
+    public async Task<string> PrepareAsync(string package, string workDirectory, CancellationToken cancellationToken)
     {
+        if (package.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            var extractedDir = Path.Combine(workDirectory, "installer");
+            return await UpdateHelper.ExtractSingleFileFromZipAsync(package, extractedDir, ".exe", cancellationToken).ConfigureAwait(false);
+        }
         if (!package.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
         {
             throw new UpdateInstallException($"Not a Windows installer: {Path.GetFileName(package)}");
         }
-        return Task.FromResult(package);
+        return package;
     }
 
     public void LaunchInstall(string prepared, InstallRequest request)

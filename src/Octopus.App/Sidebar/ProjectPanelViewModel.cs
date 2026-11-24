@@ -35,6 +35,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     private readonly IWorkspaceManager? _workspaces;
     private readonly IFileOpener? _fileOpener;
     private readonly ISettingsNavigator? _settingsNavigator;
+    private readonly DeviceSwitcherViewModel? _devices;
     /// <summary>Per item, outliving the rows: a rebuild (a filter, a new tab) keeps what the user opened.</summary>
     private readonly Dictionary<string, SubagentListViewModel> _subagentLists = [];
     private readonly Dictionary<string, bool> _defaultCollapsed = [];
@@ -55,7 +56,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         IGitService? git = null,
         IWorkspaceManager? workspaces = null,
         IFileOpener? fileOpener = null,
-        ISettingsNavigator? settingsNavigator = null)
+        ISettingsNavigator? settingsNavigator = null,
+        DeviceSwitcherViewModel? devices = null)
     {
         _subagents = subagents;
         _accounts = accounts;
@@ -64,6 +66,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         _workspaces = workspaces;
         _fileOpener = fileOpener;
         _settingsNavigator = settingsNavigator;
+        _devices = devices;
+        if (_devices is not null) _devices.Changed += (_, _) => UiContext.Run(NotifyDeviceState);
         if (_accounts is not null) _accounts.Changed += (_, _) => UiContext.Run(Rebuild);
         if (_settings is not null) _settings.Changed += (_, _) => UiContext.Run(Rebuild);
         if (_subagents is not null)
@@ -117,12 +121,30 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     [NotifyPropertyChangedFor(nameof(ShowFlatList), nameof(SectionHeaderText))]
     public partial bool HasWorkspaces { get; private set; }
 
+    public DeviceSwitcherViewModel? Devices => _devices;
+    public bool ShowDeviceHeader => _devices is { ShowDeviceHeader: true };
+    public bool ShowOfflineBanner => _devices is { ShowOfflineBanner: true };
+    public string EmptyTitle => _devices?.CurrentDevice is { IsLocal: false } dev
+        ? AppLangResources.Format(AppLangResourceKind.DeviceNoProjectsTitle, dev.Name)
+        : AppLangResources.Get(AppLangResourceKind.NoProjectTitle);
+    public string EmptyHint => _devices?.CurrentDevice is { IsLocal: false }
+        ? AppLangResources.Get(AppLangResourceKind.DeviceNoProjectsHint)
+        : AppLangResources.Get(AppLangResourceKind.NoProjectHint);
+
     public bool HasNoProject => !HasProject;
     public bool HasGroup => GroupName.Length > 0;
     public bool NoItems => !HasWorkspaces && Items.Count == 0;
     public bool ShowFlatList => !HasWorkspaces;
     public bool CanCreateWorkspace => HasProject && IsGitProject && _workspaces is not null;
     public string SectionHeaderText => AppLangResources.Get(HasWorkspaces ? AppLangResourceKind.WorkspaceSectionHeader : AppLangResourceKind.ItemList);
+
+    private void NotifyDeviceState()
+    {
+        OnPropertyChanged(nameof(ShowDeviceHeader));
+        OnPropertyChanged(nameof(ShowOfflineBanner));
+        OnPropertyChanged(nameof(EmptyTitle));
+        OnPropertyChanged(nameof(EmptyHint));
+    }
 
     /// <summary>Asks the view to put the project name into editing.</summary>
     public event EventHandler? RenameRequested;
@@ -296,6 +318,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         OnPropertyChanged(nameof(NoItems));
         OnPropertyChanged(nameof(CanCreateWorkspace));
         OnPropertyChanged(nameof(SectionHeaderText));
+        NotifyDeviceState();
         // Lists of items that are gone (closed, or another project's) go with them; a project switch builds them anew.
         foreach (var id in _subagentLists.Keys.Where(id => _projects.FindItem(id) is null).ToList())
         {
@@ -411,7 +434,9 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             {
                 return;
             }
-            list = new SubagentListViewModel(() => _projects.ActivateItem(itemId));
+            list = new SubagentListViewModel(
+                () => _projects.ActivateItem(itemId),
+                subId => WeakReferenceMessenger.Default.Send(new FocusSubagentRequested(itemId, subId)));
             _subagentLists[itemId] = list;
         }
         list.Sync(runs, DateTimeOffset.Now);

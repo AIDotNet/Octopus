@@ -6,7 +6,9 @@ Outputs (src/Octopus.App/Assets/Icon/):
   octopus.icns  macOS: for an .app bundle (an unbundled run gets its Dock icon from dock.png)
   octopus.png   512 px window icon (Avalonia Window.Icon: Windows title bar/taskbar, Linux)
   dock.png      512 px macOS Dock icon, with the transparent margin the Dock expects (set at run time by MacAppIcon)
-  logo.png      128 px in-app logo (sidebar head)
+
+Note: `src/Octopus.App/Assets/Icon/logo.png` (512 px transparent-background in-app logo for the sidebar head and
+empty/welcome views) is maintained as a separate transparent cutout so it sits cleanly on both light and dark surfaces.
 
 Mobile outputs:
   Android Resources/mipmap-*/octopus.png (48–192 px)
@@ -86,7 +88,6 @@ def main() -> None:
 
     (OUT / "octopus.png").write_bytes(png_bytes(rounded(master, 512)))
     (OUT / "dock.png").write_bytes(png_bytes(rounded(master, 512, inset=100 / 1024)))
-    (OUT / "logo.png").write_bytes(png_bytes(rounded(master, 128)))
 
     mobile_icons = []
     for density, size in (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)):

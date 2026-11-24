@@ -6,18 +6,23 @@ using Octopus.App.Localization;
 
 namespace Octopus.App.Sidebar;
 
+/// <summary>Broadcast when a user clicks a specific subagent card in the sidebar so an open ACP GUI tab can focus it.</summary>
+public sealed record FocusSubagentRequested(string ItemId, string SubagentId);
+
 /// <summary>
-/// The subagents under an agent's row: a card per running (or failed) one, and the finished ones folded into one
-/// "N finished" line. Kept per item across rebuilds of the panel, so what the user opened stays open.
+/// The subagents under an agent's row: collapsed by default as a compact <c>[done | total icon]</c> pill on the parent row,
+/// and expanded on click to reveal active cards plus a folded "N finished" group. Kept per item across panel rebuilds.
 /// </summary>
 public sealed partial class SubagentListViewModel : ObservableObject
 {
     private readonly Action _activate;
-    private int _knownStarts;
-    /// <summary>The user opened or closed the list since the last subagent started: their choice wins until then.</summary>
-    private bool _userChose;
+    private readonly Action<string>? _focusSubagent;
 
-    public SubagentListViewModel(Action activate) => _activate = activate;
+    public SubagentListViewModel(Action activate, Action<string>? focusSubagent = null)
+    {
+        _activate = activate;
+        _focusSubagent = focusSubagent;
+    }
 
     /// <summary>Running and failed ones, oldest first.</summary>
     public ObservableCollection<SubagentCardViewModel> Active { get; } = [];
@@ -28,8 +33,12 @@ public sealed partial class SubagentListViewModel : ObservableObject
     [ObservableProperty] public partial bool HasAny { get; private set; }
     [ObservableProperty] public partial bool IsExpanded { get; private set; }
     [ObservableProperty] public partial bool IsFoldOpen { get; private set; }
-    /// <summary>"1/3": finished of all.</summary>
+    /// <summary>"1|3": finished of all.</summary>
     [ObservableProperty] public partial string CountText { get; private set; } = "";
+    [ObservableProperty] public partial string FinishedCountText { get; private set; } = "0";
+    [ObservableProperty] public partial string TotalCountText { get; private set; } = "0";
+    [ObservableProperty] public partial bool HasRunning { get; private set; }
+    [ObservableProperty] public partial bool HasFailed { get; private set; }
     [ObservableProperty] public partial string FinishedText { get; private set; } = "";
 
     public bool HasFinished => Finished.Count > 0;
@@ -46,7 +55,6 @@ public sealed partial class SubagentListViewModel : ObservableObject
     [RelayCommand]
     private void ToggleExpanded()
     {
-        _userChose = true;
         IsExpanded = !IsExpanded;
     }
 
@@ -61,24 +69,18 @@ public sealed partial class SubagentListViewModel : ObservableObject
         Reconcile(Finished, finished, now);
 
         HasAny = runs.Count > 0;
-        CountText = $"{finished.Count}/{runs.Count}";
+        FinishedCountText = finished.Count.ToString();
+        TotalCountText = runs.Count.ToString();
+        CountText = $"{finished.Count}|{runs.Count}";
+        HasRunning = runs.Any(r => r.State == SubagentState.Running);
+        HasFailed = runs.Any(r => r.State == SubagentState.Failed);
         FinishedText = AppLangResources.Format(AppLangResourceKind.SubagentsFinished, finished.Count);
         OnPropertyChanged(nameof(HasFinished));
 
-        // Opens when a subagent starts, closes when none runs any more; a choice of the user holds until the next start.
-        var starts = runs.Count;
-        var running = runs.Any(r => r.State == SubagentState.Running);
-        if (starts > _knownStarts && running)
-        {
-            _userChose = false;
-        }
-        _knownStarts = starts;
-        if (!_userChose)
-        {
-            IsExpanded = running || active.Count > 0;
-        }
+        // Collapsed by default: the parent row displays the compact [done|total icon] pill and only expands on click.
         if (!HasAny)
         {
+            IsExpanded = false;
             IsFoldOpen = false;
         }
     }
@@ -96,7 +98,7 @@ public sealed partial class SubagentListViewModel : ObservableObject
     {
         for (var i = cards.Count - 1; i >= 0; i--)
         {
-            if (!runs.Contains(cards[i].Run))
+            if (runs.All(r => r.Id != cards[i].Run.Id))
             {
                 cards.RemoveAt(i);
             }
@@ -106,11 +108,12 @@ public sealed partial class SubagentListViewModel : ObservableObject
             var at = IndexOf(cards, runs[i]);
             if (at < 0)
             {
-                cards.Insert(i, new SubagentCardViewModel(runs[i], _activate));
+                cards.Insert(i, new SubagentCardViewModel(runs[i], _activate, _focusSubagent));
             }
-            else if (at != i)
+            else
             {
-                cards.Move(at, i);
+                if (at != i) cards.Move(at, i);
+                cards[i].UpdateRun(runs[i]);
             }
             cards[i].Refresh(now);
         }
@@ -120,7 +123,7 @@ public sealed partial class SubagentListViewModel : ObservableObject
     {
         for (var i = 0; i < cards.Count; i++)
         {
-            if (ReferenceEquals(cards[i].Run, run))
+            if (ReferenceEquals(cards[i].Run, run) || string.Equals(cards[i].Run.Id, run.Id, StringComparison.Ordinal))
             {
                 return i;
             }
@@ -133,15 +136,25 @@ public sealed partial class SubagentListViewModel : ObservableObject
 public sealed partial class SubagentCardViewModel : ObservableObject
 {
     private readonly Action _activate;
+    private readonly Action<string>? _focusSubagent;
 
-    public SubagentCardViewModel(SubagentRun run, Action activate)
+    public SubagentCardViewModel(SubagentRun run, Action activate, Action<string>? focusSubagent = null)
     {
         Run = run;
         _activate = activate;
+        _focusSubagent = focusSubagent;
     }
 
-    public SubagentRun Run { get; }
+    public SubagentRun Run { get; private set; }
     public string Type => Run.Type;
+
+    internal void UpdateRun(SubagentRun run)
+    {
+        if (ReferenceEquals(Run, run)) return;
+        var typeChanged = !string.Equals(Run.Type, run.Type, StringComparison.Ordinal);
+        Run = run;
+        if (typeChanged) OnPropertyChanged(nameof(Type));
+    }
 
     [ObservableProperty] public partial string Title { get; private set; } = "";
     [ObservableProperty] public partial string Detail { get; private set; } = "";
@@ -153,7 +166,12 @@ public sealed partial class SubagentCardViewModel : ObservableObject
     [ObservableProperty] public partial bool IsFailed { get; private set; }
     [ObservableProperty] public partial bool IsInterrupted { get; private set; }
 
-    [RelayCommand] private void Activate() => _activate();
+    [RelayCommand]
+    private void Activate()
+    {
+        _activate();
+        _focusSubagent?.Invoke(Run.Id);
+    }
 
     public void Refresh(DateTimeOffset now)
     {

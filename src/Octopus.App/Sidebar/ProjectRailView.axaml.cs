@@ -3,6 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using Octopus.App.Common;
+using Octopus.App.Localization;
+using TKCode.Arc;
 
 namespace Octopus.App.Sidebar;
 
@@ -36,6 +39,7 @@ public partial class ProjectRailView : UserControl
     private bool _dragging;
     private Control? _markView;
     private DropMark _mark;
+    private DeviceSwitcherViewModel? _boundDevices;
 
     public ProjectRailView()
     {
@@ -51,6 +55,46 @@ public partial class ProjectRailView : UserControl
     }
 
     private ProjectRailViewModel? Model => DataContext as ProjectRailViewModel;
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (_boundDevices is not null)
+        {
+            _boundDevices.Changed -= OnDevicesChanged;
+            _boundDevices = null;
+        }
+        _boundDevices = Model?.Devices;
+        if (_boundDevices is not null)
+        {
+            _boundDevices.Changed += OnDevicesChanged;
+            AttachDeviceMenu();
+        }
+    }
+
+    private void OnDevicesChanged(object? sender, EventArgs e) => AttachDeviceMenu();
+
+    private void AttachDeviceMenu()
+    {
+        if (_boundDevices is not { } devices)
+        {
+            return;
+        }
+        var entries = new List<MenuFactory.Entry>
+        {
+            new(AppLangResources.Get(AppLangResourceKind.DeviceChangeIcon), devices.ChangeCurrentIconCommand, Glyph: ArcIcons.Image),
+        };
+        if (devices.CurrentDevice is { CanReconnect: true })
+        {
+            entries.Add(new(AppLangResources.Get(AppLangResourceKind.DeviceReconnect), devices.ReconnectCurrentCommand, Glyph: ArcIcons.RefreshCw));
+        }
+        entries.Add(new(AppLangResources.Get(AppLangResourceKind.DeviceManageRemoteHosts), devices.OpenRemoteHostsSettingsCommand, SeparatorBefore: true, Glyph: ArcIcons.Monitor));
+        entries.Add(new(AppLangResources.Get(AppLangResourceKind.DeviceManageSshHosts), devices.OpenSshSettingsCommand, Glyph: ArcIcons.Server));
+        MenuFactory.Attach(DeviceBadgeButton, entries);
+    }
+
+    private void OnDeviceBadgeClick(object? sender, RoutedEventArgs e) =>
+        DeviceSwitcherRequest.Raise(DeviceBadgeButton);
 
     private void OnPressed(object? sender, PointerPressedEventArgs e)
     {

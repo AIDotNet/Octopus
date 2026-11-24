@@ -15,10 +15,10 @@ public static class UpdatesServiceCollectionExtensions
         services.AddSingleton(options);
         services.AddKeyedSingleton(UpdateHttp.Key, (_, _) => UpdateHttp.Create());
         services.AddSingleton(_ => new ManifestVerifier(publicKeys ?? UpdateEndpoints.PublicKeys));
-        services.AddSingleton<IUpdateFeed>(p => new GitHubReleasesFeed(
+        services.AddSingleton<IUpdateFeed>(p => new ServerUpdateFeed(
             p.GetRequiredKeyedService<HttpClient>(UpdateHttp.Key),
             p.GetRequiredService<ManifestVerifier>(),
-            releasesUrl ?? UpdateEndpoints.ReleasesUrl));
+            releasesUrl ?? UpdateEndpoints.UpdateCheckUrl));
         services.AddSingleton(p => new UpdateDownloader(p.GetRequiredKeyedService<HttpClient>(UpdateHttp.Key)));
         services.AddSingleton<UpdateService>();
         services.AddSingleton<IUpdateService>(p => p.GetRequiredService<UpdateService>());

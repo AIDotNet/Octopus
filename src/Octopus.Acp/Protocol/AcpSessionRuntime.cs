@@ -8,8 +8,14 @@ using Octopus.Core.Agents;
 namespace Octopus.Acp.Protocol;
 
 /// <summary>Event emitted by <see cref="AcpSessionRuntime"/> as the agent streams updates or requests input.</summary>
-public abstract record AcpRuntimeEvent;
+public abstract record AcpRuntimeEvent
+{
+    /// <summary>True when this content event replays prior conversation history (session/load or <c>_meta.isReplay</c>).</summary>
+    public bool IsReplay { get; init; }
+}
 
+/// <summary>A user prompt chunk; only emitted for replayed history (live prompts are rendered by the client itself).</summary>
+public sealed record AcpUserMessageEvent(string Text, string? MessageId) : AcpRuntimeEvent;
 public sealed record AcpTextDeltaEvent(string Channel, string Text, string? MessageId) : AcpRuntimeEvent;
 public sealed record AcpToolCallEvent(AcpToolCallUpdate Update) : AcpRuntimeEvent;
 public sealed record AcpPlanEvent(IReadOnlyList<AcpPlanEntry> Entries, string? Markdown = null) : AcpRuntimeEvent;
@@ -60,6 +66,8 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
         {
             OnRequest = HandleIncomingRequestAsync,
             OnNotification = HandleNotification,
+            // Close the replay window in read order so updates after the session/load reply are treated as live.
+            OnResponse = method => { if (method == "session/load") _isLoadingHistory = false; },
             OnOtherLine = line => Emit(new AcpDiagnosticEvent(line)),
             OnDiagnostic = msg => Emit(new AcpDiagnosticEvent(msg)),
             OnClose = err => Emit(new AcpClosedEvent(err)),
@@ -384,9 +392,20 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
                 if (dialectHandled.RequireManualApproval) req.WarningMessage = notice;
                 else req.ActionDetail = notice;
             }
+            if (dialectHandled?.IsPlanApproval == true)
+            {
+                req.IsPlanApproval = true;
+                req.PlanMarkdown ??= dialectHandled.PlanMarkdown ?? req.ToolCall.PlanMarkdown;
+            }
+            else if (string.Equals(req.ToolCall.WorkflowAction, "exit_plan", StringComparison.Ordinal))
+            {
+                req.IsPlanApproval = true;
+                req.PlanMarkdown ??= req.ToolCall.PlanMarkdown;
+            }
             var mode = _options.GetActivePermissionMode?.Invoke() ?? PermissionModes.Default;
             var auto = AcpPermissionCoordinator.TryAutoSelectOptionId(
-                req, mode, _options.PermissionStrategy, dialectHandled?.RequireManualApproval == true);
+                req, mode, _options.PermissionStrategy,
+                requireManualApproval: dialectHandled?.RequireManualApproval == true || req.IsPlanApproval);
             if (auto is not null)
             {
                 return AcpPermissionCoordinator.BuildSelectedReply(auto);
@@ -414,14 +433,26 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
         var kind = AcpProtocolParser.TryStr(upd, "sessionUpdate");
         if (string.IsNullOrEmpty(kind)) return;
 
-        // During session/load replay, only adopt metadata/usage/options to avoid duplicating history.
+        // During session/load the agent replays the prior conversation; forward it tagged as replay so the
+        // client can rebuild an empty timeline (and skip it when the history is already on screen).
         var isReplay = _isLoadingHistory
             || AcpProtocolParser.TryBool(AcpProtocolParser.TryObj(env, "_meta"), "isReplay") == true;
 
         switch (kind)
         {
-            case "agent_message_chunk" when !isReplay:
-            case "agent_thought_chunk" when !isReplay:
+            case "user_message_chunk" when isReplay:
+            {
+                var text = AcpProtocolParser.TryObj(upd, "content") is { } block
+                    ? AcpProtocolParser.ExtractContentBlockText(block)
+                    : null;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    Emit(new AcpUserMessageEvent(text, AcpProtocolParser.TryStr(upd, "messageId")) { IsReplay = true });
+                }
+                break;
+            }
+            case "agent_message_chunk":
+            case "agent_thought_chunk":
             {
                 var channel = kind == "agent_thought_chunk" ? "reasoning" : "assistant";
                 var text = AcpProtocolParser.TryObj(upd, "content") is { } block
@@ -429,37 +460,37 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
                     : null;
                 if (!string.IsNullOrEmpty(text))
                 {
-                    Emit(new AcpTextDeltaEvent(channel, text, AcpProtocolParser.TryStr(upd, "messageId")));
+                    Emit(new AcpTextDeltaEvent(channel, text, AcpProtocolParser.TryStr(upd, "messageId")) { IsReplay = isReplay });
                 }
                 break;
             }
-            case "tool_call" when !isReplay:
-            case "tool_call_update" when !isReplay:
+            case "tool_call":
+            case "tool_call_update":
             {
                 var tc = AcpProtocolParser.ParseToolCallUpdate(upd, _options.Dialect);
-                Emit(new AcpToolCallEvent(tc));
+                Emit(new AcpToolCallEvent(tc) { IsReplay = isReplay });
                 break;
             }
-            case "plan" when !isReplay:
+            case "plan":
             {
                 if (AcpProtocolParser.TryArr(upd, "entries") is { } entries)
                 {
-                    Emit(new AcpPlanEvent(AcpProtocolParser.ParsePlanEntries(entries)));
+                    Emit(new AcpPlanEvent(AcpProtocolParser.ParsePlanEntries(entries)) { IsReplay = isReplay });
                 }
                 break;
             }
-            case "plan_update" when !isReplay:
+            case "plan_update":
             {
                 if (AcpProtocolParser.TryObj(upd, "plan") is { } plan)
                 {
                     var pType = AcpProtocolParser.TryStr(plan, "type");
                     if (pType == "items" && AcpProtocolParser.TryArr(plan, "entries") is { } entries)
                     {
-                        Emit(new AcpPlanEvent(AcpProtocolParser.ParsePlanEntries(entries)));
+                        Emit(new AcpPlanEvent(AcpProtocolParser.ParsePlanEntries(entries)) { IsReplay = isReplay });
                     }
                     else if (pType == "markdown" && AcpProtocolParser.TryStr(plan, "content") is { Length: > 0 } md)
                     {
-                        Emit(new AcpPlanEvent([], md));
+                        Emit(new AcpPlanEvent([], md) { IsReplay = isReplay });
                     }
                 }
                 break;

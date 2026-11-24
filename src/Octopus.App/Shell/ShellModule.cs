@@ -53,6 +53,7 @@ internal static class ShellModule
         services.AddSingleton<EmptyStateViewModel>();
         services.AddSingleton<WorkspaceViewModel>();
         services.AddSingleton<IWorkspaceCommands>(p => p.GetRequiredService<WorkspaceViewModel>());
+        services.AddSingleton<DeviceSwitcherViewModel>();
         services.AddSingleton<ProjectRailViewModel>();
         services.AddSingleton<ProjectPanelViewModel>();
         services.AddSingleton<LauncherViewModel>();

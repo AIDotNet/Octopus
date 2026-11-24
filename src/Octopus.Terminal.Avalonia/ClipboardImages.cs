@@ -16,7 +16,7 @@ public static class ClipboardImages
         Directory.CreateDirectory(folder);
         Cleanup(folder);
         var path = Path.Combine(folder, $"paste-{DateTime.Now:yyyyMMdd-HHmmss-fff}.png");
-        bitmap.Save(path);
+        bitmap.Save(path, PngBitmapEncoderOptions.Default);
         return Quote(path);
     }
 

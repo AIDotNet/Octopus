@@ -26,7 +26,7 @@ public class ImageAnimationTests
     private static SKColor PixelAt(Bitmap bitmap, double x, double y, int width, int height)
     {
         using var stream = new MemoryStream();
-        bitmap.Save(stream);
+        bitmap.Save(stream, PngBitmapEncoderOptions.Default);
         using var decoded = SKBitmap.Decode(stream.ToArray());
         return decoded.GetPixel((int)(x / width * decoded.Width), (int)(y / height * decoded.Height));
     }

@@ -109,6 +109,24 @@ public partial class AgentGuiTabView : UserControl, ITabContent
 
         if (e.Key == Key.Escape)
         {
+            if (_model.ScriptPreview.IsOpen)
+            {
+                e.Handled = true;
+                _model.ScriptPreview.Close();
+                return;
+            }
+            if (_model.HasSelectedSubagent)
+            {
+                e.Handled = true;
+                _model.SelectedSubagent = null;
+                return;
+            }
+            if (_model.IsAnyHudOpen)
+            {
+                e.Handled = true;
+                _model.ActiveHudPanel = HudPanelKind.None;
+                return;
+            }
             if (pickerOpen)
             {
                 e.Handled = true;

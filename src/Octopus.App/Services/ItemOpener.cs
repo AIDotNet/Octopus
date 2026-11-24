@@ -191,7 +191,14 @@ public sealed class ItemOpener(
 
     public async Task<Project?> PickAndAddProjectAsync()
     {
-        var choice = await dialogs.AskNewProjectAsync();
+        var (kind, target) = DeviceKeys.Parse(projects.ActiveDeviceKey);
+        var initial = kind switch
+        {
+            ProjectLocationKind.Remote when target is not null => new NewProjectChoice("", "", RemoteHost: target),
+            ProjectLocationKind.Ssh when target is not null => new NewProjectChoice("", "", SshHost: target),
+            _ => null,
+        };
+        var choice = await dialogs.AskNewProjectAsync(initial);
         if (choice is null) return null;
         if (choice.RemoteHost is { } hostId && remoteProjects is not null)
         {

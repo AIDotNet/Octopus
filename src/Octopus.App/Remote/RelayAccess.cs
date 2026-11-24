@@ -1,3 +1,4 @@
+using Octopus.Core;
 using Octopus.Platform;
 using Octopus.Remote.Relay;
 using Octopus.Storage;
@@ -5,10 +6,11 @@ using Octopus.Storage;
 namespace Octopus.App.Remote;
 
 /// <summary>
-/// The relay this computer uses, if any (design/12-远程操作.md §8): its address from the settings, and the account this
-/// computer is signed in to there (<see cref="RelaySession"/>, shared with the phone app), kept in the system's
-/// keystore (a file only this user can read where there is none). Both the host side (being reachable through the
-/// relay) and the device side (reaching hosts through it) ask here for a token that is good right now.
+/// The relay this computer uses, if any (design/12-远程操作.md §8): its address from the settings (falling back to
+/// the official service when not customized), and the account this computer is signed in to there (<see cref="RelaySession"/>,
+/// shared with the phone app), kept in the system's keystore (a file only this user can read where there is none).
+/// Both the host side (being reachable through the relay) and the device side (reaching hosts through it) ask here for
+/// a token that is good right now.
 /// </summary>
 public sealed class RelayAccess : IRelayGate
 {
@@ -18,14 +20,20 @@ public sealed class RelayAccess : IRelayGate
     private const string LegacyTokenName = "relay-token";
 
     private readonly ISettingsStore _settings;
+    private readonly string? _officialUrl;
     private readonly RelaySession _session;
 
-    public RelayAccess(ISettingsStore settings, ISecretStore secrets, IAppPaths paths, RemoteIdentityProvider identity)
+    public RelayAccess(ISettingsStore settings, ISecretStore secrets, IAppPaths paths, RemoteIdentityProvider identity, string? officialUrl = null)
     {
         _settings = settings;
-        _session = new RelaySession(() => settings.Current.Remote.RelayUrl, new Keystore(secrets, paths), identity.GetAsync);
+        var resolvedOfficial = officialUrl ?? ServiceEndpoints.OfficialServiceUrl;
+        _officialUrl = RelayAccountClient.ParseUrl(resolvedOfficial) is null ? null : resolvedOfficial!.Trim();
+        _session = new RelaySession(ResolveUrl, new Keystore(secrets, paths), identity.GetAsync);
         _session.Changed += () => Changed?.Invoke();
     }
+
+    /// <summary>The official relay address compiled into this build, or null when disabled.</summary>
+    public string? OfficialUrl => _officialUrl;
 
     /// <summary>The address or the sign-in changed. Raised on the thread that changed them.</summary>
     public event Action? Changed;
@@ -48,12 +56,19 @@ public sealed class RelayAccess : IRelayGate
     /// <summary>Keeps the relay's address. A sign-in belongs to one relay: with another address this computer is signed out (of the old one, too).</summary>
     public async Task SetUrlAsync(string? url)
     {
-        var value = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
-        if (value == _settings.Current.Remote.RelayUrl) return;
-        if (RelayAccountClient.ParseUrl(value) != RelayAccountClient.ParseUrl(Url)) await _session.ForgetAsync().ConfigureAwait(false);
-        _settings.Update(s => s.Remote.RelayUrl = value);
+        var typed = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
+        var stored = typed is not null && IsOfficial(typed) ? null : typed;
+        var effectiveNext = stored ?? _officialUrl;
+        if (stored == _settings.Current.Remote.RelayUrl && effectiveNext == Url) return;
+        if (RelayAccountClient.ParseUrl(effectiveNext) != RelayAccountClient.ParseUrl(Url)) await _session.ForgetAsync().ConfigureAwait(false);
+        _settings.Update(s => s.Remote.RelayUrl = stored);
         Changed?.Invoke();
     }
+
+    private string? ResolveUrl() => string.IsNullOrWhiteSpace(_settings.Current.Remote.RelayUrl) ? _officialUrl : _settings.Current.Remote.RelayUrl;
+
+    private bool IsOfficial(string candidate) =>
+        _officialUrl is not null && RelayAccountClient.ParseUrl(candidate) is { } parsed && parsed == RelayAccountClient.ParseUrl(_officialUrl);
 
     private sealed class Keystore(ISecretStore secrets, IAppPaths paths) : IRelaySessionStore
     {

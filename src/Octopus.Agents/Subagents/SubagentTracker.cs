@@ -22,6 +22,30 @@ public sealed class SubagentRun
         StartedAt = startedAt;
     }
 
+    /// <summary>Creates a snapshot <see cref="SubagentRun"/> fed directly by an ACP GUI session (no hook transcript polling).</summary>
+    public static SubagentRun CreateExternal(
+        string id,
+        string type,
+        string? description,
+        SubagentState state,
+        DateTimeOffset startedAt,
+        DateTimeOffset? endedAt = null,
+        int toolCount = 0,
+        string? lastAction = null,
+        bool background = false)
+    {
+        return new SubagentRun(id, string.IsNullOrWhiteSpace(type) ? "general-purpose" : type, startedAt)
+        {
+            Description = description,
+            State = state,
+            EndedAt = endedAt,
+            ToolCount = toolCount,
+            LastAction = lastAction,
+            Background = background,
+            Settled = true,
+        };
+    }
+
     /// <summary>The agent's own id (<c>agent_id</c>), letters and digits only.</summary>
     public string Id { get; }
 

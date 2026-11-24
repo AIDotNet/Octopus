@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using Octopus.Platform.Linux;
 using Octopus.Platform.MacOS;
 using Octopus.Platform.Updates;
@@ -89,11 +90,54 @@ public sealed class UpdateInstallerTests : IDisposable
     }
 
     [Fact]
-    public async Task WindowsOnlyTakesAnInstaller()
+    public async Task WindowsOnlyTakesAnInstallerOrZipContainingOne()
     {
         var installer = new WindowsUpdateInstaller(Dir("w"));
-        await Assert.ThrowsAsync<UpdateInstallException>(() => installer.PrepareAsync("a.zip", Dir("work"), CancellationToken.None));
+        await Assert.ThrowsAsync<UpdateInstallException>(() => installer.PrepareAsync("a.txt", Dir("work"), CancellationToken.None));
         Assert.Equal("a-setup.exe", await installer.PrepareAsync("a-setup.exe", Dir("work"), CancellationToken.None));
+
+        var zipPath = Path.Combine(Dir("dl-win"), "Octopus-1.2.0-win-x64-update.zip");
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            var entry = archive.CreateEntry("Octopus-1.2.0-win-x64-setup.exe");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("fake-setup-exe");
+        }
+        var extracted = await installer.PrepareAsync(zipPath, Dir("work-win-zip"), CancellationToken.None);
+        Assert.EndsWith("Octopus-1.2.0-win-x64-setup.exe", extracted);
+        Assert.Equal("fake-setup-exe", File.ReadAllText(extracted));
+
+        // A zip without an .exe installer is refused.
+        var emptyZip = Path.Combine(Dir("dl-win-bad"), "bad.zip");
+        using (var archive = ZipFile.Open(emptyZip, ZipArchiveMode.Create))
+        {
+            var entry = archive.CreateEntry("readme.txt");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("nothing");
+        }
+        await Assert.ThrowsAsync<UpdateInstallException>(() => installer.PrepareAsync(emptyZip, Dir("work-win-bad"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LinuxExtractsAZippedRunInstallerAndMakesItExecutable()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var dir = LinuxInstall();
+        var installer = new LinuxUpdateInstaller(dir);
+        var rawRun = FakeRun();
+        var zipPath = Path.Combine(Dir("dl-linux-zip"), "Octopus-1.1.0-linux-x64-update.zip");
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntryFromFile(rawRun, "Octopus-1.1.0-linux-x64.run");
+        }
+
+        var prepared = await installer.PrepareAsync(zipPath, Dir("work-linux-zip"), CancellationToken.None);
+        Assert.EndsWith("Octopus-1.1.0-linux-x64.run", prepared);
+        var request = Request();
+        var script = Path.Combine(request.WorkDirectory, "install.sh");
+        UpdateHelper.WriteShellScript(script, installer.BuildScript(prepared, request));
+        Assert.Equal(0, await RunShAsync(script));
+        Assert.Contains("result=ok", File.ReadAllText(request.LogFile));
     }
 
     // ------------------------------------------------------------------ Linux

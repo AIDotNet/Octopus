@@ -22,7 +22,8 @@ public sealed class AgentSignalsModule(
     PluginHostInfo host,
     Octopus.Storage.ISettingsStore? settings = null,
     IShellCommandBuilder? shell = null,
-    IAgentAccountDiscovery? discovery = null) : IPluginApiModule
+    IAgentAccountDiscovery? discovery = null,
+    ISystemProxy? systemProxy = null) : IPluginApiModule
 {
     private readonly ConcurrentDictionary<(string Plugin, string Key), IDisposable> _subscriptions = new();
 
@@ -130,6 +131,37 @@ public sealed class AgentSignalsModule(
         }
     }
 
+    /// <summary>
+    /// What a session of the agent would start with: the login environment, the definition's base variables, the
+    /// user's per-agent variables and, when enabled, the system proxy. Without the proxy an agent behind one (agy's
+    /// <c>/usage</c>) never reaches its server and the probe only ends at its timeout.
+    /// </summary>
+    private async Task<Dictionary<string, string>> ProbeEnvironmentAsync(Octopus.Core.Agents.AgentDefinition definition, CancellationToken cancellationToken)
+    {
+        var loginEnvironment = await login.GetAsync(cancellationToken).ConfigureAwait(false);
+        return ProbeEnvironment(loginEnvironment, definition, settings?.Current.Agents, systemProxy);
+    }
+
+    /// <inheritdoc cref="ProbeEnvironmentAsync"/>
+    internal static Dictionary<string, string> ProbeEnvironment(
+        IReadOnlyDictionary<string, string> loginEnvironment,
+        Octopus.Core.Agents.AgentDefinition definition,
+        Octopus.Core.Settings.AgentSettings? agents,
+        ISystemProxy? systemProxy)
+    {
+        var environment = new Dictionary<string, string>(loginEnvironment, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (var (key, value) in definition.Capabilities.BaseEnv) environment[key] = value;
+        if (agents?.ProfileOf(definition.Id).Env is { } profileEnv)
+        {
+            foreach (var (key, value) in profileEnv) environment[key] = value;
+        }
+        if ((agents?.UseSystemProxy ?? true) && systemProxy?.Resolve() is { } proxy)
+        {
+            foreach (var (key, value) in AgentProxyEnvironment.Compute(proxy, environment)) environment[key] = value;
+        }
+        return environment;
+    }
+
     private async Task<PluginReply> RunProbeAsync(PluginCall call, CancellationToken cancellationToken)
     {
         var agent = call.RequiredString("agentId");
@@ -152,7 +184,7 @@ public sealed class AgentSignalsModule(
                 if (value is JsonValue v && v.TryGetValue<string>(out var text)) arguments[name] = text;
             }
         }
-        var environment = await login.GetAsync(cancellationToken).ConfigureAwait(false);
+        var environment = await ProbeEnvironmentAsync(definition, cancellationToken).ConfigureAwait(false);
         // The command the user set for the agent (a path, or a wrapper with arguments) runs the probe too.
         var executable = installation.Path;
         IReadOnlyList<string>? prefix = null;

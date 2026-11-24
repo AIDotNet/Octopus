@@ -40,21 +40,39 @@ public partial class ProjectAppearanceView : UserControl
     }
 
     public ProjectAppearanceView(Project project, IPickerService? pickers, IProjectIconStore? icons)
+        : this(project.Id, project.Name, ProjectLocation.Describe(project), project.Color, project.Icon, project.Image, pickers, icons)
+    {
+    }
+
+    public ProjectAppearanceView(
+        string itemId,
+        string displayName,
+        string subtitle,
+        string? color,
+        string? icon,
+        string? image,
+        IPickerService? pickers,
+        IProjectIconStore? icons,
+        bool circularPreview = false)
     {
         _pickers = pickers;
         _icons = icons;
-        _projectId = project.Id;
+        _projectId = itemId;
         InitializeComponent();
 
-        Color = project.Color ?? ProjectService.Palette[0];
-        Icon = ProjectIcons.Parse(project.Icon) is { } kind ? kind.ToString()
-            : PixelIcons.Parse(project.Icon) is { } pixel ? PixelIcons.Reference(pixel) : null;
+        if (circularPreview)
+        {
+            Preview.CornerRadius = new CornerRadius(28);
+        }
+        Color = color ?? ProjectService.Palette[0];
+        Icon = ProjectIcons.Parse(icon) is { } kind ? kind.ToString()
+            : PixelIcons.Parse(icon) is { } pixel ? PixelIcons.Reference(pixel) : null;
         // Open on the category of the chosen icon.
         _category = PixelIcons.Parse(Icon)?.Category ?? LineCategory;
-        Image = project.Image;
-        ProjectNameText.Text = project.Name;
-        ProjectPathText.Text = ProjectLocation.Describe(project);
-        PreviewInitial.Text = InitialOf(project.Name);
+        Image = image;
+        ProjectNameText.Text = displayName;
+        ProjectPathText.Text = subtitle;
+        PreviewInitial.Text = InitialOf(displayName);
 
         BuildColors();
         BuildCategories();

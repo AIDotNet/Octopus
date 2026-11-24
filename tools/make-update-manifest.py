@@ -32,7 +32,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--tag", required=True, help="the release tag, e.g. v1.2.1112 or v1.3.0-preview.2")
     parser.add_argument("--dist", required=True, help="the folder with the release files")
+    parser.add_argument("--out", default=None, help="output folder for update.json(.sig); defaults to --dist")
     parser.add_argument("--repo", default="AIDotNet/Octopus", help="owner/name on GitHub")
+    parser.add_argument("--download-base-url", default=None, help="base URL for asset downloads (without trailing slash); defaults to GitHub Releases")
+    parser.add_argument("--prefer-zip", action="store_true", help="prefer compressed -update.zip packages for Windows and Linux when present")
     parser.add_argument("--key", default=os.environ.get("UPDATE_SIGNING_KEY_FILE"), help="PEM private key to sign with")
     parser.add_argument("--published-at", default=None, help="ISO 8601 time; now by default")
     args = parser.parse_args()
@@ -42,18 +45,31 @@ def main() -> int:
         return 2
     version = args.tag[1:] if args.tag.startswith("v") else args.tag
     tag = "v" + version
+    download_base = (args.download_base_url or f"https://github.com/{args.repo}/releases/download/{tag}").rstrip("/")
 
-    pattern = re.compile(r"^Octopus-" + re.escape(version) + r"-(?P<os>win|osx|linux)-(?P<arch>[a-z0-9]+)(?P<kind>-setup\.exe|\.zip|\.run)$")
-    assets = {}
+    pattern = re.compile(r"^Octopus-" + re.escape(version) + r"-(?P<os>win|osx|linux)-(?P<arch>[a-z0-9]+)(?P<kind>-update\.zip|-setup\.exe|\.zip|\.run)$")
+    candidates = {}
     for name in sorted(os.listdir(args.dist)):
         match = pattern.match(name)
-        if not match or KINDS[match["os"]] != match["kind"]:
+        if not match:
             continue
-        target = f"{match['os']}-{match['arch']}"
+        os_name, arch, kind = match["os"], match["arch"], match["kind"]
+        allowed = [KINDS[os_name]]
+        if args.prefer_zip and os_name in ("win", "linux"):
+            allowed = ["-update.zip", KINDS[os_name]]
+        if kind not in allowed:
+            continue
+        target = f"{os_name}-{arch}"
+        priority = allowed.index(kind)
+        if target not in candidates or priority < candidates[target][0]:
+            candidates[target] = (priority, name)
+
+    assets = {}
+    for target, (_, name) in sorted(candidates.items()):
         path = os.path.join(args.dist, name)
         assets[target] = {
             "name": name,
-            "url": f"https://github.com/{args.repo}/releases/download/{tag}/{name}",
+            "url": f"{download_base}/{name}",
             "size": os.path.getsize(path),
             "sha256": sha256(path),
         }
@@ -69,7 +85,9 @@ def main() -> int:
         "notesUrl": f"https://github.com/{args.repo}/releases/tag/{tag}",
         "assets": assets,
     }
-    out = os.path.join(args.dist, "update.json")
+    out_dir = args.out or args.dist
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, "update.json")
     with open(out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")

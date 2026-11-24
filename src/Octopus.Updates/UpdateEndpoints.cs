@@ -1,9 +1,18 @@
+using Octopus.Core;
+
 namespace Octopus.Updates;
 
 /// <summary>Where releases are published and who may sign their manifests (design/10-自动更新.md §5).</summary>
 public static class UpdateEndpoints
 {
-    public const string ReleasesUrl = GitHubReleasesFeed.DefaultReleasesUrl;
+    /// <summary>Official Octopus service origin (from <c>OctopusServiceUrl</c>, defaulting to <c>https://octoterm.si</c>).</summary>
+    public static string ServiceUrl { get; } = ServiceEndpoints.OfficialServiceUrl ?? ServiceEndpoints.DefaultOfficialServiceUrl;
+
+    /// <summary>Version update check endpoint on the official Octopus server.</summary>
+    public static string UpdateCheckUrl => $"{ServiceUrl}/v1/updates/check";
+
+    /// <summary>Default update feed URL.</summary>
+    public static string ReleasesUrl => UpdateCheckUrl;
 
     /// <summary>The project's home on GitHub.</summary>
     public const string RepositoryUrl = "https://github.com/AIDotNet/Octopus";

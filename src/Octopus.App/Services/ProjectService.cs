@@ -22,8 +22,12 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
 
     public IReadOnlyList<Project> Projects => _document.Projects;
 
+    public string ActiveDeviceKey => DeviceKeys.Normalize(_document.ActiveDeviceKey);
+
     public Project? Current =>
-        _document.Projects.FirstOrDefault(p => p.Id == _document.ActiveProjectId) ?? _document.Projects.FirstOrDefault();
+        _document.ActiveProjectId is { } activeId
+            ? _document.Projects.FirstOrDefault(p => p.Id == activeId)
+            : null;
 
     public async Task LoadAsync()
     {
@@ -38,9 +42,26 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
             }
             Normalize(project);
         }
-        if (_document.ActiveProjectId is null || _document.Projects.All(p => p.Id != _document.ActiveProjectId))
+        var current = _document.ActiveProjectId is { } savedActive
+            ? _document.Projects.FirstOrDefault(p => p.Id == savedActive)
+            : null;
+        if (string.IsNullOrWhiteSpace(_document.ActiveDeviceKey))
         {
-            _document.ActiveProjectId = _document.Projects.FirstOrDefault()?.Id;
+            _document.ActiveDeviceKey = current is not null ? DeviceKeys.Of(current) : DeviceKeys.Local;
+        }
+        else
+        {
+            _document.ActiveDeviceKey = DeviceKeys.Normalize(_document.ActiveDeviceKey);
+        }
+        var deviceKey = ActiveDeviceKey;
+        if (current is null || !DeviceKeys.Matches(current, deviceKey))
+        {
+            var preferred = PickProjectForDevice(deviceKey);
+            _document.ActiveProjectId = preferred?.Id;
+        }
+        if (Current is { } resolved)
+        {
+            _document.LastProjectByDevice[DeviceKeys.Of(resolved)] = resolved.Id;
         }
         Raise(ProjectChangeKind.Projects, save: dropped);
     }
@@ -111,8 +132,16 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
             Raise(ProjectChangeKind.Projects, project);
             return project;
         }
+        var deviceKey = DeviceKeys.Of(project);
+        var deviceChanged = !string.Equals(ActiveDeviceKey, deviceKey, StringComparison.Ordinal);
+        _document.ActiveDeviceKey = deviceKey;
         _document.ActiveProjectId = project.Id;
+        _document.LastProjectByDevice[deviceKey] = project.Id;
         Raise(ProjectChangeKind.Projects, project);
+        if (deviceChanged)
+        {
+            Raise(ProjectChangeKind.Device, project, save: false);
+        }
         Raise(ProjectChangeKind.CurrentProject, project, save: false);
         return project;
     }
@@ -134,8 +163,16 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
             Color = Palette[_document.Projects.Count % Palette.Length],
         };
         _document.Projects.Add(project);
+        var deviceKey = DeviceKeys.Of(project);
+        var deviceChanged = !string.Equals(ActiveDeviceKey, deviceKey, StringComparison.Ordinal);
+        _document.ActiveDeviceKey = deviceKey;
         _document.ActiveProjectId = project.Id;
+        _document.LastProjectByDevice[deviceKey] = project.Id;
         Raise(ProjectChangeKind.Projects, project);
+        if (deviceChanged)
+        {
+            Raise(ProjectChangeKind.Device, project, save: false);
+        }
         Raise(ProjectChangeKind.CurrentProject, project, save: false);
         return project;
     }
@@ -155,14 +192,28 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
         {
             return;
         }
-        var index = _document.Projects.IndexOf(project);
+        var deviceKey = DeviceKeys.Of(project);
+        var sameDevice = _document.Projects.Where(p => DeviceKeys.Matches(p, deviceKey)).ToList();
+        var sameDeviceIndex = sameDevice.IndexOf(project);
         _document.Projects.Remove(project);
+        foreach (var k in _document.LastProjectByDevice.Where(kv => kv.Value == projectId).Select(kv => kv.Key).ToList())
+        {
+            _document.LastProjectByDevice.Remove(k);
+        }
         var wasCurrent = _document.ActiveProjectId == projectId;
         if (wasCurrent)
         {
-            _document.ActiveProjectId = _document.Projects.Count == 0
-                ? null
-                : _document.Projects[Math.Min(index, _document.Projects.Count - 1)].Id;
+            var remainingOnDevice = _document.Projects.Where(p => DeviceKeys.Matches(p, ActiveDeviceKey)).ToList();
+            if (remainingOnDevice.Count > 0)
+            {
+                var next = remainingOnDevice[Math.Min(Math.Max(0, sameDeviceIndex), remainingOnDevice.Count - 1)];
+                _document.ActiveProjectId = next.Id;
+                _document.LastProjectByDevice[ActiveDeviceKey] = next.Id;
+            }
+            else
+            {
+                _document.ActiveProjectId = null;
+            }
         }
         foreach (var item in project.Items)
         {
@@ -235,12 +286,88 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
     public void SetCurrent(string projectId)
     {
         var project = Find(projectId);
-        if (project is null || _document.ActiveProjectId == projectId)
+        if (project is null)
         {
             return;
         }
+        var deviceKey = DeviceKeys.Of(project);
+        var deviceChanged = !string.Equals(ActiveDeviceKey, deviceKey, StringComparison.Ordinal);
+        if (!deviceChanged && _document.ActiveProjectId == projectId)
+        {
+            return;
+        }
+        _document.ActiveDeviceKey = deviceKey;
         _document.ActiveProjectId = projectId;
+        _document.LastProjectByDevice[deviceKey] = projectId;
+        if (deviceChanged)
+        {
+            Raise(ProjectChangeKind.Device, project, save: false);
+        }
         Raise(ProjectChangeKind.CurrentProject, project);
+    }
+
+    public void SetActiveDevice(string deviceKey)
+    {
+        var normalized = DeviceKeys.Normalize(deviceKey);
+        if (string.Equals(ActiveDeviceKey, normalized, StringComparison.Ordinal))
+        {
+            return;
+        }
+        if (Current is { } current)
+        {
+            _document.LastProjectByDevice[DeviceKeys.Of(current)] = current.Id;
+        }
+        _document.ActiveDeviceKey = normalized;
+        var next = PickProjectForDevice(normalized);
+        var previousId = _document.ActiveProjectId;
+        _document.ActiveProjectId = next?.Id;
+        if (next is not null)
+        {
+            _document.LastProjectByDevice[normalized] = next.Id;
+        }
+        Raise(ProjectChangeKind.Device, next);
+        if (!string.Equals(previousId, _document.ActiveProjectId, StringComparison.Ordinal))
+        {
+            Raise(ProjectChangeKind.CurrentProject, next, save: false);
+        }
+    }
+
+    public DeviceAppearance? GetDeviceAppearance(string deviceKey) =>
+        _document.DeviceAppearances.TryGetValue(DeviceKeys.Normalize(deviceKey), out var appearance)
+            ? appearance
+            : null;
+
+    public void SetDeviceAppearance(string deviceKey, string? color, string? icon, string? image)
+    {
+        var normalized = DeviceKeys.Normalize(deviceKey);
+        var normalizedColor = string.IsNullOrWhiteSpace(color) ? null : color.Trim();
+        var normalizedIcon = string.IsNullOrWhiteSpace(icon) ? null : icon.Trim();
+        var normalizedImage = string.IsNullOrWhiteSpace(image) ? null : image.Trim();
+        if (normalizedColor is null && normalizedIcon is null && normalizedImage is null)
+        {
+            if (!_document.DeviceAppearances.Remove(normalized)) return;
+        }
+        else
+        {
+            _document.DeviceAppearances[normalized] = new DeviceAppearance
+            {
+                Color = normalizedColor,
+                Icon = normalizedIcon,
+                Image = normalizedImage,
+            };
+        }
+        Raise(ProjectChangeKind.Device);
+    }
+
+    private Project? PickProjectForDevice(string deviceKey)
+    {
+        if (_document.LastProjectByDevice.TryGetValue(deviceKey, out var lastId)
+            && Find(lastId) is { } remembered
+            && DeviceKeys.Matches(remembered, deviceKey))
+        {
+            return remembered;
+        }
+        return _document.Projects.FirstOrDefault(p => DeviceKeys.Matches(p, deviceKey));
     }
 
     // ---- groups ----
@@ -594,9 +721,17 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
         {
             return;
         }
-        if (_document.ActiveProjectId != project.Id)
+        var deviceKey = DeviceKeys.Of(project);
+        var deviceChanged = !string.Equals(ActiveDeviceKey, deviceKey, StringComparison.Ordinal);
+        if (deviceChanged || _document.ActiveProjectId != project.Id)
         {
+            _document.ActiveDeviceKey = deviceKey;
             _document.ActiveProjectId = project.Id;
+            _document.LastProjectByDevice[deviceKey] = project.Id;
+            if (deviceChanged)
+            {
+                Raise(ProjectChangeKind.Device, project, save: false);
+            }
             Raise(ProjectChangeKind.CurrentProject, project, save: false);
         }
         if (project.ActiveItemId == itemId)
@@ -674,6 +809,12 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
         Version = _document.Version,
         ActiveProjectId = _document.ActiveProjectId,
         ExpandedGroupId = _document.ExpandedGroupId,
+        ActiveDeviceKey = ActiveDeviceKey,
+        LastProjectByDevice = new Dictionary<string, string>(_document.LastProjectByDevice, StringComparer.Ordinal),
+        DeviceAppearances = _document.DeviceAppearances.ToDictionary(
+            kv => kv.Key,
+            kv => new DeviceAppearance { Color = kv.Value.Color, Icon = kv.Value.Icon, Image = kv.Value.Image },
+            StringComparer.Ordinal),
         Groups = [.. _document.Groups],
         Projects = [.. _document.Projects.Select(SnapshotProject)],
     };

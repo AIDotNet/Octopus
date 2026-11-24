@@ -9,7 +9,7 @@ public interface IDialogService
     Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false);
 
     /// <summary>Asks for the folder and the name of a new project; null when the dialog was dismissed.</summary>
-    Task<NewProjectChoice?> AskNewProjectAsync();
+    Task<NewProjectChoice?> AskNewProjectAsync(NewProjectChoice? initial = null);
 
     /// <summary>Asks for a host to add to ~/.ssh/config; null when the dialog was dismissed.</summary>
     Task<SshHostDraft?> AskNewSshHostAsync();
@@ -31,6 +31,17 @@ public interface IDialogService
     /// already a thumbnail in the icon store; ones made and then not kept are deleted by the dialog.
     /// </summary>
     Task<ProjectAppearanceChoice?> AskProjectAppearanceAsync(Octopus.Core.Projects.Project project);
+
+    /// <summary>
+    /// Lets the person choose what a device's badge shows (the same color, icon or picture choices as projects); null when dismissed.
+    /// </summary>
+    Task<ProjectAppearanceChoice?> AskDeviceAppearanceAsync(
+        string deviceKey,
+        string deviceName,
+        string subtitle,
+        Octopus.Core.Projects.DeviceAppearance? current,
+        string defaultColor,
+        string? defaultIcon);
 
     /// <summary>
     /// Shows the agent editor until what it holds is a valid definition (then returns it) or the person cancels (null).

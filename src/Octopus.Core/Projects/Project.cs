@@ -119,4 +119,10 @@ public sealed class ProjectsDocument
     public List<ProjectGroup> Groups { get; set; } = [];
     /// <summary>The one group that is open on the rail; opening another closes it. Null: all closed.</summary>
     public string? ExpandedGroupId { get; set; }
+    /// <summary>The device currently shown on the sidebar rail (<see cref="DeviceKeys"/>); null follows the active project or local.</summary>
+    public string? ActiveDeviceKey { get; set; }
+    /// <summary>Last active project id per device key, restored when switching back to that device.</summary>
+    public Dictionary<string, string> LastProjectByDevice { get; set; } = [];
+    /// <summary>Custom color, icon or picture thumbnail per device key.</summary>
+    public Dictionary<string, DeviceAppearance> DeviceAppearances { get; set; } = [];
 }

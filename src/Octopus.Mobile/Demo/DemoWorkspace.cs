@@ -309,7 +309,7 @@ public sealed class DemoAccount : IAccountSession
     public bool IsSignedIn { get; private set; } = true;
     public bool IsLocalOnly => !IsSignedIn && _localOnly;
     public string? Name => IsSignedIn ? "Demo" : null;
-    public string? OfficialServer { get; init; } = "https://octopus.example";
+    public string? OfficialServer { get; init; } = "https://octoterm.si";
     public string Server { get; private set; } = "";
     public bool SignInEnded => false;
     public event EventHandler? Changed;

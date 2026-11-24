@@ -37,6 +37,7 @@ public sealed partial class ShellViewModel : ObservableObject
         IWorkspaceCommands workspaceCommands,
         IProjectService projects,
         SettingsNavigator navigator,
+        DeviceSwitcherViewModel deviceSwitcher,
         ProjectRailViewModel rail,
         ProjectPanelViewModel panel,
         WorkspaceViewModel workspace,
@@ -57,7 +58,7 @@ public sealed partial class ShellViewModel : ObservableObject
         };
         projects.Changed += (_, e) =>
         {
-            if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.CurrentProject or ProjectChangeKind.Active or ProjectChangeKind.Items or ProjectChangeKind.Workspaces)
+            if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.CurrentProject or ProjectChangeKind.Active or ProjectChangeKind.Items or ProjectChangeKind.Workspaces or ProjectChangeKind.Device)
             {
                 ReadProject();
             }
@@ -66,6 +67,7 @@ public sealed partial class ShellViewModel : ObservableObject
         IsRightPanelOpen = settings.Current.RightPanel.IsOpen;
         RightPanelWidth = Math.Clamp(settings.Current.RightPanel.Width, MinRightPanelWidth, MaxRightPanelWidth);
         navigator.Requested += (_, section) => SettingsRequested?.Invoke(this, section);
+        DeviceSwitcher = deviceSwitcher;
         Rail = rail;
         Panel = panel;
         Workspace = workspace;
@@ -77,6 +79,7 @@ public sealed partial class ShellViewModel : ObservableObject
         PanelWidth = Math.Clamp(settings.Current.Sidebar.Width, MinPanelWidth, MaxPanelWidth);
     }
 
+    public DeviceSwitcherViewModel DeviceSwitcher { get; }
     public ProjectRailViewModel Rail { get; }
     public ProjectPanelViewModel Panel { get; }
     public WorkspaceViewModel Workspace { get; }

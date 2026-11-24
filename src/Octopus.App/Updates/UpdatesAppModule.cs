@@ -18,9 +18,9 @@ internal static class UpdatesAppModule
         string[]? keys = null;
         var development = false;
 #if DEBUG
-        // A debug build checks nothing, unless pointed at a test feed: OCTOPUS_UPDATE_FEED (a GitHub-shaped release
-        // list), OCTOPUS_UPDATE_PUBKEY (the key that signed it) and OCTOPUS_UPDATE_VERSION (the version to pretend to be).
-        // A release build reads none of these.
+        // A debug build checks nothing, unless pointed at a test feed: OCTOPUS_UPDATE_FEED (e.g.
+        // http://localhost:5080/v1/updates/check), OCTOPUS_UPDATE_PUBKEY (the key that signed it) and
+        // OCTOPUS_UPDATE_VERSION (the version to pretend to be). A release build reads none of these.
         feed = Environment.GetEnvironmentVariable("OCTOPUS_UPDATE_FEED") is { Length: > 0 } f ? f : null;
         keys = Environment.GetEnvironmentVariable("OCTOPUS_UPDATE_PUBKEY") is { Length: > 0 } k ? [k] : null;
         version = Environment.GetEnvironmentVariable("OCTOPUS_UPDATE_VERSION") is { Length: > 0 } v ? v : version;

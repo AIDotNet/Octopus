@@ -153,6 +153,7 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
         RelayErrorText = null;
         CancelRelaySignIn();
         await _relay.SetUrlAsync(RelayUrl);
+        RelayUrl = _relay.Url;
         await ApplyCoreAsync();
     }
 

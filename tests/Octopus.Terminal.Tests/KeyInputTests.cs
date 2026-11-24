@@ -76,6 +76,39 @@ public class KeyInputTests
     public async Task Sends(TerminalKey key, KeyMods mods, string expected) =>
         Assert.Equal(expected, await Press(key, mods));
 
+    /// <summary>Holding Ctrl (or Cmd, Shift, Option) while reading the scrollback keeps it there; typing goes back down.</summary>
+    [Theory]
+    [InlineData(TerminalKey.ControlLeft, 0)]
+    [InlineData(TerminalKey.MetaLeft, 0)]
+    [InlineData(TerminalKey.ShiftRight, 0)]
+    [InlineData(TerminalKey.AltLeft, 0)]
+    [InlineData(TerminalKey.ControlLeft, 31)] // extended keyboard: the program still hears the key, the view stays
+    public async Task A_modifier_alone_does_not_scroll_to_the_bottom(TerminalKey modifier, byte kittyFlags)
+    {
+        var rec = new Recorder();
+        await using var session = new TerminalSession(
+            new LaunchSpec("x", [], null, new Dictionary<string, string>()), rec, new TerminalSize(80, 24, 0, 0),
+            TerminalPalettes.Dark, ColorScheme.Dark, 100, () => false);
+        session.Start();
+        session.Use(c =>
+        {
+            for (var i = 0; i < 200; i++) c.Write(Encoding.UTF8.GetBytes($"line {i}\r\n"));
+            if (kittyFlags != 0) c.Write(Encoding.UTF8.GetBytes($"\u001b[>{kittyFlags}u"));
+        });
+        using var router = new TerminalInputRouter(session, () => new MacTerminalKeymap(),
+            () => Task.FromResult<string?>(null), () => Task.FromResult<string?>(null), _ => Task.CompletedTask, (_, _) => Task.FromResult(true), () => { });
+        var bottom = session.Read(c => c.CaptureFrame(force: true)!.Scrollbar.Offset);
+        session.Use(c => c.ScrollViewport(ViewportScroll.Lines(-50)));
+        var reading = session.Read(c => c.CaptureFrame(force: true)!.Scrollbar.Offset);
+        Assert.NotEqual(bottom, reading);
+
+        router.HandleKey(new TerminalKeyEventArgs(new KeyInput(modifier, KeyAction.Press, KeyMods.None), global::Avalonia.Input.KeyModifiers.None));
+        Assert.Equal(reading, session.Read(c => c.CaptureFrame(force: true)!.Scrollbar.Offset));
+
+        router.HandleKey(new TerminalKeyEventArgs(new KeyInput(TerminalKey.ArrowDown, KeyAction.Press, KeyMods.None), global::Avalonia.Input.KeyModifiers.None));
+        Assert.Equal(bottom, session.Read(c => c.CaptureFrame(force: true)!.Scrollbar.Offset));
+    }
+
     [Theory]
     [InlineData(0, "03")]
     [InlineData(1, "1B-5B-39-39-3B-35-75")] // ESC [ 99 ; 5 u

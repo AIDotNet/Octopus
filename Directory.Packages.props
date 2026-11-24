@@ -2,8 +2,8 @@
     <!-- Every package version lives here. Arc is built against one exact Avalonia version: keep all Avalonia
          packages on it, and all TKCode.Arc packages on the same Arc version. -->
     <PropertyGroup>
-        <AvaloniaVersion>12.1.6</AvaloniaVersion>
-        <ArcVersion>1.3.1-preview.1</ArcVersion>
+        <AvaloniaVersion>12.2.0</AvaloniaVersion>
+        <ArcVersion>1.3.1</ArcVersion>
     </PropertyGroup>
     <ItemGroup>
         <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
@@ -35,8 +35,8 @@
         <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0" />
         <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
-        <!-- Avalonia.Headless.XUnit 12.1.x is built against xunit.v3 3.2.2; xunit.v3 4.x breaks IXunitTestAssembly at run time. -->
+        <!-- Avalonia.Headless.XUnit 12.2.x is built against xunit.v3 3.2.2; xunit.v3 4.x breaks IXunitTestAssembly at run time. -->
         <PackageVersion Include="xunit.v3" Version="3.2.2" />
-        <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+        <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     </ItemGroup>
 </Project>

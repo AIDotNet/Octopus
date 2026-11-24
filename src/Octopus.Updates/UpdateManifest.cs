@@ -91,6 +91,30 @@ public sealed class GitHubReleaseAsset
     [JsonPropertyName("size")] public long Size { get; set; }
 }
 
+/// <summary>Response of <c>GET /v1/updates/check</c> from Octopus Server.</summary>
+public sealed class ServerUpdateCheckResponse
+{
+    public bool UpdateAvailable { get; set; }
+    public string? LatestVersion { get; set; }
+    public string? Tag { get; set; }
+    public string? Version { get; set; }
+    public string? Channel { get; set; }
+    public DateTimeOffset? PublishedAt { get; set; }
+    public string? NotesUrl { get; set; }
+    /// <summary>Base64-encoded exact raw bytes of <c>update.json</c>, verified with <see cref="ManifestVerifier"/>.</summary>
+    public string? Manifest { get; set; }
+    /// <summary>Base64 DER ECDSA signature from <c>update.json.sig</c>.</summary>
+    public string? Signature { get; set; }
+    public List<ServerUpdateChangelogEntry>? Changelog { get; set; }
+}
+
+public sealed class ServerUpdateChangelogEntry
+{
+    public string Version { get; set; } = "";
+    public DateTimeOffset? PublishedAt { get; set; }
+    public string? Notes { get; set; }
+}
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     WriteIndented = true,
@@ -102,4 +126,5 @@ public sealed class GitHubReleaseAsset
 [JsonSerializable(typeof(PendingUpdate))]
 [JsonSerializable(typeof(UpdateCheckState))]
 [JsonSerializable(typeof(List<GitHubRelease>))]
+[JsonSerializable(typeof(ServerUpdateCheckResponse))]
 internal sealed partial class UpdatesJsonContext : JsonSerializerContext;

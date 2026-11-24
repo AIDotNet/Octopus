@@ -298,4 +298,92 @@ public class AcpRuntimeAndPermissionTests
         var toolEvt = Assert.Single(receivedEvents.OfType<AcpToolCallEvent>());
         Assert.Equal("Program.cs", Assert.Single(toolEvt.Update.Diffs).Path);
     }
+    [Fact]
+    public async Task Session_load_forwards_replayed_history_tagged_as_replay()
+    {
+        using var clientToAgentServer = new AnonymousPipeServerStream(PipeDirection.In);
+        using var clientToAgentClient = new AnonymousPipeClientStream(PipeDirection.Out, clientToAgentServer.ClientSafePipeHandle);
+        using var agentToClientServer = new AnonymousPipeServerStream(PipeDirection.Out);
+        using var agentToClientClient = new AnonymousPipeClientStream(PipeDirection.In, agentToClientServer.ClientSafePipeHandle);
+
+        var events = new System.Collections.Concurrent.ConcurrentQueue<AcpRuntimeEvent>();
+        await using var runtime = new AcpSessionRuntime(agentToClientClient, clientToAgentClient, new AcpSessionRuntimeOptions());
+        runtime.EventReceived += events.Enqueue;
+
+        string? loadMethod = null;
+        var serverTask = Task.Run(async () =>
+        {
+            using var reader = new StreamReader(clientToAgentServer, Encoding.UTF8);
+            await using var writer = new StreamWriter(agentToClientServer, new UTF8Encoding(false)) { AutoFlush = true };
+            async Task SendAsync(JsonNode node) => await writer.WriteLineAsync(node.ToJsonString());
+            JsonObject Update(JsonObject update) => new()
+            {
+                ["jsonrpc"] = "2.0",
+                ["method"] = "session/update",
+                ["params"] = new JsonObject { ["sessionId"] = "prev-1", ["update"] = update },
+            };
+
+            using var initDoc = JsonDocument.Parse((await reader.ReadLineAsync())!);
+            await SendAsync(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = initDoc.RootElement.GetProperty("id").GetInt32(),
+                ["result"] = new JsonObject
+                {
+                    ["protocolVersion"] = 1,
+                    ["agentCapabilities"] = new JsonObject { ["loadSession"] = true },
+                },
+            });
+
+            using var loadDoc = JsonDocument.Parse((await reader.ReadLineAsync())!);
+            loadMethod = loadDoc.RootElement.GetProperty("method").GetString();
+            await SendAsync(Update(new JsonObject
+            {
+                ["sessionUpdate"] = "user_message_chunk",
+                ["content"] = new JsonObject { ["type"] = "text", ["text"] = "Hello agent" },
+            }));
+            await SendAsync(Update(new JsonObject
+            {
+                ["sessionUpdate"] = "agent_message_chunk",
+                ["content"] = new JsonObject { ["type"] = "text", ["text"] = "Hi there" },
+            }));
+            await SendAsync(Update(new JsonObject
+            {
+                ["sessionUpdate"] = "tool_call",
+                ["toolCallId"] = "tc-1",
+                ["title"] = "Read file",
+                ["kind"] = "read",
+                ["status"] = "completed",
+            }));
+            await SendAsync(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = loadDoc.RootElement.GetProperty("id").GetInt32(),
+                ["result"] = new JsonObject(),
+            });
+
+            // A live user_message_chunk echo (outside replay) must not be surfaced.
+            await SendAsync(Update(new JsonObject
+            {
+                ["sessionUpdate"] = "user_message_chunk",
+                ["content"] = new JsonObject { ["type"] = "text", ["text"] = "echo" },
+            }));
+        });
+
+        var started = await runtime.StartSessionAsync("/tmp", resumeSessionId: "prev-1");
+        await serverTask.WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.Delay(100);
+
+        Assert.Equal("session/load", loadMethod);
+        Assert.Equal("prev-1", started.SessionId);
+        var list = events.ToList();
+        var user = Assert.Single(list.OfType<AcpUserMessageEvent>());
+        Assert.Equal("Hello agent", user.Text);
+        Assert.True(user.IsReplay);
+        var text = Assert.Single(list.OfType<AcpTextDeltaEvent>());
+        Assert.Equal("Hi there", text.Text);
+        Assert.True(text.IsReplay);
+        var tool = Assert.Single(list.OfType<AcpToolCallEvent>());
+        Assert.True(tool.IsReplay);
+    }
 }

@@ -864,7 +864,86 @@ public sealed class ClaudeAdapterDialect : IAcpDialect
 {
     public string Id => "claude-acp";
     public bool AdvertiseFormElicitation => true;
+    public bool ReactiveWakeups => true;
     public IReadOnlyCollection<string> WithheldCommands { get; } = ["clear", "logout", "exit"];
+
+    public void NormalizeToolUpdate(AcpToolCallUpdate update)
+    {
+        var ccMeta = DialectJsonHelpers.Obj(update.Meta, "claudeCode");
+        if (string.IsNullOrEmpty(update.Name) && DialectJsonHelpers.Str(ccMeta, "toolName") is { Length: > 0 } toolName)
+        {
+            update.Name = toolName;
+        }
+        if (string.IsNullOrEmpty(update.ParentToolCallId))
+        {
+            update.ParentToolCallId = DialectJsonHelpers.Str(ccMeta, "parentToolUseId")
+                ?? DialectJsonHelpers.Str(ccMeta, "parent_tool_use_id");
+        }
+
+        // claude-agent-acp sometimes puts rawOutput as { content: "...", is_error: bool } or { stdout, stderr, interrupted }.
+        if (update.RawOutput is { ValueKind: JsonValueKind.Object } raw)
+        {
+            if (update.Stdout is null && DialectJsonHelpers.Str(raw, "content") is { Length: > 0 } content)
+            {
+                if (update.Kind == "execute" || string.Equals(update.Name, "Bash", StringComparison.OrdinalIgnoreCase))
+                {
+                    update.Stdout = content;
+                }
+            }
+            if (update.RawOutput.Value.TryGetProperty("is_error", out var errEl) && errEl.ValueKind == JsonValueKind.True
+                && update.Status == "completed")
+            {
+                update.Status = "failed";
+            }
+        }
+
+        // Re-run semantic classifier if dialect resolved Name/Meta after initial parse.
+        AcpProtocolParser.ClassifyToolSemantics(update);
+    }
+
+    public AcpDialectRequestHandling? TryHandleRequest(string method, JsonElement? parameters, string requestId)
+    {
+        if (method != "session/request_permission" || parameters is not { ValueKind: JsonValueKind.Object } obj)
+        {
+            return null;
+        }
+        var tc = DialectJsonHelpers.Obj(obj, "toolCall");
+        if (tc is null) return null;
+
+        var ccMeta = DialectJsonHelpers.Obj(DialectJsonHelpers.Obj(tc, "_meta"), "claudeCode");
+        var toolName = DialectJsonHelpers.Str(ccMeta, "toolName")
+            ?? DialectJsonHelpers.Str(tc, "name")
+            ?? DialectJsonHelpers.Str(tc, "title")
+            ?? "";
+
+        if (toolName.Contains("ExitPlanMode", StringComparison.OrdinalIgnoreCase))
+        {
+            var rawInput = DialectJsonHelpers.Obj(tc, "rawInput");
+            var plan = DialectJsonHelpers.Str(rawInput, "plan");
+            if (string.IsNullOrWhiteSpace(plan) && tc.Value.TryGetProperty("content", out var contentArr) && contentArr.ValueKind == JsonValueKind.Array)
+            {
+                var parts = new List<string>();
+                foreach (var block in contentArr.EnumerateArray())
+                {
+                    if (DialectJsonHelpers.Str(block, "type") == "content"
+                        && DialectJsonHelpers.Obj(block, "content") is { } inner
+                        && DialectJsonHelpers.Str(inner, "text") is { Length: > 0 } text)
+                    {
+                        parts.Add(text);
+                    }
+                }
+                if (parts.Count > 0) plan = string.Join("\n\n", parts);
+            }
+            return new AcpDialectRequestHandling
+            {
+                RequireManualApproval = true,
+                IsPlanApproval = true,
+                PlanMarkdown = plan,
+            };
+        }
+
+        return null;
+    }
 }
 
 /// <summary>Official <c>@agentclientprotocol/codex-acp</c> adapter.</summary>

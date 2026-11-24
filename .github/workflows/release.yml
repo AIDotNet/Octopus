@@ -267,9 +267,19 @@ jobs:
           pattern: octopus-*
           merge-multiple: true
 
+      # Generate release notes once so GitHub Releases and Octopus Server share the same changelog.
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$GH_REPO/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" \
+            --jq '.body' > "$RUNNER_TEMP/release-notes.md" || true
+
       # update.json lists each platform's package with its size and SHA-256, signed with UPDATE_SIGNING_KEY
       # (design/10-自动更新.md §5). Installs only take a release whose manifest is signed by a key they trust.
-      - name: Update manifest
+      - name: Update manifest (GitHub release)
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
@@ -282,6 +292,32 @@ jobs:
           python3 tools/make-update-manifest.py --tag "$GITHUB_REF_NAME" --dist dist --repo "$GITHUB_REPOSITORY" --key "$KEY"
           rm -f "$KEY"
 
+      # Compress Windows/Linux update installers and publish to Octopus Server (https://octoterm.si).
+      - name: Publish to Octopus Server
+        env:
+          OCTOPUS_RELEASE_TOKEN: ${{ secrets.OCTOPUS_RELEASE_TOKEN }}
+          OCTOPUS_RELEASE_SERVER: ${{ vars.OCTOPUS_RELEASE_SERVER || 'https://octoterm.si' }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$OCTOPUS_RELEASE_TOKEN" ]; then
+            echo "::warning::OCTOPUS_RELEASE_TOKEN is not set: skipping publish to $OCTOPUS_RELEASE_SERVER."
+            exit 0
+          fi
+          KEY_ARGS=()
+          if [ -n "$UPDATE_SIGNING_KEY" ]; then
+            KEY="$RUNNER_TEMP/server-update-signing-key.pem"
+            ( umask 077; printf '%s\n' "$UPDATE_SIGNING_KEY" > "$KEY" )
+            KEY_ARGS=(--key "$KEY")
+          fi
+          python3 tools/publish-release-server.py \
+            --tag "$GITHUB_REF_NAME" \
+            --dist dist \
+            --server "$OCTOPUS_RELEASE_SERVER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            "${KEY_ARGS[@]}"
+          rm -f "$RUNNER_TEMP/server-update-signing-key.pem"
+
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -289,4 +325,8 @@ jobs:
         run: |
           PRERELEASE=()
           case "$GITHUB_REF_NAME" in *-*) PRERELEASE=(--prerelease) ;; esac
-          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes "${PRERELEASE[@]}"
+          if [ -s "$RUNNER_TEMP/release-notes.md" ]; then
+            gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md" "${PRERELEASE[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes "${PRERELEASE[@]}"
+          fi

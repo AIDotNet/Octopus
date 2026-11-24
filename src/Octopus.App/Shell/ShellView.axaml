@@ -115,6 +115,10 @@
             <launcher:LauncherMenu x:Name="LauncherMenuView" DataContext="{Binding Launcher}" />
         </arc:Popover>
 
+        <arc:Popover x:Name="DevicePopover" Placement="Right" Alignment="Start">
+            <sidebar:DeviceSwitcherView x:Name="DeviceSwitcherMenuView" DataContext="{Binding DeviceSwitcher}" />
+        </arc:Popover>
+
         <!-- The settings page covers the whole window. -->
         <Grid x:Name="Overlay" />
 

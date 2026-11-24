@@ -179,7 +179,7 @@ public sealed class DialogService(
         }
     }
 
-    public async Task<NewProjectChoice?> AskNewProjectAsync()
+    public async Task<NewProjectChoice?> AskNewProjectAsync(NewProjectChoice? initial = null)
     {
         if (windows.Window is null)
         {
@@ -212,7 +212,7 @@ public sealed class DialogService(
                 comparer);
         }
 
-        NewProjectChoice? typed = null;
+        NewProjectChoice? typed = initial;
         string? error = null;
         while (true)
         {
@@ -328,6 +328,35 @@ public sealed class DialogService(
             new DialogAction(AppLangResources.Get(AppLangResourceKind.Save), true, ButtonVariant.Primary));
         var choice = result is true ? form.Choice : null;
         // Thumbnails made while choosing and then not kept (or the whole dialog dismissed) are not left behind.
+        form.DiscardUnused(choice?.Image);
+        return choice;
+    }
+
+    public async Task<ProjectAppearanceChoice?> AskDeviceAppearanceAsync(
+        string deviceKey,
+        string deviceName,
+        string subtitle,
+        DeviceAppearance? current,
+        string defaultColor,
+        string? defaultIcon)
+    {
+        if (windows.Window is null)
+        {
+            return null;
+        }
+        var color = current?.Color ?? defaultColor;
+        // When uncustomized, pre-select the device's default Lucide icon; once customized, keep whatever the user picked (including null = Initial).
+        var icon = current is null ? defaultIcon : current.Icon;
+        var image = current?.Image;
+        var form = new ProjectAppearanceView("dev-" + deviceKey, deviceName, subtitle, color, icon, image, pickers, icons, circularPreview: true);
+        var result = await Dialog.ShowAsync(
+            windows.Window,
+            AppLangResources.Get(AppLangResourceKind.DeviceAppearanceTitle),
+            form,
+            AppLangResources.Get(AppLangResourceKind.DeviceAppearanceDescription),
+            new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
+            new DialogAction(AppLangResources.Get(AppLangResourceKind.Save), true, ButtonVariant.Primary));
+        var choice = result is true ? form.Choice : null;
         form.DiscardUnused(choice?.Image);
         return choice;
     }

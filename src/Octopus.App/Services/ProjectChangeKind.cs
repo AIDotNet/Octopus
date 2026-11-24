@@ -29,4 +29,6 @@ public enum ProjectChangeKind
     ProjectAccounts,
     /// <summary>A project's git worktree workspaces changed (added, updated, collapsed or removed).</summary>
     Workspaces,
+    /// <summary>The active sidebar device or a device's custom appearance changed.</summary>
+    Device,
 }

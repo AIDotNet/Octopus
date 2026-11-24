@@ -15,8 +15,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- The logo of the welcome page: the desktop app's icon, not a second copy of it. -->
-        <AvaloniaResource Include="../Octopus.App/Assets/Icon/octopus.png" Link="Assets/logo.png" />
+        <!-- The logo of the welcome page: the desktop app's transparent in-app logo, not a second copy of it. -->
+        <AvaloniaResource Include="../Octopus.App/Assets/Icon/logo.png" Link="Assets/logo.png" />
     </ItemGroup>
 
     <ItemGroup>

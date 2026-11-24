@@ -14,6 +14,8 @@ public sealed class AcpPeerHandlers
 {
     public Func<string, JsonElement?, AcpRequestContext, Task<JsonNode?>>? OnRequest { get; init; }
     public Action<string, JsonElement?>? OnNotification { get; init; }
+    /// <summary>Invoked on the read loop with the request method when its reply arrives, before the caller resumes.</summary>
+    public Action<string>? OnResponse { get; init; }
     public Action<string>? OnOtherLine { get; init; }
     public Action<string>? OnDiagnostic { get; init; }
     public Action<Exception>? OnClose { get; init; }
@@ -322,6 +324,8 @@ public sealed class AcpJsonRpcPeer : IAsyncDisposable
             {
                 return;
             }
+            try { _handlers.OnResponse?.Invoke(pending.Method); }
+            catch { /* Observers cannot break reply dispatch. */ }
 
             if (root.TryGetProperty("error", out var errEl) && errEl.ValueKind == JsonValueKind.Object)
             {

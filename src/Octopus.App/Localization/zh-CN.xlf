@@ -783,7 +783,7 @@
     <unit id="SettingsRemoteRelay"><segment><source>Relay service</source><target state="translated">中转服务</target></segment></unit>
     <unit id="SettingsRemoteRelayHint"><segment><source>When the two computers are not on the same network they connect through a relay service. The relay only carries encrypted data and cannot read a terminal; who may operate this computer is still decided by pairing.</source><target state="translated">两台电脑不在同一网络时，经中转服务连接。中转只转发加密后的数据，看不到终端内容；谁能操作这台电脑仍然由配对决定。</target></segment></unit>
     <unit id="SettingsRemoteRelayUrl"><segment><source>Relay address</source><target state="translated">中转地址</target></segment></unit>
-    <unit id="SettingsRemoteRelayUrlHint"><segment><source>For example relay.example.com. Also used when this computer connects to other hosts.</source><target state="translated">例如 relay.example.com。这台电脑连接其他主机时也用它。</target></segment></unit>
+    <unit id="SettingsRemoteRelayUrlHint"><segment><source>Defaults to https://octoterm.si. Also used when this computer connects to other hosts.</source><target state="translated">默认使用 https://octoterm.si。这台电脑连接其他主机时也用它。</target></segment></unit>
     <unit id="SettingsRemoteRelayApply"><segment><source>Apply</source><target state="translated">应用</target></segment></unit>
     <unit id="SettingsRemoteRelayHost"><segment><source>Reach this computer through the relay</source><target state="translated">允许经中转访问这台电脑</target></segment></unit>
     <unit id="SettingsRemoteRelayHostHint"><segment><source>This computer keeps a connection to the relay; paired devices can then reach it from any network.</source><target state="translated">这台电脑保持一条到中转服务的连接，已配对的设备在任何网络都能连上它。</target></segment></unit>
@@ -1109,6 +1109,19 @@
     <unit id="AgentGuiExploreSearch"><segment><source>search {0}</source><target state="translated">搜索 {0}</target></segment></unit>
     <unit id="AgentGuiExploreFetch"><segment><source>fetch {0}</source><target state="translated">抓取 {0}</target></segment></unit>
     <unit id="AgentGuiExploreOther"><segment><source>other {0}</source><target state="translated">其他 {0}</target></segment></unit>
+    <unit id="AgentGuiCommandGroupSummary"><segment><source>Ran {0} commands</source><target state="translated">执行了 {0} 条命令</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase01"><segment><source>Untangling the clues with all eight arms…</source><target state="translated">八只触手正在翻阅线索…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase02"><segment><source>Connecting the dots…</source><target state="translated">正在把零散的拼图拼在一起…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase03"><segment><source>Brewing a thoughtful answer…</source><target state="translated">灵感蓄力中，马上就好…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase04"><segment><source>Double-checking the finer details…</source><target state="translated">正在仔细推敲细节…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase05"><segment><source>Following the code breadcrumbs…</source><target state="translated">顺着代码的脉络往下摸索…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase06"><segment><source>Take a sip of water — almost there…</source><target state="translated">喝口水，答案正在路上…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase07"><segment><source>Weighing the cleanest approach…</source><target state="translated">正在权衡更优雅的解法…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase08"><segment><source>Neurons firing at full speed…</source><target state="translated">神经元高速运转中…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase09"><segment><source>Sorting out the tricky bits…</source><target state="translated">正在把复杂问题拆解顺溜…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase10"><segment><source>Polishing the response…</source><target state="translated">正在认真组织语言…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase11"><segment><source>Cooking up a fresh result…</source><target state="translated">马上端上热乎的结论…</target></segment></unit>
+    <unit id="AgentGuiWorkingPhrase12"><segment><source>Quietly doing the heavy lifting…</source><target state="translated">正在幕后加紧搬砖中…</target></segment></unit>
     <unit id="SessionsContinueInGui"><segment><source>Continue in GUI (ACP)</source><target state="translated">在 GUI (ACP) 继续</target></segment></unit>
     <unit id="SessionsContinueInTerminal"><segment><source>Continue in Terminal</source><target state="translated">在终端继续</target></segment></unit>
     <unit id="SettingsNavWorkspaces"><segment><source>Workspaces</source><target state="translated">工作区</target></segment></unit>
@@ -1123,5 +1136,64 @@
     <unit id="WorkspaceDirectoryErrorIsFile"><segment><source>This path points to an existing file. Choose a folder instead.</source><target state="translated">该路径指向一个已存在的文件，请选择文件夹。</target></segment></unit>
     <unit id="WorkspaceDirectoryChangeButton"><segment><source>Change…</source><target state="translated">更改…</target></segment></unit>
     <unit id="WorkspaceDirectoryCustomHint"><segment><source>Using custom folder for this workspace</source><target state="translated">已为本次创建指定自定义目录</target></segment></unit>
+    <unit id="DeviceSectionLocal"><segment><source>This computer</source><target state="translated">本机</target></segment></unit>
+    <unit id="DeviceSectionRemote"><segment><source>Remote hosts</source><target state="translated">远程主机</target></segment></unit>
+    <unit id="DeviceSectionSsh"><segment><source>SSH hosts</source><target state="translated">SSH 主机</target></segment></unit>
+    <unit id="DeviceStatusLocal"><segment><source>Local</source><target state="translated">本机</target></segment></unit>
+    <unit id="DeviceStatusSsh"><segment><source>SSH</source><target state="translated">SSH</target></segment></unit>
+    <unit id="DeviceStatusLan"><segment><source>LAN</source><target state="translated">局域网</target></segment></unit>
+    <unit id="DeviceStatusRelay"><segment><source>Relay</source><target state="translated">经中转</target></segment></unit>
+    <unit id="DeviceStatusOffline"><segment><source>Offline</source><target state="translated">离线</target></segment></unit>
+    <unit id="DeviceStatusConnecting"><segment><source>Connecting</source><target state="translated">连接中</target></segment></unit>
+    <unit id="DeviceChangeIcon"><segment><source>Change device icon…</source><target state="translated">修改设备图标…</target></segment></unit>
+    <unit id="DeviceAppearanceTitle"><segment><source>Device icon</source><target state="translated">设备图标</target></segment></unit>
+    <unit id="DeviceAppearanceDescription"><segment><source>Choose the icon, color or picture shown on the sidebar rail for this device.</source><target state="translated">选择要在左侧轨道中显示的图标、颜色或图片。</target></segment></unit>
+    <unit id="DeviceSwitchTip"><segment><source>{0} · {1}&#10;{2} · Click to switch device, right-click to change icon</source><target state="translated">{0} · {1}&#10;{2} · 点击切换设备，右键修改图标</target></segment></unit>
+    <unit id="DeviceOtherWaitingTip"><segment><source>{0} agent(s) waiting on other devices</source><target state="translated">其他设备有 {0} 个智能体等待确认</target></segment></unit>
+    <unit id="DeviceProjectCount"><segment><source>{0} projects</source><target state="translated">{0} 个项目</target></segment></unit>
+    <unit id="DeviceProjectCountOne"><segment><source>1 project</source><target state="translated">1 个项目</target></segment></unit>
+    <unit id="DeviceNoProjectsTitle"><segment><source>No projects on {0}</source><target state="translated">{0} 还没有项目</target></segment></unit>
+    <unit id="DeviceNoProjectsHint"><segment><source>The sidebar only shows projects on the selected device. Add one on this device to get started.</source><target state="translated">左侧仅显示当前设备的项目。你可以直接在这台设备上新建项目。</target></segment></unit>
+    <unit id="DeviceOfflineTitle"><segment><source>Host is offline</source><target state="translated">主机当前离线</target></segment></unit>
+    <unit id="DeviceOfflineConnecting"><segment><source>Reconnecting to host…</source><target state="translated">正在重新连接主机…</target></segment></unit>
+    <unit id="DeviceOfflineHint"><segment><source>Showing cached projects; sessions sync automatically once connected.</source><target state="translated">已显示缓存项目；连接恢复后会自动同步会话。</target></segment></unit>
+    <unit id="DeviceReconnect"><segment><source>Reconnect</source><target state="translated">立即重连</target></segment></unit>
+    <unit id="DeviceManageRemoteHosts"><segment><source>Remote hosts</source><target state="translated">远程主机</target></segment></unit>
+    <unit id="DeviceManageSshHosts"><segment><source>SSH hosts</source><target state="translated">SSH 主机</target></segment></unit>
+    <unit id="DeviceSwitchHeader"><segment><source>Switch device</source><target state="translated">切换设备</target></segment></unit>
+    <unit id="AgentGuiHudWorkflow"><segment><source>Workflow {0}/{1}</source><target state="translated">工作流 {0}/{1}</target></segment></unit>
+    <unit id="AgentGuiHudSubagents"><segment><source>SubAgents {0}/{1}</source><target state="translated">子智能体 {0}/{1}</target></segment></unit>
+    <unit id="AgentGuiHudBgBash"><segment><source>Bg Bash {0}</source><target state="translated">后台 Bash {0}</target></segment></unit>
+    <unit id="AgentGuiViewChatSwimlane"><segment><source>Chat + Swimlane</source><target state="translated">对话 + 泳道</target></segment></unit>
+    <unit id="AgentGuiViewTopology"><segment><source>Topology</source><target state="translated">编排拓扑</target></segment></unit>
+    <unit id="AgentGuiSwimlaneTitle"><segment><source>Multi-Agent Orchestration</source><target state="translated">多智能体编排泳道</target></segment></unit>
+    <unit id="AgentGuiPhaseResearch"><segment><source>Research</source><target state="translated">调研</target></segment></unit>
+    <unit id="AgentGuiPhasePlan"><segment><source>Planned</source><target state="translated">计划已定</target></segment></unit>
+    <unit id="AgentGuiPhasePlanGate"><segment><source>Plan Review</source><target state="translated">待审计划</target></segment></unit>
+    <unit id="AgentGuiPhaseExecute"><segment><source>Executing</source><target state="translated">并行实施</target></segment></unit>
+    <unit id="AgentGuiPhaseVerify"><segment><source>Verify</source><target state="translated">验证回归</target></segment></unit>
+    <unit id="AgentGuiPlanGateTitle"><segment><source>Plan Review · Awaiting Approval</source><target state="translated">计划审阅 · 等待你的批准</target></segment></unit>
+    <unit id="AgentGuiPlanGateResolved"><segment><source>Plan Reviewed</source><target state="translated">计划已处理</target></segment></unit>
+    <unit id="AgentGuiPlanRevisePlaceholder"><segment><source>Describe what to adjust in the plan…</source><target state="translated">输入希望调整的计划细节…</target></segment></unit>
+    <unit id="AgentGuiPlanReviseSend"><segment><source>Send feedback</source><target state="translated">发送修改意见</target></segment></unit>
+    <unit id="AgentGuiPlanReviseToggle"><segment><source>Request changes</source><target state="translated">提出修改意见</target></segment></unit>
+    <unit id="AgentGuiSubagentDrawerTitle"><segment><source>SubAgent Details</source><target state="translated">子智能体详情</target></segment></unit>
+    <unit id="AgentGuiSubagentStepsHeader"><segment><source>Tool Calls ({0})</source><target state="translated">内部工具调用 ({0})</target></segment></unit>
+    <unit id="AgentGuiSubagentSummaryHeader"><segment><source>Result Summary</source><target state="translated">执行摘要</target></segment></unit>
+    <unit id="AgentGuiSubagentStop"><segment><source>Stop</source><target state="translated">中止</target></segment></unit>
+    <unit id="AgentGuiBgBashTitle"><segment><source>Background Bash</source><target state="translated">后台 Bash 进程</target></segment></unit>
+    <unit id="AgentGuiBgBashEmpty"><segment><source>No background shell processes.</source><target state="translated">当前没有后台 Bash 进程。</target></segment></unit>
+    <unit id="AgentGuiBgBashStop"><segment><source>Stop</source><target state="translated">终止</target></segment></unit>
+    <unit id="AgentGuiBgBashOpenTerminal"><segment><source>Open Terminal</source><target state="translated">打开终端</target></segment></unit>
+    <unit id="AgentGuiBgBashRunning"><segment><source>Running</source><target state="translated">运行中</target></segment></unit>
+    <unit id="AgentGuiBgBashExited"><segment><source>Exit {0}</source><target state="translated">已退出 ({0})</target></segment></unit>
+    <unit id="AgentGuiBgBashFailed"><segment><source>Failed ({0})</source><target state="translated">异常 ({0})</target></segment></unit>
+    <unit id="AgentGuiBgBashViewLogs"><segment><source>View logs</source><target state="translated">查看日志</target></segment></unit>
+    <unit id="AgentGuiBashLinesCollapsed"><segment><source>{0} lines collapsed</source><target state="translated">{0} 行已折叠</target></segment></unit>
+    <unit id="AgentGuiBashLinesBadge"><segment><source>{0} lines</source><target state="translated">{0} 行</target></segment></unit>
+    <unit id="AgentGuiBashViewFullScript"><segment><source>View full script</source><target state="translated">查看完整脚本</target></segment></unit>
+    <unit id="AgentGuiBashScriptModalTitle"><segment><source>Full Script ({0} lines)</source><target state="translated">完整执行脚本（{0} 行）</target></segment></unit>
+    <unit id="AgentGuiTaskBlockedBy"><segment><source>Waiting on {0}</source><target state="translated">等待 {0}</target></segment></unit>
+    <unit id="AgentGuiTaskDagTitle"><segment><source>Workflow Tasks</source><target state="translated">工作流任务清单</target></segment></unit>
   </file>
 </xliff>

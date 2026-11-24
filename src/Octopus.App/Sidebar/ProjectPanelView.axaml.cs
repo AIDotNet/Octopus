@@ -283,6 +283,8 @@ public partial class ProjectPanelView : UserControl
         };
     }
 
+    private void OnDeviceEchoClick(object? sender, RoutedEventArgs e) => DeviceSwitcherRequest.Raise(DeviceEchoButton);
+
     private void OnAddItemClick(object? sender, RoutedEventArgs e) => LauncherRequest.Raise(AddItemButton);
 
     private void OnItemsReordered(object? sender, ReorderableListReorderedEventArgs e) =>

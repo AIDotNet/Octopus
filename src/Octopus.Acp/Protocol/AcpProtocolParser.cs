@@ -263,21 +263,172 @@ public static class AcpProtocolParser
             }
         }
 
-        // Extract generic command/stdout/stderr/exitCode from rawInput/rawOutput before dialect hook.
+        // Extract generic command/stdout/stderr/exitCode and subagent/workflow/background metadata before dialect hook.
+        tc.ParentToolCallId ??= TryStr(obj, "parentToolCallId")
+            ?? TryStr(obj, "parentToolUseId")
+            ?? TryStr(obj, "parent_tool_use_id")
+            ?? TryStr(tc.Meta, "parentToolCallId")
+            ?? TryStr(tc.Meta, "parentToolUseId")
+            ?? TryStr(tc.Meta, "parent_tool_use_id")
+            ?? TryStr(TryObj(tc.Meta, "claudeCode"), "parentToolUseId")
+            ?? TryStr(TryObj(tc.Meta, "claudeCode"), "parent_tool_use_id");
+
+        tc.Name ??= TryStr(TryObj(tc.Meta, "claudeCode"), "toolName")
+            ?? TryStr(tc.Meta, "toolName");
+
         if (tc.RawInput is { ValueKind: JsonValueKind.Object } rawIn)
         {
             tc.Command ??= TryStr(rawIn, "command") ?? TryStr(rawIn, "cmd");
             tc.WorkingDirectory ??= TryStr(rawIn, "cwd");
+            tc.Description ??= TryStr(rawIn, "description");
+            if (TryBool(rawIn, "run_in_background") == true || TryBool(rawIn, "runInBackground") == true || TryBool(rawIn, "background") == true)
+            {
+                tc.IsBackground = true;
+            }
+            tc.SubagentType ??= TryStr(rawIn, "subagent_type") ?? TryStr(rawIn, "subagentType") ?? TryStr(rawIn, "agent_type") ?? TryStr(rawIn, "agentType");
+            tc.SubagentModel ??= TryStr(rawIn, "model");
+            tc.WorktreeIsolation ??= TryStr(rawIn, "isolation");
+            tc.BackgroundTaskId ??= TryStr(rawIn, "task_id")
+                ?? TryStr(rawIn, "taskId")
+                ?? TryStr(rawIn, "shell_id")
+                ?? TryStr(rawIn, "shellId")
+                ?? TryStr(rawIn, "bash_id")
+                ?? TryStr(rawIn, "bashId");
+            tc.PlanMarkdown ??= TryStr(rawIn, "plan");
         }
         if (tc.RawOutput is { ValueKind: JsonValueKind.Object } rawOut)
         {
             tc.Stdout ??= TryStr(rawOut, "stdout");
             tc.Stderr ??= TryStr(rawOut, "stderr");
             tc.ExitCode ??= TryInt(rawOut, "exitCode") ?? TryInt(rawOut, "exit_code");
+            tc.BackgroundTaskId ??= TryStr(rawOut, "backgroundTaskId")
+                ?? TryStr(rawOut, "task_id")
+                ?? TryStr(rawOut, "taskId")
+                ?? TryStr(rawOut, "shell_id")
+                ?? TryStr(rawOut, "shellId")
+                ?? TryStr(rawOut, "bash_id");
+            if (TryBool(rawOut, "isBackground") == true || TryBool(rawOut, "background") == true)
+            {
+                tc.IsBackground = true;
+            }
         }
 
+        ClassifyToolSemantics(tc);
         dialect.NormalizeToolUpdate(tc);
         return tc;
+    }
+
+    internal static void ClassifyToolSemantics(AcpToolCallUpdate tc)
+    {
+        var toolName = tc.Name;
+        if (string.IsNullOrWhiteSpace(toolName) && !string.IsNullOrWhiteSpace(tc.Title))
+        {
+            var trimmed = tc.Title.Trim();
+            var sep = trimmed.IndexOfAny([':', '(', ' ']);
+            var head = sep > 0 ? trimmed[..sep] : trimmed;
+            if (head is "Agent" or "Task" or "TodoWrite" or "TaskCreate" or "TaskUpdate" or "EnterPlanMode" or "ExitPlanMode"
+                or "TaskOutput" or "BashOutput" or "TaskStop" or "KillShell" or "Bash")
+            {
+                toolName = head;
+            }
+        }
+
+        if (string.Equals(toolName, "Agent", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(toolName, "Task", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(tc.SubagentType))
+        {
+            tc.IsSubagentLaunch = true;
+            tc.SubagentType ??= "general-purpose";
+        }
+        else if (string.Equals(toolName, "EnterPlanMode", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.WorkflowAction = "enter_plan";
+        }
+        else if (string.Equals(toolName, "ExitPlanMode", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.WorkflowAction = "exit_plan";
+        }
+        else if (string.Equals(toolName, "TodoWrite", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.WorkflowAction = "todo_write";
+            if (tc.RawInput is { ValueKind: JsonValueKind.Object } ri && TryArr(ri, "todos") is { } todos)
+            {
+                tc.WorkflowTasks = ParsePlanEntries(todos);
+            }
+        }
+        else if (string.Equals(toolName, "TaskCreate", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.WorkflowAction = "task_create";
+            if (tc.RawInput is { ValueKind: JsonValueKind.Object } ri)
+            {
+                var subject = TryStr(ri, "subject") ?? TryStr(ri, "content") ?? TryStr(ri, "description");
+                if (!string.IsNullOrWhiteSpace(subject))
+                {
+                    tc.WorkflowTasks =
+                    [
+                        new AcpPlanEntry
+                        {
+                            Id = TryStr(ri, "taskId") ?? TryStr(ri, "id") ?? tc.ToolCallId,
+                            Content = subject,
+                            ActiveForm = TryStr(ri, "activeForm"),
+                            Status = TryStr(ri, "status") ?? "pending",
+                            Owner = TryStr(ri, "owner"),
+                        },
+                    ];
+                }
+            }
+        }
+        else if (string.Equals(toolName, "TaskUpdate", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.WorkflowAction = "task_update";
+            if (tc.RawInput is { ValueKind: JsonValueKind.Object } ri)
+            {
+                var entry = new AcpPlanEntry
+                {
+                    Id = TryStr(ri, "taskId") ?? TryStr(ri, "id"),
+                    Content = TryStr(ri, "subject") ?? TryStr(ri, "content") ?? "",
+                    ActiveForm = TryStr(ri, "activeForm"),
+                    Status = TryStr(ri, "status") ?? "",
+                    Owner = TryStr(ri, "owner"),
+                };
+                if (TryArr(ri, "addBlockedBy") is { } deps)
+                {
+                    foreach (var d in deps.EnumerateArray())
+                    {
+                        var depId = d.ValueKind == JsonValueKind.String ? d.GetString() : d.GetRawText();
+                        if (!string.IsNullOrWhiteSpace(depId)) entry.BlockedBy.Add(depId);
+                    }
+                }
+                tc.WorkflowTasks = [entry];
+            }
+        }
+        else if (string.Equals(toolName, "TaskOutput", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(toolName, "BashOutput", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.WorkflowAction = "background_output";
+        }
+        else if (string.Equals(toolName, "TaskStop", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(toolName, "KillShell", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.WorkflowAction = "background_stop";
+        }
+
+        if (tc.IsBackground && string.IsNullOrWhiteSpace(tc.BackgroundTaskId))
+        {
+            var probe = tc.Stdout ?? tc.TextOutputs.FirstOrDefault()
+                ?? (tc.RawOutput is { ValueKind: JsonValueKind.String } rs ? rs.GetString() : null);
+            if (!string.IsNullOrEmpty(probe))
+            {
+                var idx = probe.IndexOf("ID:", StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    var tail = probe[(idx + 3)..].TrimStart();
+                    var len = 0;
+                    while (len < tail.Length && (char.IsLetterOrDigit(tail[len]) || tail[len] is '-' or '_')) len++;
+                    if (len > 0) tc.BackgroundTaskId = tail[..len];
+                }
+            }
+        }
     }
 
     public static AcpPermissionRequest? ParsePermissionRequest(JsonElement? parameters, string requestId, IAcpDialect dialect)
@@ -426,14 +577,26 @@ public static class AcpProtocolParser
         foreach (var item in arr.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
-            var content = TryStr(item, "content");
+            var content = TryStr(item, "content") ?? TryStr(item, "subject");
             if (string.IsNullOrEmpty(content)) continue;
-            list.Add(new AcpPlanEntry
+            var entry = new AcpPlanEntry
             {
+                Id = TryStr(item, "id"),
                 Content = content,
+                ActiveForm = TryStr(item, "activeForm"),
                 Priority = TryStr(item, "priority") ?? "medium",
                 Status = TryStr(item, "status") ?? "pending",
-            });
+                Owner = TryStr(item, "owner"),
+            };
+            if (TryArr(item, "blockedBy") is { } deps)
+            {
+                foreach (var d in deps.EnumerateArray())
+                {
+                    var depId = d.ValueKind == JsonValueKind.String ? d.GetString() : d.GetRawText();
+                    if (!string.IsNullOrWhiteSpace(depId)) entry.BlockedBy.Add(depId);
+                }
+            }
+            list.Add(entry);
         }
         return list;
     }

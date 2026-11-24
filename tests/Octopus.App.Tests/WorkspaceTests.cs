@@ -1,5 +1,7 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Octopus.Agents;
@@ -12,6 +14,7 @@ using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Storage;
+using SkiaSharp;
 using TKCode.Arc;
 using Xunit;
 
@@ -265,5 +268,42 @@ public class WorkspaceTests
         Assert.Equal(ProjectItemKind.Agent, item.Kind);
         Assert.Equal("claude", item.AgentId);
         Assert.Equal("high", item.Launch!.Effort);
+    }
+
+    [AvaloniaFact]
+    public void Empty_views_render_the_logo_with_a_transparent_background()
+    {
+        var emptyState = AppHost.Get<EmptyStateViewModel>();
+        foreach (Control view in new Control[]
+        {
+            new EmptyProjectView { DataContext = emptyState },
+            new NoProjectView { DataContext = emptyState },
+        })
+        {
+            var window = new Window
+            {
+                Width = 480,
+                Height = 360,
+                Background = new SolidColorBrush(Color.FromRgb(24, 24, 28)),
+                Content = view,
+            };
+            window.Show();
+            Frames.Pump();
+
+            var logo = view.GetVisualDescendants().OfType<Image>().Single();
+            var origin = logo.TranslatePoint(new Point(0, 0), window)!.Value;
+
+            var shot = Path.Combine(Directory.CreateTempSubdirectory("octopus-empty-logo-").FullName, "view.png");
+            Frames.Save(window, shot);
+            window.Close();
+
+            using var rendered = SKBitmap.Decode(shot);
+            // Inside the logo's 72x72 box (well inside the old rounded-square card), corners must show the dark window
+            // background rather than an opaque cream backdrop, while the centre draws the orange mascot.
+            var corner = rendered.GetPixel((int)Math.Round(origin.X + 8), (int)Math.Round(origin.Y + 8));
+            Assert.True(corner.Red < 45 && corner.Green < 45 && corner.Blue < 50, $"corner={corner}");
+            var center = rendered.GetPixel((int)Math.Round(origin.X + logo.Bounds.Width / 2), (int)Math.Round(origin.Y + logo.Bounds.Height / 2));
+            Assert.True(center.Red > 140, $"center={center}");
+        }
     }
 }

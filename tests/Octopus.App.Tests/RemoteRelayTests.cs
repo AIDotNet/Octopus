@@ -146,11 +146,12 @@ public class RemoteRelayTests
         var opener = new RecordingOpener();
         using var page = NewPage(opener);
 
-        // Turned on with nothing set up: nothing connects, and the page says what is missing, one thing at a time.
+        // Default official service is pre-selected; turning relay on without signing in asks to sign in first.
+        Assert.Equal("https://octoterm.si", page.RelayUrl);
         page.RelayHostEnabled = true;
         await Wait(page.Applied);
         Assert.Null(runtime.RelayState);
-        Assert.Equal("先填写中转地址", page.RelayStatus);
+        Assert.Equal("先登录中转服务", page.RelayStatus);
         page.RelayUrl = relay.Url;
         Assert.False(page.IsRelayInsecure); // this computer itself
         page.SaveRelayCommand.Execute(null);
@@ -241,16 +242,22 @@ public class RemoteRelayTests
         Assert.Null(page.RelayErrorText);
         Assert.True(page.CanSignInRelay);
 
-        // No relay at that address, and no address at all.
+        // No relay at that address, and an invalid address.
         page.RelayUrl = "http://127.0.0.1:9";
         page.SignInRelayCommand.Execute(null);
         await Wait(page.RelaySignIn);
         Assert.StartsWith("登录失败：", page.RelayErrorText);
-        page.RelayUrl = "";
+        page.RelayUrl = "two words";
         page.SignInRelayCommand.Execute(null);
         await Wait(page.RelaySignIn);
         Assert.Equal("先填写中转地址", page.RelayErrorText);
         Assert.Null(await AppHost.Get<ISecretStore>().GetAsync("Octopus/remote", "relay-session"));
+
+        // Clearing the address falls back to the official default service.
+        page.RelayUrl = "";
+        page.SaveRelayCommand.Execute(null);
+        await Wait(page.Applied);
+        Assert.Equal("https://octoterm.si", page.RelayUrl);
     }
 
     [AvaloniaFact]

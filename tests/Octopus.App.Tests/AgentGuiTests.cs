@@ -64,12 +64,17 @@ public sealed class FakeAcpSession : IAcpSession
 
     public void Emit(AcpRuntimeEvent evt) => EventReceived?.Invoke(evt);
 
+    /// <summary>Runs during <see cref="StartAsync"/> (e.g. to emit session/load history replay).</summary>
+    public Action<FakeAcpSession, string?>? StartHandler { get; set; }
+
     public Task<AcpSessionStartResult> StartAsync(
         string workingDirectory,
         IReadOnlyList<string>? additionalDirectories = null,
         string? resumeSessionId = null,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult(new AcpSessionStartResult
+        CancellationToken cancellationToken = default)
+    {
+        StartHandler?.Invoke(this, resumeSessionId);
+        return Task.FromResult(new AcpSessionStartResult
         {
             Kind = string.IsNullOrEmpty(resumeSessionId) ? "new" : "load",
             SessionId = SessionId ?? "fake-acp-session-1",
@@ -77,6 +82,7 @@ public sealed class FakeAcpSession : IAcpSession
             Models = Models,
             ConfigOptions = [.. MutableConfigOptions],
         });
+    }
 
     public Task<AcpPromptResult> PromptAsync(
         string text,
@@ -725,6 +731,153 @@ public class AgentGuiTests
     }
 
     [AvaloniaFact]
+    public async Task Assistant_turn_caps_expanded_thought_height_folds_completed_commands_and_shows_live_status()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-polish-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "acp-gui-polish");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        var turnGate = new TaskCompletionSource<bool>();
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.PromptHandler = async (s, _, _, _) =>
+            {
+                s.Emit(new AcpTextDeltaEvent("reasoning", string.Join("\n", Enumerable.Range(1, 80).Select(i => $"Thought line {i}: investigating architecture details...")), null));
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate { ToolCallId = "cmd1", Kind = "execute", Title = "ls -la", Command = "ls -la", Status = "completed", ExitCode = 0 }));
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate { ToolCallId = "cmd2", Kind = "execute", Title = "ls -la src", Command = "ls -la src", Status = "completed", ExitCode = 0 }));
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate { ToolCallId = "cmd3", Kind = "execute", Title = "dotnet test", Command = "dotnet test", Status = "in_progress" }));
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate { ToolCallId = "cmd4", Kind = "execute", Title = "bad-cmd", Command = "bad-cmd", Status = "completed", ExitCode = 1 }));
+                await turnGate.Task;
+                return new AcpPromptResult { StopReason = "end_turn" };
+            };
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 960, Height = 720, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            vm.InputText = "Inspect repo";
+            var sendTask = vm.SendPromptAsync();
+
+            await WaitUntilAsync(() => vm.Timeline.OfType<AssistantTurnItem>().Any(t => t.ToolCalls.Count == 4));
+            var turn = vm.Timeline.OfType<AssistantTurnItem>().Single();
+
+            // 1) Completed successful bash commands (>= 2) fold into CommandTools while running & non-zero exit stay in PrimaryTools.
+            Assert.True(turn.HasCommandGroup);
+            Assert.Equal(2, turn.CommandTools.Count);
+            Assert.Equal(["cmd1", "cmd2"], turn.CommandTools.Select(c => c.ToolCallId));
+            Assert.Equal(["cmd3", "cmd4"], turn.PrimaryTools.Select(c => c.ToolCallId));
+            Assert.False(string.IsNullOrWhiteSpace(turn.CommandGroupSummary));
+
+            // 2) Live status feedback is visible while streaming, rotates playful copy, hides when waiting, and hides on completion.
+            Assert.True(turn.ShowLiveStatus);
+            var firstPhrase = turn.LiveStatusText;
+            Assert.False(string.IsNullOrWhiteSpace(firstPhrase));
+            turn.AdvanceLiveStatus();
+            Assert.NotEqual(firstPhrase, turn.LiveStatusText);
+            turn.SetWaitingForInput(true);
+            Assert.False(turn.ShowLiveStatus);
+            turn.SetWaitingForInput(false);
+            Assert.True(turn.ShowLiveStatus);
+
+            // 3) Expanded Thinking block is wrapped in a height-capped ScrollArea (MaxHeight <= 240).
+            turn.ToggleThoughtCommand.Execute(null);
+            Assert.True(turn.IsThoughtExpanded);
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var thoughtScroll = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view)
+                .OfType<TKCode.Arc.ScrollArea>()
+                .FirstOrDefault(s => s.Classes.Contains("thoughtScroll"));
+            Assert.NotNull(thoughtScroll);
+            Assert.InRange(thoughtScroll!.MaxHeight, 100, 260);
+
+            turnGate.TrySetResult(true);
+            await sendTask;
+            Assert.False(turn.IsStreaming);
+            Assert.False(turn.ShowLiveStatus);
+        }
+        finally
+        {
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public void Assistant_turn_creates_independent_thought_blocks_across_tools_messages_and_message_ids()
+    {
+        var turn = new AssistantTurnItem("agy", "Antigravity CLI");
+        try
+        {
+            // Step 1: initial thought split across 2 streaming deltas -> single ThoughtBlock #1
+            turn.AppendThought("First part ");
+            turn.AppendThought("of thought 1.");
+            var t1 = Assert.IsType<ThoughtBlockViewModel>(Assert.Single(turn.Blocks));
+            Assert.Equal("First part of thought 1.", t1.Text);
+
+            // Step 2: tool burst arrives -> creates ToolRunBlock #1
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "tc1", Kind = "execute", Title = "ls -la", Command = "ls -la", Status = "in_progress" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "tc2", Kind = "execute", Title = "ls src", Command = "ls src", Status = "completed", ExitCode = 0 });
+            Assert.Equal(2, turn.Blocks.Count);
+            var run1 = Assert.IsType<ToolRunBlockViewModel>(turn.Blocks[1]);
+            Assert.Equal(2, run1.ToolCalls.Count);
+
+            // Step 3: subsequent reasoning after tools -> MUST create an independent ThoughtBlock #2 (never appended to Thought #1!)
+            turn.AppendThought("Second thought after tools.", messageId: "m2");
+            Assert.Equal(3, turn.Blocks.Count);
+            var t2 = Assert.IsType<ThoughtBlockViewModel>(turn.Blocks[2]);
+            Assert.Equal("First part of thought 1.", t1.Text);
+            Assert.Equal("Second thought after tools.", t2.Text);
+
+            // Late completion update for tc1 updates run1 in place and does NOT split ThoughtBlock #2!
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "tc1", Status = "completed", ExitCode = 0 });
+            Assert.Equal(3, turn.Blocks.Count);
+            Assert.True(run1.HasCommandGroup);
+            Assert.Equal(2, run1.CommandTools.Count);
+
+            turn.AppendThought(" Still thought 2.", messageId: "m2");
+            Assert.Equal(3, turn.Blocks.Count);
+            Assert.Equal("Second thought after tools. Still thought 2.", t2.Text);
+
+            // Step 4: new reasoning with a different messageId -> independent ThoughtBlock #3
+            turn.AppendThought("Third thought with new messageId.", messageId: "m3");
+            Assert.Equal(4, turn.Blocks.Count);
+            var t3 = Assert.IsType<ThoughtBlockViewModel>(turn.Blocks[3]);
+            Assert.Equal("Third thought with new messageId.", t3.Text);
+
+            // Independent expand/collapse state per thought block
+            t2.ToggleCommand.Execute(null);
+            Assert.False(t1.IsExpanded);
+            Assert.True(t2.IsExpanded);
+            Assert.False(t3.IsExpanded);
+
+            // Step 5: final markdown response -> MarkdownBlock at the end
+            turn.AppendMessage("Final answer.");
+            Assert.Equal(5, turn.Blocks.Count);
+            var md = Assert.IsType<MarkdownBlockViewModel>(turn.Blocks[4]);
+            Assert.Equal("Final answer.", md.Text);
+            Assert.Equal("Final answer.", turn.MarkdownText);
+        }
+        finally
+        {
+            turn.Complete();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Sessions_panel_tracks_live_acp_sessions_and_offers_gui_resume_only_for_acp_agents()
     {
         var tempDir = Directory.CreateTempSubdirectory("octopus-acp-sess-").FullName;
@@ -806,10 +959,290 @@ public class AgentGuiTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task SchemeD_orchestration_handles_subagents_claude_workflow_background_bash_and_bash_style2()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-scheme-d-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "acp-scheme-d");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+        var subagentService = AppHost.Get<ISubagentService>();
+
+        var multilinePython = "python3 -c '\nimport urllib.request, json\npackages = [\n  \"Avalonia\",\n  \"TKCode.Arc\",\n  \"MiniPty\",\n]\nfor p in packages:\n  print(p)\n'";
+        string? approvedPlanOption = null;
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.PromptHandler = async (s, _, _, ct) =>
+            {
+                // 1. Claude Code TodoWrite workflow tasks
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "todo-1",
+                    WorkflowAction = "todo_write",
+                    WorkflowTasks =
+                    [
+                        new AcpPlanEntry { Id = "1", Content = "Scan protocol", Status = "completed", Owner = "Explore" },
+                        new AcpPlanEntry { Id = "2", Content = "Implement Scheme D HUD", Status = "in_progress", ActiveForm = "Building HUD capsules", Owner = "general-purpose", BlockedBy = ["1"] },
+                    ],
+                }));
+
+                // 2. ExitPlanMode Plan Approval Gate
+                approvedPlanOption = await s.Callbacks.OnPermissionRequest!(new AcpPermissionRequest
+                {
+                    RequestId = "plan-gate-1",
+                    SessionId = s.SessionId!,
+                    IsPlanApproval = true,
+                    PlanMarkdown = "## Plan\n- Wire SubAgents\n- Track Background Bash",
+                    Options =
+                    [
+                        new AcpPermissionOption { OptionId = "approve_auto", Name = "Approve & Accept Edits", Kind = "allow_once" },
+                    ],
+                }, ct);
+
+                // 3. Large multiline Bash command (Style 2)
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "bash-big-1",
+                    Kind = "execute",
+                    Title = multilinePython,
+                    Command = multilinePython,
+                    Description = "Check latest NuGet package versions",
+                    Status = "completed",
+                    Stdout = "Avalonia -> 11.3.2\nTKCode.Arc -> 1.4.8",
+                    ExitCode = 0,
+                }));
+
+                // 4. Parallel SubAgents + nested child tool call
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "sub-1",
+                    IsSubagentLaunch = true,
+                    SubagentType = "Explore",
+                    Description = "Audit ACP event models",
+                    SubagentModel = "haiku",
+                    Status = "completed",
+                    TextOutputs = ["Found 4 extension points."],
+                }));
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "sub-2",
+                    IsSubagentLaunch = true,
+                    SubagentType = "general-purpose",
+                    Description = "Build floating HUD capsules",
+                    SubagentModel = "opus",
+                    WorktreeIsolation = "worktree",
+                    Status = "in_progress",
+                }));
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "sub-2-step-1",
+                    ParentToolCallId = "sub-2",
+                    Name = "Edit",
+                    Kind = "edit",
+                    Title = "Edit AgentGuiTabView.axaml",
+                    Status = "in_progress",
+                }));
+
+                // 5. Background Bash launch + follow-up TaskOutput
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "bg-1",
+                    Kind = "execute",
+                    Command = "npm run dev -- --port 5173",
+                    Description = "Start Vite dev server",
+                    IsBackground = true,
+                    BackgroundTaskId = "bg_vite",
+                    Status = "completed",
+                    Stdout = "Command running in background with ID: bg_vite",
+                }));
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "bg-out-1",
+                    WorkflowAction = "background_output",
+                    BackgroundTaskId = "bg_vite",
+                    Stdout = "VITE ready in 280ms\nLocal: http://localhost:5173/",
+                }));
+
+                return new AcpPromptResult { StopReason = "end_turn" };
+            };
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 1100, Height = 760, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            vm.InputText = "Implement Scheme D";
+            var sendTask = vm.SendPromptAsync();
+
+            // Plan Approval Gate card appears and advances workflow on approval.
+            await WaitUntilAsync(() => vm.Timeline.OfType<PlanApprovalCardItem>().Any());
+            var planCard = vm.Timeline.OfType<PlanApprovalCardItem>().Single();
+            Assert.Equal(WorkflowPhase.PlanGate, vm.CurrentPhase);
+            planCard.Actions[0].ChooseCommand.Execute(null);
+            Assert.True(planCard.IsResolved);
+
+            await sendTask;
+            Assert.Equal("approve_auto", approvedPlanOption);
+
+            // Workflow tasks & HUD capsule state
+            Assert.True(vm.HasWorkflowTasks);
+            Assert.Equal(2, vm.WorkflowTasks.Count);
+            Assert.Contains("1/2", vm.HudWorkflowText);
+            Assert.True(vm.HasAnyHudItem);
+            vm.ToggleWorkflowHudCommand.Execute(null);
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.IsWorkflowHudOpen);
+
+            // SubAgents + nested child steps + sidebar sync
+            Assert.Equal(2, vm.Subagents.Count);
+            var runningSub = vm.Subagents[1];
+            Assert.Single(runningSub.Steps);
+            Assert.Equal("Edit", runningSub.Steps[0].ToolName);
+            Assert.Equal(2, subagentService.Of(item.Id).Count);
+
+            // Swimlane card rendered in timeline; clicking a SubAgent opens Slide-Over Drawer
+            Assert.Contains(vm.Timeline, t => t is WorkflowSwimlaneItem);
+            vm.SelectSubagentCommand.Execute(runningSub);
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.HasSelectedSubagent);
+            Assert.Same(runningSub, vm.SelectedSubagent);
+
+            // Background Bash tracked across turn with detected port :5173 & live output
+            var bgShell = Assert.Single(vm.BackgroundShells);
+            Assert.Equal(":5173", bgShell.DetectedPort);
+            Assert.True(bgShell.IsRunning);
+            Assert.True(await vm.HasRunningChildAsync());
+            vm.ToggleShellsHudCommand.Execute(null);
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.IsShellsHudOpen);
+            bgShell.StopCommand.Execute(null);
+            Assert.False(bgShell.IsRunning);
+
+            // Bash Style 2: multiline python script stays strictly single-line in header & opens full-script modal
+            var turn = vm.Timeline.OfType<AssistantTurnItem>().Single();
+            var bigBash = Assert.Single(turn.ToolCalls, t => t.ToolCallId == "bash-big-1");
+            Assert.DoesNotContain('\n', bigBash.DisplayTitle);
+            Assert.Equal("Check latest NuGet package versions", bigBash.DisplayTitle);
+            Assert.True(bigBash.IsLargeCommand);
+            Assert.Equal("python3", bigBash.ScriptLanguage);
+            Assert.True(bigBash.CommandLineCount >= 9);
+            Assert.True(bigBash.CanOpenScriptPreview);
+            bigBash.ToggleExpandedCommand.Execute(null);
+            bigBash.OpenScriptPreviewCommand.Execute(null);
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.ScriptPreview.IsOpen);
+            Assert.Equal(bigBash.CommandLineCount, vm.ScriptPreview.Lines.Count);
+            vm.ScriptPreview.CloseCommand.Execute(null);
+            Assert.False(vm.ScriptPreview.IsOpen);
+
+            // Topology view switches cleanly
+            vm.SetTopologyViewCommand.Execute(null);
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.IsTopologyView);
+            vm.SetChatViewCommand.Execute(null);
+            Assert.False(vm.IsTopologyView);
+        }
+        finally
+        {
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
     private sealed class DummyMigrationDialog : Octopus.App.Explorer.Sessions.ISessionMigrationDialog
     {
         public Task<Octopus.App.Explorer.Sessions.SessionMigrationChoice?> AskAsync(Octopus.App.Explorer.Sessions.SessionMigrationFormViewModel form) =>
             Task.FromResult<Octopus.App.Explorer.Sessions.SessionMigrationChoice?>(null);
+    }
+
+    [AvaloniaFact]
+    public async Task Reopened_gui_tab_rebuilds_timeline_from_session_load_replay_without_duplicating_on_reconnect()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-replay-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "acp-gui-replay");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        var starts = 0;
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.StartHandler = (s, _) =>
+            {
+                starts++;
+                s.Emit(new AcpUserMessageEvent("Fix the ", "u1") { IsReplay = true });
+                s.Emit(new AcpUserMessageEvent("login bug", "u1") { IsReplay = true });
+                s.Emit(new AcpTextDeltaEvent("reasoning", "Looking at auth.", null) { IsReplay = true });
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate { ToolCallId = "tc1", Kind = "read", Title = "Read auth.cs", Status = "completed" }) { IsReplay = true });
+                s.Emit(new AcpTextDeltaEvent("assistant", "Fixed the null check.", "m1") { IsReplay = true });
+                s.Emit(new AcpUserMessageEvent("Thanks, add a test", "u2") { IsReplay = true });
+                s.Emit(new AcpTextDeltaEvent("assistant", "Added LoginTests.", "m2") { IsReplay = true });
+            };
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 920, Height = 640, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(4, vm.Timeline.Count);
+            var u1 = Assert.IsType<UserTurnItem>(vm.Timeline[0]);
+            Assert.Equal("Fix the login bug", u1.Text);
+            var a1 = Assert.IsType<AssistantTurnItem>(vm.Timeline[1]);
+            Assert.False(a1.IsStreaming);
+            Assert.Contains("Fixed the null check.", a1.MarkdownText);
+            Assert.True(a1.HasThought);
+            var u2 = Assert.IsType<UserTurnItem>(vm.Timeline[2]);
+            Assert.Equal("Thanks, add a test", u2.Text);
+            var a2 = Assert.IsType<AssistantTurnItem>(vm.Timeline[3]);
+            Assert.False(a2.IsStreaming);
+            Assert.False(a2.HasDuration);
+            Assert.False(vm.ShowEmptyState);
+
+            // Replayed prompts feed composer history navigation.
+            Assert.True(vm.NavigateHistoryUp());
+            Assert.Equal("Thanks, add a test", vm.InputText);
+            vm.NavigateHistoryDown();
+
+            // Reconnecting a tab that already shows history must not duplicate it.
+            await vm.RestartAsync();
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready && starts == 2);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.Equal(4, vm.Timeline.Count);
+        }
+        finally
+        {
+            fakeFactory.ConfigureNext = null;
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)

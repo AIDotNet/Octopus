@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Octopus.App.Launcher;
 using Octopus.App.Settings;
+using Octopus.App.Sidebar;
 using TKCode.Arc;
 
 namespace Octopus.App.Shell;
@@ -28,6 +29,7 @@ public partial class ShellView : UserControl
         _right.Frame += OnRightFrame;
         _right.Arrived += OnRightArrived;
         AddHandler(LauncherRequest.RequestedEvent, OnLauncherRequested);
+        AddHandler(DeviceSwitcherRequest.RequestedEvent, OnDeviceSwitcherRequested);
         // A "+" in a tab strip names its group for the next new tab; the choice ends with the menu.
         LauncherPopover.Closed += (_, _) => _model?.Workspace.SetNewTabGroup(null);
         CollapsedLead.SizeChanged += (_, _) => UpdateInsets();
@@ -45,6 +47,7 @@ public partial class ShellView : UserControl
         {
             _model.SettingsRequested -= OnSettingsRequested;
             _model.Launcher.CloseRequested -= OnLauncherCloseRequested;
+            _model.DeviceSwitcher.CloseRequested -= OnDeviceSwitcherCloseRequested;
             _model.PropertyChanged -= OnModelPropertyChanged;
         }
         _model = DataContext as ShellViewModel;
@@ -52,6 +55,7 @@ public partial class ShellView : UserControl
         {
             _model.SettingsRequested += OnSettingsRequested;
             _model.Launcher.CloseRequested += OnLauncherCloseRequested;
+            _model.DeviceSwitcher.CloseRequested += OnDeviceSwitcherCloseRequested;
             _model.PropertyChanged += OnModelPropertyChanged;
             // The saved state is shown as it is, without a slide.
             _leftCollapsed = _model.IsSidebarCollapsed;
@@ -320,6 +324,21 @@ public partial class ShellView : UserControl
     }
 
     private void OnLauncherCloseRequested(object? sender, EventArgs e) => LauncherPopover.Close();
+
+    private void OnDeviceSwitcherRequested(object? sender, DeviceSwitcherRequestedEventArgs e)
+    {
+        if (_model is null)
+        {
+            return;
+        }
+        _model.DeviceSwitcher.Rebuild();
+        DevicePopover.Placement = e.Anchor.Name == "DeviceEchoButton" ? PopoverPlacement.Bottom : PopoverPlacement.Right;
+        DevicePopover.Alignment = PopoverAlignment.Start;
+        DevicePopover.ShowAt(e.Anchor);
+        e.Handled = true;
+    }
+
+    private void OnDeviceSwitcherCloseRequested(object? sender, EventArgs e) => DevicePopover.Close();
 
     private void OnSplitterDragCompleted(object? sender, Avalonia.Input.VectorEventArgs e)
     {

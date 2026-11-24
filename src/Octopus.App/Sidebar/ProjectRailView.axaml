@@ -3,11 +3,95 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:common="using:Octopus.App.Common"
              xmlns:vm="using:Octopus.App.Sidebar"
              x:Class="Octopus.App.Sidebar.ProjectRailView"
              x:DataType="vm:ProjectRailViewModel">
-    <Grid Width="{DynamicResource OctopusRailWidth}" RowDefinitions="*,Auto" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
-        <arc:ScrollArea OverlayScrollbarMode="Auto" FadeLength="0">
+    <Grid Width="{DynamicResource OctopusRailWidth}" RowDefinitions="Auto,*,Auto" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+        <!-- Option B: Circular device switcher badge at the top of the rail, separated from square project chips by a fine divider. -->
+        <StackPanel IsVisible="{Binding HasDeviceSwitcher}" HorizontalAlignment="Center" Margin="0,6,0,2" Spacing="6">
+            <Grid Width="{DynamicResource OctopusProjectSlotSize}" Height="{DynamicResource OctopusProjectSlotSize}" HorizontalAlignment="Center">
+                <Border BorderThickness="1.5" BorderBrush="{arc:ArcDesignTokenResource Border}" CornerRadius="999" IsHitTestVisible="False" />
+                <Button x:Name="DeviceBadgeButton" Classes="device-chip"
+                        Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}"
+                        Background="{Binding Devices.CurrentDevice.Background}"
+                        Opacity="{Binding Devices.CurrentDevice.BadgeOpacity}"
+                        Click="OnDeviceBadgeClick"
+                        AutomationProperties.Name="{Binding Devices.CurrentDevice.Name}"
+                        arc:Tooltip.Tip="{Binding Devices.CurrentBadgeTip}" arc:Tooltip.Side="Right">
+                    <Panel>
+                        <TextBlock IsVisible="{Binding Devices.CurrentDevice.ShowInitial}"
+                                   Text="{Binding Devices.CurrentDevice.Initial}"
+                                   Foreground="White" FontWeight="Bold"
+                                   FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <lucide:LucideIcon IsVisible="{Binding Devices.CurrentDevice.ShowIcon}"
+                                           Kind="{Binding Devices.CurrentDevice.EffectiveIconKind}"
+                                           Size="{DynamicResource OctopusProjectChipIconSize}" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <common:PixelIconView IsVisible="{Binding Devices.CurrentDevice.ShowPixel}"
+                                              Icon="{Binding Devices.CurrentDevice.Pixel}"
+                                              Width="{DynamicResource OctopusProjectChipPixelSize}"
+                                              Height="{DynamicResource OctopusProjectChipPixelSize}"
+                                              Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Image IsVisible="{Binding Devices.CurrentDevice.HasImage}"
+                               Source="{Binding Devices.CurrentDevice.Image}"
+                               Width="{DynamicResource OctopusProjectChipSize}"
+                               Height="{DynamicResource OctopusProjectChipSize}"
+                               Stretch="UniformToFill"
+                               RenderOptions.BitmapInterpolationMode="HighQuality" />
+                    </Panel>
+                </Button>
+
+                <!-- Bottom-right: current device connection status dot -->
+                <Border IsHitTestVisible="False" Width="12" Height="12" CornerRadius="6"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,1"
+                        Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                    <Panel>
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Devices.CurrentDevice.IsOnlineStatus}"
+                                 Fill="{arc:ArcDesignTokenResource Success}" />
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Devices.CurrentDevice.IsConnecting}"
+                                 Fill="{arc:ArcDesignTokenResource Warning}" />
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Devices.CurrentDevice.IsOffline}"
+                                 Fill="{arc:ArcDesignTokenResource TextMuted}" Opacity="0.55" />
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Devices.CurrentDevice.IsSshStatus}"
+                                 Fill="{arc:ArcDesignTokenResource Accent}" />
+                    </Panel>
+                </Border>
+
+                <!-- Bottom-left: tiny chevron cue indicating this badge opens a switcher -->
+                <Border IsHitTestVisible="False" Width="13" Height="13" CornerRadius="6.5"
+                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="1,0,0,1"
+                        Background="{arc:ArcDesignTokenResource Surface}"
+                        BorderBrush="{arc:ArcDesignTokenResource Border}" BorderThickness="1">
+                    <lucide:LucideIcon Kind="ChevronDown" Size="8" Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+
+                <!-- Top-right: cross-device attention badge (waiting count or working spinner on other devices) -->
+                <Border IsVisible="{Binding Devices.HasOtherWaiting}" IsHitTestVisible="False"
+                        MinWidth="16" Height="16" Padding="3,0" CornerRadius="8"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-1,-1,0"
+                        Background="{arc:ArcDesignTokenResource Warning}"
+                        BorderBrush="{arc:ArcDesignTokenResource SurfaceMuted}" BorderThickness="1.5">
+                    <TextBlock FontSize="9.5" FontWeight="Bold" Foreground="#1C1405"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Text="{Binding Devices.OtherWaitingBadgeText}" />
+                </Border>
+                <Border IsVisible="{Binding Devices.ShowOtherWorking}" IsHitTestVisible="False"
+                        Width="{DynamicResource OctopusStatusBadgeSize}" Height="{DynamicResource OctopusStatusBadgeSize}"
+                        CornerRadius="{DynamicResource OctopusStatusBadgeCorner}"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-1,-1,0"
+                        Background="{arc:ArcDesignTokenResource Background}"
+                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                    <arc:ArcSpinner Width="9" Height="9" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Foreground="{arc:ArcDesignTokenResource Accent}" />
+                </Border>
+            </Grid>
+            <Border Width="24" Height="1" Background="{arc:ArcDesignTokenResource Border}" HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <arc:ScrollArea Grid.Row="1" OverlayScrollbarMode="Auto" FadeLength="0">
             <StackPanel Spacing="{DynamicResource OctopusRailSpacing}" Margin="{DynamicResource OctopusRailMargin}">
                 <!-- Squares of projects in no group, then the group folders (ProjectRailViewModel.Entries). -->
                 <ItemsControl ItemsSource="{Binding Entries}">
@@ -33,7 +117,7 @@
                 </arc:Button>
             </StackPanel>
         </arc:ScrollArea>
-        <arc:Button Grid.Row="1" Classes="icon" Variant="Ghost" HorizontalAlignment="Center" Margin="{DynamicResource OctopusRailBottomMargin}"
+        <arc:Button Grid.Row="2" Classes="icon" Variant="Ghost" HorizontalAlignment="Center" Margin="{DynamicResource OctopusRailBottomMargin}"
                     Command="{Binding OpenSettingsCommand}"
                     AutomationProperties.Name="{l:AppLangResource Settings}"
                     arc:Tooltip.Tip="{l:AppLangResource Settings}" arc:Tooltip.Side="Right">

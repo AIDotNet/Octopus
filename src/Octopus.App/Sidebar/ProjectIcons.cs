@@ -9,7 +9,7 @@ public static class ProjectIcons
     [
         LucideIconKind.Code, LucideIconKind.Terminal, LucideIconKind.Globe, LucideIconKind.Server,
         LucideIconKind.Database, LucideIconKind.Cloud, LucideIconKind.Smartphone, LucideIconKind.Monitor,
-        LucideIconKind.Cpu, LucideIconKind.Bot, LucideIconKind.Brain, LucideIconKind.Sparkles,
+        LucideIconKind.Laptop, LucideIconKind.Cpu, LucideIconKind.Bot, LucideIconKind.Brain, LucideIconKind.Sparkles,
         LucideIconKind.Rocket, LucideIconKind.Zap, LucideIconKind.Flame, LucideIconKind.Star,
         LucideIconKind.Heart, LucideIconKind.Gamepad2, LucideIconKind.Music, LucideIconKind.Camera,
         LucideIconKind.BookOpen, LucideIconKind.FileText, LucideIconKind.Package, LucideIconKind.Puzzle,

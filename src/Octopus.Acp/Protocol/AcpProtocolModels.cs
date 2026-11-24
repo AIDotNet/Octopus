@@ -166,8 +166,12 @@ public sealed class AcpToolLocation
 public sealed class AcpToolCallUpdate
 {
     public string ToolCallId { get; set; } = "";
+    /// <summary>Parent tool call id when this tool was executed inside a spawned subagent (e.g. Claude Code <c>parentToolUseId</c>).</summary>
+    public string? ParentToolCallId { get; set; }
     public string? Title { get; set; }
     public string? Name { get; set; }
+    /// <summary>Human-readable summary from <c>rawInput.description</c> (e.g. Bash description or SubAgent prompt summary).</summary>
+    public string? Description { get; set; }
     /// <summary>read | edit | delete | move | search | execute | think | fetch | switch_mode | other</summary>
     public string? Kind { get; set; }
     /// <summary>pending | in_progress | completed | failed</summary>
@@ -180,6 +184,21 @@ public sealed class AcpToolCallUpdate
     public string? Stdout { get; set; }
     public string? Stderr { get; set; }
     public int? ExitCode { get; set; }
+    /// <summary>True when started with <c>run_in_background: true</c> or reported as a background shell/subagent.</summary>
+    public bool IsBackground { get; set; }
+    /// <summary>True when this tool call spawns a subagent (<c>Agent</c> / <c>Task</c>).</summary>
+    public bool IsSubagentLaunch { get; set; }
+    public string? SubagentType { get; set; }
+    public string? SubagentModel { get; set; }
+    public string? WorktreeIsolation { get; set; }
+    /// <summary>Identifier linking a background Bash/Task with follow-up <c>TaskOutput</c>/<c>BashOutput</c>/<c>TaskStop</c>/<c>KillShell</c> calls.</summary>
+    public string? BackgroundTaskId { get; set; }
+    /// <summary>Structured Claude Code workflow tool kind: <c>enter_plan</c> | <c>exit_plan</c> | <c>todo_write</c> | <c>task_create</c> | <c>task_update</c> | <c>background_output</c> | <c>background_stop</c>.</summary>
+    public string? WorkflowAction { get; set; }
+    /// <summary>Tasks parsed from <c>TodoWrite</c>, <c>TaskCreate</c>, or <c>TaskUpdate</c>.</summary>
+    public List<AcpPlanEntry> WorkflowTasks { get; set; } = [];
+    /// <summary>Markdown plan payload extracted from <c>ExitPlanMode</c> or plan tools.</summary>
+    public string? PlanMarkdown { get; set; }
     public JsonElement? RawInput { get; set; }
     public JsonElement? RawOutput { get; set; }
     public JsonElement? Meta { get; set; }
@@ -187,10 +206,14 @@ public sealed class AcpToolCallUpdate
 
 public sealed class AcpPlanEntry
 {
+    public string? Id { get; set; }
     public string Content { get; set; } = "";
+    public string? ActiveForm { get; set; }
     public string Priority { get; set; } = "medium";
-    /// <summary>pending | in_progress | completed</summary>
+    /// <summary>pending | in_progress | completed | failed</summary>
     public string Status { get; set; } = "pending";
+    public string? Owner { get; set; }
+    public List<string> BlockedBy { get; set; } = [];
 }
 
 public sealed class AcpPermissionOption
@@ -210,6 +233,10 @@ public sealed class AcpPermissionRequest
     public List<AcpPermissionOption> Options { get; set; } = [];
     public string? WarningMessage { get; set; }
     public string? ActionDetail { get; set; }
+    /// <summary>True when this request represents an interactive Plan approval gate (e.g. Claude Code <c>ExitPlanMode</c>).</summary>
+    public bool IsPlanApproval { get; set; }
+    /// <summary>Structured plan markdown to display inside the Plan Approval gate card.</summary>
+    public string? PlanMarkdown { get; set; }
 }
 
 public sealed class AcpQuestionOption
