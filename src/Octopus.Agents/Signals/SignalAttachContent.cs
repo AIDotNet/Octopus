@@ -316,7 +316,11 @@ internal static class SignalAttachContent
 
         """;
 
-    /// <summary>A TOML inline array of basic strings, for <c>-c notify=[…]</c>.</summary>
+    /// <summary>
+    /// A TOML inline array for <c>-c notify=[…]</c>. Items are literal strings (<c>'…'</c>) when they can be: an
+    /// argument with double quotes is mangled by Windows PowerShell on its way to a native program (#18), and a path
+    /// needs no backslash escapes this way. An item with a single quote or a control character is a basic string.
+    /// </summary>
     public static string TomlArray(IEnumerable<string> items)
     {
         var sb = new StringBuilder("[");
@@ -328,6 +332,11 @@ internal static class SignalAttachContent
                 sb.Append(',');
             }
             first = false;
+            if (!item.Contains('\'') && !item.Any(char.IsControl))
+            {
+                sb.Append('\'').Append(item).Append('\'');
+                continue;
+            }
             sb.Append('"');
             foreach (var c in item)
             {
