@@ -71,6 +71,9 @@
         <DataTemplate DataType="ssh:SshSettingsViewModel">
             <ssh:SshPageView />
         </DataTemplate>
+        <DataTemplate DataType="remote:AccountDevicesSettingsViewModel">
+            <remote:AccountDevicesPageView />
+        </DataTemplate>
         <DataTemplate DataType="remote:RemoteAccessSettingsViewModel">
             <remote:RemoteAccessPageView />
         </DataTemplate>

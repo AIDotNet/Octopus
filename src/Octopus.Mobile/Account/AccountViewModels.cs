@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Workspace;
+using Octopus.Remote.Relay;
 
 namespace Octopus.Mobile.Account;
 
@@ -105,6 +106,31 @@ public sealed partial class SignInFlow : ObservableObject, IDisposable
             UserCode = challenge.UserCode;
             _openBrowser(challenge.VerificationUri);
             _ = WaitAsync(challenge);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (IOException e)
+        {
+            ErrorText = string.Format(MobileLangResources.Get(MobileLangResourceKind.SignInFailed), e.Message);
+        }
+        finally
+        {
+            IsStarting = false;
+        }
+    }
+
+    /// <summary>Signs in directly at a self-hosted relay using its Access Key (no browser code).</summary>
+    public async Task StartWithKeyAsync(string server, string accessKey)
+    {
+        if (!IsIdle || _disposed) return;
+        ErrorText = null;
+        CodeCopied = false;
+        IsStarting = true;
+        var starting = _starting = new CancellationTokenSource();
+        try
+        {
+            await _account.SignInWithKeyAsync(server.Trim(), accessKey.Trim(), starting.Token);
         }
         catch (OperationCanceledException)
         {
@@ -291,14 +317,29 @@ public sealed partial class CustomServerViewModel : ObservableObject, IDisposabl
     }
 
     public SignInFlow SignIn { get; }
-    /// <summary>The address as typed; the last one used is there to start with.</summary>
+    /// <summary>The address as typed; the last one used is there to start with. Also accepts <c>octopus://relay?…</c>.</summary>
     [ObservableProperty] public partial string Server { get; set; }
+    /// <summary>Optional Access Key for browser-free sign-in on a self-hosted Octopus Relay.</summary>
+    [ObservableProperty] public partial string AccessKey { get; set; } = "";
 
     /// <summary>The address is showing rather than the code.</summary>
     public bool IsEntering => !SignIn.HasCode;
     public bool CanStart => SignIn.IsIdle && !string.IsNullOrWhiteSpace(Server);
 
-    partial void OnServerChanged(string value) => Notify();
+    partial void OnServerChanged(string value)
+    {
+        if (RelayConfigLink.TryParse(value) is { } link)
+        {
+            Server = link.Url.GetLeftPart(UriPartial.Authority);
+            if (!string.IsNullOrEmpty(link.AccessKey))
+            {
+                AccessKey = link.AccessKey;
+            }
+            return;
+        }
+
+        Notify();
+    }
 
     private void Notify()
     {
@@ -307,7 +348,18 @@ public sealed partial class CustomServerViewModel : ObservableObject, IDisposabl
     }
 
     [RelayCommand(CanExecute = nameof(CanStart))]
-    private Task StartAsync() => SignIn.StartAsync(Server);
+    private Task StartAsync()
+    {
+        var server = Server.Trim();
+        var key = AccessKey.Trim();
+        if (RelayConfigLink.TryParse(server) is { } link)
+        {
+            server = link.Url.GetLeftPart(UriPartial.Authority);
+            if (!string.IsNullOrEmpty(link.AccessKey)) key = link.AccessKey;
+        }
+
+        return string.IsNullOrEmpty(key) ? SignIn.StartAsync(server) : SignIn.StartWithKeyAsync(server, key);
+    }
 
     [RelayCommand]
     private void Back()

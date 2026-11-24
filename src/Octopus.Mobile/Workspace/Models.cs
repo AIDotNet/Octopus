@@ -55,6 +55,14 @@ public sealed partial class RemoteHost : ObservableObject
     [ObservableProperty] public partial bool IsPaired { get; set; }
     /// <summary>When the host was last reachable; shown while it is offline.</summary>
     public DateTimeOffset? LastSeen { get; set; }
+    /// <summary>
+    /// A computer of the account this phone is not paired with yet that, online, lets devices of the account in with
+    /// its access password (its settings, "Account and devices"). False while it is offline, when the owner turned
+    /// password access off, and for an older version that has none: then only pairing gets in.
+    /// </summary>
+    [ObservableProperty] public partial bool AcceptsPassword { get; set; }
+    /// <summary>The system it runs ("macOS", "Windows"…), when the account's list says.</summary>
+    public string? Platform { get; set; }
     public ObservableCollection<RemoteProject> Projects { get; } = [];
     public IReadOnlyList<AgentOption> Agents { get; set; } = [];
 
@@ -62,6 +70,14 @@ public sealed partial class RemoteHost : ObservableObject
 
     partial void OnLinkChanged(HostLink value) => OnPropertyChanged(nameof(IsOnline));
 }
+
+/// <summary>
+/// A device of the account that is not a computer to operate: a phone, this one included. Phones are never hosts; the
+/// host list only names them.
+/// </summary>
+/// <param name="IsCurrent">This phone itself.</param>
+/// <param name="Platform">The system it runs ("iOS", "Android"…), when the account's list says.</param>
+public sealed record AccountDevice(string Id, string Name, bool IsCurrent, bool IsOnline, DateTimeOffset? LastSeen, string? Platform = null);
 
 /// <summary>An isolated git worktree workspace of a project on the host.</summary>
 public sealed record RemoteBranchWorkspace(

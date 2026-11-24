@@ -51,6 +51,8 @@ public partial class TerminalPage : Page, ITerminalSurface, IClosablePage
 
     public void FocusTerminal() => Terminal.FocusTerminal();
 
+    public Task<PickedImage?> PickImageAsync() => MobileHost.PickImage(Avalonia.Controls.TopLevel.GetTopLevel(this));
+
     /// <summary>The page left the stack: the connection to the session ends (the program on the host keeps running).</summary>
     public void OnClosed()
     {

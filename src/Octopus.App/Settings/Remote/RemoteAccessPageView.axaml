@@ -58,6 +58,14 @@
                                 Command="{Binding SaveRelayCommand}" />
                 </StackPanel>
             </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteRelayAccessKey}"
+                             Description="{l:AppLangResource SettingsRemoteRelayAccessKeyHint}"
+                             IsVisible="{Binding CanSignInRelay}">
+                <arc:Input x:Name="RelayAccessKeyInput" Size="Small" Width="260" PasswordChar="•"
+                           AutomationProperties.Name="{l:AppLangResource SettingsRemoteRelayAccessKey}"
+                           Text="{Binding RelayAccessKey, Mode=TwoWay}"
+                           PlaceholderText="{l:AppLangResource AccountCustomAccessKeyPlaceholder}" />
+            </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteRelayAccount}"
                              Description="{l:AppLangResource SettingsRemoteRelayAccountHint}">
                 <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
@@ -198,6 +206,7 @@
                                         <TextBlock Classes="name" Text="{Binding Name}" />
                                         <arc:Badge Size="Small" Tone="Neutral" Content="{Binding Kind}" VerticalAlignment="Center" />
                                         <arc:Badge Size="Small" Tone="Success" Content="{l:AppLangResource SettingsRemoteOnline}" IsVisible="{Binding IsOnline}" VerticalAlignment="Center" />
+                                        <arc:Badge Size="Small" Tone="Info" Content="{l:AppLangResource SettingsRemoteViaPassword}" IsVisible="{Binding ViaPassword}" VerticalAlignment="Center" />
                                     </StackPanel>
                                     <TextBlock Classes="hint" Text="{Binding Details}" IsVisible="{Binding !IsOnline}" />
                                     <TextBlock Classes="mono" Text="{Binding Id}" TextTrimming="CharacterEllipsis" />

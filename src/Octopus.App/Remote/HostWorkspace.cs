@@ -503,6 +503,40 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         }).ConfigureAwait(false);
     }
 
+    public async Task<string?> UploadAsync(string itemId, string upload, string name, byte[] data, bool last)
+    {
+        // Only for a terminal of this computer: the picture's path is handed to its program, which reads it from here.
+        await OnUi(() =>
+        {
+            if (IsGui(FindItem(itemId).Item)) throw NoTerminal();
+            return true;
+        }).ConfigureAwait(false);
+        if (!upload.All(char.IsAsciiLetterOrDigit)) throw new RemoteException(RemoteProtocol.InvalidParams, "The upload id may only have letters and digits.");
+        var extension = ClipboardImages.ImageExtension(name)
+            ?? throw new RemoteException(RemoteProtocol.InvalidParams, "Only pictures (png, jpg, gif or webp) can be uploaded.");
+        return await IoAsync(() =>
+        {
+            var folder = ClipboardImages.DefaultFolder;
+            Directory.CreateDirectory(folder);
+            var partial = Path.Combine(folder, $"upload-{upload}.part");
+            using (var stream = new FileStream(partial, FileMode.Append, FileAccess.Write, FileShare.None))
+            {
+                if (stream.Length + data.Length > RemoteMethods.UploadMaxBytes)
+                {
+                    stream.Dispose();
+                    File.Delete(partial);
+                    throw new RemoteException(RemoteProtocol.InvalidParams, "The picture is too large.");
+                }
+                stream.Write(data);
+            }
+            if (!last) return (string?)null;
+            ClipboardImages.Cleanup(folder);
+            var path = ClipboardImages.NewPath(folder, extension);
+            File.Move(partial, path);
+            return path;
+        }).ConfigureAwait(false);
+    }
+
     public async Task CreateFileAsync(string path) => await Wrap(_files.CreateFileAsync(await InsideProjectAsync(path).ConfigureAwait(false))).ConfigureAwait(false);
 
     public async Task CreateDirectoryAsync(string path) => await Wrap(_files.CreateDirectoryAsync(await InsideProjectAsync(path).ConfigureAwait(false))).ConfigureAwait(false);

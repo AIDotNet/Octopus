@@ -237,5 +237,36 @@
     <unit id="DiffBinary"><segment><source>A binary file: there are no lines to show.</source></segment></unit>
     <unit id="DiffTooLarge"><segment><source>This change is too large to show on the phone.</source></segment></unit>
     <unit id="DiffEmpty"><segment><source>There is no difference to show.</source></segment></unit>
+    <unit id="HostAccessByPassword"><segment><source>Get in with its access password</source></segment></unit>
+    <unit id="AccessPasswordAction"><segment><source>Password</source></segment></unit>
+    <unit id="LastSeenJustNow"><segment><source>Online just now</source></segment></unit>
+    <unit id="LastSeenMinutes"><segment><source>Online {0} min ago</source></segment></unit>
+    <unit id="LastSeenHours"><segment><source>Online {0} h ago</source></segment></unit>
+    <unit id="LastSeenDays"><segment><source>Online {0} days ago</source></segment></unit>
+    <unit id="OtherDevicesTitle"><segment><source>Other devices ({0})</source></segment></unit>
+    <unit id="OtherDevicesHint"><segment><source>Phones of this account. They cannot be operated from here.</source></segment></unit>
+    <unit id="ThisPhone"><segment><source>This phone</source></segment></unit>
+    <unit id="ThisPhoneSummary"><segment><source>The phone you are using</source></segment></unit>
+    <unit id="AccessPasswordLabel"><segment><source>Access password</source></segment></unit>
+    <unit id="AccessPasswordIntro"><segment><source>Type this computer's access password once. After that this phone connects to it by itself, until it is removed on the computer.</source></segment></unit>
+    <unit id="AccessPasswordHint"><segment><source>The access password is shown on this computer in Octopus Settings → Account and devices.</source></segment></unit>
+    <unit id="AccessPasswordSubmit"><segment><source>Connect</source></segment></unit>
+    <unit id="AccessPasswordVerifying"><segment><source>Verifying…</source></segment></unit>
+    <unit id="AccessPasswordWrong"><segment><source>That is not this computer's access password. Check it on the computer and try again.</source></segment></unit>
+    <unit id="AccessPasswordLocked"><segment><source>Too many wrong passwords. Try again later, in about 15 minutes.</source></segment></unit>
+    <unit id="AccessPasswordOff"><segment><source>This computer does not take its access password right now. Pair with it instead, or turn the access password on there in Octopus Settings → Account and devices.</source></segment></unit>
+    <unit id="AccessPasswordUsePairing"><segment><source>Pair instead</source></segment></unit>
+    <unit id="AccessPasswordUnreachable"><segment><source>The computer could not be reached. It may be offline, or this phone is not signed in.</source></segment></unit>
+    <unit id="AccessPasswordNotConfirmed"><segment><source>Could not confirm this is your computer: what answered could not prove it knows the password. Nothing was remembered.</source></segment></unit>
+    <unit id="AccessPasswordInvalid"><segment><source>An access password is 8 letters and digits.</source></segment></unit>
+    <unit id="SignInAccessKey"><segment><source>Access key (optional)</source></segment></unit>
+    <unit id="SignInAccessKeyPlaceholder"><segment><source>Access key (optional, or paste octopus://relay?…)</source></segment></unit>
+    <unit id="SendImage"><segment><source>Send a picture</source></segment></unit>
+    <unit id="UploadUnsupportedHost"><segment><source>Update Octopus on the computer to send it pictures.</source></segment></unit>
+    <unit id="UploadProgress"><segment><source>Uploading picture… {0}%</source></segment></unit>
+    <unit id="UploadDone"><segment><source>Picture uploaded: its path is in the input.</source></segment></unit>
+    <unit id="UploadTooLarge"><segment><source>The picture is too large: at most {0} MB.</source></segment></unit>
+    <unit id="UploadUnreadable"><segment><source>This picture cannot be read. Try a JPG or PNG.</source></segment></unit>
+    <unit id="UploadFailed"><segment><source>The picture was not sent: {0}</source></segment></unit>
   </file>
 </xliff>

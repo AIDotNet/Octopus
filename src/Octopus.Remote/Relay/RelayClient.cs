@@ -70,6 +70,15 @@ internal sealed class RelayControlMessage
     public string? Signature { get; set; }
     public string? DeviceId { get; set; }
     public string? Tunnel { get; set; }
+    /// <summary>What a host offers besides being reached by paired devices (<see cref="RelayHostFeatures"/>); in "register" and "features".</summary>
+    public List<string>? Features { get; set; }
+}
+
+/// <summary>Names of what a host tells the relay it offers, for the account's device list.</summary>
+public static class RelayHostFeatures
+{
+    /// <summary>Devices of the same account may come in with the host's access password.</summary>
+    public const string PasswordAccess = "password-access";
 }
 
 internal sealed class RelayOpenTunnel
@@ -215,6 +224,8 @@ public sealed class RelayHostLink : IAsyncDisposable
     private readonly Func<string> _name;
     private readonly Func<IMessageTransport, Task> _serve;
     private readonly CancellationTokenSource _stop = new();
+    private readonly SemaphoreSlim _sending = new(1, 1);
+    private ClientWebSocket? _socket;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<IMessageTransport, bool> _serving = new();
     private Task? _running;
 
@@ -241,6 +252,34 @@ public sealed class RelayHostLink : IAsyncDisposable
     /// <summary>How long is waited before trying again; shortened in tests.</summary>
     internal TimeSpan? RetryPause { get; set; }
 
+    /// <summary>What this host offers besides paired devices (<see cref="RelayHostFeatures"/>), asked at every registration.</summary>
+    public Func<IReadOnlyList<string>>? Features { get; init; }
+
+    /// <summary>
+    /// Tells the relay what <see cref="Features"/> says now, when online (at registration it is told anyway). A relay
+    /// of before features ignores the message.
+    /// </summary>
+    public async Task AnnounceFeaturesAsync()
+    {
+        if (Volatile.Read(ref _socket) is not { State: WebSocketState.Open } socket) return;
+        var message = new RelayControlMessage { Type = "features", Features = [.. Features?.Invoke() ?? []] };
+        await _sending.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+            limit.CancelAfter(TimeSpan.FromSeconds(10));
+            await socket.SendAsync((ReadOnlyMemory<byte>)JsonSerializer.SerializeToUtf8Bytes(message, RelayJsonContext.Default.RelayControlMessage), WebSocketMessageType.Text, true, limit.Token).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is WebSocketException or IOException or OperationCanceledException or ObjectDisposedException)
+        {
+            // The connection is going; the next registration says it.
+        }
+        finally
+        {
+            _sending.Release();
+        }
+    }
+
     public void Start() => _running ??= Task.Run(RunAsync);
 
     private async Task RunAsync()
@@ -262,10 +301,18 @@ public sealed class RelayHostLink : IAsyncDisposable
                 await RegisterAsync(socket).ConfigureAwait(false);
                 failures = 0;
                 pause = Pauses[0];
+                Volatile.Write(ref _socket, socket);
                 Set(RelayLinkState.Online, null);
-                while (await ReceiveAsync(socket, _stop.Token).ConfigureAwait(false) is { } message)
+                try
                 {
-                    if (message.Type == "connect" && RelaySockets.IsTunnelId(message.Tunnel)) _ = MeetAsync(message.Tunnel!);
+                    while (await ReceiveAsync(socket, _stop.Token).ConfigureAwait(false) is { } message)
+                    {
+                        if (message.Type == "connect" && RelaySockets.IsTunnelId(message.Tunnel)) _ = MeetAsync(message.Tunnel!);
+                    }
+                }
+                finally
+                {
+                    Volatile.Write(ref _socket, null);
                 }
                 switch ((int?)socket.CloseStatus)
                 {
@@ -314,6 +361,7 @@ public sealed class RelayHostLink : IAsyncDisposable
             PublicKey = Convert.ToBase64String(_identity.PublicKey.Bytes),
             Name = _name(),
             Signature = Convert.ToBase64String(_identity.Sign(RelaySockets.RegistrationHash(nonce))),
+            Features = Features?.Invoke() is { Count: > 0 } features ? [.. features] : null,
         };
         await socket.SendAsync((ReadOnlyMemory<byte>)JsonSerializer.SerializeToUtf8Bytes(register, RelayJsonContext.Default.RelayControlMessage), WebSocketMessageType.Text, true, limit.Token).ConfigureAwait(false);
         var answer = await ReceiveAsync(socket, limit.Token).ConfigureAwait(false);

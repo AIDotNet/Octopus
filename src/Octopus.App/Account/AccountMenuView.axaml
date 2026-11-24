@@ -57,6 +57,13 @@
                     <TextBlock Grid.Column="2" Classes="hint" Text="{Binding ServerHost}" VerticalAlignment="Center" />
                 </Grid>
             </Button>
+            <Button x:Name="MenuAccountDevicesButton" Classes="row" Padding="8,7"
+                    Command="{Binding OpenAccountDevicesCommand}">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <lucide:LucideIcon Kind="MonitorSmartphone" Size="14" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource AccountOpenAccountDevices}" VerticalAlignment="Center" />
+                </Grid>
+            </Button>
             <Button x:Name="MenuRemoteSettingsButton" Classes="row" Padding="8,7"
                     Command="{Binding OpenRemoteSettingsCommand}">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">

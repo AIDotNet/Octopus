@@ -97,6 +97,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public bool SupportsWorkspaces =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityWorkspaces);
 
+    /// <summary>The host takes pictures for its sessions (<see cref="RemoteMethods.FsUpload"/>).</summary>
+    public bool SupportsUpload =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityUpload);
+
     /// <summary>Projects or their items changed on the host. Raised on the receiving thread.</summary>
     public event Action? WorkspaceChanged;
     /// <summary>One item's title or activity changed. Raised on the receiving thread.</summary>
@@ -202,6 +206,28 @@ public sealed class RemoteHostClient : IAsyncDisposable
             offset += length;
         }
         while (offset < bytes.Length);
+    }
+
+    /// <summary>
+    /// Hands the host a picture for a session, piece by piece, and returns where the host keeps it (its own temporary
+    /// folder). <paramref name="progress"/> hears the share sent so far, from 0 to 1, after every piece.
+    /// </summary>
+    public async Task<string> UploadAsync(string itemId, string name, byte[] bytes, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    {
+        if (bytes.Length > RemoteMethods.UploadMaxBytes) throw new InvalidDataException($"{bytes.Length} bytes is more than the {RemoteMethods.UploadMaxBytes} bytes a picture may have.");
+        var upload = Guid.NewGuid().ToString("N");
+        var offset = 0;
+        while (true)
+        {
+            var length = Math.Min(RemoteMethods.FilePieceBytes, bytes.Length - offset);
+            var last = offset + length >= bytes.Length;
+            var answer = await CallAsync(RemoteMethods.FsUpload,
+                new UploadMessage { ItemId = itemId, Upload = upload, Name = name, Data = Convert.ToBase64String(bytes, offset, length), Last = last },
+                RemoteJsonContext.Default.UploadMessage, RemoteJsonContext.Default.UploadedMessage, cancellationToken).ConfigureAwait(false);
+            offset += length;
+            progress?.Report(bytes.Length == 0 ? 1 : (double)offset / bytes.Length);
+            if (last) return answer.Path is { Length: > 0 } path ? path : throw new RemoteException(RemoteProtocol.InternalError, "The host did not say where it kept the picture.");
+        }
     }
 
     public Task CreateFileAsync(string path, CancellationToken cancellationToken = default) =>

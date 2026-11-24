@@ -53,7 +53,9 @@ public sealed class MobileRemote : IDisposable
         Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityBrowse,
             RemoteMethods.CapabilityAcpGui,
             // Looking at the projects' files and their uncommitted changes (Files/).
-            RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit],
+            RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit,
+            // Pictures for a terminal session's program (Terminals/).
+            RemoteMethods.CapabilityUpload],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
     };
 
@@ -188,6 +190,14 @@ internal sealed class RelayAccountSession : IAccountSession
         var login = await _session.BeginSignInAsync(_deviceName, cancellationToken).ConfigureAwait(false);
         var cancel = new CancellationTokenSource();
         return new SignInChallenge(login.UserCode, login.VerificationUriComplete, CompleteAsync(login, cancel.Token), cancel.Cancel);
+    }
+
+    public async Task SignInWithKeyAsync(string server, string accessKey, CancellationToken cancellationToken = default)
+    {
+        if (RelayAccountClient.ParseUrl(server) is not { } url) throw new IOException("That is not an address.");
+        if (url != RelayAccountClient.ParseUrl(_settings.Server)) await _session.ForgetAsync().ConfigureAwait(false);
+        _settings.Use(server);
+        await _session.SignInWithKeyAsync(accessKey, _deviceName, cancellationToken).ConfigureAwait(false);
     }
 
     public void SignOut() => _ = _session.SignOutAsync();

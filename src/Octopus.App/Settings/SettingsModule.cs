@@ -22,6 +22,7 @@ internal static class SettingsModule
         services.AddTransient<WorkspaceCleanupSettingsViewModel>();
         services.AddTransient<TerminalSettingsViewModel>();
         services.AddTransient<SshSettingsViewModel>();
+        services.AddTransient<Remote.AccountDevicesSettingsViewModel>();
         services.AddTransient<Remote.RemoteAccessSettingsViewModel>();
         services.AddTransient<Remote.RemoteHostsSettingsViewModel>();
         services.AddTransient<AppearanceSettingsViewModel>();

@@ -237,5 +237,36 @@
     <unit id="DiffBinary"><segment><source>A binary file: there are no lines to show.</source><target state="translated">二进制文件，没有可显示的行。</target></segment></unit>
     <unit id="DiffTooLarge"><segment><source>This change is too large to show on the phone.</source><target state="translated">这处改动太大，手机上不显示。</target></segment></unit>
     <unit id="DiffEmpty"><segment><source>There is no difference to show.</source><target state="translated">没有可显示的差异。</target></segment></unit>
+    <unit id="HostAccessByPassword"><segment><source>Get in with its access password</source><target state="translated">可用访问密码进入</target></segment></unit>
+    <unit id="AccessPasswordAction"><segment><source>Password</source><target state="translated">密码</target></segment></unit>
+    <unit id="LastSeenJustNow"><segment><source>Online just now</source><target state="translated">刚刚在线</target></segment></unit>
+    <unit id="LastSeenMinutes"><segment><source>Online {0} min ago</source><target state="translated">{0} 分钟前在线</target></segment></unit>
+    <unit id="LastSeenHours"><segment><source>Online {0} h ago</source><target state="translated">{0} 小时前在线</target></segment></unit>
+    <unit id="LastSeenDays"><segment><source>Online {0} days ago</source><target state="translated">{0} 天前在线</target></segment></unit>
+    <unit id="OtherDevicesTitle"><segment><source>Other devices ({0})</source><target state="translated">其他设备（{0}）</target></segment></unit>
+    <unit id="OtherDevicesHint"><segment><source>Phones of this account. They cannot be operated from here.</source><target state="translated">这个账号下的手机，不能在这里操作。</target></segment></unit>
+    <unit id="ThisPhone"><segment><source>This phone</source><target state="translated">本机</target></segment></unit>
+    <unit id="ThisPhoneSummary"><segment><source>The phone you are using</source><target state="translated">正在使用的这台手机</target></segment></unit>
+    <unit id="AccessPasswordLabel"><segment><source>Access password</source><target state="translated">访问密码</target></segment></unit>
+    <unit id="AccessPasswordIntro"><segment><source>Type this computer's access password once. After that this phone connects to it by itself, until it is removed on the computer.</source><target state="translated">输入一次这台电脑的访问密码，之后这台手机就能直接连上它，直到在电脑上把它移除。</target></segment></unit>
+    <unit id="AccessPasswordHint"><segment><source>The access password is shown on this computer in Octopus Settings → Account and devices.</source><target state="translated">在这台电脑的 Octopus 设置 → 账号与设备 里可以看到访问密码</target></segment></unit>
+    <unit id="AccessPasswordSubmit"><segment><source>Connect</source><target state="translated">连接</target></segment></unit>
+    <unit id="AccessPasswordVerifying"><segment><source>Verifying…</source><target state="translated">验证中…</target></segment></unit>
+    <unit id="AccessPasswordWrong"><segment><source>That is not this computer's access password. Check it on the computer and try again.</source><target state="translated">密码不对。请对照电脑上显示的访问密码再试一次。</target></segment></unit>
+    <unit id="AccessPasswordLocked"><segment><source>Too many wrong passwords. Try again later, in about 15 minutes.</source><target state="translated">错误次数太多，稍后再试，约 15 分钟。</target></segment></unit>
+    <unit id="AccessPasswordOff"><segment><source>This computer does not take its access password right now. Pair with it instead, or turn the access password on there in Octopus Settings → Account and devices.</source><target state="translated">这台电脑现在不接受访问密码。可以改用配对，或在这台电脑的 Octopus 设置 → 账号与设备 里打开访问密码。</target></segment></unit>
+    <unit id="AccessPasswordUsePairing"><segment><source>Pair instead</source><target state="translated">改用配对</target></segment></unit>
+    <unit id="AccessPasswordUnreachable"><segment><source>The computer could not be reached. It may be offline, or this phone is not signed in.</source><target state="translated">连不上这台电脑：它可能已经离线，或者这台手机没有登录。</target></segment></unit>
+    <unit id="AccessPasswordNotConfirmed"><segment><source>Could not confirm this is your computer: what answered could not prove it knows the password. Nothing was remembered.</source><target state="translated">无法确认这是你的电脑：应答的一方证明不了它知道这个密码，所以没有记住它。</target></segment></unit>
+    <unit id="AccessPasswordInvalid"><segment><source>An access password is 8 letters and digits.</source><target state="translated">访问密码是 8 位字母和数字。</target></segment></unit>
+    <unit id="SignInAccessKey"><segment><source>Access key (optional)</source><target state="translated">访问密钥（可选）</target></segment></unit>
+    <unit id="SignInAccessKeyPlaceholder"><segment><source>Access key (optional, or paste octopus://relay?…)</source><target state="translated">访问密钥（可选，或直接粘贴 octopus://relay?…）</target></segment></unit>
+    <unit id="SendImage"><segment><source>Send a picture</source><target state="translated">发送图片</target></segment></unit>
+    <unit id="UploadUnsupportedHost"><segment><source>Update Octopus on the computer to send it pictures.</source><target state="translated">请更新电脑上的 Octopus，才能发送图片。</target></segment></unit>
+    <unit id="UploadProgress"><segment><source>Uploading picture… {0}%</source><target state="translated">正在上传图片… {0}%</target></segment></unit>
+    <unit id="UploadDone"><segment><source>Picture uploaded: its path is in the input.</source><target state="translated">图片已上传，路径已填入输入。</target></segment></unit>
+    <unit id="UploadTooLarge"><segment><source>The picture is too large: at most {0} MB.</source><target state="translated">图片太大，最多 {0} MB。</target></segment></unit>
+    <unit id="UploadUnreadable"><segment><source>This picture cannot be read. Try a JPG or PNG.</source><target state="translated">无法读取这张图片，请换成 JPG 或 PNG。</target></segment></unit>
+    <unit id="UploadFailed"><segment><source>The picture was not sent: {0}</source><target state="translated">图片没有发送：{0}</target></segment></unit>
   </file>
 </xliff>

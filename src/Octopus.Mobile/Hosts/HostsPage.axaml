@@ -8,9 +8,11 @@
            x:DataType="vm:HostsViewModel"
            IsScrollable="True">
     <arcm:Page.Resources>
-        <!-- One computer row: how it is reached, and a pill with what needs the person there. -->
+        <!-- One computer row: how it is reached, and a pill with what needs the person there (a lock: its access
+             password gets in). Offline it is faded and does nothing. -->
         <DataTemplate x:Key="HostRow" x:DataType="vm:HostRowViewModel">
             <arcm:ListItem Icon="{x:Static arc:ArcIcons.Monitor}"
+                           Classes.dimmed="{Binding IsDimmed}"
                            Content="{Binding Name}"
                            Subtitle="{Binding Summary}"
                            ShowChevron="{Binding ShowChevron}"
@@ -25,11 +27,25 @@
                                 IsVisible="{Binding HasPill}">
                             <StackPanel Orientation="Horizontal" Spacing="5">
                                 <arc:ArcSpinner IsVisible="{Binding IsWorking}" />
+                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Lock}" Size="11" IsVisible="{Binding IsPasswordAction}" />
                                 <TextBlock Text="{Binding PillText}" />
                             </StackPanel>
                         </Border>
                         <TextBlock Classes="muted" Text="{l:MobileLangResource Idle}" IsVisible="{Binding IsIdle}" VerticalAlignment="Center" />
                     </Panel>
+                </arcm:ListItem.Trailing>
+            </arcm:ListItem>
+        </DataTemplate>
+
+        <!-- A phone of the account under "Other devices": only named ("This phone" for itself), never opened. -->
+        <DataTemplate x:Key="DeviceRow" x:DataType="vm:AccountDeviceRowViewModel">
+            <arcm:ListItem Icon="{x:Static arc:ArcIcons.Smartphone}"
+                           Content="{Binding Name}"
+                           Subtitle="{Binding Summary}">
+                <arcm:ListItem.Trailing>
+                    <Border Classes="pill" IsVisible="{Binding IsCurrent}">
+                        <TextBlock Text="{l:MobileLangResource ThisPhone}" />
+                    </Border>
                 </arcm:ListItem.Trailing>
             </arcm:ListItem>
         </DataTemplate>
@@ -210,6 +226,32 @@
                             ItemsSource="{Binding Offline}"
                             ItemTemplate="{StaticResource HostRow}"
                             IsVisible="{Binding HasOffline}" />
+            <!-- The account's phones (this one too): folded, for information only. -->
+            <StackPanel Name="OtherDevicesSection" Spacing="0" IsVisible="{Binding HasOtherDevices}">
+                <arcm:ListGroup Name="OtherDevicesGroup">
+                    <arcm:ListItem Name="OtherDevicesToggle"
+                                   Icon="{x:Static arc:ArcIcons.Smartphone}"
+                                   Content="{Binding OtherDevicesTitle}"
+                                   Command="{Binding ToggleOtherDevicesCommand}">
+                        <arcm:ListItem.Trailing>
+                            <Panel VerticalAlignment="Center">
+                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronRight}" Size="16"
+                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                              IsVisible="{Binding !IsOtherDevicesOpen}" />
+                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronDown}" Size="16"
+                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                              IsVisible="{Binding IsOtherDevicesOpen}" />
+                            </Panel>
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                </arcm:ListGroup>
+                <arcm:ListGroup Name="OtherDevicesList"
+                                Margin="0,8,0,0"
+                                Footer="{l:MobileLangResource OtherDevicesHint}"
+                                ItemsSource="{Binding OtherDevices}"
+                                ItemTemplate="{StaticResource DeviceRow}"
+                                IsVisible="{Binding IsOtherDevicesOpen}" />
+            </StackPanel>
             <arcm:ListGroup Name="AddGroup" IsVisible="{Binding HasHosts}">
                 <arcm:ListItem Name="AddHostRow"
                                Icon="{x:Static arc:ArcIcons.Plus}"

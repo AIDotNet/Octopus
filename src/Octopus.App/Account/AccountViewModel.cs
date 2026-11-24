@@ -72,6 +72,7 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial bool IsSignInDialogOpen { get; set; }
     [ObservableProperty] public partial bool ShowCustomServer { get; set; }
     [ObservableProperty] public partial string CustomServerUrl { get; set; } = "";
+    [ObservableProperty] public partial string CustomAccessKey { get; set; } = "";
     [ObservableProperty] public partial bool AutoEnableRelayOnSignIn { get; set; } = true;
     [ObservableProperty] public partial string? UserCode { get; private set; }
     [ObservableProperty] public partial string? ErrorText { get; private set; }
@@ -114,6 +115,16 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
 
     partial void OnCustomServerUrlChanged(string value)
     {
+        if (RelayConfigLink.TryParse(value) is { } link)
+        {
+            CustomServerUrl = link.Url.GetLeftPart(UriPartial.Authority);
+            if (!string.IsNullOrEmpty(link.AccessKey))
+            {
+                CustomAccessKey = link.AccessKey;
+            }
+            return;
+        }
+
         OnPropertyChanged(nameof(IsCustomServerInsecure));
         RefreshLabels();
     }
@@ -151,6 +162,7 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
         {
             ErrorText = null;
             CustomServerUrl = _settings.Current.Remote.RelayUrl ?? "";
+            CustomAccessKey = "";
             ShowCustomServer = !string.IsNullOrWhiteSpace(CustomServerUrl);
             RefreshLabels();
             IsSignInDialogOpen = true;
@@ -183,6 +195,16 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
         try
         {
             var targetUrl = EffectiveTargetUrl();
+            var accessKey = ShowCustomServer ? CustomAccessKey.Trim() : "";
+            if (RelayConfigLink.TryParse(targetUrl) is { } configLink)
+            {
+                targetUrl = configLink.Url.GetLeftPart(UriPartial.Authority);
+                if (!string.IsNullOrEmpty(configLink.AccessKey))
+                {
+                    accessKey = configLink.AccessKey;
+                }
+            }
+
             if (RelayAccountClient.ParseUrl(targetUrl) is null)
             {
                 ErrorText = AppLangResources.Get(AppLangResourceKind.SettingsRemoteRelayStateNoUrl);
@@ -190,6 +212,19 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
             }
 
             await _relay.SetUrlAsync(targetUrl);
+            if (!string.IsNullOrEmpty(accessKey))
+            {
+                await _relay.SignInWithKeyAsync(accessKey, _runtime.DeviceName, signIn.Token);
+                CustomAccessKey = "";
+                if (AutoEnableRelayOnSignIn && !_settings.Current.Remote.RelayHostEnabled)
+                {
+                    _settings.Update(s => s.Remote.RelayHostEnabled = true);
+                }
+                IsSignInDialogOpen = false;
+                await ApplyRuntimeAsync();
+                return;
+            }
+
             var login = await _relay.BeginSignInAsync(_runtime.DeviceName, signIn.Token);
             UserCode = login.UserCode;
             _loginPage = login.VerificationUriComplete.ToString();
@@ -286,6 +321,14 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
         MenuCloseRequested?.Invoke(this, EventArgs.Empty);
         IsSignInDialogOpen = false;
         _navigator.OpenSettings("remote");
+    }
+
+    [RelayCommand]
+    private void OpenAccountDevices()
+    {
+        MenuCloseRequested?.Invoke(this, EventArgs.Empty);
+        IsSignInDialogOpen = false;
+        _navigator.OpenSettings("account-devices");
     }
 
     [RelayCommand]

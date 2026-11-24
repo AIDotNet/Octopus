@@ -58,6 +58,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
     }
 
     public ObservableCollection<RemoteHost> Hosts { get; } = [];
+    public ObservableCollection<AccountDevice> OtherDevices { get; } = [];
     public bool MirrorsTerminals => true;
     public bool HasPairedHosts => _connections.Hosts.Peers.Count > 0;
 
@@ -347,6 +348,56 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         return new PairingAttempt(code.Task, AddAsync(target, code, cancel.Token), cancel.Cancel);
     }
 
+    public async Task<AccessOutcome> AccessWithPasswordAsync(RemoteHost host, string password, CancellationToken cancellationToken = default)
+    {
+        if (AccessPassword.Normalize(password) is not { } normalized) return AccessOutcome.NotAPassword;
+        try
+        {
+            // Through the relay to the device id the account's list named; the computer proves the password back.
+            await _connections.AccessWithPasswordAsync(host.Id, normalized, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HandshakeException e) when (e.Failure == HandshakeFailure.WrongPeer)
+        {
+            return AccessOutcome.NotConfirmed;
+        }
+        catch (HandshakeException e) when (e.Failure == HandshakeFailure.Rejected)
+        {
+            return e.Status switch
+            {
+                HandshakeStatus.WrongPassword => AccessOutcome.WrongPassword,
+                HandshakeStatus.PasswordLocked => AccessOutcome.Locked,
+                HandshakeStatus.PairingClosed => AccessOutcome.PasswordOff,
+                _ => AccessOutcome.Unreachable,
+            };
+        }
+        catch (HandshakeException e) when (e.Failure == HandshakeFailure.Authentication)
+        {
+            return AccessOutcome.NotConfirmed;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return AccessOutcome.Cancelled;
+        }
+        catch (ArgumentException)
+        {
+            return AccessOutcome.NotAPassword;
+        }
+        catch (Exception e) when (e is HandshakeException or IOException or RemoteException or OperationCanceledException or ObjectDisposedException
+                                      or System.Net.WebSockets.WebSocketException or System.Net.Sockets.SocketException)
+        {
+            return AccessOutcome.Unreachable;
+        }
+        // Remembered like a paired computer and connected already: its row moves to the online ones at once.
+        await UiAsync(() =>
+        {
+            host.IsPaired = true;
+            host.AcceptsPassword = false;
+            if (_states.TryGetValue(host.Id, out var state)) Sync(state);
+        }).ConfigureAwait(false);
+        _ = RefreshAsync();
+        return AccessOutcome.Granted;
+    }
+
     public void Dispose()
     {
         _disposed = true;
@@ -449,24 +500,29 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
 
     private void Merge(IReadOnlyList<PairedPeer> paired, IReadOnlyList<RelayDevice>? devices)
     {
-        var wanted = new Dictionary<string, (string Name, bool Paired, bool Online, DateTimeOffset? Seen)>(StringComparer.Ordinal);
+        var wanted = new Dictionary<string, (string Name, bool Paired, bool Online, DateTimeOffset? Seen, bool Password, string? Platform)>(StringComparer.Ordinal);
         var order = new List<string>();
+        var others = new List<AccountDevice>();
         foreach (var peer in paired)
         {
-            wanted[peer.Id] = (peer.Name, true, false, peer.LastSeenAt);
+            wanted[peer.Id] = (peer.Name, true, false, peer.LastSeenAt, false, null);
             order.Add(peer.Id);
         }
-        // The account's other computers; phones are never hosts, and this phone is not its own.
+        // The account's other computers. Phones are never hosts, and this phone is not its own: they are only named.
         foreach (var device in devices ?? [])
         {
-            if (device.Current || device.Kind != "desktop") continue;
+            if (device.Current || device.Kind != "desktop")
+            {
+                others.Add(new AccountDevice(device.Id, device.Name, device.Current, device.Online, device.LastSeenAt, device.Platform));
+                continue;
+            }
             if (wanted.TryGetValue(device.Id, out var known))
             {
-                wanted[device.Id] = known with { Online = device.Online, Seen = Later(known.Seen, device.LastSeenAt) };
+                wanted[device.Id] = known with { Online = device.Online, Seen = Later(known.Seen, device.LastSeenAt), Platform = device.Platform };
             }
             else
             {
-                wanted[device.Id] = (device.Name, false, device.Online, device.LastSeenAt);
+                wanted[device.Id] = (device.Name, false, device.Online, device.LastSeenAt, device.PasswordAccess, device.Platform);
                 order.Add(device.Id);
             }
         }
@@ -477,10 +533,12 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 Hosts.Remove(_states[gone].Host);
                 _states.Remove(gone);
             }
+            // This phone first, then the others as the service orders them.
+            ReplaceValues(OtherDevices, [.. others.OrderByDescending(device => device.IsCurrent)]);
         }
         foreach (var id in order)
         {
-            var (name, isPaired, online, seen) = wanted[id];
+            var (name, isPaired, online, seen, password, platform) = wanted[id];
             if (!_states.TryGetValue(id, out var state))
             {
                 _states[id] = state = new HostState(new RemoteHost(id, name, HostLink.Offline, isPaired));
@@ -489,6 +547,9 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
             state.Host.Name = name;
             state.Host.IsPaired = isPaired;
             state.Host.LastSeen = seen;
+            state.Host.Platform = platform ?? state.Host.Platform;
+            // What the service says, while it says anything: password access only means something before pairing.
+            if (devices is not null) state.Host.AcceptsPassword = !isPaired && online && password;
             if (devices is not null) state.AccountOnline = online;
             // A computer paired a moment ago is connected already, before it had a row here.
             Sync(state);
@@ -502,6 +563,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         if (_session.Account is not null || _settings.LocalOnly) return;
         Hosts.Clear();
         _states.Clear();
+        OtherDevices.Clear();
     }
 
     // How the row says the computer is reached: a live connection counts; before pairing, what the service says.

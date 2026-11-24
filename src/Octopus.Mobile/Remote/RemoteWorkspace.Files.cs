@@ -21,6 +21,16 @@ internal sealed partial class RemoteWorkspace
 
     public bool SupportsGit(RemoteHost host) => Shares(host, RemoteMethods.CapabilityGit);
 
+    public bool SupportsUpload(RemoteHost host) => Shares(host, RemoteMethods.CapabilityUpload);
+
+    public async Task<string> UploadImageAsync(RemoteSession session, string name, byte[] data, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var path = "";
+        await FilesCallAsync(session.Project.Host, RemoteMethods.CapabilityUpload, MobileLangResourceKind.UploadUnsupportedHost, async client =>
+            path = await client.UploadAsync(session.Id, name, data, progress, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        return path;
+    }
+
     // A host not reached yet may well have it: the call then says what is wrong.
     private bool Shares(RemoteHost host, string capability) =>
         _connections.ClientOf(host.Id) is not { } client || RemoteHello.Shared(client.OwnHello, client.HostHello).Contains(capability);

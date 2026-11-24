@@ -338,6 +338,52 @@ public class RemoteEndToEndTests
     }
 
     [AvaloniaFact]
+    public async Task A_picture_for_a_terminal_is_kept_in_the_hosts_temporary_folder_and_its_path_given_back()
+    {
+        await using var host = new HostSide();
+        using var device = DeviceIdentity.Create();
+        host.Devices.Add(device.PublicKey, Laptop);
+        var mine = AddHostProject();
+        var shell = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "shell" };
+        var gui = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "接口文档", Surface = Octopus.Core.Agents.AgentSurface.Gui };
+        host.Projects.AddItem(mine, shell, activate: false);
+        host.Projects.AddItem(mine, gui, activate: false);
+        await using var client = await Connect(host, device);
+        Assert.Contains(RemoteMethods.CapabilityUpload, RemoteHostRuntime.Hello.Capabilities);
+
+        // More than one piece: the pieces collect on the host and the last one is answered with the whole picture's path.
+        var picture = new byte[RemoteMethods.FilePieceBytes * 2 + 99];
+        Random.Shared.NextBytes(picture);
+        var shares = new List<double>();
+        var path = await Wait(client.UploadAsync(shell.Id, "IMG_0001.JPG", picture, new SyncProgress(shares.Add)));
+        try
+        {
+            Assert.Equal(Path.GetFullPath(ClipboardImages.DefaultFolder), Path.GetDirectoryName(path));
+            Assert.Matches(@"^paste-\d{8}-\d{6}-\d{3}(-\d+)?\.jpg$", Path.GetFileName(path));
+            Assert.Equal(picture, File.ReadAllBytes(path));
+            // One report a piece, rising to the whole.
+            Assert.Equal(3, shares.Count);
+            Assert.Equal((double)RemoteMethods.FilePieceBytes / picture.Length, shares[0], 6);
+            Assert.Equal(1.0, shares[^1]);
+            // Nothing of it is left half-done beside it.
+            Assert.DoesNotContain(Directory.EnumerateFiles(ClipboardImages.DefaultFolder, "upload-*.part"), f => File.GetLastWriteTimeUtc(f) > DateTime.UtcNow.AddMinutes(-1));
+        }
+        finally { File.Delete(path); }
+
+        // Only pictures, only for a terminal of the host, and never larger than a picture may be.
+        Assert.Equal(RemoteProtocol.InvalidParams, (await Assert.ThrowsAsync<RemoteException>(() => Wait(client.UploadAsync(shell.Id, "notes.sh", [1, 2, 3])))).Code);
+        Assert.Equal(RemoteMethods.NotAllowed, (await Assert.ThrowsAsync<RemoteException>(() => Wait(client.UploadAsync(gui.Id, "a.png", [1, 2, 3])))).Code);
+        Assert.Equal(RemoteMethods.NotFound, (await Assert.ThrowsAsync<RemoteException>(() => Wait(client.UploadAsync("nope", "a.png", [1, 2, 3])))).Code);
+        await Assert.ThrowsAsync<InvalidDataException>(() => Wait(client.UploadAsync(shell.Id, "big.png", new byte[RemoteMethods.UploadMaxBytes + 1])));
+    }
+
+    /// <summary>Reports at once, on the reporting thread, unlike <see cref="Progress{T}"/>.</summary>
+    private sealed class SyncProgress(Action<double> report) : IProgress<double>
+    {
+        public void Report(double value) => report(value);
+    }
+
+    [AvaloniaFact]
     public async Task An_agent_is_started_on_the_host_from_the_hosts_own_catalog()
     {
         await using var host = new HostSide();

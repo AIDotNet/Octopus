@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Octopus.Mobile.Account;
 using Octopus.Mobile.Conversations;
 using Octopus.Mobile.Files;
@@ -40,6 +41,37 @@ public sealed class MobileShell : ContentControl, INavigator
         TopLevel.SetAutoSafeAreaPadding(this, false);
         account.Changed += OnAccountChanged;
         Show();
+    }
+
+    private TopLevel? _topLevel;
+
+    protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _topLevel = TopLevel.GetTopLevel(this);
+        if (_topLevel is not null) _topLevel.ScalingChanged += OnScalingChanged;
+    }
+
+    protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        if (_topLevel is not null) _topLevel.ScalingChanged -= OnScalingChanged;
+        _topLevel = null;
+    }
+
+    /// <summary>
+    /// Android reports the safe area in device pixels divided by the top level's scaling, and the first page reads it
+    /// while that scaling is still 1: the status and gesture bars' pixels (128 and 63 on a 2.625 phone) become as many
+    /// points, a wide empty band above the header and under the tab bar. A change of scaling raises no safe-area
+    /// change, so the pages showing then read it again here (a page covered by another reads it when it is back).
+    /// </summary>
+    private void OnScalingChanged(object? sender, EventArgs e)
+    {
+        if (_topLevel?.InsetsManager is not { } insets) return;
+        foreach (var page in this.GetVisualDescendants().OfType<TKCode.Arc.Mobile.Page>())
+        {
+            if (page.UsePlatformSafeArea) page.SafeArea = insets.SafeAreaPadding;
+        }
     }
 
     /// <summary>The stack of pages.</summary>
@@ -86,6 +118,8 @@ public sealed class MobileShell : ContentControl, INavigator
         Push(new DiffPage(new DiffViewModel(project, workspacePath, change, _workspace, this)));
 
     public void ShowPairing(RemoteHost host) => Push(new PairingPage(new PairingViewModel(host, _workspace, this)));
+
+    public void ShowAccessPassword(RemoteHost host) => Push(new AccessPasswordPage(new AccessPasswordViewModel(host, _workspace, this)));
 
     public void ShowPairing(string hostName, PairingAttempt attempt) => Push(new PairingPage(new PairingViewModel(hostName, attempt, this)));
 

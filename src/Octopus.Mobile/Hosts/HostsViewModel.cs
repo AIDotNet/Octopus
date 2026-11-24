@@ -41,7 +41,9 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         _openBrowser = openBrowser ?? (_ => { });
         IsSignedIn = account.IsSignedIn;
         workspace.Hosts.CollectionChanged += OnHostsChanged;
+        workspace.OtherDevices.CollectionChanged += OnOtherDevicesChanged;
         RebuildAll();
+        RebuildOtherDevices();
     }
 
     /// <summary>The app's updater: the "Me" tab's update row binds to it.</summary>
@@ -75,6 +77,8 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     public ObservableCollection<HostRowViewModel> Online { get; } = [];
     public ObservableCollection<HostRowViewModel> Offline { get; } = [];
     public ObservableCollection<HostRowViewModel> Unpaired { get; } = [];
+    /// <summary>The account's phones, this one too: named under "Other devices", never opened.</summary>
+    public ObservableCollection<AccountDeviceRowViewModel> OtherDevices { get; } = [];
 
     [ObservableProperty] public partial bool HasAttention { get; private set; }
     [ObservableProperty] public partial bool HasWorking { get; private set; }
@@ -82,6 +86,9 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial bool HasOffline { get; private set; }
     [ObservableProperty] public partial bool HasUnpaired { get; private set; }
     [ObservableProperty] public partial bool IsEmpty { get; private set; }
+    [ObservableProperty] public partial bool HasOtherDevices { get; private set; }
+    /// <summary>"Other devices" is folded open; it starts folded.</summary>
+    [ObservableProperty] public partial bool IsOtherDevicesOpen { get; set; }
     /// <summary>The account sheet (its name and "Sign out") is showing.</summary>
     [ObservableProperty] public partial bool IsAccountOpen { get; set; }
     /// <summary>The sheet of a phone used without an account ("Sign in", "Leave local network mode") is showing.</summary>
@@ -147,6 +154,9 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsActivityAllClear));
     }
 
+    /// <summary>The header row of the folded section: its name and how many devices are in it.</summary>
+    public string OtherDevicesTitle => MobileLangResources.Format(MobileLangResourceKind.OtherDevicesTitle, OtherDevices.Count);
+
     partial void OnHasAttentionChanged(bool value) => OnPropertyChanged(nameof(IsActivityAllClear));
     partial void OnHasWorkingChanged(bool value) => OnPropertyChanged(nameof(IsActivityAllClear));
 
@@ -155,6 +165,9 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void SelectAccountTab() => SelectedTab = TabAccount;
+
+    [RelayCommand]
+    private void ToggleOtherDevices() => IsOtherDevicesOpen = !IsOtherDevicesOpen;
 
     [RelayCommand]
     private void OpenAccount()
@@ -204,12 +217,23 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _workspace.Hosts.CollectionChanged -= OnHostsChanged;
+        _workspace.OtherDevices.CollectionChanged -= OnOtherDevicesChanged;
         Updater.PropertyChanged -= OnUpdaterChanged;
         UnwatchAll();
         ClearRows();
     }
 
     private void OnHostsChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildAll();
+
+    private void OnOtherDevicesChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildOtherDevices();
+
+    private void RebuildOtherDevices()
+    {
+        OtherDevices.Clear();
+        foreach (var device in _workspace.OtherDevices) OtherDevices.Add(new AccountDeviceRowViewModel(device));
+        HasOtherDevices = OtherDevices.Count > 0;
+        OnPropertyChanged(nameof(OtherDevicesTitle));
+    }
 
     private void OnUpdaterChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -225,7 +249,7 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
 
     private void OnHostChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(RemoteHost.Link) or nameof(RemoteHost.IsPaired)) RebuildAll();
+        if (e.PropertyName is nameof(RemoteHost.Link) or nameof(RemoteHost.IsPaired) or nameof(RemoteHost.AcceptsPassword)) RebuildAll();
     }
 
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
@@ -283,15 +307,23 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         Unpaired.Clear();
         foreach (var host in _workspace.Hosts)
         {
-            if (!host.IsPaired) Unpaired.Add(new HostRowViewModel(host, _navigator.ShowPairing));
-            else if (host.IsOnline) Online.Add(new HostRowViewModel(host, _navigator.ShowHost));
-            else Offline.Add(new HostRowViewModel(host, _ => { }));
+            // Offline, paired or not, is only named: nothing is tried until the account says it is back.
+            if (!host.IsOnline) Offline.Add(new HostRowViewModel(host, _ => { }));
+            else if (host.IsPaired) Online.Add(new HostRowViewModel(host, _navigator.ShowHost));
+            else Unpaired.Add(new HostRowViewModel(host, GetIn));
         }
         HasOnline = Online.Count > 0;
         HasOffline = Offline.Count > 0;
         HasUnpaired = Unpaired.Count > 0;
         IsEmpty = _workspace.Hosts.Count == 0;
         OnPropertyChanged(nameof(AccountHostSummary));
+    }
+
+    // A computer of the account that is not paired: its access password when it takes one, else the six digits.
+    private void GetIn(RemoteHost host)
+    {
+        if (host.AcceptsPassword) _navigator.ShowAccessPassword(host);
+        else _navigator.ShowPairing(host);
     }
 
     private void RebuildActivity()
@@ -400,6 +432,8 @@ public sealed partial class HostRowViewModel : ObservableObject, IDisposable
     public bool IsOnline => Host.IsOnline;
     public bool IsPaired => Host.IsPaired;
     public bool IsLan => Host.Link == HostLink.Lan;
+    /// <summary>Offline: drawn faded, and nothing happens on a tap.</summary>
+    public bool IsDimmed => !Host.IsOnline;
     public string LinkLabel => MobileLangResources.Get(Host.Link == HostLink.Lan ? MobileLangResourceKind.LinkLan : MobileLangResourceKind.LinkRelay);
     /// <summary>A paired, online host opens; an unpaired one starts pairing; an offline one does nothing.</summary>
     public bool CanOpen => Host.IsOnline;
@@ -411,13 +445,11 @@ public sealed partial class HostRowViewModel : ObservableObject, IDisposable
         {
             if (!Host.IsOnline)
             {
-                return Host.LastSeen is { } seen
-                    ? string.Format(MobileLangResources.Get(MobileLangResourceKind.LastSeen), seen.LocalDateTime.ToString("MM-dd HH:mm"))
-                    : MobileLangResources.Get(MobileLangResourceKind.LinkOffline);
+                return Host.LastSeen is { } seen ? LastSeenText(seen, DateTimeOffset.Now) : MobileLangResources.Get(MobileLangResourceKind.LinkOffline);
             }
             var link = LinkLabel;
-            return Host.IsPaired
-                ? link + " · " + string.Format(MobileLangResources.Get(MobileLangResourceKind.ProjectCount), Host.Projects.Count)
+            return Host.IsPaired ? link + " · " + string.Format(MobileLangResources.Get(MobileLangResourceKind.ProjectCount), Host.Projects.Count)
+                : Host.AcceptsPassword ? link + " · " + MobileLangResources.Get(MobileLangResourceKind.HostAccessByPassword)
                 : link;
         }
     }
@@ -427,13 +459,16 @@ public sealed partial class HostRowViewModel : ObservableObject, IDisposable
     public bool IsWaiting => Host.IsPaired && Count(SessionActivity.Waiting) > 0;
     public bool IsError => Host.IsPaired && !IsWaiting && Count(SessionActivity.Error) > 0;
     public bool IsWorking => Host.IsPaired && !IsWaiting && !IsError && Count(SessionActivity.Working) > 0;
-    /// <summary>The pill says "Pair" for a host that is not paired, otherwise the most urgent count.</summary>
+    /// <summary>The pill says "Pair" for a host that is not paired (a lock and "Password" when it takes its access password), otherwise the most urgent count.</summary>
     public bool IsPairAction => !Host.IsPaired && Host.IsOnline;
+    /// <summary>Not paired, online, and it takes its access password: the pill has a lock.</summary>
+    public bool IsPasswordAction => IsPairAction && Host.AcceptsPassword;
     public bool HasPill => IsWaiting || IsError || IsWorking || IsPairAction;
     public bool IsIdle => Host.IsOnline && Host.IsPaired && !HasPill;
 
     public string PillText =>
-        IsPairAction ? MobileLangResources.Get(MobileLangResourceKind.Pair)
+        IsPasswordAction ? MobileLangResources.Get(MobileLangResourceKind.AccessPasswordAction)
+        : IsPairAction ? MobileLangResources.Get(MobileLangResourceKind.Pair)
         : IsWaiting ? string.Format(MobileLangResources.Get(MobileLangResourceKind.WaitingCount), Count(SessionActivity.Waiting))
         : IsError ? string.Format(MobileLangResources.Get(MobileLangResourceKind.ErrorCount), Count(SessionActivity.Error))
         : IsWorking ? string.Format(MobileLangResources.Get(MobileLangResourceKind.WorkingCount), Count(SessionActivity.Working))
@@ -441,6 +476,17 @@ public sealed partial class HostRowViewModel : ObservableObject, IDisposable
 
     [RelayCommand(CanExecute = nameof(CanOpen))]
     private void Open() => _open(Host);
+
+    /// <summary>"Online just now", "Online 5 minutes ago", "Online 3 days ago"; the date when it is longer ago than a month.</summary>
+    public static string LastSeenText(DateTimeOffset seen, DateTimeOffset now)
+    {
+        var ago = now - seen;
+        if (ago < TimeSpan.FromMinutes(1)) return MobileLangResources.Get(MobileLangResourceKind.LastSeenJustNow);
+        if (ago < TimeSpan.FromHours(1)) return MobileLangResources.Format(MobileLangResourceKind.LastSeenMinutes, (int)ago.TotalMinutes);
+        if (ago < TimeSpan.FromDays(1)) return MobileLangResources.Format(MobileLangResourceKind.LastSeenHours, (int)ago.TotalHours);
+        if (ago < TimeSpan.FromDays(31)) return MobileLangResources.Format(MobileLangResourceKind.LastSeenDays, (int)ago.TotalDays);
+        return MobileLangResources.Format(MobileLangResourceKind.LastSeen, seen.LocalDateTime.ToString("yyyy-MM-dd"));
+    }
 
     public void Dispose()
     {
@@ -482,5 +528,24 @@ public sealed partial class HostRowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(string.Empty);
         OpenCommand.NotifyCanExecuteChanged();
+    }
+}
+
+/// <summary>A phone of the account under "Other devices": its name, "This phone" for itself, and when it was online. Not opened.</summary>
+public sealed class AccountDeviceRowViewModel(AccountDevice device)
+{
+    public AccountDevice Device { get; } = device;
+    public string Name => Device.Name;
+    public bool IsCurrent => Device.IsCurrent;
+    public string Summary
+    {
+        get
+        {
+            var state = Device.IsCurrent ? MobileLangResources.Get(MobileLangResourceKind.ThisPhoneSummary)
+                : Device.IsOnline ? MobileLangResources.Get(MobileLangResourceKind.HostsOnline)
+                : Device.LastSeen is { } seen ? HostRowViewModel.LastSeenText(seen, DateTimeOffset.Now)
+                : MobileLangResources.Get(MobileLangResourceKind.LinkOffline);
+            return Device.Platform is { Length: > 0 } platform ? platform + " · " + state : state;
+        }
     }
 }

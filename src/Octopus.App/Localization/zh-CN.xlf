@@ -1278,5 +1278,56 @@
     <unit id="SettingsAboutChannelPreview"><segment><source>Preview</source><target state="translated">预览版</target></segment></unit>
     <unit id="SettingsAboutChannelDev"><segment><source>Development</source><target state="translated">开发版</target></segment></unit>
     <unit id="SettingsAboutBuiltWith"><segment><source>Built with {0}</source><target state="translated">基于 {0} 构建</target></segment></unit>
+    <unit id="SettingsNavAccountDevices"><segment><source>Account &amp; devices</source><target state="translated">账号与设备</target></segment></unit>
+    <unit id="AccountDevicesTitle"><segment><source>Account &amp; devices</source><target state="translated">账号与设备</target></segment></unit>
+    <unit id="AccountDevicesSubtitle"><segment><source>Every device signed in to your account, and the password other devices of the account use to get into this computer.</source><target state="translated">登录同一账号的所有设备，以及账号下其他设备进入这台电脑时要输入的访问密码。</target></segment></unit>
+    <unit id="AccountDevicesAccountHint"><segment><source>Sign in with the account button at the top of the window.</source><target state="translated">在窗口顶部的账号按钮里登录。</target></segment></unit>
+    <unit id="AccountDevicesRelayHostHint"><segment><source>Off: the account's other devices see this computer as offline.</source><target state="translated">关闭后，账号下的其他设备会看到这台电脑离线。</target></segment></unit>
+    <unit id="AccountDevicesSignInHint"><segment><source>Sign in to an account (top of the window) to see its devices and to let them in with the access password.</source><target state="translated">登录账号（窗口顶部）后，才能看到账号下的设备，并让它们用访问密码进入这台电脑。</target></segment></unit>
+    <unit id="AccountDevicesRelayOff"><segment><source>This computer is not reachable through the relay: the account's other devices see it as offline.</source><target state="translated">这台电脑没有经中转服务开放访问，账号下的其他设备会看到它离线。</target></segment></unit>
+    <unit id="AccountDevicesPasswordGroup"><segment><source>Access password of this computer</source><target state="translated">本机访问密码</target></segment></unit>
+    <unit id="AccountDevicesPasswordGroupHint"><segment><source>A device signed in to the same account types it once to get in; it is remembered afterwards and can be revoked under Remote access. The password never leaves this computer.</source><target state="translated">同一账号下的设备第一次访问这台电脑时输入一次，之后会被记住，可以在「远程访问」里撤销。密码不会离开这台电脑，也不会发给服务器。</target></segment></unit>
+    <unit id="AccountDevicesPasswordAccess"><segment><source>Let devices of the account in with the password</source><target state="translated">允许同账号设备用密码访问</target></segment></unit>
+    <unit id="AccountDevicesPasswordAccessHint"><segment><source>Off: only pairing by comparing numbers or a pairing link.</source><target state="translated">关闭后只能用核对数字或配对链接来配对。</target></segment></unit>
+    <unit id="AccountDevicesPassword"><segment><source>Access password</source><target state="translated">访问密码</target></segment></unit>
+    <unit id="AccountDevicesPasswordDevices"><segment><source>{0} device(s) got in with the password</source><target state="translated">已有 {0} 台设备用访问密码授权</target></segment></unit>
+    <unit id="AccountDevicesShow"><segment><source>Show</source><target state="translated">显示</target></segment></unit>
+    <unit id="AccountDevicesHide"><segment><source>Hide</source><target state="translated">隐藏</target></segment></unit>
+    <unit id="AccountDevicesCopied"><segment><source>Copied</source><target state="translated">已复制</target></segment></unit>
+    <unit id="AccountDevicesChange"><segment><source>Change the password</source><target state="translated">更换密码</target></segment></unit>
+    <unit id="AccountDevicesChangeHint"><segment><source>A new random one, or one you choose: exactly 8 letters and digits.</source><target state="translated">随机生成一个新的，或者自己设定：必须是 8 位字母或数字。</target></segment></unit>
+    <unit id="AccountDevicesRegenerate"><segment><source>Generate new</source><target state="translated">重新生成</target></segment></unit>
+    <unit id="AccountDevicesEdit"><segment><source>Set my own</source><target state="translated">自定义</target></segment></unit>
+    <unit id="AccountDevicesNewPassword"><segment><source>New access password</source><target state="translated">新的访问密码</target></segment></unit>
+    <unit id="AccountDevicesNewPasswordPlaceholder"><segment><source>8 letters and digits</source><target state="translated">8 位字母或数字</target></segment></unit>
+    <unit id="AccountDevicesSave"><segment><source>Save</source><target state="translated">保存</target></segment></unit>
+    <unit id="AccountDevicesPasswordInvalid"><segment><source>The access password must be exactly 8 letters (A–Z) and digits. Case, spaces and dashes do not count.</source><target state="translated">访问密码必须正好是 8 位字母（A–Z）或数字，不区分大小写，空格和连字符不计。</target></segment></unit>
+    <unit id="AccountDevicesRevokeOnChange"><segment><source>When the password changes, also revoke the devices that got in with the old one</source><target state="translated">更换密码时，同时撤销用旧密码授权的设备</target></segment></unit>
+    <unit id="AccountDevicesSuspended"><segment><source>Too many wrong passwords: password access is paused. Check the devices under Remote access, then turn it back on.</source><target state="translated">输错密码次数过多，密码访问已暂停。请在「远程访问」里检查设备，然后重新开启。</target></segment></unit>
+    <unit id="AccountDevicesResume"><segment><source>Turn back on</source><target state="translated">重新开启</target></segment></unit>
+    <unit id="AccountDevicesList"><segment><source>Devices of the account</source><target state="translated">账号下的设备</target></segment></unit>
+    <unit id="AccountDevicesRefresh"><segment><source>Refresh</source><target state="translated">刷新</target></segment></unit>
+    <unit id="AccountDevicesListHint"><segment><source>A computer you get into here appears among the remote hosts and in the location list of New project.</source><target state="translated">在这里授权的电脑会出现在「远程主机」和「新建项目」的位置列表里。</target></segment></unit>
+    <unit id="AccountDevicesListFailed"><segment><source>The account's devices could not be loaded: {0}</source><target state="translated">无法读取账号下的设备：{0}</target></segment></unit>
+    <unit id="AccountDevicesThisComputer"><segment><source>This computer</source><target state="translated">本机</target></segment></unit>
+    <unit id="AccountDevicesAuthorized"><segment><source>Authorized</source><target state="translated">已授权</target></segment></unit>
+    <unit id="AccountDevicesEnterPassword"><segment><source>Enter password</source><target state="translated">输入密码</target></segment></unit>
+    <unit id="AccountDevicesNeedsPairing"><segment><source>No password access there: pair under Remote hosts.</source><target state="translated">这台电脑没有开启密码访问，请在「远程主机」里配对。</target></segment></unit>
+    <unit id="AccountDevicesConnect"><segment><source>Connect</source><target state="translated">连接</target></segment></unit>
+    <unit id="AccountDevicesEnterHint"><segment><source>Shown on that computer under Settings → Account &amp; devices.</source><target state="translated">在那台电脑的「设置 → 账号与设备」里可以看到访问密码。</target></segment></unit>
+    <unit id="AccountDevicesWrongPassword"><segment><source>Wrong password.</source><target state="translated">密码不正确。</target></segment></unit>
+    <unit id="AccountDevicesLocked"><segment><source>Too many wrong passwords from this computer. Try again in about 15 minutes.</source><target state="translated">这台设备输错次数过多，请约 15 分钟后再试。</target></segment></unit>
+    <unit id="AccountDevicesPasswordOff"><segment><source>That computer does not take passwords right now (turned off or paused there).</source><target state="translated">那台电脑现在不接受密码访问（已关闭或已暂停）。</target></segment></unit>
+    <unit id="AccountDevicesNotVerified"><segment><source>Could not confirm that this is your computer. Nothing was sent; try again later.</source><target state="translated">无法确认对方就是你的那台电脑，没有建立连接，请稍后再试。</target></segment></unit>
+    <unit id="AccountDevicesRefused"><segment><source>That computer refused the connection.</source><target state="translated">那台电脑拒绝了连接。</target></segment></unit>
+    <unit id="AccountDevicesUnreachable"><segment><source>That computer cannot be reached: {0}</source><target state="translated">连不上那台电脑：{0}</target></segment></unit>
+    <unit id="AccountDevicesLastActive"><segment><source>Last active {0}</source><target state="translated">最近活动 {0}</target></segment></unit>
+    <unit id="AccountOpenAccountDevices"><segment><source>Account &amp; devices</source><target state="translated">账号与设备</target></segment></unit>
+    <unit id="SettingsRemoteViaPassword"><segment><source>Password</source><target state="translated">密码授权</target></segment></unit>
+    <unit id="AccountDevicesOnline"><segment><source>Online</source><target state="translated">在线</target></segment></unit>
+    <unit id="AccountCustomAccessKeyLabel"><segment><source>Access key (optional)</source><target state="translated">访问密钥（可选）</target></segment></unit>
+    <unit id="AccountCustomAccessKeyPlaceholder"><segment><source>Optional for self-hosted relay (or paste octopus://relay?…)</source><target state="translated">自建中转可选，免浏览器直连（也可直接粘贴 octopus://relay?…）</target></segment></unit>
+    <unit id="SettingsRemoteRelayAccessKey"><segment><source>Access key</source><target state="translated">访问密钥</target></segment></unit>
+    <unit id="SettingsRemoteRelayAccessKeyHint"><segment><source>Optional for self-hosted Octopus Relay to sign in without a browser. Never saved in settings.</source><target state="translated">自建中转服务可选，填后免浏览器直接绑定；不会明文写入设置文件。</target></segment></unit>
   </file>
 </xliff>

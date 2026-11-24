@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Octopus.Mobile.Localization;
 using Octopus.Mobile.Workspace;
 
 namespace Octopus.Mobile.Demo;
@@ -129,6 +130,24 @@ public sealed partial class DemoWorkspace
     public bool SupportsFiles(RemoteHost host) => FilesSupported;
 
     public bool SupportsGit(RemoteHost host) => FilesSupported;
+
+    /// <summary>The pictures "uploaded" so far, for tests: the session, the name and the bytes.</summary>
+    internal List<(RemoteSession Session, string Name, byte[] Data)> Uploads { get; } = [];
+
+    public bool SupportsUpload(RemoteHost host) => FilesSupported;
+
+    /// <summary>Takes the picture in four steps of progress and answers with a path in a made-up temporary folder.</summary>
+    public async Task<string> UploadImageAsync(RemoteSession session, string name, byte[] data, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+    {
+        if (!FilesSupported) throw new IOException(MobileLangResources.Get(MobileLangResourceKind.UploadUnsupportedHost));
+        for (var step = 1; step <= 4; step++)
+        {
+            await Task.Delay(30, cancellationToken);
+            progress?.Report(step / 4.0);
+        }
+        Uploads.Add((session, name, data));
+        return $"/tmp/octopus-paste/paste-demo-{Uploads.Count}{Path.GetExtension(name)}";
+    }
 
     public Task<IReadOnlyList<RemoteFileEntry>> ListFilesAsync(RemoteProject project, string folder, CancellationToken cancellationToken = default)
     {

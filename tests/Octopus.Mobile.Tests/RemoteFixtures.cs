@@ -38,8 +38,24 @@ internal sealed class Computer : IAsyncDisposable
         Service = new RemoteHostService(identity, () => new DeviceDescription(name, DeviceKind.Desktop), new PairedPeerStore(null), Workspace,
             new HelloMessage { AppVersion = "1.0", Capabilities = capabilities });
         if (relay is null || tokens is null) return;
-        Link = new RelayHostLink(new RelayEndpoint(new Uri(relay.Url), tokens.AccessToken), identity, () => name, transport => Service.ServeAsync(transport));
+        // As the desktop app does: the relay hears whether this computer takes its access password, for the account's list.
+        Link = new RelayHostLink(new RelayEndpoint(new Uri(relay.Url), tokens.AccessToken), identity, () => name, transport => Service.ServeAsync(transport))
+        {
+            Features = () => Service.AcceptsPassword ? [RelayHostFeatures.PasswordAccess] : [],
+        };
         Link.Start();
+    }
+
+    /// <summary>
+    /// Sets the access password the account's devices may come in with (null: password access off) and tells the
+    /// relay, as the computer's settings page does.
+    /// </summary>
+    public async Task SetAccessPasswordAsync(string? password, FakeRelay relay)
+    {
+        Service.SetAccessPassword(password);
+        await Link!.AnnounceFeaturesAsync();
+        var offered = password is not null;
+        Assert.True(Phone.Until(() => relay.FeaturesOf(Identity.Id).Contains(RelayHostFeatures.PasswordAccess) == offered), "the relay heard about the access password");
     }
 
     /// <summary>Where the computer listens on the local network (the loopback one here), as a person would type it.</summary>

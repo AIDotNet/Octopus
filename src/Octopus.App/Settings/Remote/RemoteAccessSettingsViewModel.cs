@@ -25,7 +25,8 @@ public sealed partial class PairingRequestRow(PairingRequest request)
 }
 
 /// <summary>A paired device in the list.</summary>
-public sealed record PairedDeviceRow(string Id, string Name, string Kind, bool IsOnline, string Details);
+/// <param name="ViaPassword">It got in with this computer's access password (design/16), not by a person comparing numbers.</param>
+public sealed record PairedDeviceRow(string Id, string Name, string Kind, bool IsOnline, string Details, bool ViaPassword = false);
 
 /// <summary>
 /// The "Remote access" page (design/12-远程操作.md §7.1): the name other devices see, local network access, pairing a
@@ -106,6 +107,8 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
 
     /// <summary>The relay's address as typed; kept by <see cref="SaveRelayCommand"/> and by signing in.</summary>
     [ObservableProperty] public partial string RelayUrl { get; set; } = "";
+    /// <summary>Optional Access Key for browser-free sign-in on a self-hosted Octopus Relay; never persisted in settings.</summary>
+    [ObservableProperty] public partial string RelayAccessKey { get; set; } = "";
     [ObservableProperty] public partial string RelayStatus { get; private set; } = "";
     [ObservableProperty] public partial bool IsRelayOnline { get; private set; }
     [ObservableProperty] public partial string? RelayErrorText { get; private set; }
@@ -127,7 +130,20 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
     /// <summary>The address typed is plain http to another machine: the sign-in would travel unencrypted.</summary>
     public bool IsRelayInsecure => Octopus.Remote.Relay.RelayAccountClient.ParseUrl(RelayUrl) is { Scheme: "http", IsLoopback: false };
 
-    partial void OnRelayUrlChanged(string value) => OnPropertyChanged(nameof(IsRelayInsecure));
+    partial void OnRelayUrlChanged(string value)
+    {
+        if (RelayConfigLink.TryParse(value) is { } link)
+        {
+            RelayUrl = link.Url.GetLeftPart(UriPartial.Authority);
+            if (!string.IsNullOrEmpty(link.AccessKey))
+            {
+                RelayAccessKey = link.AccessKey;
+            }
+            return;
+        }
+
+        OnPropertyChanged(nameof(IsRelayInsecure));
+    }
     partial void OnRelayErrorTextChanged(string? value) => OnPropertyChanged(nameof(HasRelayError));
     partial void OnIsRelaySignedInChanged(bool value) => OnPropertyChanged(nameof(CanSignInRelay));
     partial void OnIsRelaySigningInChanged(bool value) => OnPropertyChanged(nameof(CanSignInRelay));
@@ -176,10 +192,27 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
         try
         {
             // What is typed is what is signed in to, whether or not "Apply" was pressed first.
-            await _relay.SetUrlAsync(RelayUrl);
+            var targetUrl = RelayUrl;
+            var accessKey = RelayAccessKey.Trim();
+            if (RelayConfigLink.TryParse(targetUrl) is { } configLink)
+            {
+                targetUrl = configLink.Url.GetLeftPart(UriPartial.Authority);
+                if (!string.IsNullOrEmpty(configLink.AccessKey))
+                {
+                    accessKey = configLink.AccessKey;
+                }
+            }
+
+            await _relay.SetUrlAsync(targetUrl);
             if (Octopus.Remote.Relay.RelayAccountClient.ParseUrl(_relay.Url) is null)
             {
                 RelayErrorText = AppLangResources.Get(AppLangResourceKind.SettingsRemoteRelayStateNoUrl);
+                return;
+            }
+            if (!string.IsNullOrEmpty(accessKey))
+            {
+                await _relay.SignInWithKeyAsync(accessKey, _runtime.DeviceName, signIn.Token);
+                RelayAccessKey = "";
                 return;
             }
             var login = await _relay.BeginSignInAsync(_runtime.DeviceName, signIn.Token);
@@ -365,7 +398,8 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
                 ? AppLangResources.Get(AppLangResourceKind.SettingsRemoteOnline)
                 : peer.LastSeenAt is { } seen
                     ? string.Format(AppLangResources.Get(AppLangResourceKind.SettingsRemoteLastSeen), seen.LocalDateTime.ToString("yyyy-MM-dd HH:mm"))
-                    : "")).ToList();
+                    : "",
+            peer.Via == PairedVia.Password)).ToList();
         if (!rows.SequenceEqual(Devices))
         {
             Devices.Clear();

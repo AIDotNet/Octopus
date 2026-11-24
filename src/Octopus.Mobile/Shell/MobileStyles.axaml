@@ -2,7 +2,8 @@
         x:Class="Octopus.Mobile.Shell.MobileStyles"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
-        xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile">
+        xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+        xmlns:shell="using:Octopus.Mobile.Shell">
     <!-- A state pill at the end of a row: waiting (the person is needed), working, failed, or an action ("Pair"). -->
     <Style Selector="Border.pill">
         <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
@@ -372,5 +373,111 @@
     <Style Selector="Border.diffLine.note TextBlock.codeText">
         <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
         <Setter Property="FontStyle" Value="Italic" />
+    </Style>
+    <!-- Access passwords (Account/AccessPasswordPage) and the account's devices on the host list. -->
+    <Style Selector="Border.lockBadge">
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+    </Style>
+    <Style Selector="arcm|TextField.accessPassword">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXL}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="LetterSpacing" Value="2" />
+    </Style>
+    <Style Selector="Border.pill.action arc|ArcGlyph">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- An offline computer is only named: its row is faded, and nothing happens on a tap. -->
+    <Style Selector="arcm|ListItem.dimmed">
+        <Setter Property="Opacity" Value="0.5" />
+    </Style>
+
+    <!--
+        The navbar with a row that keeps a long title (a session's name) off the back button and the actions: Arc's own
+        template lays the row out as a *,Auto,* grid, so a title wider than the bar takes all of it and the side buttons
+        end up under it, unseen and untappable. Same parts and geometry as Arc's NavbarTheme (bar 43 high, 44 wide slots,
+        22 chevron, 30 large title with 8 at the sides); only the row panel differs, and an empty leading slot takes no room.
+    -->
+    <Style Selector="arcm|Navbar">
+        <Setter Property="Template">
+            <ControlTemplate TargetType="arcm:Navbar">
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        Padding="{TemplateBinding Padding}">
+                    <StackPanel>
+                        <shell:NavbarBarPanel Height="43">
+                            <StackPanel Name="PART_LeadingHost"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <arcm:Button Name="PART_Back"
+                                             Variant="Plain"
+                                             Command="{TemplateBinding BackCommand}"
+                                             IsVisible="{TemplateBinding ShowBack}">
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronLeft}"
+                                                      Foreground="{Binding $parent[arcm:Button].Foreground}"
+                                                      Size="22"
+                                                      VerticalAlignment="Center" />
+                                        <TextBlock Text="{TemplateBinding BackText}"
+                                                   IsVisible="{Binding !!BackText, RelativeSource={RelativeSource TemplatedParent}}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </arcm:Button>
+                                <ContentPresenter Name="PART_Leading"
+                                                  MinWidth="44"
+                                                  VerticalAlignment="Center"
+                                                  Content="{TemplateBinding Leading}"
+                                                  IsVisible="{Binding Leading, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                            </StackPanel>
+                            <arc:ArcContentSwap Name="PART_Title"
+                                                Mode="BlurSwap"
+                                                Content="{TemplateBinding Title}"
+                                                HorizontalContentAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Opacity="{TemplateBinding BarTitleOpacity}">
+                                <arc:ArcContentSwap.ContentTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}"
+                                                   FontSize="{arc:ArcDesignTokenResource TypeBase}"
+                                                   FontWeight="{arc:ArcDesignTokenResource WeightMedium}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </arc:ArcContentSwap.ContentTemplate>
+                            </arc:ArcContentSwap>
+                            <ContentPresenter Name="PART_Trailing"
+                                              MinWidth="44"
+                                              HorizontalContentAlignment="Right"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Trailing}" />
+                        </shell:NavbarBarPanel>
+                        <Border Name="PART_LargeTitleHost"
+                                Height="{TemplateBinding LargeTitleHeight}"
+                                ClipToBounds="True"
+                                IsHitTestVisible="False">
+                            <arc:ArcContentSwap Name="PART_LargeTitle"
+                                                Mode="BlurSwap"
+                                                Content="{TemplateBinding Title}"
+                                                Margin="8,0"
+                                                HorizontalContentAlignment="Left"
+                                                VerticalAlignment="Center">
+                                <arc:ArcContentSwap.ContentTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}"
+                                                   FontSize="30"
+                                                   FontWeight="{arc:ArcDesignTokenResource WeightMedium}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </arc:ArcContentSwap.ContentTemplate>
+                            </arc:ArcContentSwap>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
     </Style>
 </Styles>

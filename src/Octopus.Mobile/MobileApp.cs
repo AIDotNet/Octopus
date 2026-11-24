@@ -26,6 +26,12 @@ public static class MobileHost
     /// <summary>The app's updater; only a head that can install a package sets one (Android). Elsewhere: no update row.</summary>
     public static Updates.MobileUpdater Updater { get; set; } = Updates.MobileUpdater.Unsupported;
 
+    /// <summary>
+    /// Lets the person choose one picture (<see cref="Terminals.ImagePicking"/>: the photo library on iOS, the system's
+    /// picker on Android); tests put their own picture here. Null when nothing was chosen.
+    /// </summary>
+    public static Func<Avalonia.Controls.TopLevel?, Task<Terminals.PickedImage?>> PickImage { get; set; } = Terminals.ImagePicking.PickWithStorageAsync;
+
     /// <summary>Handles an incoming <c>octopus://</c> deep link (e.g. <c>octopus://auth-done</c> after browser approval).</summary>
     public static void HandleDeepLink(Uri uri)
     {

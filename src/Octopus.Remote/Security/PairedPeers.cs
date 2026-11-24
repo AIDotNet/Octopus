@@ -16,6 +16,8 @@ public sealed class PairedPeer
     public DateTimeOffset? LastSeenAt { get; set; }
     /// <summary>A host's addresses (<c>ws://host:port</c>), the one that last worked first. Empty for a device that connects to this one.</summary>
     public List<string> Addresses { get; set; } = [];
+    /// <summary>How a device was let in on a host's list: <see cref="PairedVia.Password"/>, or null for a person comparing numbers or a pairing link.</summary>
+    public string? Via { get; set; }
 
     /// <summary>The key, or null when what is stored is not one.</summary>
     public DevicePublicKey? Key()
@@ -23,6 +25,13 @@ public sealed class PairedPeer
         try { return DevicePublicKey.Parse(Convert.FromBase64String(PublicKey)); }
         catch (Exception e) when (e is FormatException or System.Security.Cryptography.CryptographicException) { return null; }
     }
+}
+
+/// <summary>Values of <see cref="PairedPeer.Via"/>.</summary>
+public static class PairedVia
+{
+    /// <summary>With the host's access password, by a device of the same account.</summary>
+    public const string Password = "password";
 }
 
 internal sealed class PairedPeersDocument
@@ -73,7 +82,7 @@ public sealed class PairedPeerStore
     }
 
     /// <summary>Remembers a device (or replaces what was known about it) and returns its entry.</summary>
-    public PairedPeer Add(DevicePublicKey key, DeviceDescription description, IEnumerable<string>? addresses = null)
+    public PairedPeer Add(DevicePublicKey key, DeviceDescription description, IEnumerable<string>? addresses = null, string? via = null)
     {
         var peer = new PairedPeer
         {
@@ -84,6 +93,7 @@ public sealed class PairedPeerStore
             PairedAt = DateTimeOffset.UtcNow,
             LastSeenAt = DateTimeOffset.UtcNow,
             Addresses = addresses?.ToList() ?? [],
+            Via = via,
         };
         lock (_gate)
         {
@@ -105,6 +115,21 @@ public sealed class PairedPeerStore
         }
         Changed?.Invoke();
         return true;
+    }
+
+    /// <summary>Forgets every device that was let in a certain way; returns their ids.</summary>
+    public IReadOnlyList<string> RemoveAll(string via)
+    {
+        List<string> removed;
+        lock (_gate)
+        {
+            removed = [.. _peers.Where(peer => peer.Via == via).Select(peer => peer.Id)];
+            if (removed.Count == 0) return removed;
+            _peers.RemoveAll(peer => peer.Via == via);
+            Save();
+        }
+        Changed?.Invoke();
+        return removed;
     }
 
     /// <summary>Notes that a device was just talked to: when, under which name, and for a host at which address.</summary>

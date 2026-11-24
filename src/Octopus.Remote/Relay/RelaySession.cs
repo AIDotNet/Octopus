@@ -162,6 +162,29 @@ public sealed class RelaySession(Func<string?> url, IRelaySessionStore store, Fu
     }
 
     /// <summary>
+    /// Signs this device in directly at a self-hosted relay using an Access Key (no browser step).
+    /// Throws <see cref="RelayException"/> (and <see cref="InvalidOperationException"/> when no address is set).
+    /// </summary>
+    public async Task SignInWithKeyAsync(string accessKey, string deviceName, CancellationToken cancellationToken = default)
+    {
+        var url = RelayAccountClient.ParseUrl(Url) ?? throw new InvalidOperationException("No relay address is set.");
+        var device = await identity().ConfigureAwait(false);
+        var tokens = await RelayAccountClient.SignInWithKeyAsync(url, accessKey, device, deviceName, kind, cancellationToken).ConfigureAwait(false);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await AdoptAsync(url, tokens).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        SignInEnded = false;
+        Changed?.Invoke();
+    }
+
+    /// <summary>
     /// Waits for the person to confirm the code in a browser, asking the relay at the pace it set. Throws
     /// <see cref="RelayException"/> when the relay cannot be reached for good or refuses this device's key.
     /// </summary>

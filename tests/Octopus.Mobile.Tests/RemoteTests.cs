@@ -437,4 +437,26 @@ public class RemoteTests
         Assert.Contains("登录已经失效", phone.Model<WelcomeViewModel>().SignIn.ErrorText);
         Assert.True(Phone.Until(() => studio.Service.Connections.Count == 0), "the connection to the computer ended");
     }
+
+    [AvaloniaFact]
+    public async Task Custom_server_signs_in_directly_with_a_self_hosted_setup_link_without_opening_browser()
+    {
+        await using var relay = new FakeRelay { SelfHostedAccessKey = "ork_mobile_self_hosted_01234567" };
+        await using var studio = await Computer.StartAsync(relay);
+        using var phone = new RealPhone(relay);
+
+        phone.Model<WelcomeViewModel>().UseCustomCommand.Execute(null);
+        phone.Top<CustomServerPage>();
+        var page = phone.Model<CustomServerViewModel>();
+
+        page.Server = $"octopus://relay?v=1&url={Uri.EscapeDataString(relay.Url)}&key={Uri.EscapeDataString(relay.SelfHostedAccessKey)}";
+        Assert.Equal(relay.Url, page.Server);
+        Assert.Equal(relay.SelfHostedAccessKey, page.AccessKey);
+
+        page.StartCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostsPage && phone.Remote.Account.IsSignedIn), "signed in directly to host list: " + page.SignIn.ErrorText);
+        Assert.Null(phone.Opened); // browser was never opened
+        var hosts = phone.Model<HostsViewModel>();
+        Assert.True(Phone.Until(() => hosts.Unpaired.Any(row => row.Host.Id == studio.Identity.Id)), "host discovered on self-hosted relay");
+    }
 }

@@ -37,6 +37,11 @@ public static class RemoteMethods
     public const string FsBrowse = "fs/browse";
     /// <summary>Creates a new empty folder while browsing for a new project folder.</summary>
     public const string FsBrowseCreateDirectory = "fs/browseCreateDirectory";
+    /// <summary>
+    /// Hands the host a picture for a session (<see cref="UploadMessage"/>, piece by piece): it is kept in the host's own
+    /// temporary folder, not a project's, and the last piece is answered with its path for the session to be given.
+    /// </summary>
+    public const string FsUpload = "fs/upload";
     /// <summary>A call of the host's git service: the method's name and its arguments as JSON, the result as JSON.</summary>
     public const string GitCall = "git/call";
 
@@ -74,9 +79,13 @@ public static class RemoteMethods
     public const string CapabilityAcpGui = "acp.gui";
     /// <summary>The host exposes branch workspaces (<see cref="WorkspaceOptions"/>, <see cref="WorkspaceCreate"/>, and workspace ids on items).</summary>
     public const string CapabilityWorkspaces = "workspaces";
+    /// <summary>The host takes pictures for its sessions (<see cref="FsUpload"/>).</summary>
+    public const string CapabilityUpload = "fs.upload";
 
     /// <summary>The most bytes of a file in one <see cref="FsRead"/> answer or <see cref="FsWrite"/> request.</summary>
     public const int FilePieceBytes = 256 * 1024;
+    /// <summary>The most bytes of one picture sent with <see cref="FsUpload"/>.</summary>
+    public const long UploadMaxBytes = 20 * 1024 * 1024;
 
     public const int NotFound = -33010;
     public const int NotAllowed = -33002;
@@ -428,6 +437,26 @@ public sealed class WriteFileMessage
     public string Upload { get; set; } = "";
     public string Data { get; set; } = "";
     public bool Last { get; set; }
+}
+
+/// <summary>One piece of a picture for a session (<see cref="RemoteMethods.FsUpload"/>).</summary>
+public sealed class UploadMessage
+{
+    /// <summary>The session the picture is for.</summary>
+    public string ItemId { get; set; } = "";
+    /// <summary>One id for all pieces of one picture, letters and digits.</summary>
+    public string Upload { get; set; } = "";
+    /// <summary>The picture's file name on the device: only its extension is kept (png, jpg, jpeg, gif or webp).</summary>
+    public string Name { get; set; } = "";
+    /// <summary>At most <see cref="RemoteMethods.FilePieceBytes"/>, base64.</summary>
+    public string Data { get; set; } = "";
+    public bool Last { get; set; }
+}
+
+public sealed class UploadedMessage
+{
+    /// <summary>Where the host keeps the picture: given with the last piece only.</summary>
+    public string? Path { get; set; }
 }
 
 public sealed class MoveMessage

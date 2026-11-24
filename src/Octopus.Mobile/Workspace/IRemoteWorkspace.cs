@@ -19,6 +19,20 @@ public partial interface IRemoteWorkspace
     /// <summary>True when this phone is paired with a computer already, whether or not <see cref="Hosts"/> shows it right now.</summary>
     bool HasPairedHosts => Hosts.Any(host => host.IsPaired);
 
+    /// <summary>
+    /// While signed in, the account's devices that are not computers to operate: phones, this one too
+    /// (<see cref="AccountDevice.IsCurrent"/>). Only shown, never connected to. Empty without an account.
+    /// </summary>
+    ObservableCollection<AccountDevice> OtherDevices { get; }
+
+    /// <summary>
+    /// Gets into a computer of the account this phone is not paired with, with the access password shown in that
+    /// computer's settings (design/16-账号设备与访问密码.md). Once it worked the computer is remembered like a paired
+    /// one (<see cref="RemoteHost.IsPaired"/>, and connected); the owner can revoke it there. Only through the
+    /// account's relay, so only while signed in. The password may be typed with spaces, dashes and any case.
+    /// </summary>
+    Task<AccessOutcome> AccessWithPasswordAsync(RemoteHost host, string password, CancellationToken cancellationToken = default);
+
     /// <summary>Starts a terminal or agent in a project on its host; the new session is also added to the project.</summary>
     Task<RemoteSession> CreateSessionAsync(RemoteProject project, NewSessionRequest request, CancellationToken cancellationToken = default);
 
@@ -110,6 +124,26 @@ public enum PairingOutcome
     NotAnAddress,
 }
 
+/// <summary>How getting into a computer with its access password ended (<see cref="IRemoteWorkspace.AccessWithPasswordAsync"/>).</summary>
+public enum AccessOutcome
+{
+    /// <summary>The computer took the password: it is remembered and connected.</summary>
+    Granted,
+    /// <summary>Not the computer's access password.</summary>
+    WrongPassword,
+    /// <summary>Too many wrong passwords from this phone: the computer does not try its passwords for a while (about 15 minutes).</summary>
+    Locked,
+    /// <summary>Password access is off on that computer, or suspended after too many wrong passwords: pairing still works, or turning it on there.</summary>
+    PasswordOff,
+    /// <summary>The computer could not be reached (offline, or this phone is not signed in).</summary>
+    Unreachable,
+    /// <summary>What answered could not prove it knows the password: it may not be the person's computer.</summary>
+    NotConfirmed,
+    /// <summary>What was typed is not eight letters and digits.</summary>
+    NotAPassword,
+    Cancelled,
+}
+
 /// <summary>One request to pair with a host.</summary>
 /// <param name="Code">The six digits both sides show, once the host answered; cancelled when it never did.</param>
 /// <param name="Completion">How it ended.</param>
@@ -154,6 +188,12 @@ public interface IAccountSession
     /// Throws <see cref="IOException"/> (with words for the person) when the service cannot be reached or is none.
     /// </summary>
     Task<SignInChallenge> BeginSignInAsync(string server, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Signs this phone in directly at a self-hosted relay using its Access Key (no browser step).
+    /// Throws <see cref="IOException"/> when the address is invalid, the service cannot be reached, or the key is rejected.
+    /// </summary>
+    Task SignInWithKeyAsync(string server, string accessKey, CancellationToken cancellationToken = default) =>
+        throw new IOException("Access-key sign-in is not supported.");
     void SignOut();
     /// <summary>From now on the app is used without an account (until someone signs in, and again after they sign out).</summary>
     void UseLocalOnly();

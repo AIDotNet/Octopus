@@ -72,6 +72,8 @@ public sealed class HelloMessage
 [JsonSerializable(typeof(ReadFileMessage))]
 [JsonSerializable(typeof(FilePieceMessage))]
 [JsonSerializable(typeof(WriteFileMessage))]
+[JsonSerializable(typeof(UploadMessage))]
+[JsonSerializable(typeof(UploadedMessage))]
 [JsonSerializable(typeof(MoveMessage))]
 [JsonSerializable(typeof(DeleteMessage))]
 [JsonSerializable(typeof(BrowseFolderMessage))]

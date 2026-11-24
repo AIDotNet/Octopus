@@ -29,6 +29,8 @@ public interface INavigator
     /// <summary>Shows the diff of one change listed by <see cref="ShowChanges"/>.</summary>
     void ShowDiff(RemoteProject project, string? workspacePath, RemoteChange change);
     void ShowPairing(RemoteHost host);
+    /// <summary>Getting into a computer of the account with its access password; once in, its page replaces this one.</summary>
+    void ShowAccessPassword(RemoteHost host);
     /// <summary>The number of a pairing that is already under way: a computer the person named by its address.</summary>
     void ShowPairing(string hostName, PairingAttempt attempt);
     /// <summary>The page that takes a computer's address or a pairing link.</summary>

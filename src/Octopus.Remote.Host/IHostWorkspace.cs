@@ -71,6 +71,13 @@ public interface IHostWorkspace
     /// <summary>Chooses a model, mode or effort above the input.</summary>
     Task SetConversationOptionAsync(AcpSetOptionMessage option) => throw NoConversations();
 
+    /// <summary>
+    /// Takes one piece of a picture for a session (<see cref="RemoteMethods.FsUpload"/>): the pieces collect in the
+    /// host's temporary folder, and the last one is answered with the picture's full path there; earlier ones with null.
+    /// </summary>
+    Task<string?> UploadAsync(string itemId, string upload, string name, byte[] data, bool last) =>
+        throw new RemoteException(RemoteMethods.NotAllowed, "This host takes no pictures.");
+
     private static RemoteException NoConversations() => new(RemoteMethods.NotAllowed, "This host shows no GUI conversations.");
 
     /// <summary>Projects or their items were added, removed or reordered.</summary>

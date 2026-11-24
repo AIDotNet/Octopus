@@ -26,6 +26,10 @@ public sealed class RemoteHostRuntime : IDisposable
     private readonly HostWorkspace _workspace;
     private readonly SemaphoreSlim _starting = new(1, 1);
     private readonly SemaphoreSlim _applying = new(1, 1);
+    private readonly SemaphoreSlim _passwordGate = new(1, 1);
+    /// <summary>The keystore entry of the access password (design/16).</summary>
+    internal const string AccessPasswordName = "access-password";
+    private string? _accessPassword;
     private readonly RelayAccess? _relay;
     private RemoteHostService? _service;
     private RelayHostLink? _relayLink;
@@ -69,7 +73,7 @@ public sealed class RemoteHostRuntime : IDisposable
     public static HelloMessage Hello { get; } = new()
     {
         AppVersion = HostWorkspace.AppVersion,
-        Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityBrowse, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityAcpGui],
+        Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityBrowse, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityAcpGui, RemoteMethods.CapabilityUpload],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
     };
 
@@ -83,7 +87,11 @@ public sealed class RemoteHostRuntime : IDisposable
             if (_service is { } made) return made;
             var identity = await _identity.GetAsync().ConfigureAwait(false);
             var devices = new PairedPeerStore(Path.Combine(_identity.Folder, "devices.json"));
-            return _service = new RemoteHostService(identity, () => new DeviceDescription(DeviceName, DeviceKind.Desktop), devices, _workspace, Hello);
+            var service = new RemoteHostService(identity, () => new DeviceDescription(DeviceName, DeviceKind.Desktop), devices, _workspace, Hello);
+            service.PasswordAccessSuspendedChanged += OnPasswordAccessChanged;
+            var password = await LoadAccessPasswordAsync().ConfigureAwait(false);
+            if (_settings.Current.Remote.PasswordAccessEnabled) service.SetAccessPassword(password);
+            return _service = service;
         }
         finally
         {
@@ -101,6 +109,7 @@ public sealed class RemoteHostRuntime : IDisposable
         try
         {
             await ApplyLanAsync().ConfigureAwait(false);
+            await ApplyPasswordAsync().ConfigureAwait(false);
             await ApplyRelayAsync().ConfigureAwait(false);
         }
         finally
@@ -151,13 +160,103 @@ public sealed class RemoteHostRuntime : IDisposable
         if (wanted is null || _relayLink is not null) return;
         var service = await GetAsync().ConfigureAwait(false);
         // The link asks for a token each time it connects: they live for minutes, the link for as long as the app.
-        var link = new RelayHostLink((fresh, cancellationToken) => _relay!.GetAsync(fresh, cancellationToken), service.Identity, () => DeviceName, transport => service.ServeAsync(transport));
+        var link = new RelayHostLink((fresh, cancellationToken) => _relay!.GetAsync(fresh, cancellationToken), service.Identity, () => DeviceName, transport => service.ServeAsync(transport))
+        {
+            Features = RelayFeatures,
+        };
         link.Changed += OnRelayChanged;
         (_relayLink, _relayLinkFor) = (link, wanted);
         link.Start();
     }
 
     private void OnRelayChanged() => Changed?.Invoke();
+
+    // ---- the access password (design/16-账号设备与访问密码.md) ----
+
+    /// <summary>This computer's access password, normalized (<see cref="AccessPassword.Normalize"/>); made and kept in the keystore the first time.</summary>
+    public async Task<string> GetAccessPasswordAsync()
+    {
+        await GetAsync().ConfigureAwait(false);
+        return await LoadAccessPasswordAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>True while the service takes passwords: the setting is on and it was not suspended after too many wrong ones.</summary>
+    public bool AcceptsPassword => _service?.AcceptsPassword == true;
+
+    /// <summary>Password access was suspended after too many wrong passwords.</summary>
+    public bool PasswordAccessSuspended => _service?.PasswordAccessSuspended == true;
+
+    /// <summary>
+    /// Replaces the access password with one the person chose (eight letters and digits; throws
+    /// <see cref="ArgumentException"/> otherwise) or, with null, with a new random one. With <paramref name="revokeOld"/>,
+    /// the devices that came in with a password are forgotten and cut off. Returns the new password.
+    /// </summary>
+    public async Task<string> ChangeAccessPasswordAsync(string? typed, bool revokeOld)
+    {
+        var password = typed is null ? AccessPassword.Generate() : AccessPassword.Normalize(typed) ?? throw new ArgumentException("An access password is eight letters and digits.", nameof(typed));
+        var service = await GetAsync().ConfigureAwait(false);
+        await _passwordGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await _identity.SaveSecretAsync(AccessPasswordName, password).ConfigureAwait(false);
+            _accessPassword = password;
+        }
+        finally
+        {
+            _passwordGate.Release();
+        }
+        if (_settings.Current.Remote.PasswordAccessEnabled) service.SetAccessPassword(password);
+        if (revokeOld) await service.RevokePasswordDevicesAsync().ConfigureAwait(false);
+        OnPasswordAccessChanged();
+        return password;
+    }
+
+    /// <summary>Takes passwords again after a suspension.</summary>
+    public void ResumePasswordAccess()
+    {
+        _service?.ResumePasswordAccess();
+        OnPasswordAccessChanged();
+    }
+
+    /// <summary>What this host tells the relay it offers, for the account's device list.</summary>
+    private IReadOnlyList<string> RelayFeatures() => AcceptsPassword ? [RelayHostFeatures.PasswordAccess] : [];
+
+    private void OnPasswordAccessChanged()
+    {
+        if (_relayLink is { } link) _ = link.AnnounceFeaturesAsync();
+        Changed?.Invoke();
+    }
+
+    // The service follows the setting: off takes the password away from it, on gives it back.
+    private async Task ApplyPasswordAsync()
+    {
+        if (_service is not { } service) return;
+        var wanted = _settings.Current.Remote.PasswordAccessEnabled ? await LoadAccessPasswordAsync().ConfigureAwait(false) : null;
+        if (service.AccessPassword == wanted) return;
+        service.SetAccessPassword(wanted);
+        OnPasswordAccessChanged();
+    }
+
+    private async Task<string> LoadAccessPasswordAsync()
+    {
+        if (_accessPassword is { } known) return known;
+        await _passwordGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_accessPassword is { } loaded) return loaded;
+            var stored = AccessPassword.Normalize(await _identity.LoadSecretAsync(AccessPasswordName).ConfigureAwait(false));
+            if (stored is null)
+            {
+                stored = AccessPassword.Generate();
+                await _identity.SaveSecretAsync(AccessPasswordName, stored).ConfigureAwait(false);
+            }
+            return _accessPassword = stored;
+        }
+        finally
+        {
+            _passwordGate.Release();
+        }
+    }
 
     private void OnRelayAccessChanged() => _ = FollowRelayAsync();
 
@@ -200,6 +299,7 @@ public sealed class RemoteHostRuntime : IDisposable
     {
         // At exit: devices are cut off and the port is given back; nothing waits for them.
         if (_relay is not null) _relay.Changed -= OnRelayAccessChanged;
+        if (_service is { } running) running.PasswordAccessSuspendedChanged -= OnPasswordAccessChanged;
         if (_relayLink is { } link) _ = link.DisposeAsync().AsTask();
         if (_service is { } service) _ = service.DisposeAsync().AsTask();
         _workspace.Dispose();

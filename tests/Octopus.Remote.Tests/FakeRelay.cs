@@ -37,11 +37,17 @@ internal sealed class FakeRelay : IAsyncDisposable
     private readonly ConcurrentDictionary<string, (TaskCompletionSource<WebSocket> Host, TaskCompletionSource<WebSocket> Device)> _tunnels = new();
     private readonly ConcurrentBag<WebSocket> _sockets = [];
     private readonly ConcurrentDictionary<string, Login> _logins = new();
+    private readonly ConcurrentDictionary<string, byte[]> _keyChallenges = new();
     // What is signed in: refresh token → (account, device), access token → the same.
     private readonly ConcurrentDictionary<string, (string Account, string DeviceId)> _refresh = new();
     private readonly ConcurrentDictionary<string, (string Account, string DeviceId)> _access = new();
     // The devices that signed in, as an account's list shows them.
     private readonly ConcurrentDictionary<string, (string Account, string Name, string Kind)> _devices = new();
+    // What each online host said it offers (register.features, then "features" messages).
+    private readonly ConcurrentDictionary<string, string[]> _features = new();
+
+    /// <summary>When set, this fake relay also exposes <c>/v1/info</c> and <c>/v1/auth/key*</c> as a self-hosted relay.</summary>
+    public string? SelfHostedAccessKey { get; set; }
 
     public FakeRelay()
     {
@@ -71,6 +77,12 @@ internal sealed class FakeRelay : IAsyncDisposable
     /// <summary>How many requests arrived, of any kind: zero means nothing ever asked this relay for anything.</summary>
     public int Requests;
     public int Refreshes;
+    /// <summary>What an online host last said it offers; empty when it said nothing or is offline.</summary>
+    public IReadOnlyList<string> FeaturesOf(string deviceId) => _features.TryGetValue(deviceId, out var features) ? features : [];
+
+    /// <summary>Puts a device on an account's list as if it had signed in somewhere (a phone, a computer that is off).</summary>
+    public void AddDevice(string deviceId, string name, string kind = "desktop", string account = "ada") => _devices[deviceId] = (account, name, kind);
+
     /// <summary>How long the access tokens say they live.</summary>
     public int AccessSeconds { get; set; } = 900;
 
@@ -134,6 +146,18 @@ internal sealed class FakeRelay : IAsyncDisposable
     {
         Interlocked.Increment(ref Requests);
         var path = context.Request.Url!.AbsolutePath;
+        if (path == "/v1/info" && context.Request.HttpMethod == "GET")
+        {
+            if (SelfHostedAccessKey is null)
+            {
+                Respond(context, 404, """{"error":"not_found"}""");
+            }
+            else
+            {
+                Respond(context, 200, """{"protocol":1,"mode":"self-hosted","name":"Fake Self-Hosted","auth":["device_code","access_key"]}""");
+            }
+            return;
+        }
         if (path.StartsWith("/v1/auth/", StringComparison.Ordinal) && context.Request.HttpMethod == "POST")
         {
             await HandleAuthAsync(context, path);
@@ -155,6 +179,7 @@ internal sealed class FakeRelay : IAsyncDisposable
             {
                 ["id"] = device.Key, ["name"] = device.Value.Name, ["kind"] = device.Value.Kind,
                 ["online"] = _hosts.ContainsKey(device.Key), ["current"] = device.Key == caller.DeviceId,
+                ["passwordAccess"] = _hosts.ContainsKey(device.Key) && FeaturesOf(device.Key).Contains("password-access"),
                 ["createdAt"] = DateTimeOffset.UtcNow, ["lastSeenAt"] = DateTimeOffset.UtcNow,
             }).ToList();
             Respond(context, 200, JsonSerializer.Serialize(new Dictionary<string, object> { ["devices"] = devices }));
@@ -176,16 +201,26 @@ internal sealed class FakeRelay : IAsyncDisposable
                 return;
             }
             Interlocked.Increment(ref Registrations);
+            _features[key.DeviceId] = Features(register);
             _hosts[key.DeviceId] = (socket, caller.Account);
             await SendTextAsync(socket, JsonSerializer.Serialize(new Dictionary<string, string> { ["type"] = "registered", ["deviceId"] = key.DeviceId }));
             try
             {
-                while (await ReadAsync(socket) is not null) { }
+                while (await ReadAsync(socket) is { } said)
+                {
+                    var message = JsonSerializer.Deserialize<JsonElement>(said);
+                    if (message.TryGetProperty("type", out var type) && type.GetString() == "features") _features[key.DeviceId] = Features(message);
+                }
             }
             finally
             {
-                _hosts.TryRemove(new KeyValuePair<string, (WebSocket, string)>(key.DeviceId, (socket, caller.Account)));
+                if (_hosts.TryRemove(new KeyValuePair<string, (WebSocket, string)>(key.DeviceId, (socket, caller.Account)))) _features.TryRemove(key.DeviceId, out _);
             }
+
+            static string[] Features(JsonElement message) =>
+                message.TryGetProperty("features", out var list) && list.ValueKind == JsonValueKind.Array
+                    ? [.. list.EnumerateArray().Select(item => item.GetString() ?? "")]
+                    : [];
         }
         else if (path == "/v1/tunnels" && context.Request.HttpMethod == "POST")
         {
@@ -237,6 +272,47 @@ internal sealed class FakeRelay : IAsyncDisposable
         string? Text(string name) => request.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
         switch (path)
         {
+            case "/v1/auth/key/challenge":
+                if (SelfHostedAccessKey is null)
+                {
+                    Respond(context, 403, """{"error":"key_login_disabled"}""");
+                    break;
+                }
+                var challenge = RandomNumberGenerator.GetBytes(32);
+                var encodedChallenge = Convert.ToBase64String(challenge);
+                _keyChallenges[encodedChallenge] = challenge;
+                Respond(context, 200, JsonSerializer.Serialize(new Dictionary<string, object> { ["challenge"] = encodedChallenge, ["expiresIn"] = 120 }));
+                break;
+            case "/v1/auth/key":
+                if (SelfHostedAccessKey is null)
+                {
+                    Respond(context, 403, """{"error":"key_login_disabled"}""");
+                    break;
+                }
+                if (Text("accessKey") != SelfHostedAccessKey)
+                {
+                    Respond(context, 401, """{"error":"invalid_access_key"}""");
+                    break;
+                }
+                if (Text("challenge") is not { } chText || !_keyChallenges.TryRemove(chText, out var chBytes))
+                {
+                    Respond(context, 400, """{"error":"invalid_challenge"}""");
+                    break;
+                }
+                var keyPeer = DevicePublicKey.Parse(Convert.FromBase64String(Text("publicKey")!));
+                var keyHash = SHA256.HashData([.. Encoding.ASCII.GetBytes("octopus-relay/1 key-login\n"), .. chBytes]);
+                if (Text("signature") is not { } keySig || !keyPeer.Verify(keyHash, Convert.FromBase64String(keySig)))
+                {
+                    Respond(context, 400, """{"error":"invalid_signature"}""");
+                    break;
+                }
+                var keyName = Text("deviceName") ?? "";
+                var keyKind = Text("kind") == "phone" ? "phone" : "desktop";
+                LoginNames.Enqueue(keyName);
+                LoginClients.Enqueue((Text("platform"), Text("appVersion")));
+                _devices[keyPeer.DeviceId] = ("ada", keyName, keyKind);
+                Respond(context, 200, Issue("ada", keyPeer.DeviceId));
+                break;
             case "/v1/auth/device":
                 var deviceCode = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24));
                 var letters = RandomNumberGenerator.GetString("BCDFGHJKLMNPQRSTVWXZ", 8);

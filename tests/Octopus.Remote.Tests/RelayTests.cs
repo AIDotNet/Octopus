@@ -234,6 +234,55 @@ public class RelayTests
         // Put together here from the relay's text (03-账号与登录.md §4), not with the app's helper.
         var expected = SHA256.HashData(Encoding.ASCII.GetBytes("octopus-relay/1 login\nthe-device-code"));
         Assert.Equal(expected, RelayAccountClient.LoginHash("the-device-code"));
+
+        byte[] challenge = [.. Enumerable.Range(0, 32).Select(i => (byte)i)];
+        var expectedKeyHash = SHA256.HashData([.. Encoding.ASCII.GetBytes("octopus-relay/1 key-login\n"), .. challenge]);
+        Assert.Equal(expectedKeyHash, RelayAccountClient.KeyLoginHash(challenge));
+    }
+
+    [Fact]
+    public void Config_link_parses_url_and_optional_access_key()
+    {
+        var link = RelayConfigLink.TryParse("octopus://relay?v=1&url=https%3A%2F%2Frelay.example.com&key=ork_secret_12345678");
+        Assert.NotNull(link);
+        Assert.Equal("https://relay.example.com/", link!.Url.ToString());
+        Assert.Equal("ork_secret_12345678", link.AccessKey);
+
+        var urlOnly = RelayConfigLink.TryParse("octopus://relay?url=https%3A%2F%2Frelay.example.com");
+        Assert.NotNull(urlOnly);
+        Assert.Null(urlOnly!.AccessKey);
+
+        Assert.Null(RelayConfigLink.TryParse("https://relay.example.com"));
+        Assert.Null(RelayConfigLink.TryParse("octopus://pair?v=1&id=abc"));
+        Assert.Null(RelayConfigLink.TryParse("octopus://relay?key=only-key"));
+    }
+
+    [Fact]
+    public async Task A_device_signs_in_to_a_self_hosted_relay_using_its_access_key()
+    {
+        await using var relay = new FakeRelay();
+        var url = new Uri(relay.Url);
+        using var device = DeviceIdentity.Create();
+
+        // Standard cloud server without /v1/info returns null gracefully.
+        Assert.Null(await RelayAccountClient.GetInfoAsync(url).WaitAsync(Limit));
+
+        relay.SelfHostedAccessKey = "ork_test_self_hosted_key_123456";
+        var info = await RelayAccountClient.GetInfoAsync(url).WaitAsync(Limit);
+        Assert.NotNull(info);
+        Assert.Equal("self-hosted", info!.Mode);
+        Assert.True(info.SupportsAccessKey);
+        Assert.True(info.SupportsDeviceCode);
+
+        var bad = await Assert.ThrowsAsync<RelayException>(() => RelayAccountClient.SignInWithKeyAsync(url, "ork_wrong_key", device, "Ada's Mac"));
+        Assert.Equal(RelayFailure.Unauthorized, bad.Failure);
+
+        var tokens = await RelayAccountClient.SignInWithKeyAsync(url, relay.SelfHostedAccessKey, device, "Ada's Mac").WaitAsync(Limit);
+        Assert.StartsWith("oa1.", tokens.AccessToken);
+        Assert.StartsWith("or1.", tokens.RefreshToken);
+        Assert.Equal("Ada", tokens.Account.Name);
+        var listed = await RelayAccountClient.ListDevicesAsync(new RelayEndpoint(url, tokens.AccessToken)).WaitAsync(Limit);
+        Assert.Single(listed, d => d.Id == device.Id && d.Current);
     }
 
     [Fact]
@@ -363,5 +412,60 @@ public class RelayTests
         var (status, tokens) = await RelayAccountClient.PollLoginAsync(url, login, device).WaitAsync(Limit);
         Assert.Equal(RelayLoginStatus.SignedIn, status);
         return tokens!;
+    }
+
+    /// <summary>
+    /// Live end-to-end check against a real self-hosted Octopus-Relay instance when OCTOPUS_SELF_HOST_RELAY_URL and
+    /// OCTOPUS_SELF_HOST_RELAY_KEY are set: /v1/info, Access Key sign-in, encrypted tunnel (incl. 900 KB), live features,
+    /// refresh rotation, and revoke.
+    /// </summary>
+    [Fact]
+    public async Task A_real_self_hosted_relay_signs_devices_in_with_access_key_and_relays_encrypted_traffic()
+    {
+        var url = RelayAccountClient.ParseUrl(Environment.GetEnvironmentVariable("OCTOPUS_SELF_HOST_RELAY_URL"));
+        var accessKey = Environment.GetEnvironmentVariable("OCTOPUS_SELF_HOST_RELAY_KEY");
+        Assert.SkipWhen(url is null || string.IsNullOrWhiteSpace(accessKey), "No self-hosted relay is configured (OCTOPUS_SELF_HOST_RELAY_URL + OCTOPUS_SELF_HOST_RELAY_KEY).");
+
+        var info = await RelayAccountClient.GetInfoAsync(url!).WaitAsync(Limit);
+        Assert.NotNull(info);
+        Assert.Equal("self-hosted", info!.Mode);
+        Assert.True(info.SupportsAccessKey);
+
+        using var host = DeviceIdentity.Create();
+        using var device = DeviceIdentity.Create();
+
+        var hostTokens = await RelayAccountClient.SignInWithKeyAsync(url!, accessKey!, host, "Studio Host").WaitAsync(Limit);
+        var deviceTokens = await RelayAccountClient.SignInWithKeyAsync(url!, accessKey!, device, "Mobile Client", kind: "phone").WaitAsync(Limit);
+
+        var relay = new RelayEndpoint(url!, deviceTokens.AccessToken);
+        await using var link = new RelayHostLink(new RelayEndpoint(url!, hostTokens.AccessToken), host, () => Station.Name, async transport =>
+        {
+            await using var channel = await SecureChannel.AcceptAsync(transport, host, Station, new Door { Paired = { device.PublicKey } });
+            while (await channel.ReceiveAsync() is { } message)
+            {
+                await channel.SendAsync(Encoding.UTF8.GetBytes("echo: " + Encoding.UTF8.GetString(message)));
+            }
+        })
+        {
+            RetryPause = TimeSpan.FromMilliseconds(50),
+            Features = () => [RelayHostFeatures.PasswordAccess],
+        };
+        link.Start();
+        await Until(() => link.State == RelayLinkState.Online, "the host registers at the self-hosted relay: " + link.Error);
+
+        Assert.Equal("echo: through self-hosted relay", await AskAsync(relay, host, device, "through self-hosted relay"));
+        var large = new string('z', 900_000);
+        Assert.Equal("echo: " + large, await AskAsync(relay, host, device, large));
+
+        var devices = await RelayAccountClient.ListDevicesAsync(relay).WaitAsync(Limit);
+        var hostRow = Assert.Single(devices, d => d.Id == host.Id);
+        Assert.True(hostRow.Online);
+        Assert.True(hostRow.PasswordAccess);
+
+        var refreshed = await RelayAccountClient.RefreshAsync(url!, hostTokens.RefreshToken).WaitAsync(Limit);
+        Assert.NotNull(refreshed);
+        await RelayAccountClient.RevokeAsync(url!, refreshed!.RefreshToken).WaitAsync(Limit);
+        Assert.Null(await RelayAccountClient.RefreshAsync(url!, refreshed.RefreshToken).WaitAsync(Limit));
+        await Until(() => link.State == RelayLinkState.Failed, "host link closes after revoke");
     }
 }

@@ -10,8 +10,9 @@ using Octopus.Terminal;
 namespace Octopus.Mobile.Demo;
 
 /// <summary>
-/// Hosts, projects and sessions made up for the preview and the tests: three paired computers, one that is not paired
-/// yet, and six sessions of which one waits for the user. Without an account (<c>localOnly</c>) only the two that need
+/// Hosts, projects and sessions made up for the preview and the tests: three paired computers; of the account, one
+/// that takes its access password (<see cref="DemoAccessPassword"/>), one that only pairs and one that is offline; two
+/// phones (this one and another); and seven sessions of which one waits for the user. Without an account (<c>localOnly</c>) only the two that need
 /// no service are there. Nothing here talks to a network.
 /// </summary>
 public sealed partial class DemoWorkspace : IRemoteWorkspace
@@ -67,11 +68,49 @@ public sealed partial class DemoWorkspace : IRemoteWorkspace
             LastSeen = DateTimeOffset.Now.AddHours(-11),
         };
         var linux = new RemoteHost("linux", "Linux 服务器", HostLink.Relay, isPaired: false);
+        // Online, not paired, and lets the account's devices in with its access password (DemoAccessPassword).
+        var desk = new RemoteHost("desk", "Windows 台式机", HostLink.Relay, isPaired: false) { AcceptsPassword = true, Platform = "Windows" };
+        // Of the account, not paired, and not running: only named.
+        var laptop = new RemoteHost("laptop", "旧笔记本", HostLink.Offline, isPaired: false)
+        {
+            LastSeen = DateTimeOffset.Now.AddDays(-3),
+            Platform = "macOS",
+        };
 
-        Hosts = localOnly ? [mac, mini] : [mac, station, mini, linux];
+        Hosts = localOnly ? [mac, mini] : [mac, station, mini, desk, linux, laptop];
+        OtherDevices = localOnly
+            ? []
+            : [new AccountDevice("phone", "Demo 的 iPhone", IsCurrent: true, IsOnline: true, DateTimeOffset.Now, "iOS"),
+               new AccountDevice("pixel", "Pixel 9", IsCurrent: false, IsOnline: false, DateTimeOffset.Now.AddDays(-2), "Android")];
     }
 
+    /// <summary>The access password of the made-up computer that takes one ("Windows 台式机").</summary>
+    public const string DemoAccessPassword = "DEMO-2345";
+
+    /// <summary>How long checking an access password takes: the real derivation takes a moment too.</summary>
+    public TimeSpan AccessDelay { get; init; } = TimeSpan.FromMilliseconds(600);
+
     public ObservableCollection<RemoteHost> Hosts { get; }
+
+    public ObservableCollection<AccountDevice> OtherDevices { get; }
+
+    public async Task<AccessOutcome> AccessWithPasswordAsync(RemoteHost host, string password, CancellationToken cancellationToken = default)
+    {
+        if (AccessPassword.Normalize(password) is not { } normalized) return AccessOutcome.NotAPassword;
+        try { await Task.Delay(AccessDelay, cancellationToken).ConfigureAwait(false); }
+        catch (OperationCanceledException) { return AccessOutcome.Cancelled; }
+        if (!host.IsOnline) return AccessOutcome.Unreachable;
+        if (!host.AcceptsPassword) return AccessOutcome.PasswordOff;
+        if (normalized != AccessPassword.Normalize(DemoAccessPassword)) return AccessOutcome.WrongPassword;
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            host.IsPaired = true;
+            host.AcceptsPassword = false;
+            if (host.Agents.Count == 0) host.Agents = [Claude];
+            if (host.Projects.Count == 0) Add(host, "infra", "~/infra");
+        });
+        return AccessOutcome.Granted;
+    }
 
     public Task<RemoteSession> CreateSessionAsync(RemoteProject project, NewSessionRequest request, CancellationToken cancellationToken = default)
     {
@@ -393,6 +432,16 @@ public sealed class DemoAccount : IAccountSession
         if (url != RelayAccountClient.ParseUrl(OfficialServer)) Server = server.Trim();
         var cancel = new CancellationTokenSource();
         return Task.FromResult(new SignInChallenge("WDJB-MJHT", new Uri(url, "device?code=WDJB-MJHT"), ConfirmAsync(cancel.Token), cancel.Cancel));
+    }
+
+    public Task SignInWithKeyAsync(string server, string accessKey, CancellationToken cancellationToken = default)
+    {
+        if (RelayAccountClient.ParseUrl(server) is not { } url) throw new IOException("That is not an address.");
+        if (string.IsNullOrWhiteSpace(accessKey)) throw new IOException("Access key is required.");
+        if (url != RelayAccountClient.ParseUrl(OfficialServer)) Server = server.Trim();
+        IsSignedIn = true;
+        Changed?.Invoke(this, EventArgs.Empty);
+        return Task.CompletedTask;
     }
 
     public void SignOut()

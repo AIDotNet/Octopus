@@ -7,7 +7,9 @@ using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Workspace;
+using Octopus.Remote.Protocol;
 using Octopus.Terminal;
+using Octopus.Terminal.Avalonia;
 using TKCode.Terminal.Core;
 
 namespace Octopus.Mobile.Terminals;
@@ -34,6 +36,8 @@ public interface ITerminalSurface
     string ReadTailText(int maxLines = 16) => ReadScreenText();
     (int Columns, int Rows)? GridSize { get; }
     void FocusTerminal();
+    /// <summary>Lets the person choose a picture; null when nothing was chosen.</summary>
+    Task<PickedImage?> PickImageAsync() => Task.FromResult<PickedImage?>(null);
 }
 
 /// <summary>A key of the row above the keyboard: a named key, a character, or the sticky Ctrl.</summary>
@@ -117,6 +121,13 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
     public bool HasQuickReplies => IsComposing && QuickReplies.Count > 0;
     public IReadOnlyList<KeyCapViewModel> Keys { get; }
 
+    /// <summary>The host takes pictures for its sessions: the input bars show the picture button.</summary>
+    public bool CanSendImage => _workspace.SupportsUpload(Session.Project.Host);
+    /// <summary>A picture is on its way to the host.</summary>
+    [ObservableProperty] public partial bool IsUploading { get; private set; }
+    /// <summary>How far the picture is, for the line above the input.</summary>
+    [ObservableProperty] public partial string UploadText { get; private set; } = "";
+
     /// <summary>The page hands over its terminal once it exists.</summary>
     public void Attach(ITerminalSurface surface)
     {
@@ -198,6 +209,55 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         _surface?.SendText(ComposeText + "\r");
         ComposeText = "";
     }
+
+    /// <summary>
+    /// Sends a picture the person chooses to the host and puts the path the host keeps it at where the session takes
+    /// input: after the composed line (sent with it), or typed straight into the terminal. The program reads the
+    /// picture from there, as when a picture is pasted into a terminal on the computer itself.
+    /// </summary>
+    [RelayCommand]
+    private async Task SendImageAsync()
+    {
+        if (_surface is null || IsUploading) return;
+        try
+        {
+            var picked = await _surface.PickImageAsync();
+            if (picked is null) return;
+            IsUploading = true;
+            ShowProgress(0);
+            var prepared = await Task.Run(() => UploadImages.Prepare(picked));
+            var path = await _workspace.UploadImageAsync(Session, prepared.Name, prepared.Data, new Progress<double>(ShowProgress));
+            var typed = ClipboardImages.Quote(path);
+            if (IsDirect)
+            {
+                _surface.SendText(typed + " ");
+            }
+            else
+            {
+                ComposeText = ComposeText.Length == 0 || char.IsWhiteSpace(ComposeText[^1]) ? ComposeText + typed + " " : ComposeText + " " + typed + " ";
+                Actions.ShowNotice(MobileLangResources.Get(MobileLangResourceKind.UploadDone));
+            }
+        }
+        catch (ImageTooLargeException)
+        {
+            Actions.ShowNotice(string.Format(MobileLangResources.Get(MobileLangResourceKind.UploadTooLarge), RemoteMethods.UploadMaxBytes / (1024 * 1024)));
+        }
+        catch (InvalidDataException)
+        {
+            Actions.ShowNotice(MobileLangResources.Get(MobileLangResourceKind.UploadUnreadable));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            Actions.ShowNotice(string.Format(MobileLangResources.Get(MobileLangResourceKind.UploadFailed), e.Message));
+        }
+        finally
+        {
+            IsUploading = false;
+        }
+    }
+
+    private void ShowProgress(double share) =>
+        UploadText = string.Format(MobileLangResources.Get(MobileLangResourceKind.UploadProgress), (int)Math.Round(share * 100));
 
     [RelayCommand]
     private void Reply(QuickReply? reply)

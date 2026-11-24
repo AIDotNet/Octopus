@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Octopus.Mobile.Account;
 using Octopus.Mobile.Conversations;
@@ -187,9 +188,42 @@ public class Screenshots
             var workspace = new Octopus.Mobile.Demo.DemoWorkspace { PairingDelay = TimeSpan.FromMinutes(1) };
             var shell = new Octopus.Mobile.Shell.MobileShell(workspace, phone.Account);
             phone.Window.Content = shell;
-            shell.ShowPairing(workspace.Hosts.Single(host => !host.IsPaired));
+            shell.ShowPairing(workspace.Hosts.Single(host => host.Id == "linux"));
             Phone.Settle();
             phone.Save("7-pairing" + suffix);
+        }
+
+        // Signed in: the account's computers on the Computers tab (paired, with the lock, to pair, offline), the
+        // folded phones, then the access password page empty, filled and turned away.
+        using (var phone = new Phone())
+        {
+            var hosts = (HostsViewModel)phone.Top<HostsPage>().DataContext!;
+            hosts.SelectedTab = HostsViewModel.TabHosts;
+            Phone.Settle(300);
+            phone.Save("22-hosts-computers" + suffix);
+            hosts.IsOtherDevicesOpen = true;
+            Phone.Settle(300);
+            phone.Top<HostsPage>().FindControl<Control>("OtherDevicesList")!.BringIntoView();
+            Phone.Settle(300);
+            phone.Save("22b-hosts-other-devices" + suffix);
+
+            phone.Shell.ShowAccessPassword(phone.Workspace.Hosts.Single(host => host.Id == "desk"));
+            Phone.Settle();
+            phone.Save("23-access-password" + suffix);
+            var access = (AccessPasswordViewModel)phone.Top<AccessPasswordPage>().DataContext!;
+            access.Password = "demo-2346";
+            access.VerifyCommand.Execute(null);
+            Assert.True(Phone.Until(() => access.HasError));
+            Phone.Settle(300);
+            phone.Save("23b-access-password-error" + suffix);
+
+            // The keyboard up: the field and the button stay above it.
+            var keyboard = new TKCode.Arc.Mobile.KeyboardInsetSource();
+            TKCode.Arc.Mobile.Page.SetKeyboardInsetSource(phone.Shell, keyboard);
+            phone.Top<AccessPasswordPage>().Field.Focus();
+            keyboard.Set(300, TimeSpan.Zero);
+            Phone.Settle(600);
+            phone.Save("23c-access-password-keyboard" + suffix);
         }
 
         // Signed out and nothing chosen: the welcome page, then the code to confirm in the browser.

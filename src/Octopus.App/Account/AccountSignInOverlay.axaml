@@ -66,6 +66,10 @@
                             <arc:Input x:Name="CustomServerInput" Size="Small"
                                        Text="{Binding CustomServerUrl, Mode=TwoWay}"
                                        PlaceholderText="https://octoterm.si" />
+                            <TextBlock Classes="caption" Margin="0,4,0,0" Text="{l:AppLangResource AccountCustomAccessKeyLabel}" />
+                            <arc:Input x:Name="CustomAccessKeyInput" Size="Small" PasswordChar="•"
+                                       Text="{Binding CustomAccessKey, Mode=TwoWay}"
+                                       PlaceholderText="{l:AppLangResource AccountCustomAccessKeyPlaceholder}" />
                             <TextBlock Classes="hint" Text="{Binding CustomServerHintText}" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>

@@ -32,6 +32,35 @@ public sealed class RemoteIdentityProvider(IAppPaths paths, ISecretStore secrets
         }
     }
 
+    /// <summary>A secret of remote operation (beside the device key): from the keystore, or from a file only this user can read where there is none.</summary>
+    public async Task<string?> LoadSecretAsync(string name)
+    {
+        try
+        {
+            if (secrets.IsAvailable) return await secrets.GetAsync(KeyService, name).ConfigureAwait(false);
+            var file = Path.Combine(Folder, name);
+            return File.Exists(file) ? (await File.ReadAllTextAsync(file).ConfigureAwait(false)).Trim() : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    public async Task SaveSecretAsync(string name, string value)
+    {
+        if (secrets.IsAvailable)
+        {
+            await secrets.SetAsync(KeyService, name, value).ConfigureAwait(false);
+            return;
+        }
+        Directory.CreateDirectory(Folder);
+        var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        await using var stream = new FileStream(Path.Combine(Folder, name), options);
+        await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(value)).ConfigureAwait(false);
+    }
+
     private sealed class KeyVault(ISecretStore secrets) : IKeyVault
     {
         public bool IsAvailable => secrets.IsAvailable;

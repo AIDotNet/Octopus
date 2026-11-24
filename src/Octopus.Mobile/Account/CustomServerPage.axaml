@@ -30,6 +30,10 @@
                             Text="{Binding Server, Mode=TwoWay}"
                             PlaceholderText="octopus.example.com"
                             AutomationProperties.Name="{l:MobileLangResource SignInServer}" />
+            <arcm:TextField Name="AccessKeyInput"
+                            Text="{Binding AccessKey, Mode=TwoWay}"
+                            PlaceholderText="{l:MobileLangResource SignInAccessKeyPlaceholder}"
+                            AutomationProperties.Name="{l:MobileLangResource SignInAccessKey}" />
             <arcm:Button Name="StartButton"
                          Variant="Filled"
                          HorizontalAlignment="Stretch"

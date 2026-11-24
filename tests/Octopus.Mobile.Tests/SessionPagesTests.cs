@@ -240,4 +240,32 @@ public class SessionPagesTests
         Assert.True(host.NewSession.IsOpen);
         Assert.Equal("~/code/mobile-app", host.NewSession.Projects.Single(choice => choice.IsSelected).Path);
     }
+
+    [AvaloniaFact]
+    public void A_long_session_title_is_trimmed_between_the_back_button_and_the_menu()
+    {
+        using var phone = new Phone();
+        var (page, _, session) = OpenTerminal(phone, 0, 1);
+        session.Title = string.Concat(Enumerable.Repeat("一个非常非常长的会话名称 ", 12));
+
+        var navbar = page.GetVisualDescendants().OfType<Navbar>().Single();
+        var back = navbar.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "PART_Back");
+        var title = navbar.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "PART_Title");
+        var menu = page.FindControl<Control>("MenuButton")!;
+
+        Rect BoundsOf(Control control) => new(control.TranslatePoint(default, phone.Window)!.Value, control.Bounds.Size);
+        // Wait for the page to finish sliding in and the new title to finish swapping in.
+        Phone.Until(() => Math.Abs(BoundsOf(navbar).X) < 0.5 && BoundsOf(title).Width > phone.Window.Width / 3);
+        var (backBounds, titleBounds, menuBounds) = (BoundsOf(back), BoundsOf(title), BoundsOf(menu));
+
+        // Both buttons keep their place on screen, and the title sits between them.
+        Assert.True(backBounds.Width > 0 && backBounds.X >= 0, $"back at {backBounds}");
+        Assert.True(menuBounds.Width > 0 && menuBounds.Right <= phone.Window.Width + 0.5, $"menu at {menuBounds}");
+        Assert.True(titleBounds.X >= backBounds.Right - 0.5, $"title at {titleBounds}, back ends at {backBounds.Right}");
+        Assert.True(titleBounds.Right <= menuBounds.X + 0.5, $"title at {titleBounds}, menu starts at {menuBounds.X}");
+
+        // And a tap on the menu reaches it.
+        var hit = phone.Window.InputHitTest(menuBounds.Center) as Visual;
+        Assert.True(hit is not null && (hit == menu || hit.GetVisualAncestors().Contains(menu)), $"a tap on the menu hits {hit}");
+    }
 }

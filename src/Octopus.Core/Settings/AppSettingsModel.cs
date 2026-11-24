@@ -78,6 +78,11 @@ public sealed class RemoteSettings
     public string? RelayUrl { get; set; }
     /// <summary>Stay connected to the relay so that paired devices can reach this computer through it. Off until the person turns it on.</summary>
     public bool RelayHostEnabled { get; set; }
+    /// <summary>
+    /// Devices signed in to the same account may come in with this computer's access password (design/16). On unless
+    /// the person turns it off; the password itself is in the keystore.
+    /// </summary>
+    public bool PasswordAccessEnabled { get; set; } = true;
 }
 
 public sealed class TraySettings

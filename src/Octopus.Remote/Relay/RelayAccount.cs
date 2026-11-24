@@ -29,7 +29,9 @@ public sealed record RelayDeviceLogin(string DeviceCode, string UserCode, Uri Ve
 /// <param name="Kind">"desktop" or "phone".</param>
 /// <param name="Online">It is connected to the relay as a host right now.</param>
 /// <param name="Current">It is the device that asks.</param>
-public sealed record RelayDevice(string Id, string Name, string Kind, bool Online, bool Current, DateTimeOffset LastSeenAt);
+/// <param name="PasswordAccess">While online: the host takes devices of the account that come with its access password (design/16).</param>
+/// <param name="Platform">The system it runs ("macOS", "iOS"…), when it said.</param>
+public sealed record RelayDevice(string Id, string Name, string Kind, bool Online, bool Current, DateTimeOffset LastSeenAt, bool PasswordAccess = false, string? Platform = null);
 
 public enum RelayLoginStatus
 {
@@ -42,6 +44,88 @@ public enum RelayLoginStatus
     /// <summary>Too late: the code is no longer good.</summary>
     Expired,
     SignedIn,
+}
+
+/// <summary>Public capabilities advertised by a self-hosted relay at <c>GET /v1/info</c>.</summary>
+public sealed record RelayServerInfo(int Protocol, string Mode, string Name, IReadOnlyList<string> Auth)
+{
+    public bool SupportsDeviceCode => Auth.Contains("device_code", StringComparer.OrdinalIgnoreCase);
+    public bool SupportsAccessKey => Auth.Contains("access_key", StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// A one-click self-hosted relay setup link (<c>octopus://relay?v=1&amp;url=…&amp;key=…</c>): carries the relay URL
+/// and optionally an Access Key so desktop and mobile apps can bind in one paste without a browser.
+/// </summary>
+public sealed record RelayConfigLink(Uri Url, string? AccessKey)
+{
+    public const string Scheme = "octopus";
+
+    public static RelayConfigLink? TryParse(string? raw)
+    {
+        var text = raw?.Trim();
+        if (string.IsNullOrEmpty(text) || !text.StartsWith("octopus://relay", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!Uri.TryCreate(text, UriKind.Absolute, out var uri)
+            || !uri.Scheme.Equals(Scheme, StringComparison.OrdinalIgnoreCase)
+            || !uri.Host.Equals("relay", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        string? urlText = null;
+        string? key = null;
+        var query = uri.Query.TrimStart('?');
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = pair.IndexOf('=');
+            var name = Uri.UnescapeDataString(eq < 0 ? pair : pair[..eq]);
+            var value = eq < 0 ? "" : Uri.UnescapeDataString(pair[(eq + 1)..]);
+            switch (name)
+            {
+                case "url":
+                    urlText = value;
+                    break;
+                case "key":
+                    key = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                    break;
+            }
+        }
+
+        var parsedUrl = RelayAccountClient.ParseUrl(urlText);
+        return parsedUrl is null ? null : new RelayConfigLink(parsedUrl, key);
+    }
+
+    public override string ToString() => Url.ToString();
+}
+
+internal sealed class RelayInfoResponse
+{
+    public int Protocol { get; set; }
+    public string? Mode { get; set; }
+    public string? Name { get; set; }
+    public List<string>? Auth { get; set; }
+}
+
+internal sealed class RelayKeyChallengeResponse
+{
+    public string? Challenge { get; set; }
+    public int ExpiresIn { get; set; }
+}
+
+internal sealed class RelayKeyLoginRequest
+{
+    public string? AccessKey { get; set; }
+    public string? Challenge { get; set; }
+    public string? DeviceName { get; set; }
+    public string? Kind { get; set; }
+    public string? PublicKey { get; set; }
+    public string? Signature { get; set; }
+    public string? Platform { get; set; }
+    public string? AppVersion { get; set; }
 }
 
 internal sealed class RelayDeviceLoginRequest
@@ -97,6 +181,8 @@ internal sealed class RelayDeviceBody
     public bool Online { get; set; }
     public bool Current { get; set; }
     public DateTimeOffset LastSeenAt { get; set; }
+    public bool PasswordAccess { get; set; }
+    public string? Platform { get; set; }
 }
 
 internal sealed class RelayDevicesResponse
@@ -105,6 +191,9 @@ internal sealed class RelayDevicesResponse
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(RelayInfoResponse))]
+[JsonSerializable(typeof(RelayKeyChallengeResponse))]
+[JsonSerializable(typeof(RelayKeyLoginRequest))]
 [JsonSerializable(typeof(RelayDevicesResponse))]
 [JsonSerializable(typeof(RelayDeviceLoginRequest))]
 [JsonSerializable(typeof(RelayDeviceLoginResponse))]
@@ -151,10 +240,98 @@ public static class RelayAccountClient
         Timeout = TimeSpan.FromSeconds(20),
     };
     private static readonly byte[] LoginLabel = Encoding.ASCII.GetBytes("octopus-relay/1 login\n");
+    private static readonly byte[] KeyLoginLabel = Encoding.ASCII.GetBytes("octopus-relay/1 key-login\n");
     private const int MaxAnswerBytes = 16 * 1024;
 
     /// <summary>The relay's address from what a person types (see <see cref="RelayEndpoint.TryCreate"/>); null when it is none.</summary>
     public static Uri? ParseUrl(string? typed) => RelayEndpoint.TryCreate(typed, "-")?.Url;
+
+    /// <summary>
+    /// Queries <c>GET /v1/info</c> to discover capabilities of a self-hosted relay. Returns null when the endpoint is
+    /// absent (404, such as older servers that only support device-code login). Throws <see cref="RelayException"/> on network failure.
+    /// </summary>
+    public static async Task<RelayServerInfo?> GetInfoAsync(Uri relay, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(relay, "v1/info"));
+        HttpStatusCode status;
+        byte[] bytes;
+        try
+        {
+            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            status = response.StatusCode;
+            if (status == HttpStatusCode.NotFound) return null;
+            if (response.Content.Headers.ContentLength > MaxAnswerBytes) return null;
+            bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException || e is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            throw new RelayException(RelayFailure.Unreachable, e is OperationCanceledException ? "The relay did not answer in time." : $"The relay cannot be reached: {e.Message}", e);
+        }
+        if (status != HttpStatusCode.OK || bytes.Length > MaxAnswerBytes) return null;
+        var parsed = Parse(bytes, RelayAccountJsonContext.Default.RelayInfoResponse);
+        if (parsed is not { Protocol: >= 1, Auth.Count: > 0 }) return null;
+        return new RelayServerInfo(parsed.Protocol, parsed.Mode ?? "cloud", parsed.Name ?? relay.Host, parsed.Auth);
+    }
+
+    /// <summary>
+    /// Signs this device in at a self-hosted relay using its Access Key (challenge + device ECDSA signature), returning
+    /// the same short-lived access token and rotating refresh token as device-code sign-in. Throws <see cref="RelayException"/>.
+    /// </summary>
+    public static async Task<RelayTokens> SignInWithKeyAsync(Uri relay, string accessKey, DeviceIdentity identity, string deviceName, string kind = "desktop", CancellationToken cancellationToken = default)
+    {
+        var key = accessKey?.Trim() ?? "";
+        if (key.Length == 0) throw new RelayException(RelayFailure.Unauthorized, "Access key is required.");
+
+        var (challengeStatus, challengeBytes) = await PostAsync(new Uri(relay, "v1/auth/key/challenge"), "{}"u8.ToArray(), cancellationToken).ConfigureAwait(false);
+        if (challengeStatus == HttpStatusCode.TooManyRequests) throw new RelayException(RelayFailure.Busy, "The relay is busy; try again later.");
+        if (challengeStatus is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+        {
+            throw new RelayException(RelayFailure.Protocol, "This relay does not accept access-key sign-in.");
+        }
+
+        var challengeAnswer = challengeStatus == HttpStatusCode.OK ? Parse(challengeBytes, RelayAccountJsonContext.Default.RelayKeyChallengeResponse) : null;
+        if (challengeAnswer?.Challenge is not { Length: > 0 and <= 64 } challengeEncoded)
+        {
+            throw new RelayException(RelayFailure.Protocol, $"The relay answered {(int)challengeStatus} to the key challenge.");
+        }
+
+        byte[] challenge;
+        try { challenge = Convert.FromBase64String(challengeEncoded); }
+        catch (FormatException) { throw new RelayException(RelayFailure.Protocol, "The relay sent an invalid challenge."); }
+        if (challenge.Length != 32) throw new RelayException(RelayFailure.Protocol, "The relay's challenge is not of the expected length.");
+
+        var loginRequest = new RelayKeyLoginRequest
+        {
+            AccessKey = key,
+            Challenge = challengeEncoded,
+            DeviceName = deviceName,
+            Kind = kind,
+            PublicKey = Convert.ToBase64String(identity.PublicKey.Bytes),
+            Signature = Convert.ToBase64String(identity.Sign(KeyLoginHash(challenge))),
+            Platform = RelayClientInfo.Platform,
+            AppVersion = RelayClientInfo.AppVersion,
+        };
+        var (status, bytes) = await PostAsync(new Uri(relay, "v1/auth/key"), JsonSerializer.SerializeToUtf8Bytes(loginRequest, RelayAccountJsonContext.Default.RelayKeyLoginRequest), cancellationToken).ConfigureAwait(false);
+        var answer = Parse(bytes, RelayAccountJsonContext.Default.RelayTokenResponse);
+        if (status == HttpStatusCode.OK && Tokens(answer) is { } tokens) return tokens;
+        throw status switch
+        {
+            HttpStatusCode.Unauthorized => new RelayException(RelayFailure.Unauthorized, "The access key was not accepted by the relay."),
+            HttpStatusCode.Forbidden => new RelayException(RelayFailure.Protocol, "This relay does not accept access-key sign-in."),
+            HttpStatusCode.Conflict when answer?.Error == "device_limit" => new RelayException(RelayFailure.Busy, "This relay has reached its maximum device limit."),
+            HttpStatusCode.TooManyRequests => new RelayException(RelayFailure.Busy, "The relay is busy; try again later."),
+            _ => new RelayException(RelayFailure.Protocol, $"The relay answered {(int)status} to the access-key sign-in."),
+        };
+    }
+
+    /// <summary>What a device signs to authenticate an access-key login: SHA-256 of the label and the 32-byte challenge.</summary>
+    internal static byte[] KeyLoginHash(ReadOnlySpan<byte> challenge)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hash.AppendData(KeyLoginLabel);
+        hash.AppendData(challenge);
+        return hash.GetHashAndReset();
+    }
 
     /// <summary>Starts a sign-in for this device. Throws <see cref="RelayException"/>.</summary>
     public static async Task<RelayDeviceLogin> StartLoginAsync(Uri relay, DeviceIdentity identity, string deviceName, string kind = "desktop", CancellationToken cancellationToken = default)
@@ -248,7 +425,8 @@ public static class RelayAccountClient
         if (answer?.Devices is not { } devices) throw new RelayException(RelayFailure.Protocol, $"The relay answered {(int)status} to the request for the account's devices.");
         // Only what looks like a device: an id of the form the apps derive, and a name of a bounded length.
         return [.. devices.Where(d => d.Id is { Length: 26 } id && id.All(char.IsAsciiLetterOrDigit))
-            .Select(d => new RelayDevice(d.Id!, d.Name is { Length: > 0 and <= 128 } name ? name : d.Id!, d.Kind == "phone" ? "phone" : "desktop", d.Online, d.Current, d.LastSeenAt))];
+            .Select(d => new RelayDevice(d.Id!, d.Name is { Length: > 0 and <= 128 } name ? name : d.Id!, d.Kind == "phone" ? "phone" : "desktop", d.Online, d.Current, d.LastSeenAt,
+                d.Online && d.PasswordAccess, d.Platform is { Length: > 0 and <= 32 } platform ? platform : null))];
     }
 
     /// <summary>Signs this device out at the relay. Best effort: a relay that cannot be reached is not waited for.</summary>

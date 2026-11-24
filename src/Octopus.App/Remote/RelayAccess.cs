@@ -51,6 +51,7 @@ public sealed class RelayAccess : IRelayGate
     public Task<RelayEndpoint?> GetAsync(bool fresh = false, CancellationToken cancellationToken = default) => _session.GetAsync(fresh, cancellationToken);
     public Task<RelayDeviceLogin> BeginSignInAsync(string deviceName, CancellationToken cancellationToken = default) => _session.BeginSignInAsync(deviceName, cancellationToken);
     public Task<RelaySignInResult> CompleteSignInAsync(RelayDeviceLogin login, CancellationToken cancellationToken = default) => _session.CompleteSignInAsync(login, cancellationToken);
+    public Task SignInWithKeyAsync(string accessKey, string deviceName, CancellationToken cancellationToken = default) => _session.SignInWithKeyAsync(accessKey, deviceName, cancellationToken);
     public Task SignOutAsync() => _session.SignOutAsync();
 
     /// <summary>Keeps the relay's address. A sign-in belongs to one relay: with another address this computer is signed out (of the old one, too).</summary>

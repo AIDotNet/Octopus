@@ -28,8 +28,11 @@ public class NavigationTests
         var hosts = (HostsViewModel)phone.Top<HostsPage>().DataContext!;
 
         Assert.Equal(["MacBook Pro", "工作站"], hosts.Online.Select(row => row.Name));
-        Assert.Equal(["Mac mini"], hosts.Offline.Select(row => row.Name));
-        Assert.Equal(["Linux 服务器"], hosts.Unpaired.Select(row => row.Name));
+        // Offline, paired or only of the account: named, faded, and nothing happens on a tap.
+        Assert.Equal(["Mac mini", "旧笔记本"], hosts.Offline.Select(row => row.Name));
+        Assert.All(hosts.Offline, row => Assert.True(row.IsDimmed));
+        Assert.Equal("3 天前在线", hosts.Offline[1].Summary);
+        Assert.Equal(["Windows 台式机", "Linux 服务器"], hosts.Unpaired.Select(row => row.Name));
 
         var mac = hosts.Online[0];
         Assert.Equal("局域网 · 3 个项目", mac.Summary);
@@ -38,7 +41,9 @@ public class NavigationTests
         // Nothing waits or works on the second one.
         Assert.True(hosts.Online[1].IsIdle);
         Assert.False(hosts.Offline[0].OpenCommand.CanExecute(null));
-        Assert.Equal("配对", hosts.Unpaired[0].PillText);
+        // One takes its access password (a lock), the other only pairs.
+        Assert.Equal(("密码", true, "中转 · 可用访问密码进入"), (hosts.Unpaired[0].PillText, hosts.Unpaired[0].IsPasswordAction, hosts.Unpaired[0].Summary));
+        Assert.Equal(("配对", false), (hosts.Unpaired[1].PillText, hosts.Unpaired[1].IsPasswordAction));
 
         // Scheme A: 3 bottom tabs — Activity inbox starts active (1 waiting + 1 error), Computers tab shows every host row + add row.
         Assert.Equal(HostsViewModel.TabActivity, hosts.SelectedTab);
@@ -48,7 +53,8 @@ public class NavigationTests
         hosts.SelectedTab = HostsViewModel.TabHosts;
         Phone.Pump();
         var hostsTab = phone.Top<HostsPage>().FindControl<Control>("HostsTabContent")!;
-        Assert.Equal(5, hostsTab.GetVisualDescendants().OfType<ListItem>().Count());
+        // Six computers, the folded "Other devices" row and "Add a computer"; the phones stay folded away.
+        Assert.Equal(8, hostsTab.GetVisualDescendants().OfType<ListItem>().Count(row => row.IsEffectivelyVisible));
         Assert.False(hosts.IsEmpty);
         Assert.Equal("Demo", hosts.AccountName);
         hosts.OpenAccountCommand.Execute(null);
@@ -167,9 +173,9 @@ public class NavigationTests
         // Long enough that the number is seen before the host allows, even on a slow machine.
         using var phone = new Phone(pairingDelay: TimeSpan.FromSeconds(1));
         var hosts = (HostsViewModel)phone.Top<HostsPage>().DataContext!;
-        var linux = phone.Workspace.Hosts.Single(host => !host.IsPaired);
+        var linux = phone.Workspace.Hosts.Single(host => host.Id == "linux");
 
-        hosts.Unpaired[0].OpenCommand.Execute(null);
+        hosts.Unpaired.Single(row => row.Host == linux).OpenCommand.Execute(null);
         var pairing = (PairingViewModel)phone.Top<PairingPage>().DataContext!;
         Assert.Equal("Linux 服务器", pairing.HostName);
         Assert.True(Phone.Until(() => pairing.HasCode));
@@ -178,7 +184,7 @@ public class NavigationTests
 
         // The made-up host allows after a moment: the page leaves by itself.
         Assert.True(Phone.Until(() => linux.IsPaired && phone.Shell.Top is HostsPage));
-        Assert.Empty(hosts.Unpaired);
+        Assert.DoesNotContain(hosts.Unpaired, row => row.Host == linux);
         Assert.Contains(hosts.Online, row => row.Name == "Linux 服务器");
     }
 
@@ -186,7 +192,7 @@ public class NavigationTests
     public void Cancelling_a_pairing_leaves_the_host_unpaired()
     {
         using var phone = new Phone(pairingDelay: TimeSpan.FromSeconds(2));
-        var linux = phone.Workspace.Hosts.Single(host => !host.IsPaired);
+        var linux = phone.Workspace.Hosts.Single(host => host.Id == "linux");
         phone.Shell.ShowPairing(linux);
         var pairing = (PairingViewModel)phone.Top<PairingPage>().DataContext!;
 

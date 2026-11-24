@@ -30,6 +30,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             new("workspace-cleanup", LucideIconKind.FolderGit2, AppLangResourceKind.SettingsNavWorkspaces, () => ActivatorUtilities.CreateInstance<WorkspaceCleanupSettingsViewModel>(services)),
             new("terminal", LucideIconKind.SquareTerminal, AppLangResourceKind.SettingsNavTerminal, () => ActivatorUtilities.CreateInstance<TerminalSettingsViewModel>(services)),
             new("ssh", LucideIconKind.Server, AppLangResourceKind.SettingsNavSsh, () => ActivatorUtilities.CreateInstance<SshSettingsViewModel>(services)),
+            new("account-devices", LucideIconKind.User, AppLangResourceKind.SettingsNavAccountDevices, () => ActivatorUtilities.CreateInstance<Remote.AccountDevicesSettingsViewModel>(services)),
             new("remote", LucideIconKind.MonitorSmartphone, AppLangResourceKind.SettingsNavRemote, () => ActivatorUtilities.CreateInstance<Remote.RemoteAccessSettingsViewModel>(services)),
             new("remote-hosts", LucideIconKind.Monitor, AppLangResourceKind.SettingsNavRemoteHosts, () => ActivatorUtilities.CreateInstance<Remote.RemoteHostsSettingsViewModel>(services)),
         ];

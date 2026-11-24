@@ -145,6 +145,14 @@ internal sealed class HostConnection : IAsyncDisposable
             await _workspace.WriteAsync(request.Path, request.Upload, data, request.Last).ConfigureAwait(false);
             return new Nothing();
         });
+        _connection.Handle(RemoteMethods.FsUpload, json.UploadMessage, json.UploadedMessage, async (request, _) =>
+        {
+            byte[] data;
+            try { data = Convert.FromBase64String(request.Data); }
+            catch (FormatException) { throw new RemoteException(RemoteProtocol.InvalidParams, "The data is not base64."); }
+            if (data.Length > RemoteMethods.FilePieceBytes || request.Upload.Length is 0 or > 64) throw new RemoteException(RemoteProtocol.InvalidParams, "A piece is too large.");
+            return new UploadedMessage { Path = await _workspace.UploadAsync(request.ItemId, request.Upload, request.Name, data, request.Last).ConfigureAwait(false) };
+        });
         _connection.Handle(RemoteMethods.FsCreateFile, json.PathMessage, json.Nothing, async (request, _) =>
         {
             await _workspace.CreateFileAsync(request.Path).ConfigureAwait(false);

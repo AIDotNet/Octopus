@@ -191,6 +191,51 @@ public class RemoteHostConnections : IDisposable
         throw new IOException(last?.Message ?? "The host cannot be reached.", last);
     }
 
+    /// <summary>
+    /// Gets into a computer of the same account with its access password (design/16-账号设备与访问密码.md): through
+    /// the relay, to the device id the account's list named. The host is remembered as paired, so the password is
+    /// asked only once. Throws <see cref="HandshakeException"/> with <see cref="HandshakeStatus.WrongPassword"/>,
+    /// <see cref="HandshakeStatus.PasswordLocked"/> or <see cref="HandshakeStatus.PairingClosed"/> (password access is
+    /// off there) when the host turns it away, <see cref="HandshakeFailure.WrongPeer"/> when what answered could not
+    /// prove the password; <see cref="ArgumentException"/> when <paramref name="password"/> is not eight letters and
+    /// digits; <see cref="IOException"/> when the host cannot be reached.
+    /// </summary>
+    public async Task<PairedPeer> AccessWithPasswordAsync(string hostId, string password, CancellationToken cancellationToken = default)
+    {
+        if (AccessPassword.Normalize(password) is null) throw new ArgumentException("An access password is eight letters and digits.", nameof(password));
+        if (_relay is null || !await _relay.IsUsableAsync().ConfigureAwait(false)) throw new IOException("This device is not signed in: the computer can only be reached through the account's relay.");
+        var identity = await _identity().ConfigureAwait(false);
+        var address = RelayAddress(hostId);
+        IMessageTransport transport;
+        using (var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+        {
+            limit.CancelAfter(ConnectLimit);
+            try { transport = await Dial(address, limit.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { throw new IOException("The computer did not answer in time."); }
+            catch (Exception e) when (e is System.Net.WebSockets.WebSocketException or System.Net.Sockets.SocketException) { throw new IOException(e.Message, e); }
+        }
+        var options = new ConnectOptions { Password = password };
+        RemoteHostClient client;
+        try
+        {
+            // The key derivation of the password takes a moment on each side: no tight limit on top of the host's own.
+            client = await RemoteHostClient.ConnectAsync(transport, identity, Description, PeerExpectation.WithDeviceId(hostId), _hello, options, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is RemoteException or System.Net.WebSockets.WebSocketException)
+        {
+            throw new IOException(e.Message, e);
+        }
+        var peer = Hosts.Add(client.Host, client.HostDescription, [], PairedVia.Password);
+        Link hostLink;
+        lock (_gate)
+        {
+            if (!_links.TryGetValue(peer.Id, out var existing)) _links[peer.Id] = hostLink = new Link();
+            else hostLink = existing;
+        }
+        Adopt(peer.Id, hostLink, client, throughRelay: true);
+        return peer;
+    }
+
     /// <summary>Ends every connection and stops asking for the hosts; who is paired is kept. Connecting again starts over.</summary>
     public async Task DisconnectAllAsync()
     {

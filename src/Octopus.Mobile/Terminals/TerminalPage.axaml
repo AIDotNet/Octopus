@@ -45,6 +45,14 @@
         <term:TerminalControl Name="Terminal" Grid.Row="1" FontSize="{Binding FontSize}" />
 
         <StackPanel Name="InputBars" Grid.Row="2">
+            <!-- A picture on its way to the host: how far it is. -->
+            <Border Name="UploadBar" Classes="bar" Padding="12,6" IsVisible="{Binding IsUploading}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <arc:ArcSpinner VerticalAlignment="Center" />
+                    <TextBlock Name="UploadText" Classes="secondary" Text="{Binding UploadText}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+
             <!-- Only looking: one button takes the size and opens the input. -->
             <Border Classes="bar" IsVisible="{Binding IsViewing}">
                 <arcm:Button Name="FitAndTypeButton"
@@ -70,16 +78,21 @@
 
             <!-- The composer: a whole line, sent at once. -->
             <Border Classes="bar" IsVisible="{Binding IsComposing}">
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6">
                     <arcm:IconButton Name="KeyboardButton"
                                      Icon="{x:Static arc:ArcIcons.Keyboard}"
                                      Command="{Binding ToggleInputCommand}"
                                      AutomationProperties.Name="{l:MobileLangResource UseKeyboard}" />
-                    <arcm:TextField Name="Composer" Grid.Column="1"
+                    <arcm:IconButton Name="ImageButton" Grid.Column="1"
+                                     Icon="{x:Static arc:ArcIcons.Image}"
+                                     IsVisible="{Binding CanSendImage}"
+                                     Command="{Binding SendImageCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource SendImage}" />
+                    <arcm:TextField Name="Composer" Grid.Column="2"
                                     Text="{Binding ComposeText, Mode=TwoWay}"
                                     PlaceholderText="{l:MobileLangResource ReplyPlaceholder}"
                                     VerticalAlignment="Center" />
-                    <arcm:IconButton Name="SendButton" Grid.Column="2"
+                    <arcm:IconButton Name="SendButton" Grid.Column="3"
                                      Variant="Filled"
                                      Icon="{x:Static arc:ArcIcons.ArrowUp}"
                                      Command="{Binding SendCommand}"
@@ -89,12 +102,18 @@
 
             <!-- Typing straight into the terminal: the keys a phone keyboard lacks. Ctrl is sticky. -->
             <Border Classes="bar" IsVisible="{Binding IsDirect}">
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
                     <arcm:IconButton Name="ComposerButton"
                                      Icon="{x:Static arc:ArcIcons.MessageSquare}"
                                      Command="{Binding ToggleInputCommand}"
                                      AutomationProperties.Name="{l:MobileLangResource UseComposer}" />
-                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                    <arcm:IconButton Name="DirectImageButton" Grid.Column="1"
+                                     Icon="{x:Static arc:ArcIcons.Image}"
+                                     Focusable="False"
+                                     IsVisible="{Binding CanSendImage}"
+                                     Command="{Binding SendImageCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource SendImage}" />
+                    <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
                         <ItemsControl Name="KeyRow" ItemsSource="{Binding Keys}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>

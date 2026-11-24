@@ -28,6 +28,16 @@ public partial interface IRemoteWorkspace
     Task<RemoteChanges> GetChangesAsync(RemoteProject project, string? workspacePath, CancellationToken cancellationToken = default) =>
         throw new IOException("Reviewing changes is not supported.");
 
+    /// <summary>The host takes pictures for its sessions' programs (<see cref="UploadImageAsync"/>).</summary>
+    bool SupportsUpload(RemoteHost host) => false;
+
+    /// <summary>
+    /// Hands the host a picture for a session and returns where the host keeps it (its own temporary folder), to be
+    /// typed into the session. <paramref name="progress"/> hears the share sent so far, from 0 to 1.
+    /// </summary>
+    Task<string> UploadImageAsync(RemoteSession session, string name, byte[] data, IProgress<double>? progress = null, CancellationToken cancellationToken = default) =>
+        throw new IOException("Sending pictures is not supported.");
+
     /// <summary>The diff of one change listed by <see cref="GetChangesAsync"/> for the same folder.</summary>
     Task<RemoteDiff> GetDiffAsync(RemoteProject project, string? workspacePath, RemoteChange change, CancellationToken cancellationToken = default) =>
         throw new IOException("Reviewing changes is not supported.");

@@ -50,6 +50,26 @@ public sealed class PairingWindow
     public bool IsOpen => DateTimeOffset.UtcNow < ExpiresAt;
 }
 
+/// <summary>
+/// How this host takes devices that come with its access password (design/16-账号设备与访问密码.md): the key made
+/// from the password, and the count of wrong ones, by device and in all.
+/// </summary>
+internal sealed class PasswordDoor
+{
+    /// <summary>Wrong passwords from one device before it has to wait.</summary>
+    public const int MaxFailuresPerDevice = 5;
+    public static readonly TimeSpan DeviceLock = TimeSpan.FromMinutes(15);
+    /// <summary>Wrong passwords from all devices within <see cref="Window"/> before password access is suspended.</summary>
+    public const int MaxFailuresInWindow = 10;
+    public static readonly TimeSpan Window = TimeSpan.FromHours(1);
+
+    public string? Password;
+    public byte[]? Key;
+    public bool Suspended;
+    public readonly Dictionary<string, (int Failures, DateTimeOffset LockedUntil)> Devices = new(StringComparer.Ordinal);
+    public readonly Queue<DateTimeOffset> Recent = new();
+}
+
 /// <summary>A device that is connected right now.</summary>
 public sealed record ConnectedDevice(string DeviceId, DeviceDescription Device, DateTimeOffset ConnectedAt, IPEndPoint? Remote, int AttachedTerminals);
 
@@ -72,6 +92,7 @@ public sealed class RemoteHostService : IAsyncDisposable
     private WebSocketListener? _listener;
     private CancellationTokenSource? _listening;
     private PairingWindow? _pairing;
+    private readonly PasswordDoor _password = new();
 
     public RemoteHostService(DeviceIdentity identity, Func<DeviceDescription> description, PairedPeerStore devices, IHostWorkspace workspace, HelloMessage hello)
     {
@@ -183,6 +204,61 @@ public sealed class RemoteHostService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The access password devices of the same account may come in with; null: none may (password access is off). A
+    /// normalized password (<see cref="AccessPassword.Normalize"/>). Setting it lifts a suspension and every device's wait.
+    /// </summary>
+    public string? AccessPassword
+    {
+        get { lock (_gate) return _password.Password; }
+    }
+
+    /// <summary>True while password access is suspended after too many wrong passwords; <see cref="SetAccessPassword"/> or <see cref="ResumePasswordAccess"/> ends it.</summary>
+    public bool PasswordAccessSuspended
+    {
+        get { lock (_gate) return _password.Suspended; }
+    }
+
+    /// <summary>Password access is on, and not suspended: devices with the right password come in.</summary>
+    public bool AcceptsPassword
+    {
+        get { lock (_gate) return _password.Password is not null && !_password.Suspended; }
+    }
+
+    /// <summary>Too many wrong passwords: password access was suspended. Raised on any thread.</summary>
+    public event Action? PasswordAccessSuspendedChanged;
+
+    /// <summary>Sets the access password (null turns password access off). Throws when it is not eight letters and digits.</summary>
+    public void SetAccessPassword(string? password)
+    {
+        var normalized = password is null ? null : Octopus.Remote.Security.AccessPassword.Normalize(password) ?? throw new ArgumentException("An access password is eight letters and digits.", nameof(password));
+        bool wasSuspended;
+        lock (_gate)
+        {
+            if (_password.Password != normalized) _password.Key = null; // made again on first use: it takes a moment
+            _password.Password = normalized;
+            wasSuspended = _password.Suspended;
+            _password.Suspended = false;
+            _password.Devices.Clear();
+            _password.Recent.Clear();
+        }
+        if (wasSuspended) PasswordAccessSuspendedChanged?.Invoke();
+        Changed?.Invoke();
+    }
+
+    /// <summary>Takes passwords again after a suspension, with the same password.</summary>
+    public void ResumePasswordAccess() => SetAccessPassword(AccessPassword);
+
+    /// <summary>Forgets every device that came in with the access password and ends their connections (when the password changed hands).</summary>
+    public async Task RevokePasswordDevicesAsync()
+    {
+        var removed = _devices.RemoveAll(PairedVia.Password);
+        List<HostConnection> ended;
+        lock (_gate) ended = [.. _connections.Where(c => removed.Contains(c.Connection.Peer.DeviceId)).Select(c => c.Connection)];
+        foreach (var connection in ended) await connection.DisposeAsync().ConfigureAwait(false);
+        Changed?.Invoke();
+    }
+
     /// <summary>Forgets a paired device and ends its connections at once.</summary>
     public async Task RevokeAsync(string deviceId)
     {
@@ -262,6 +338,8 @@ public sealed class RemoteHostService : IAsyncDisposable
     {
         public AcceptDecision Decide(PeerOffer offer)
         {
+            // A device with a password is checked even when it is known: it takes only a host that proves the password back.
+            if (offer.RequestsPasswordAccess) return host.DecideByPassword(offer);
             if (host._devices.Find(offer.Key) is not null) return AcceptDecision.Accept;
             if (!offer.RequestsPairing) return AcceptDecision.Reject(HandshakeStatus.UnknownDevice);
             PairingRequest request;
@@ -283,6 +361,54 @@ public sealed class RemoteHostService : IAsyncDisposable
             }
             host.Changed?.Invoke();
             return AcceptDecision.AskPerson(request.Answer);
+        }
+    }
+
+    // design/16-账号设备与访问密码.md §4: a device waits after five wrong passwords; ten from anyone within an hour
+    // suspend password access until the person at this computer takes it up again.
+    private AcceptDecision DecideByPassword(PeerOffer offer)
+    {
+        var id = offer.Key.DeviceId;
+        var now = DateTimeOffset.UtcNow;
+        string password;
+        lock (_gate)
+        {
+            if (_password.Password is not { } current || _password.Suspended) return AcceptDecision.Reject(HandshakeStatus.PairingClosed);
+            if (_password.Devices.TryGetValue(id, out var record) && record.LockedUntil > now) return AcceptDecision.Reject(HandshakeStatus.PasswordLocked);
+            if (_password.Key is { } ready) return Check(ready);
+            password = current;
+        }
+        // Slow on purpose; outside the lock. Two first devices at once both make it, which is harmless.
+        var key = Octopus.Remote.Security.AccessPassword.DeriveKey(password, _identity.PublicKey);
+        lock (_gate)
+        {
+            if (_password.Password != password) return AcceptDecision.Reject(HandshakeStatus.WrongPassword); // changed meanwhile
+            _password.Key = key;
+            return Check(key);
+        }
+
+        AcceptDecision Check(byte[] key)
+        {
+            if (offer.ProvesPassword(key))
+            {
+                _password.Devices.Remove(id);
+                _devices.Add(offer.Key, offer.Description, via: PairedVia.Password);
+                return AcceptDecision.AcceptWithPassword(key);
+            }
+            var failures = (_password.Devices.TryGetValue(id, out var before) ? before.Failures : 0) + 1;
+            _password.Devices[id] = failures >= PasswordDoor.MaxFailuresPerDevice ? (0, now + PasswordDoor.DeviceLock) : (failures, default);
+            _password.Recent.Enqueue(now);
+            while (_password.Recent.TryPeek(out var oldest) && now - oldest > PasswordDoor.Window) _password.Recent.Dequeue();
+            if (_password.Recent.Count >= PasswordDoor.MaxFailuresInWindow)
+            {
+                _password.Suspended = true;
+                _ = Task.Run(() =>
+                {
+                    PasswordAccessSuspendedChanged?.Invoke();
+                    Changed?.Invoke();
+                });
+            }
+            return AcceptDecision.Reject(failures >= PasswordDoor.MaxFailuresPerDevice ? HandshakeStatus.PasswordLocked : HandshakeStatus.WrongPassword);
         }
     }
 

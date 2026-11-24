@@ -22,6 +22,7 @@ public sealed class SecureChannel : IAsyncDisposable
 
     private const byte TypeHello = 0x01, TypeReply = 0x02, TypeReveal = 0x03, TypeResult = 0x04;
     private const byte FlagPairing = 0x01;
+    private const byte FlagPassword = 0x02;
 
     private static readonly byte[] LabelCommit = Label("octopus-remote/1 commit");
     private static readonly byte[] LabelAuthResponder = Label("octopus-remote/1 auth responder");
@@ -30,6 +31,8 @@ public sealed class SecureChannel : IAsyncDisposable
     private static readonly byte[] LabelInitiatorKey = Label("octopus-remote/1 key i2r");
     private static readonly byte[] LabelResponderKey = Label("octopus-remote/1 key r2i");
     private static readonly byte[] LabelSas = Label("octopus-remote/1 sas");
+    private static readonly byte[] LabelPasswordInitiator = Label("octopus-remote/1 password initiator");
+    private static readonly byte[] LabelPasswordResponder = Label("octopus-remote/1 password responder");
 
     private readonly IMessageTransport _transport;
     private readonly Direction _send;
@@ -71,6 +74,11 @@ public sealed class SecureChannel : IAsyncDisposable
         try
         {
             if (options.Token.Length > MaxTokenLength) throw new ArgumentException("The pairing token is too long.", nameof(options));
+            string? password = null;
+            if (options.Password is not null)
+            {
+                password = AccessPassword.Normalize(options.Password) ?? throw new ArgumentException("Not an access password: it is eight letters and digits.", nameof(options));
+            }
             using var exchange = entropy.NewExchangeKey();
             var ephemeral = ExportPoint(exchange.ExportParameters(false));
             var nonce = new byte[NonceLength];
@@ -81,7 +89,7 @@ public sealed class SecureChannel : IAsyncDisposable
             var hello = new byte[3 + HashLength];
             hello[0] = TypeHello;
             hello[1] = Version;
-            hello[2] = options.RequestPairing ? FlagPairing : (byte)0;
+            hello[2] = (byte)((options.RequestPairing ? FlagPairing : 0) | (password is not null ? FlagPassword : 0));
             Hash(LabelCommit, ephemeral, nonce, identity).CopyTo(hello, 3);
             await transport.SendAsync(hello, cancellationToken).ConfigureAwait(false);
 
@@ -109,9 +117,18 @@ public sealed class SecureChannel : IAsyncDisposable
             var send = new Direction(initiatorKey);
             var receive = new Direction(responderKey);
 
+            // With an access password (§3.3), the token is this side's proof of the password's key, bound to this handshake.
+            byte[]? passwordKey = null;
+            var token = options.Token;
+            if (password is not null)
+            {
+                passwordKey = await Task.Run(() => AccessPassword.DeriveKey(password, peerIdentity), cancellationToken).ConfigureAwait(false);
+                token = PasswordProof(passwordKey, initiator: true, transcript, self.PublicKey);
+            }
+
             // M3: the reveal in the clear, then this device's identity and signature under the new key.
             var name = NameBytes(description.Name);
-            var proof = new byte[PointLength + SignatureLength + 2 + name.Length + 1 + options.Token.Length];
+            var proof = new byte[PointLength + SignatureLength + 2 + name.Length + 1 + token.Length];
             identity.CopyTo(proof, 0);
             self.Sign(Hash(LabelAuthInitiator, transcript, identity)).CopyTo(proof, PointLength);
             var at = PointLength + SignatureLength;
@@ -119,8 +136,8 @@ public sealed class SecureChannel : IAsyncDisposable
             proof[at++] = (byte)name.Length;
             name.CopyTo(proof, at);
             at += name.Length;
-            proof[at++] = (byte)options.Token.Length;
-            options.Token.Span.CopyTo(proof.AsSpan(at));
+            proof[at++] = (byte)token.Length;
+            token.Span.CopyTo(proof.AsSpan(at));
             var sealedProof = send.Seal(proof, transcript);
             var reveal = new byte[1 + PointLength + NonceLength + sealedProof.Length];
             reveal[0] = TypeReveal;
@@ -131,21 +148,27 @@ public sealed class SecureChannel : IAsyncDisposable
 
             // M4, and M5 when a person at the host has to allow this device first.
             var sas = ComputeSas(transcript, identity);
-            var (status, peerDescription) = await ReadResultAsync(transport, receive, cancellationToken).ConfigureAwait(false);
+            var withPassword = passwordKey is not null;
+            var (status, peerDescription, hostProof) = await ReadResultAsync(transport, receive, withPassword, cancellationToken).ConfigureAwait(false);
             var waited = false;
-            if (status == HandshakeStatus.Pending)
+            if (status == HandshakeStatus.Pending && !withPassword)
             {
                 waited = true;
                 options.OnPending?.Invoke(sas);
-                (status, peerDescription) = await ReadResultAsync(transport, receive, cancellationToken).ConfigureAwait(false);
+                (status, peerDescription, hostProof) = await ReadResultAsync(transport, receive, false, cancellationToken).ConfigureAwait(false);
             }
             if (status != HandshakeStatus.Accepted)
             {
                 throw new HandshakeException(HandshakeFailure.Rejected, RejectionText(status), status);
             }
+            // The device list that named this host came from the relay: only a host that knows the password is taken.
+            if (withPassword && (hostProof is null || !CryptographicOperations.FixedTimeEquals(hostProof, PasswordProof(passwordKey!, initiator: false, transcript, self.PublicKey))))
+            {
+                throw new HandshakeException(HandshakeFailure.WrongPeer, "The host did not prove that it knows the access password: it is not the computer it claims to be.");
+            }
             return new SecureChannel(transport, send, receive, peerIdentity, peerDescription, sas)
             {
-                WasPaired = waited || (options.RequestPairing && options.Token.Length > 0),
+                WasPaired = waited || withPassword || (options.RequestPairing && options.Token.Length > 0),
             };
         }
         catch
@@ -175,8 +198,9 @@ public sealed class SecureChannel : IAsyncDisposable
             var hello = await ReceiveHandshakeAsync(transport, cancellationToken).ConfigureAwait(false);
             if (hello.Length != 3 + HashLength || hello[0] != TypeHello) throw Protocol("The first message is malformed.");
             if (hello[1] != Version) throw Protocol($"The device speaks version {hello[1]} of the secure channel, this host version {Version}.");
-            if ((hello[2] & ~FlagPairing) != 0) throw Protocol("Unknown flags.");
+            if ((hello[2] & ~(FlagPairing | FlagPassword)) != 0) throw Protocol("Unknown flags.");
             var requestsPairing = (hello[2] & FlagPairing) != 0;
+            var requestsPassword = (hello[2] & FlagPassword) != 0;
             var commitment = hello.AsSpan(3, HashLength).ToArray();
 
             // M2.
@@ -221,22 +245,28 @@ public sealed class SecureChannel : IAsyncDisposable
 
             // The device is who it says. Whether it may come in is the host's decision.
             var sas = ComputeSas(transcript, peerIdentityBytes);
-            var decision = policy.Decide(new PeerOffer(peerIdentity, peerDescription, requestsPairing, token, sas));
+            var offer = new PeerOffer(peerIdentity, peerDescription, requestsPairing, token, sas) { RequestsPasswordAccess = requestsPassword, Transcript = transcript };
+            var decision = policy.Decide(offer);
             var status = decision.Status;
-            await SendResultAsync(transport, send, status, description, cancellationToken).ConfigureAwait(false);
+            // A device that came with a password waits for no person (it takes a "wait" as a refusal): the host's door
+            // lets it in with the password or turns it away now.
+            var hostProof = status == HandshakeStatus.Accepted && decision.PasswordKey is { } passwordKey
+                ? PasswordProof(passwordKey, initiator: false, transcript, peerIdentity)
+                : null;
+            await SendResultAsync(transport, send, status, description, hostProof, cancellationToken).ConfigureAwait(false);
             if (decision.Approval is { } approval)
             {
                 bool allowed;
                 try { allowed = await approval.WaitAsync(cancellationToken).ConfigureAwait(false); }
                 catch (OperationCanceledException) { allowed = false; }
                 status = allowed ? HandshakeStatus.Accepted : HandshakeStatus.PairingRefused;
-                await SendResultAsync(transport, send, status, description, CancellationToken.None).ConfigureAwait(false);
+                await SendResultAsync(transport, send, status, description, null, CancellationToken.None).ConfigureAwait(false);
             }
             if (status != HandshakeStatus.Accepted)
             {
                 throw new HandshakeException(HandshakeFailure.Rejected, RejectionText(status), status);
             }
-            return new SecureChannel(transport, send, receive, peerIdentity, peerDescription, sas) { WasPaired = decision.Approval is not null };
+            return new SecureChannel(transport, send, receive, peerIdentity, peerDescription, sas) { WasPaired = decision.Approval is not null || decision.PasswordKey is not null };
         }
         catch
         {
@@ -362,25 +392,43 @@ public sealed class SecureChannel : IAsyncDisposable
     internal static string ComputeSas(byte[] transcript, byte[] initiatorIdentity) =>
         (BinaryPrimitives.ReadUInt32BigEndian(Hash(LabelSas, transcript, initiatorIdentity)) % 1_000_000).ToString("D6");
 
-    private static async Task SendResultAsync(IMessageTransport transport, Direction send, HandshakeStatus status, DeviceDescription description, CancellationToken cancellationToken)
+    /// <summary>
+    /// One side's proof of the access password's key for one handshake (§3.3): HMAC-SHA256 under the key, of the side's
+    /// label, the transcript and the initiator's identity. Nothing in it can be replayed in another handshake.
+    /// </summary>
+    internal static byte[] PasswordProof(ReadOnlySpan<byte> passwordKey, bool initiator, byte[] transcript, DevicePublicKey initiatorIdentity)
+    {
+        using var mac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, passwordKey);
+        mac.AppendData(initiator ? LabelPasswordInitiator : LabelPasswordResponder);
+        mac.AppendData(transcript);
+        mac.AppendData(initiatorIdentity.Bytes);
+        return mac.GetHashAndReset();
+    }
+
+    // 0x04 ‖ status ‖ kind ‖ nameLen ‖ name [‖ proof(32), only when accepted with an access password]
+    private static async Task SendResultAsync(IMessageTransport transport, Direction send, HandshakeStatus status, DeviceDescription description, byte[]? passwordProof, CancellationToken cancellationToken)
     {
         var name = NameBytes(description.Name);
-        var result = new byte[4 + name.Length];
+        var result = new byte[4 + name.Length + (passwordProof?.Length ?? 0)];
         result[0] = TypeResult;
         result[1] = (byte)status;
         result[2] = (byte)description.Kind;
         result[3] = (byte)name.Length;
         name.CopyTo(result, 4);
+        passwordProof?.CopyTo(result, 4 + name.Length);
         await transport.SendAsync(send.Seal(result, default), cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<(HandshakeStatus Status, DeviceDescription Description)> ReadResultAsync(IMessageTransport transport, Direction receive, CancellationToken cancellationToken)
+    private static async Task<(HandshakeStatus Status, DeviceDescription Description, byte[]? PasswordProof)> ReadResultAsync(IMessageTransport transport, Direction receive, bool withPassword, CancellationToken cancellationToken)
     {
         var record = await ReceiveHandshakeAsync(transport, cancellationToken).ConfigureAwait(false);
         var result = receive.Open(record, default);
-        if (result.Length < 4 || result[0] != TypeResult || result[1] > (byte)HandshakeStatus.PairingClosed) throw Protocol("The host's answer is malformed.");
-        var (description, _) = ParseDescription(result.AsSpan(2), withToken: false);
-        return ((HandshakeStatus)result[1], description);
+        if (result.Length < 4 || result[0] != TypeResult || result[1] > (byte)HandshakeStatus.PasswordLocked) throw Protocol("The host's answer is malformed.");
+        var status = (HandshakeStatus)result[1];
+        var proofLength = withPassword && status == HandshakeStatus.Accepted ? HashLength : 0;
+        if (result.Length < 4 + proofLength) throw Protocol("The host's answer is cut short.");
+        var (description, _) = ParseDescription(result.AsSpan(2, result.Length - 2 - proofLength), withToken: false);
+        return (status, description, proofLength > 0 ? result[^proofLength..] : null);
     }
 
     // kind(1) ‖ nameLen(1) ‖ name [‖ tokenLen(1) ‖ token]
@@ -431,6 +479,8 @@ public sealed class SecureChannel : IAsyncDisposable
         HandshakeStatus.UnknownDevice => "The host does not know this device.",
         HandshakeStatus.PairingRefused => "The host did not allow this device.",
         HandshakeStatus.PairingClosed => "The host is not accepting new devices right now.",
+        HandshakeStatus.WrongPassword => "The access password is not this computer's.",
+        HandshakeStatus.PasswordLocked => "Too many wrong passwords: the computer does not take one from this device for a while.",
         _ => "The host refused the connection.",
     };
 }

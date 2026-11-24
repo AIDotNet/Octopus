@@ -212,4 +212,32 @@ public sealed class AccountSignInTests
         Assert.Equal("octopus", got.Scheme);
         Assert.Equal("auth-done", got.Host);
     }
+
+    [AvaloniaFact]
+    public async Task Pasting_a_self_hosted_relay_setup_link_signs_in_without_opening_browser()
+    {
+        await using var relay = new FakeRelay { SelfHostedAccessKey = "ork_desktop_self_hosted_01234567" };
+        var access = AppHost.Get<RelayAccess>();
+        var runtime = AppHost.Get<RemoteHostRuntime>();
+        var settings = AppHost.Get<ISettingsStore>();
+        var opener = new RecordingOpener();
+
+        using var vm = new AccountViewModel(settings, access, runtime, new RecordingNavigator(), opener);
+        vm.ActivateCapsuleCommand.Execute(null);
+        vm.ToggleCustomServerCommand.Execute(null);
+
+        // Paste octopus://relay?... link -> auto-splits into URL + Access Key.
+        vm.CustomServerUrl = $"octopus://relay?v=1&url={Uri.EscapeDataString(relay.Url)}&key={Uri.EscapeDataString(relay.SelfHostedAccessKey)}";
+        Assert.Equal(relay.Url, vm.CustomServerUrl);
+        Assert.Equal(relay.SelfHostedAccessKey, vm.CustomAccessKey);
+
+        vm.StartSignInCommand.Execute(null);
+        await Wait(vm.SignInTask);
+
+        Assert.True(vm.IsSignedIn);
+        Assert.False(vm.IsSignInDialogOpen);
+        Assert.Equal("", vm.CustomAccessKey); // never retained in UI after sign-in
+        Assert.Empty(opener.Urls); // browser was never opened
+        await Until(() => vm.IsRelayOnline, "host connects to self-hosted relay automatically");
+    }
 }
