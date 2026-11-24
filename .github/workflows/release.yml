@@ -146,10 +146,18 @@ jobs:
           $p = Start-Process "dist/Octopus-$v-win-x64-setup.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',$dirArg -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "setup exited with $($p.ExitCode)" }
           if (-not (Test-Path "$dir\Octopus.exe")) { throw "Octopus.exe was not installed into $dir" }
+          $hooksDir = Join-Path $env:USERPROFILE '.gemini\config'
+          $hooksPath = Join-Path $hooksDir 'hooks.json'
+          New-Item -ItemType Directory -Force $hooksDir | Out-Null
+          '{"octopus":{"Stop":[{"type":"command","command":"echo {}"}]},"keep":{"Stop":[]}}' | Set-Content -LiteralPath $hooksPath -Encoding UTF8
           $p = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "uninstaller exited with $($p.ExitCode)" }
           Start-Sleep -Seconds 2
           if (Test-Path "$dir\Octopus.exe") { throw "Octopus.exe is still there after uninstall" }
+          $hooksAfter = Get-Content -LiteralPath $hooksPath -Raw | ConvertFrom-Json
+          if ($null -ne $hooksAfter.octopus) { throw "octopus hook entry was not cleaned up on uninstall" }
+          if ($null -eq $hooksAfter.keep) { throw "existing user hook entry was removed on uninstall" }
+          Remove-Item -LiteralPath $hooksPath -Force
 
       - uses: actions/upload-artifact@v4
         with:
@@ -192,9 +200,13 @@ jobs:
           "dist/Octopus-$V-linux-x64.run" --prefix "$DIR"
           test -x "$DIR/Octopus"
           test -L "$HOME/.local/bin/octopus"
+          mkdir -p "$HOME/.gemini/config"
+          printf '{"octopus":{"Stop":[{"type":"command","command":"echo {}"}]},"keep":{"Stop":[]}}\n' > "$HOME/.gemini/config/hooks.json"
           "$DIR/uninstall.sh"
           test ! -e "$DIR"
           test ! -e "$HOME/.local/bin/octopus"
+          grep -q '"keep"' "$HOME/.gemini/config/hooks.json"
+          ! grep -q '"octopus"' "$HOME/.gemini/config/hooks.json"
 
       - uses: actions/upload-artifact@v4
         with:

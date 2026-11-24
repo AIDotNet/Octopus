@@ -117,7 +117,18 @@ public sealed class ClaudeStatusLineBridge(IAppPaths paths)
         {
             return;
         }
-        var backup = File.Exists(BackupPath(configDir)) ? JsonNode.Parse(File.ReadAllText(BackupPath(configDir))) : null;
+        JsonNode? backup = null;
+        if (File.Exists(BackupPath(configDir)))
+        {
+            try
+            {
+                backup = JsonNode.Parse(File.ReadAllText(BackupPath(configDir)));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
+            {
+                // A corrupt backup still lets us remove Octopus's status line instead of leaving a broken command behind.
+            }
+        }
         if (backup is null)
         {
             settings.Remove("statusLine");
@@ -129,7 +140,13 @@ public sealed class ClaudeStatusLineBridge(IAppPaths paths)
         WriteSettings(configDir, settings);
         foreach (var file in new[] { BackupPath(configDir), OriginalCommandPath(configDir), OutputPath(configDir) })
         {
-            File.Delete(file);
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
         }
     }
 
@@ -170,6 +187,10 @@ public sealed class ClaudeStatusLineBridge(IAppPaths paths)
 
     private void Remember(string configDir, bool add)
     {
+        if (!add && !System.IO.Directory.Exists(Directory))
+        {
+            return;
+        }
         System.IO.Directory.CreateDirectory(Directory);
         var list = new List<string>();
         try

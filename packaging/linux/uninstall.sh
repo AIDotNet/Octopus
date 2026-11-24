@@ -5,6 +5,13 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 MANIFEST="$DIR/.octopus-install"
 [ -f "$MANIFEST" ] && [ -x "$DIR/Octopus" ] || { echo "$DIR does not look like an Octopus install; nothing removed." >&2; exit 1; }
 
+# Clean up hooks/bridges written to external agent configs and generated signal-attach cache before deleting the binary.
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && command -v sudo >/dev/null 2>&1; then
+  sudo -H -u "$SUDO_USER" "$DIR/Octopus" --cleanup-hooks >/dev/null 2>&1 || true
+else
+  "$DIR/Octopus" --cleanup-hooks >/dev/null 2>&1 || true
+fi
+
 link="$(sed -n 's/^link=//p' "$MANIFEST")"
 entry="$(sed -n 's/^entry=//p' "$MANIFEST")"
 # Only remove the link if it still points at this install.

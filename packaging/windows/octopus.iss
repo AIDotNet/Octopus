@@ -60,6 +60,11 @@ Filename: "{app}\Octopus.exe"; Description: "{cm:LaunchProgram,Octopus}"; Flags:
 ; Automatic updates run setup silently; /RELAUNCH=1 ("restart and update") starts the new version afterwards.
 Filename: "{app}\Octopus.exe"; Flags: nowait runasoriginaluser; Check: WantsRelaunch
 
+[UninstallRun]
+; Remove hooks/bridges written to external agent configs (e.g. ~/.gemini/config/hooks.json, Claude statusLine)
+; and generated signal-attach files before deleting {app}.
+Filename: "{app}\Octopus.exe"; Parameters: "--cleanup-hooks"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "CleanupHooks"
+
 [Code]
 function WantsRelaunch: Boolean;
 begin

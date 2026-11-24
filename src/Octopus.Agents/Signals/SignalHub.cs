@@ -26,7 +26,7 @@ public sealed class SignalHub : ISignalHub
 
     internal const string SocketFileName = "hub.sock";
     private const string OwnerFileName = "owner";
-    private const string RootDirectoryName = "signal-hub";
+    internal const string RootDirectoryName = "signal-hub";
     private const string PipePrefix = @"\\.\pipe\";
 
     /// <summary>sun_path holds 104 bytes on macOS and 108 on Linux, including the terminator.</summary>

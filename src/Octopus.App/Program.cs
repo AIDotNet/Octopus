@@ -8,6 +8,10 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (Services.UninstallHookCleanup.TryHandleCommandLine(args))
+        {
+            return;
+        }
         Services.CrashLog.Install();
         // On Windows & Linux, clicking octopus://auth-done in the browser spawns a new process; forward to the live window.
         if (Services.ProtocolActivation.TryParseProtocolUri(args) is { } uri

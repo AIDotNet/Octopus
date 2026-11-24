@@ -61,9 +61,9 @@
 
 | 平台 | 发行产物 | 说明 |
 | --- | --- | --- |
-| **macOS** | `Octopus-<版本>-osx-arm64.dmg` / `osx-x64.dmg` | 拖入应用程序目录即可；另提供 `.zip` 供自动更新使用 |
-| **Windows** | `Octopus-<版本>-win-x64-setup.exe` / `.zip` | Inno Setup 安装向导（支持自定义目录及所有用户安装），另提供免安装便携包 |
-| **Linux** | `Octopus-<版本>-linux-x64.run` / `.tar.gz` | `.run` 支持交互式指定目录或 `--prefix DIR`（默认 root 装 `/opt/octopus`、普通用户装 `~/.local/share/octopus`，含 `uninstall.sh`），另提供便携归档 |
+| **macOS** | `Octopus-<版本>-osx-arm64.dmg` / `osx-x64.dmg` | 拖入应用程序目录即可；另提供 `.zip` 供自动更新使用。卸载前可运行 `/Applications/Octopus.app/Contents/MacOS/Octopus --cleanup-hooks` 清理外部智能体钩子 |
+| **Windows** | `Octopus-<版本>-win-x64-setup.exe` / `.zip` | Inno Setup 安装向导（支持自定义目录及所有用户安装，卸载时自动清理外部智能体钩子），另提供免安装便携包 |
+| **Linux** | `Octopus-<版本>-linux-x64.run` / `.tar.gz` | `.run` 支持交互式指定目录或 `--prefix DIR`（默认 root 装 `/opt/octopus`、普通用户装 `~/.local/share/octopus`，含 `uninstall.sh` 并在卸载时自动清理外部智能体钩子），另提供便携归档 |
 | **Android** | `Octopus-<版本>-android.apk` | 手机端手动安装；当前使用 Android SDK 默认调试密钥签名，升级前需先卸载旧版，不纳入自动更新清单 |
 
 > iOS 客户端源码已包含在仓库中，暂未发布安装包。

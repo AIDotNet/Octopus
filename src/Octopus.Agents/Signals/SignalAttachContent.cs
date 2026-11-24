@@ -9,6 +9,15 @@ namespace Octopus.Agents.Signals;
 /// <summary>One hook handler to generate: the agent's event name, the command line it runs and an optional matcher.</summary>
 internal sealed record GeneratedHook(string Event, string Command, string? Matcher = null);
 
+internal enum AgyHookRemovalKind
+{
+    Unchanged,
+    Updated,
+    DeleteFile,
+}
+
+internal readonly record struct AgyHookRemoval(AgyHookRemovalKind Kind, string? Content = null);
+
 /// <summary>
 /// The text of everything the planner generates. Pure: no IO, so each format can be checked in tests. None of it
 /// holds a secret; the token reaches the forwarder only through the agent's environment.
@@ -165,6 +174,39 @@ internal static class SignalAttachContent
         }
         root[AgyHookName] = entry;
         return root.ToJsonString(IndentedNodes) + "\n";
+    }
+
+    /// <summary>
+    /// Removes Octopus's <c>octopus</c> entry from <paramref name="existing"/> (<c>~/.gemini/config/hooks.json</c>).
+    /// Leaves the file alone when it is not a JSON object or has no <c>octopus</c> entry; asks to delete the file when
+    /// <c>octopus</c> was the only entry.
+    /// </summary>
+    public static AgyHookRemoval RemoveAgyHooks(string existing)
+    {
+        if (string.IsNullOrWhiteSpace(existing))
+        {
+            return new AgyHookRemoval(AgyHookRemovalKind.Unchanged);
+        }
+        JsonObject root;
+        try
+        {
+            if (JsonNode.Parse(existing.TrimStart('\uFEFF'), documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }) is not JsonObject parsed)
+            {
+                return new AgyHookRemoval(AgyHookRemovalKind.Unchanged);
+            }
+            root = parsed;
+        }
+        catch (JsonException)
+        {
+            return new AgyHookRemoval(AgyHookRemovalKind.Unchanged);
+        }
+        if (!root.Remove(AgyHookName))
+        {
+            return new AgyHookRemoval(AgyHookRemovalKind.Unchanged);
+        }
+        return root.Count == 0
+            ? new AgyHookRemoval(AgyHookRemovalKind.DeleteFile)
+            : new AgyHookRemoval(AgyHookRemovalKind.Updated, root.ToJsonString(IndentedNodes) + "\n");
     }
 
     /// <summary>Cursor's own hooks format (<c>{"version":1,"hooks":{"stop":[{"command":…}]}}</c>).</summary>
