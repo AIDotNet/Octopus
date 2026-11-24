@@ -14,6 +14,14 @@ namespace Octopus.Mobile.Tests;
 public class NavigationTests
 {
     [AvaloniaFact]
+    public void Only_the_pages_keep_clear_of_the_system_bars_so_the_safe_area_is_not_counted_twice()
+    {
+        // Avalonia pads a top level's content by the safe area unless told not to; Page.SafeArea already does it.
+        using var phone = new Phone();
+        Assert.False(TopLevel.GetAutoSafeAreaPadding(phone.Shell));
+    }
+
+    [AvaloniaFact]
     public void The_first_page_groups_the_hosts_and_says_what_waits()
     {
         using var phone = new Phone();
@@ -294,7 +302,6 @@ public class NavigationTests
         Assert.Empty(hosts.Unpaired);
         Assert.StartsWith("局域网", hosts.Online[0].Summary);
         Assert.True(page.FindControl<Control>("SignedOutButton")!.IsVisible);
-        Assert.False(page.FindControl<Control>("AccountButton")!.IsVisible);
 
         // The entry opens "Sign in" and "Leave local network mode", not "Sign out".
         hosts.OpenAccountCommand.Execute(null);

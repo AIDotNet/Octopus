@@ -137,5 +137,23 @@
     <unit id="MeSwitchCustomHint"><segment><source>Connect to a self-hosted Octopus Server</source></segment></unit>
     <unit id="MeSignInCardTitle"><segment><source>Sign in to Octopus</source></segment></unit>
     <unit id="MeSignInCardHint"><segment><source>Discover your computers automatically and reach them through an encrypted relay.</source></segment></unit>
+    <unit id="TabMeUpdate"><segment><source>Me •</source></segment></unit>
+    <unit id="MeSectionAbout"><segment><source>About</source></segment></unit>
+    <unit id="UpdateRowTitle"><segment><source>App updates</source></segment></unit>
+    <unit id="UpdateNotes"><segment><source>What's new</source></segment></unit>
+    <unit id="UpdateCurrent"><segment><source>Version {0}</source></segment></unit>
+    <unit id="UpdateDevBuild"><segment><source>Version {0} (development build, no updates)</source></segment></unit>
+    <unit id="UpdateChecking"><segment><source>Checking for updates…</source></segment></unit>
+    <unit id="UpdateUpToDate"><segment><source>Version {0} is the latest</source></segment></unit>
+    <unit id="UpdateAvailable"><segment><source>Version {0} is available</source></segment></unit>
+    <unit id="UpdateDownloading"><segment><source>Downloading… {0}%</source></segment></unit>
+    <unit id="UpdateReady"><segment><source>Version {0} is downloaded: tap to install</source></segment></unit>
+    <unit id="UpdateActionDownload"><segment><source>Update</source></segment></unit>
+    <unit id="UpdateActionInstall"><segment><source>Install</source></segment></unit>
+    <unit id="UpdateFailedNetwork"><segment><source>Could not reach the update service. Tap to try again.</source></segment></unit>
+    <unit id="UpdateFailedBusy"><segment><source>The update service is busy. Try again later.</source></segment></unit>
+    <unit id="UpdateFailedIntegrity"><segment><source>The download did not match the signed release and was discarded. Tap to try again.</source></segment></unit>
+    <unit id="UpdateFailedDisk"><segment><source>Not enough storage for the update. Tap to try again.</source></segment></unit>
+    <unit id="UpdateFailedInstall"><segment><source>The installer could not be opened: {0}</source></segment></unit>
   </file>
 </xliff>

@@ -137,5 +137,23 @@
     <unit id="MeSwitchCustomHint"><segment><source>Connect to a self-hosted Octopus Server</source><target state="translated">连接你自己部署的 Octopus Server</target></segment></unit>
     <unit id="MeSignInCardTitle"><segment><source>Sign in to Octopus</source><target state="translated">登录 Octopus 账号</target></segment></unit>
     <unit id="MeSignInCardHint"><segment><source>Discover your computers automatically and reach them through an encrypted relay.</source><target state="translated">登录后自动发现账号下电脑并通过加密中继跨网访问。</target></segment></unit>
+    <unit id="TabMeUpdate"><segment><source>Me •</source><target state="translated">我的 •</target></segment></unit>
+    <unit id="MeSectionAbout"><segment><source>About</source><target state="translated">关于</target></segment></unit>
+    <unit id="UpdateRowTitle"><segment><source>App updates</source><target state="translated">检查更新</target></segment></unit>
+    <unit id="UpdateNotes"><segment><source>What's new</source><target state="translated">查看更新说明</target></segment></unit>
+    <unit id="UpdateCurrent"><segment><source>Version {0}</source><target state="translated">当前版本 {0}</target></segment></unit>
+    <unit id="UpdateDevBuild"><segment><source>Version {0} (development build, no updates)</source><target state="translated">当前版本 {0}（开发版本，不检查更新）</target></segment></unit>
+    <unit id="UpdateChecking"><segment><source>Checking for updates…</source><target state="translated">正在检查更新…</target></segment></unit>
+    <unit id="UpdateUpToDate"><segment><source>Version {0} is the latest</source><target state="translated">{0} 已是最新版本</target></segment></unit>
+    <unit id="UpdateAvailable"><segment><source>Version {0} is available</source><target state="translated">发现新版本 {0}</target></segment></unit>
+    <unit id="UpdateDownloading"><segment><source>Downloading… {0}%</source><target state="translated">正在下载… {0}%</target></segment></unit>
+    <unit id="UpdateReady"><segment><source>Version {0} is downloaded: tap to install</source><target state="translated">{0} 已下载，点按安装</target></segment></unit>
+    <unit id="UpdateActionDownload"><segment><source>Update</source><target state="translated">更新</target></segment></unit>
+    <unit id="UpdateActionInstall"><segment><source>Install</source><target state="translated">安装</target></segment></unit>
+    <unit id="UpdateFailedNetwork"><segment><source>Could not reach the update service. Tap to try again.</source><target state="translated">连不上更新服务，点按重试。</target></segment></unit>
+    <unit id="UpdateFailedBusy"><segment><source>The update service is busy. Try again later.</source><target state="translated">更新服务繁忙，请稍后再试。</target></segment></unit>
+    <unit id="UpdateFailedIntegrity"><segment><source>The download did not match the signed release and was discarded. Tap to try again.</source><target state="translated">下载的文件与签名的版本不符，已丢弃。点按重试。</target></segment></unit>
+    <unit id="UpdateFailedDisk"><segment><source>Not enough storage for the update. Tap to try again.</source><target state="translated">存储空间不足，无法保存更新。点按重试。</target></segment></unit>
+    <unit id="UpdateFailedInstall"><segment><source>The installer could not be opened: {0}</source><target state="translated">无法打开系统安装器：{0}</target></segment></unit>
   </file>
 </xliff>

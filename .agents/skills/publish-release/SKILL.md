@@ -46,11 +46,12 @@ git fetch origin --tags
 git status --short                       # 工作区要干净；有未提交改动就问用户要不要先提交
 git rev-parse HEAD origin/main           # 要发的提交必须已经在 origin/main 上
 gh run list --workflow ci.yml --branch main --limit 3   # 这个提交的 CI 要是绿的
-gh secret list                           # 必须有 UPDATE_SIGNING_KEY
+gh secret list                           # 必须有 UPDATE_SIGNING_KEY；手机端还要 ANDROID_KEYSTORE、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS
 python3 -I .agents/skills/publish-release/scripts/release_version.py check <版本>
 ```
 
 - 缺 `UPDATE_SIGNING_KEY`：发布会成功，但不会生成更新清单，已安装的程序收不到这个版本。告诉用户，让用户决定先补 Secret 还是照发。
+- 缺 `ANDROID_KEYSTORE` 三件套：APK 用一次性的 debug 密钥签名，文件名变成 `Octopus-<版本>-android-debug.apk`，不进更新清单，手机端收不到这个版本，也不能覆盖安装。密钥用 `tools/make-android-keystore.sh` 生成，只生成一次、永久保管（丢了所有手机都得卸载重装）。
 - 缺 `APPLE_CERTIFICATE` 等 macOS 证书 Secret：dmg 只做 ad-hoc 签名、不公证，用户首次打开要右键"打开"。照发可以，但要说明。
 - 标签默认打在 `origin/main` 的最新提交上。用户要发别的提交时，那个提交也必须在 `origin/main` 上。
 
@@ -92,7 +93,7 @@ python3 -I .agents/skills/publish-release/scripts/release_version.py verify v<�
 
 - 是不是草稿、"预发布"标记和版本类型对不对；
 - 11 个产物都在：两个 dmg、两个 macOS zip、Windows 安装包和 zip、Linux `.run` 和 tar.gz、手机端的 Android `.apk`、`update.json`、`update.json.sig`；
-- `update.json` 由 `src/Octopus.Updates/UpdateEndpoints.cs` 里的公钥签名，版本号与标签一致，四个平台都有包，大小与 Release 上的文件一致。
+- `update.json` 由 `src/Octopus.Updates/UpdateEndpoints.cs` 里的公钥签名，版本号与标签一致，五个目标（四个桌面加 `android`）都有包，大小与 Release 上的文件一致。
 
 全部通过后，把 Release 链接和结果告诉用户。有问题按第 4 步的办法处理。
 

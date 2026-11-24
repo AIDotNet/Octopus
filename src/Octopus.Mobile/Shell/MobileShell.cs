@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using Octopus.Mobile.Account;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Terminals;
+using Octopus.Mobile.Updates;
 using Octopus.Mobile.Workspace;
 using TKCode.Arc.Mobile;
 
@@ -17,17 +18,23 @@ public sealed class MobileShell : ContentControl, INavigator
     private readonly IRemoteWorkspace _workspace;
     private readonly IAccountSession _account;
     private readonly Action<Uri> _openBrowser;
+    private readonly MobileUpdater _updater;
     // The pages above the first one, bottom to top: the stack control only tells that a page left, not which.
     private readonly List<Control> _pages = [];
     private NavigationStack? _stack;
 
     protected override Type StyleKeyOverride => typeof(ContentControl);
 
-    public MobileShell(IRemoteWorkspace workspace, IAccountSession account, Action<Uri>? openBrowser = null)
+    public MobileShell(IRemoteWorkspace workspace, IAccountSession account, Action<Uri>? openBrowser = null, MobileUpdater? updater = null)
     {
         _workspace = workspace;
         _account = account;
         _openBrowser = openBrowser ?? (_ => { });
+        _updater = updater ?? MobileUpdater.Unsupported;
+        // Each Page keeps clear of the status bar, the gesture bar and the keyboard itself (Page.SafeArea). Avalonia
+        // would also pad the top level's content by the same safe area, and every page would sit twice as far from the
+        // edges: on Android 15+ (edge to edge) about a status bar's height of empty space above every header.
+        TopLevel.SetAutoSafeAreaPadding(this, false);
         account.Changed += OnAccountChanged;
         Show();
     }
@@ -77,7 +84,7 @@ public sealed class MobileShell : ContentControl, INavigator
     {
         CloseAll();
         Control first = ShowsHosts
-            ? new HostsPage(new HostsViewModel(_workspace, _account, this, _openBrowser))
+            ? new HostsPage(new HostsViewModel(_workspace, _account, this, _openBrowser, _updater))
             : new WelcomePage(new WelcomeViewModel(_account, _workspace, this, _openBrowser));
         _stack = new NavigationStack { Root = first };
         _stack.Navigated += OnNavigated;

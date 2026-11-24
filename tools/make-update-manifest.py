@@ -7,6 +7,7 @@ Reads the packages in <dist> that an install can update itself from:
     Octopus-<version>-win-<arch>-setup.exe   (Inno Setup)
     Octopus-<version>-osx-<arch>.zip         (the signed .app, zipped with ditto)
     Octopus-<version>-linux-<arch>.run       (the .run installer)
+    Octopus-<version>-android.apk            (the phone app, signed with the release keystore; target "android")
 and writes <dist>/update.json with each one's download address, size and SHA-256. With --key (or the environment
 variable UPDATE_SIGNING_KEY_FILE) it also writes <dist>/update.json.sig: the ECDSA P-256 / SHA-256 signature of the
 manifest's bytes, DER, base64 (openssl does the signing). Portable archives (the Windows .zip, the Linux .tar.gz) are left
@@ -48,8 +49,14 @@ def main() -> int:
     download_base = (args.download_base_url or f"https://github.com/{args.repo}/releases/download/{tag}").rstrip("/")
 
     pattern = re.compile(r"^Octopus-" + re.escape(version) + r"-(?P<os>win|osx|linux)-(?P<arch>[a-z0-9]+)(?P<kind>-update\.zip|-setup\.exe|\.zip|\.run)$")
+    # The phone app: one APK for every ABI. CI names it so only when it is signed with the release keystore (a
+    # debug-signed APK could not install over the previous release, so it must never be offered as an update).
+    android = re.compile(r"^Octopus-" + re.escape(version) + r"-android\.apk$")
     candidates = {}
     for name in sorted(os.listdir(args.dist)):
+        if android.match(name):
+            candidates["android"] = (0, name)
+            continue
         match = pattern.match(name)
         if not match:
             continue

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the app's FileProvider may show another app: only the downloaded update in the cache's updates/ folder, to
+     the system installer (AndroidUpdatePlatform). -->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

@@ -23,6 +23,8 @@ public static class MobileHost
     public static IAccountSession Account { get; set; } = new DemoAccount();
     /// <summary>Opens the sign-in page in the system browser; the head knows how.</summary>
     public static Action<Uri> OpenBrowser { get; set; } = _ => { };
+    /// <summary>The app's updater; only a head that can install a package sets one (Android). Elsewhere: no update row.</summary>
+    public static Updates.MobileUpdater Updater { get; set; } = Updates.MobileUpdater.Unsupported;
 
     /// <summary>Handles an incoming <c>octopus://</c> deep link (e.g. <c>octopus://auth-done</c> after browser approval).</summary>
     public static void HandleDeepLink(Uri uri)
@@ -74,10 +76,12 @@ public class MobileApp : Application
                 if (e is ProtocolActivatedEventArgs { Uri: { } uri }) MobileHost.HandleDeepLink(uri);
             };
         }
+        // Once per start and quietly: a newer version shows in the "Me" tab; nothing downloads without a tap.
+        _ = MobileHost.Updater.CheckQuietlyAsync();
         base.OnFrameworkInitializationCompleted();
     }
 
-    public static MobileShell CreateShell() => new(MobileHost.Workspace, MobileHost.Account, MobileHost.OpenBrowser);
+    public static MobileShell CreateShell() => new(MobileHost.Workspace, MobileHost.Account, MobileHost.OpenBrowser, MobileHost.Updater);
 }
 
 /// <summary>How every head (a phone, the desktop preview, a test host) sets up Avalonia and Arc for the phone app.</summary>
