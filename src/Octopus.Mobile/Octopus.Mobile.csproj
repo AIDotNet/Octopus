@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <!-- The phone app's shared part: pages, view models and the seam to a remote host (design/12-远程操作.md §9).
-         Plain net11.0, so it builds without the iOS / Android workloads; the platform heads only start it. -->
+         Plain net10.0, so it builds without the iOS / Android workloads; the platform heads only start it. -->
     <PropertyGroup>
         <IsAotCompatible>true</IsAotCompatible>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>

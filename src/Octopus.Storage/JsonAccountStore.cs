@@ -48,7 +48,7 @@ public sealed class JsonAccountStore(IAppPaths paths) : IAccountStore
             Current = Normalize(Current);
             try
             {
-                var text = JsonSerializer.Serialize(Current, OctopusJsonContext.FileOptions.GetTypeInfo<AccountsDocument>());
+                var text = JsonSerializer.Serialize(Current, OctopusJsonContext.FileTypeInfo<AccountsDocument>());
                 AtomicFile.WriteAllText(_path, text);
                 LastError = null;
             }
@@ -76,7 +76,7 @@ public sealed class JsonAccountStore(IAppPaths paths) : IAccountStore
         if (!File.Exists(_path) || !AtomicFile.TryReadAllText(_path, out var text)) return new AccountsDocument();
         try
         {
-            return Normalize(JsonSerializer.Deserialize(text, OctopusJsonContext.FileOptions.GetTypeInfo<AccountsDocument>()));
+            return Normalize(JsonSerializer.Deserialize(text, OctopusJsonContext.FileTypeInfo<AccountsDocument>()));
         }
         catch (JsonException)
         {

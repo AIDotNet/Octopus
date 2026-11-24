@@ -7,18 +7,23 @@
         <RootNamespace>Octopus.App</RootNamespace>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
-        <!-- The .NET 11 SDK's optimized AOT publish drops Avalonia's compiled XAML ("No precompiled XAML found" at start). -->
+        <!-- The optimized AOT publish drops Avalonia's compiled XAML ("No precompiled XAML found" at start). -->
         <UseOptimizedPublish>false</UseOptimizedPublish>
         <!-- Icons are chosen from data (agent icons, item kinds), so compile all of Lucide in. -->
         <LucideIconsIncludeAll>true</LucideIconsIncludeAll>
     </PropertyGroup>
 
-    <!-- Releases (every packaging script publishes for a runtime) are NativeAOT: one native executable with only the code
-         it uses (trimmed), no JIT at start. Measured on osx-arm64 against the plain JIT build: about 80% less CPU in the
-         first seconds (1.35 s to 0.28 s) and a quarter less memory (280 MB to 211 MB), at about the same download size.
-         Code that reflects over types (reflection bindings, JsonValue.Create<T> of non-primitives, XAML loaded by URI)
-         does not work there: use compiled bindings, JsonNode overloads and the x:Class of a XAML file instead. -->
-    <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' And '$(Configuration)' == 'Release'">
+    <!-- Releases (every packaging script publishes for a runtime) are NativeAOT on Windows and Linux: one native
+         executable with only the code it uses (trimmed), no JIT at start. Measured on osx-arm64 against the plain JIT
+         build: about 80% less CPU in the first seconds (1.35 s to 0.28 s) and a quarter less memory (280 MB to 211 MB),
+         at about the same download size. Code that reflects over types (reflection bindings, JsonValue.Create<T> of
+         non-primitives, XAML loaded by URI) does not work there: use compiled bindings, JsonNode overloads and the
+         x:Class of a XAML file instead.
+
+         macOS is the exception: .NET 10's NativeAOT build of the Apple crypto library references Swift 6 libraries
+         (libswift_signal, libswift_stdio, ...) that only exist from macOS 14, so its executable cannot start on 13.
+         A single-file, self-contained JIT build depends only on the Swift runtime that ships with macOS 13. -->
+    <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' And '$(Configuration)' == 'Release' And '$(RuntimeIdentifier.StartsWith(&quot;osx&quot;))' != 'true'">
         <PublishAot>true</PublishAot>
         <!-- Symbols go into a separate file next to the executable (.dSYM, .dbg, .pdb); the packaging leaves them out. -->
         <StripSymbols>true</StripSymbols>
@@ -26,6 +31,13 @@
         <DebuggerSupport>false</DebuggerSupport>
         <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
         <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(RuntimeIdentifier.StartsWith(&quot;osx&quot;))' == 'true' And '$(Configuration)' == 'Release'">
+        <PublishAot>false</PublishAot>
+        <PublishSingleFile>true</PublishSingleFile>
+        <SelfContained>true</SelfContained>
+        <!-- Native libraries (Avalonia, Skia, minipty) travel inside the executable: one Mach-O file in Contents/MacOS. -->
+        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     </PropertyGroup>
     <ItemGroup>
         <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
@@ -53,7 +65,6 @@
         <PackageReference Include="TKCode.Arc.Themes.Corners" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="Svg.Skia" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     </ItemGroup>
 
     <ItemGroup>

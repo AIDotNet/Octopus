@@ -39,10 +39,13 @@ public sealed class SignalEndToEndTests : IDisposable
         }
         foreach (var configuration in new[] { "Debug", "Release" })
         {
-            var path = Path.Combine(root, "src", "Octopus.SignalForwarder", "bin", configuration, "net11.0", "octopus-signal");
-            if (File.Exists(path))
+            var bin = Path.Combine(root, "src", "Octopus.SignalForwarder", "bin", configuration);
+            if (!Directory.Exists(bin)) continue;
+            // The target framework in the path follows Directory.Build.props; do not pin it here.
+            foreach (var target in Directory.EnumerateDirectories(bin, "net*"))
             {
-                return path;
+                var path = Path.Combine(target, "octopus-signal");
+                if (File.Exists(path)) return path;
             }
         }
         return null;
