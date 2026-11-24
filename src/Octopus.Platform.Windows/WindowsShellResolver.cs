@@ -65,6 +65,13 @@ public sealed class WindowsShellResolver(IExecutableLocator locator) : IShellRes
     public IReadOnlyList<string> GetInteractiveArguments(ShellInfo shell) =>
         shell.Kind == ShellKind.PowerShell ? ["-NoLogo"] : shell.Kind == ShellKind.Cmd ? [] : ["-l"];
 
+    public IReadOnlyList<string> GetInteractiveArguments(ShellInfo shell, string? workingDirectory) =>
+        shell.Kind == ShellKind.PowerShell
+            && string.Equals(shell.Name, "pwsh", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(workingDirectory)
+            ? ["-NoLogo", "-WorkingDirectory", workingDirectory]
+            : GetInteractiveArguments(shell);
+
     public IReadOnlyList<string> GetCommandArguments(ShellInfo shell, string commandLine) => shell.Kind switch
     {
         ShellKind.PowerShell => ["-NoLogo", "-Command", commandLine],

@@ -129,11 +129,12 @@ public class LaunchTests
         projects.SetGroupMergeWorkspaces(group.Id, true);
         var claudeSpec = launcher.Plan(a, claude);
         var claudeLine = string.Join(' ', claudeSpec.Arguments);
+        var addDirSegment = claudeLine[claudeLine.IndexOf("--add-dir", StringComparison.Ordinal)..];
         Assert.Contains("--add-dir", claudeLine);
-        Assert.Contains(dirB, claudeLine);
-        Assert.DoesNotContain(dirA, claudeLine);
-        Assert.DoesNotContain(dirMissing, claudeLine);
-        Assert.DoesNotContain("/srv/remote", claudeLine);
+        Assert.Contains(dirB, addDirSegment);
+        Assert.DoesNotContain(dirA, addDirSegment);
+        Assert.DoesNotContain(dirMissing, addDirSegment);
+        Assert.DoesNotContain("/srv/remote", addDirSegment);
         Assert.False(claudeSpec.Environment.ContainsKey("CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"));
 
         // Enabling the setting passes CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1.

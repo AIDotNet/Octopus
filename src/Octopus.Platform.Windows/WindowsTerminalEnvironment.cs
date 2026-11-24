@@ -29,6 +29,8 @@ public sealed class WindowsTerminalEnvironment : ITerminalEnvironment
         env["COLORTERM"] = "truecolor";
         env["TERM_PROGRAM"] = "Octopus";
         env["TERM_PROGRAM_VERSION"] = _appVersion;
+        // Git Bash / MSYS2 / Cygwin login shells (/etc/profile) run `cd "$HOME"` (C:\Users\...) unless CHERE_INVOKING is set.
+        env["CHERE_INVOKING"] = "enabled_from_arguments";
         if (extra is not null)
         {
             foreach (var (key, value) in extra)

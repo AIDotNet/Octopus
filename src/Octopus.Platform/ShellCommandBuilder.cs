@@ -117,6 +117,29 @@ public sealed class ShellCommandBuilder : IShellCommandBuilder
         return builder.ToString();
     }
 
+    public string WrapWorkingDirectory(string commandLine, ShellKind kind, string? workingDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            return commandLine;
+        }
+        return kind switch
+        {
+            ShellKind.Posix => $"cd -- {QuotePosix(workingDirectory)}; {commandLine}",
+            ShellKind.Fish => $"cd -- {QuoteFish(workingDirectory)}; {commandLine}",
+            ShellKind.PowerShell => $"Set-Location -LiteralPath {PowerShellLiteral(workingDirectory)}; {commandLine}",
+            ShellKind.Cmd => $"cd /d {QuoteCmdDirectory(workingDirectory)} & {commandLine}",
+            _ => commandLine,
+        };
+    }
+
+    private static string QuoteCmdDirectory(string path)
+    {
+        if (path.AsSpan().IndexOfAny('\r', '\n', '\0') >= 0)
+            throw new ArgumentException("Directory path cannot contain newlines or NUL.", nameof(path));
+        return "\"" + path.Replace("\"", "\"\"") + "\"";
+    }
+
     private static bool IsValidEnvName(string? name)
     {
         if (string.IsNullOrEmpty(name)) return false;
