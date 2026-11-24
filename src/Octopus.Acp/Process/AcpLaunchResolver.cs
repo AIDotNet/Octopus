@@ -161,6 +161,15 @@ public sealed class AcpLaunchResolver(
                 }
             }
 
+            // Node adapters spawn this path without a shell, which fails with EINVAL for an npm .cmd shim on Windows.
+            if (OperatingSystem.IsWindows()
+                && !string.IsNullOrWhiteSpace(adapter.NativeExecutableEnvVar)
+                && env.TryGetValue(adapter.NativeExecutableEnvVar, out var nativeValue)
+                && BatchShimResolver.IsBatchFile(nativeValue))
+            {
+                env[adapter.NativeExecutableEnvVar] = BatchShimResolver.Resolve(nativeValue);
+            }
+
             if (FindAnyExecutable(adapter.Executables, searchPath) is { } localAdapter)
             {
                 executable = localAdapter;
