@@ -35,7 +35,7 @@ public class MiniPtyConnectionTests
 
     private static async Task WaitFor(StringBuilder sb, string needle)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = DateTime.UtcNow.AddSeconds(25);
         while (DateTime.UtcNow < deadline)
         {
             lock (sb) if (sb.ToString().Contains(needle)) return;

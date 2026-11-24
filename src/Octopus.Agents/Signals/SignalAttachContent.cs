@@ -123,7 +123,7 @@ internal static class SignalAttachContent
             var handlers = new JsonArray();
             foreach (var hook in group)
             {
-                handlers.Add(new JsonObject
+                handlers.Add((JsonNode)new JsonObject
                 {
                     ["type"] = "command",
                     ["command"] = hook.Command,

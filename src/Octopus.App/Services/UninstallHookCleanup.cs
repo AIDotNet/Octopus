@@ -107,7 +107,10 @@ public static class UninstallHookCleanup
         }
         if (OperatingSystem.IsWindows())
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+            return !string.IsNullOrWhiteSpace(userProfile)
+                ? userProfile
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         }
         return Environment.GetEnvironmentVariable("HOME")
             ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
