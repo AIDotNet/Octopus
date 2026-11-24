@@ -34,10 +34,10 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(RuntimeIdentifier.StartsWith(&quot;osx&quot;))' == 'true' And '$(Configuration)' == 'Release'">
         <PublishAot>false</PublishAot>
+        <!-- Managed assemblies go into the single executable; native libraries stay beside it as Mach-O files, which the
+             packaging signs as part of the bundle. Nothing is extracted to a writable directory at run time. -->
         <PublishSingleFile>true</PublishSingleFile>
         <SelfContained>true</SelfContained>
-        <!-- Native libraries (Avalonia, Skia, minipty) travel inside the executable: one Mach-O file in Contents/MacOS. -->
-        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     </PropertyGroup>
     <ItemGroup>
         <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
