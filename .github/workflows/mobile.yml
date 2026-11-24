@@ -13,6 +13,8 @@ on:
       - src/Octopus.Terminal.Avalonia/**
       - src/Octopus.Core/**
       - src/Octopus.Platform/**
+      - src/Octopus.Updates/**
+      - src/Octopus.Storage/**
       - Directory.Build.props
       - Directory.Packages.props
       - global.json

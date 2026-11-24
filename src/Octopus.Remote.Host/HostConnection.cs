@@ -14,6 +14,10 @@ internal sealed class HostConnection : IAsyncDisposable
     private readonly HelloMessage _hello;
     private readonly ConcurrentDictionary<uint, Subscriber> _subscribers = new();
     private readonly ConcurrentDictionary<string, IDisposable> _watches = new(StringComparer.Ordinal);
+    // The GUI conversations the device looks at, by item id; guarded by itself.
+    private readonly Dictionary<string, ConversationSubscriber> _conversations = new(StringComparer.Ordinal);
+    // Highest sequence sent on this connection for each item, so re-attaching never rewinds past an in-flight update.
+    private readonly Dictionary<string, long> _conversationSequences = new(StringComparer.Ordinal);
     private volatile HelloMessage? _theirs;
 
     public HostConnection(RemoteConnection connection, IHostWorkspace workspace, HelloMessage hello)
@@ -81,6 +85,7 @@ internal sealed class HostConnection : IAsyncDisposable
             return new Nothing();
         });
         RegisterFiles(json);
+        RegisterConversations(json);
         _connection.DataReceived = OnData;
         _workspace.Changed += OnWorkspaceChanged;
         _workspace.ItemChanged += OnItemChanged;
@@ -106,6 +111,13 @@ internal sealed class HostConnection : IAsyncDisposable
         {
             if (_watches.TryRemove(project, out var watch)) watch.Dispose();
         }
+        List<ConversationSubscriber> conversations;
+        lock (_conversations)
+        {
+            conversations = [.. _conversations.Values];
+            _conversations.Clear();
+        }
+        foreach (var conversation in conversations) conversation.Dispose();
     }
 
     private static void Forget(Task task) => _ = task;
@@ -174,6 +186,174 @@ internal sealed class HostConnection : IAsyncDisposable
             async (request, _) => new ResolvedMessage { Path = await _workspace.BrowseCreateDirectoryAsync(request).ConfigureAwait(false) });
         _connection.Handle(RemoteMethods.GitCall, json.CallMessage, json.CallResultMessage,
             async (request, _) => new CallResultMessage { Result = await _workspace.GitAsync(request.Method, request.Arguments).ConfigureAwait(false) });
+    }
+
+    private void RegisterConversations(RemoteJsonContext json)
+    {
+        _connection.Handle(RemoteMethods.AcpAttach, json.AcpRefMessage, json.AcpSnapshotMessage, (request, _) => AttachConversationAsync(request.ItemId));
+        _connection.Handle(RemoteMethods.AcpDetach, json.AcpRefMessage, json.Nothing, (request, _) =>
+        {
+            StopConversation(request.ItemId);
+            return Task.FromResult(new Nothing());
+        });
+        _connection.Handle(RemoteMethods.AcpPrompt, json.AcpPromptMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.PromptAsync(request).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.AcpCancel, json.AcpRefMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.CancelTurnAsync(request.ItemId).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.AcpRespond, json.AcpRespondMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.RespondAsync(request).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.AcpSetOption, json.AcpSetOptionMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.SetConversationOptionAsync(request).ConfigureAwait(false);
+            return new Nothing();
+        });
+    }
+
+    private async Task<AcpSnapshotMessage> AttachConversationAsync(string itemId)
+    {
+        if (string.IsNullOrEmpty(itemId)) throw new RemoteException(RemoteProtocol.InvalidParams, "An item is needed.");
+        // Attaching again replaces the earlier view (a device that saw a gap wants a fresh snapshot): the old one stops
+        // first so that no update numbered past the new snapshot follows it.
+        StopConversation(itemId);
+        var subscriber = new ConversationSubscriber(this, itemId);
+        IAcpAttachment attachment;
+        try
+        {
+            attachment = await _workspace.AttachConversationAsync(itemId, subscriber.Updated).ConfigureAwait(false);
+        }
+        catch
+        {
+            subscriber.Dispose();
+            throw;
+        }
+        long floor;
+        ConversationSubscriber? replaced;
+        lock (_conversations)
+        {
+            _conversations.Remove(itemId, out replaced);
+            if (replaced is not null)
+            {
+                var last = replaced.DisposeAndGetLastSequence();
+                RecordSequenceLocked(itemId, last);
+            }
+            floor = _conversationSequences.GetValueOrDefault(itemId);
+            _conversations[itemId] = subscriber;
+        }
+        var snapshot = subscriber.Begin(attachment, floor);
+        // The connection ended while the workspace was busy: nothing will let go of the view later.
+        if (_connection.Completion.IsCompleted) StopConversation(itemId);
+        return snapshot;
+    }
+
+    private void StopConversation(string itemId)
+    {
+        ConversationSubscriber? subscriber;
+        lock (_conversations)
+        {
+            if (!_conversations.Remove(itemId, out subscriber)) return;
+        }
+        var last = subscriber.DisposeAndGetLastSequence();
+        lock (_conversations) RecordSequenceLocked(itemId, last);
+    }
+
+    private void RecordSequenceLocked(string itemId, long sequence)
+    {
+        if (sequence > _conversationSequences.GetValueOrDefault(itemId)) _conversationSequences[itemId] = sequence;
+    }
+
+    /// <summary>
+    /// What one attached GUI conversation sends to the device: the snapshot as the answer to <c>acp/attach</c>, then
+    /// each change as an <c>acp/update</c> numbered one after the other. The workspace only queues here, from whatever
+    /// thread it is on, and never waits for the network.
+    /// </summary>
+    private sealed class ConversationSubscriber(HostConnection owner, string itemId) : IDisposable
+    {
+        private readonly Channel<AcpUpdateMessage> _queue = Channel.CreateUnbounded<AcpUpdateMessage>(new UnboundedChannelOptions { SingleReader = true });
+        private readonly object _gate = new();
+        private IAcpAttachment? _attachment;
+        private long _sequence;
+        private bool _disposed;
+
+        public void Updated(AcpUpdateMessage update) => _queue.Writer.TryWrite(update);
+
+        /// <summary>The attachment exists: what was queued since goes out after the snapshot, numbered from it on.</summary>
+        public AcpSnapshotMessage Begin(IAcpAttachment attachment, long sequenceFloor)
+        {
+            var snapshot = attachment.Snapshot;
+            snapshot.ItemId = itemId;
+            bool disposed;
+            lock (_gate)
+            {
+                _attachment = attachment;
+                snapshot.Sequence = Math.Max(snapshot.Sequence, sequenceFloor);
+                _sequence = snapshot.Sequence;
+                disposed = _disposed;
+            }
+            if (disposed) attachment.Dispose();
+            else _ = Task.Run(SendLoopAsync);
+            return snapshot;
+        }
+
+        public void Dispose() => DisposeAndGetLastSequence();
+
+        public long DisposeAndGetLastSequence()
+        {
+            IAcpAttachment? attachment;
+            long last;
+            lock (_gate)
+            {
+                last = _sequence;
+                if (_disposed) return last;
+                _disposed = true;
+                attachment = _attachment;
+            }
+            _queue.Writer.TryComplete();
+            attachment?.Dispose();
+            return last;
+        }
+
+        private async Task SendLoopAsync()
+        {
+            try
+            {
+                await foreach (var update in _queue.Reader.ReadAllAsync().ConfigureAwait(false))
+                {
+                    long sequence;
+                    lock (_gate)
+                    {
+                        if (_disposed) break;
+                        sequence = ++_sequence;
+                    }
+                    // A copy: the workspace may hand the same update to every device that looks at the conversation.
+                    var numbered = new AcpUpdateMessage
+                    {
+                        ItemId = itemId,
+                        Sequence = sequence,
+                        Upserts = update.Upserts,
+                        Removed = update.Removed,
+                        State = update.State,
+                        StatusDetail = update.StatusDetail,
+                        ErrorText = update.ErrorText,
+                        QueuedCount = update.QueuedCount,
+                        Composer = update.Composer,
+                    };
+                    await owner._connection.NotifyAsync(RemoteMethods.AcpUpdate, numbered, RemoteJsonContext.Default.AcpUpdateMessage).ConfigureAwait(false);
+                }
+            }
+            catch (Exception e) when (e is IOException or OperationCanceledException or ObjectDisposedException)
+            {
+                // The connection ended; its completion releases everything.
+            }
+        }
     }
 
     private async Task<AttachedMessage> AttachAsync(AttachMessage request)

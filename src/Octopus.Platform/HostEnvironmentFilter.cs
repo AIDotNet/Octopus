@@ -11,9 +11,9 @@ public static class HostEnvironmentFilter
         "TKCODE_", "OCTOPUS_", "TMUX", "ITERM_", "KITTY_", "GHOSTTY_", "VSCODE_", "ELECTRON_", "XPC_", "COR_",
     ];
 
-    private static readonly HashSet<string> Names = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> Names = new(StringComparer.OrdinalIgnoreCase)
     {
-        "TERMCAP", "WT_SESSION", "SHLVL", "__CFBundleIdentifier",
+        "TERMCAP", "WT_SESSION", "SHLVL", "PWD", "OLDPWD", "__CFBundleIdentifier",
         "DOTNET_LAUNCH_PROFILE", "DOTNET_STARTUP_HOOKS",
     };
 

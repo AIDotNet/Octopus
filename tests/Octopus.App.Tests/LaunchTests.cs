@@ -99,6 +99,15 @@ public class LaunchTests
         Assert.False(string.IsNullOrEmpty(spec.FileName));
     }
 
+    [AvaloniaFact]
+    public void An_agent_item_with_whitespace_working_directory_falls_back_to_project_path()
+    {
+        var project = new Project { Path = Dir };
+        var item = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude Code", WorkingDirectory = "   " };
+        var spec = AppHost.Get<IItemLaunchService>().Plan(project, item);
+        Assert.Equal(Dir, spec.WorkingDirectory);
+    }
+
     [AvaloniaFact, FreshApp]
     public void A_group_with_merged_workspaces_passes_sibling_local_folders_to_supported_agents()
     {
@@ -129,11 +138,12 @@ public class LaunchTests
         projects.SetGroupMergeWorkspaces(group.Id, true);
         var claudeSpec = launcher.Plan(a, claude);
         var claudeLine = string.Join(' ', claudeSpec.Arguments);
+        var addDirSegment = claudeLine[claudeLine.IndexOf("--add-dir", StringComparison.Ordinal)..];
         Assert.Contains("--add-dir", claudeLine);
-        Assert.Contains(dirB, claudeLine);
-        Assert.DoesNotContain(dirA, claudeLine);
-        Assert.DoesNotContain(dirMissing, claudeLine);
-        Assert.DoesNotContain("/srv/remote", claudeLine);
+        Assert.Contains(dirB, addDirSegment);
+        Assert.DoesNotContain(dirA, addDirSegment);
+        Assert.DoesNotContain(dirMissing, addDirSegment);
+        Assert.DoesNotContain("/srv/remote", addDirSegment);
         Assert.False(claudeSpec.Environment.ContainsKey("CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"));
 
         // Enabling the setting passes CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1.
@@ -323,43 +333,98 @@ public class LaunchTests
         Octopus.App.Localization.AppLangResources.Get(kind);
 }
 
-/// <summary>Terminals and agents are not remembered across restarts; open files stay.</summary>
+/// <summary>Agents and open files are remembered across restarts (when enabled); terminals stay transient.</summary>
 public class StartupItemsTests
 {
-    [AvaloniaFact]
-    public async Task Startup_brings_back_files_but_drops_saved_terminals_and_agents()
+    [AvaloniaFact, FreshApp]
+    public async Task Startup_restores_saved_agents_and_files_and_resumes_sessions()
     {
         var dir = Directory.CreateTempSubdirectory("octopus-restore-").FullName;
+        var claudeWithId = new ProjectItem
+        {
+            Kind = ProjectItemKind.Agent,
+            AgentId = "claude",
+            Title = "Fix auth bug",
+            Launch = new AgentLaunchOptions { SessionId = "sess-claude-1" },
+        };
+        var opencode = new ProjectItem
+        {
+            Kind = ProjectItemKind.Agent,
+            AgentId = "opencode",
+            Title = "OpenCode",
+        };
+        var terminal = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" };
+        var file = new ProjectItem { Kind = ProjectItemKind.File, Title = "a.txt", FilePath = Path.Combine(dir, "a.txt") };
         var project = new Project
         {
             Path = dir,
             Name = "p",
+            ActiveItemId = claudeWithId.Id,
             DockLayout = "{}",
-            Items =
-            {
-                new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude Code" },
-                new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" },
-                new ProjectItem { Kind = ProjectItemKind.File, Title = "a.txt", FilePath = Path.Combine(dir, "a.txt") },
-            },
+            Items = { claudeWithId, opencode, terminal, file },
         };
         var store = AppHost.Get<Octopus.Storage.IProjectStore>();
         await store.SaveAsync(new ProjectsDocument { Projects = { project } });
 
         var projects = AppHost.Get<IProjectService>();
         await projects.LoadAsync();
-        var item = Assert.Single(projects.Projects[0].Items);
-        Assert.Equal(ProjectItemKind.File, item.Kind);
-        Assert.Null(projects.Projects[0].DockLayout);
-        Assert.Equal(item.Id, projects.Projects[0].ActiveItemId);
+        var loadedProject = projects.Projects[0];
+        Assert.Equal([claudeWithId.Id, opencode.Id, file.Id], loadedProject.Items.Select(i => i.Id));
 
-        // Terminals and agents opened during the run are not persisted when flushing projects.json.
-        projects.AddItem(projects.Projects[0], new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "agy", Title = "Antigravity CLI" });
-        projects.AddItem(projects.Projects[0], new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" });
+        var launcher = AppHost.Get<IItemLaunchService>();
+        var restoredClaude = loadedProject.Items[0];
+        var restoredOpenCode = loadedProject.Items[1];
+
+        // Exact session id uses byId; agent without an id uses continueLatest.
+        Assert.True(launcher.Resumes(restoredClaude));
+        var claudeArgs = string.Join(' ', launcher.Plan(loadedProject, restoredClaude).Arguments);
+        Assert.Contains("--resume", claudeArgs);
+        Assert.Contains("sess-claude-1", claudeArgs);
+        Assert.DoesNotContain("--continue", claudeArgs);
+
+        Assert.True(launcher.Resumes(restoredOpenCode));
+        var openCodeArgs = string.Join(' ', launcher.Plan(loadedProject, restoredOpenCode).Arguments);
+        Assert.Contains("--continue", openCodeArgs);
+
+        // Turning ResumeAgentsOnRestart off suppresses both byId and continueLatest for restored tabs.
+        AppHost.Get<ISettingsStore>().Update(s => s.Terminal.ResumeAgentsOnRestart = false);
+        Assert.False(launcher.Resumes(restoredClaude));
+        Assert.False(launcher.Resumes(restoredOpenCode));
+        var freshClaudeArgs = string.Join(' ', launcher.Plan(loadedProject, restoredClaude).Arguments);
+        Assert.DoesNotContain("--resume", freshClaudeArgs);
+        Assert.DoesNotContain("--continue", freshClaudeArgs);
+        var freshOpenCodeArgs = string.Join(' ', launcher.Plan(loadedProject, restoredOpenCode).Arguments);
+        Assert.DoesNotContain("--continue", freshOpenCodeArgs);
+
+        // Flushing persists newly added agents (without terminals).
+        var addedAgent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "agy", Title = "Antigravity CLI" };
+        projects.AddItem(loadedProject, addedAgent);
+        projects.AddItem(loadedProject, new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" });
         await projects.FlushAsync();
 
         var reloaded = await store.LoadAsync();
-        var savedItem = Assert.Single(reloaded.Projects[0].Items);
-        Assert.Equal(ProjectItemKind.File, savedItem.Kind);
-        Assert.Equal(item.Id, savedItem.Id);
+        Assert.Equal([claudeWithId.Id, opencode.Id, file.Id, addedAgent.Id], reloaded.Projects[0].Items.Select(i => i.Id));
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Duplicate_restored_tabs_without_session_id_only_continue_latest_on_one_tab()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-dup-continue-").FullName;
+        var first = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "OpenCode 1" };
+        var second = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "OpenCode 2" };
+        var project = new Project { Path = dir, Name = "p", ActiveItemId = first.Id, Items = { first, second } };
+        var store = AppHost.Get<Octopus.Storage.IProjectStore>();
+        await store.SaveAsync(new ProjectsDocument { Projects = { project } });
+
+        var projects = AppHost.Get<IProjectService>();
+        await projects.LoadAsync();
+        var loaded = projects.Projects[0];
+        var launcher = AppHost.Get<IItemLaunchService>();
+
+        // Active tab owns --continue; the second tab opens fresh instead of colliding on the same session.
+        Assert.True(launcher.Resumes(loaded.Items[0]));
+        Assert.Contains("--continue", string.Join(' ', launcher.Plan(loaded, loaded.Items[0]).Arguments));
+        Assert.False(launcher.Resumes(loaded.Items[1]));
+        Assert.DoesNotContain("--continue", string.Join(' ', launcher.Plan(loaded, loaded.Items[1]).Arguments));
     }
 }

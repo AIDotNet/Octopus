@@ -1,0 +1,108 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Sessions"
+           xmlns:common="using:Octopus.Mobile.Common"
+           x:Class="Octopus.Mobile.Sessions.SessionDetailPage"
+           x:DataType="vm:SessionDetailViewModel"
+           IsScrollable="True">
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource SessionDetails}"
+                     ShowBack="True"
+                     BackCommand="{Binding BackCommand}" />
+    </arcm:Page.Header>
+
+    <StackPanel Margin="0,12,0,24" Spacing="18">
+        <!-- Who it is: its square and its title (tap to rename). -->
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="20,0">
+            <Panel VerticalAlignment="Center">
+                <Border Classes="badge large" Background="{Binding Tint}" IsVisible="{Binding IsAgent}">
+                    <TextBlock Text="{Binding Initial}" />
+                </Border>
+                <Border Classes="badge large" IsVisible="{Binding IsTerminal}">
+                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Terminal}" Size="20"
+                                  Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </Panel>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                <TextBlock Name="TitleText" Classes="detailTitle" Text="{Binding Title}" TextWrapping="Wrap" />
+                <TextBlock Classes="preview" Text="{Binding Preview}" IsVisible="{Binding HasPreview}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Shown only when the computer's Octopus is too old for GUI conversations. -->
+        <Border Name="GuiNotice" Classes="alertCard" Margin="16,0" IsVisible="{Binding ShowGuiNotice}">
+            <TextBlock Text="{l:MobileLangResource GuiNotice}" TextWrapping="Wrap" />
+        </Border>
+
+        <arcm:ListGroup Name="Facts">
+            <arcm:ListItem Content="{l:MobileLangResource DetailHost}">
+                <arcm:ListItem.Trailing><TextBlock Classes="secondary" Text="{Binding HostText}" TextTrimming="CharacterEllipsis" /></arcm:ListItem.Trailing>
+            </arcm:ListItem>
+            <arcm:ListItem Content="{l:MobileLangResource DetailProject}">
+                <arcm:ListItem.Trailing><TextBlock Classes="secondary" Text="{Binding ProjectText}" TextTrimming="CharacterEllipsis" MaxWidth="220" /></arcm:ListItem.Trailing>
+            </arcm:ListItem>
+            <arcm:ListItem Content="{l:MobileLangResource DetailAgent}">
+                <arcm:ListItem.Trailing><TextBlock Classes="secondary" Text="{Binding KindText}" /></arcm:ListItem.Trailing>
+            </arcm:ListItem>
+            <arcm:ListItem Content="{l:MobileLangResource DetailModel}" IsVisible="{Binding IsAgent}">
+                <arcm:ListItem.Trailing><TextBlock Classes="secondary" Text="{Binding ModelText}" /></arcm:ListItem.Trailing>
+            </arcm:ListItem>
+            <arcm:ListItem Content="{l:MobileLangResource DetailSurface}" IsVisible="{Binding IsAgent}">
+                <arcm:ListItem.Trailing><TextBlock Name="SurfaceText" Classes="secondary" Text="{Binding SurfaceText}" /></arcm:ListItem.Trailing>
+            </arcm:ListItem>
+            <arcm:ListItem Content="{l:MobileLangResource WorkspaceSection}">
+                <arcm:ListItem.Trailing><TextBlock Classes="secondary" Text="{Binding WorkspaceText}" TextTrimming="CharacterEllipsis" MaxWidth="200" /></arcm:ListItem.Trailing>
+            </arcm:ListItem>
+            <arcm:ListItem Content="{l:MobileLangResource DetailStatus}">
+                <arcm:ListItem.Trailing><TextBlock Classes="secondary" Text="{Binding StatusText}" /></arcm:ListItem.Trailing>
+            </arcm:ListItem>
+        </arcm:ListGroup>
+
+        <arcm:ListGroup Name="Commands">
+            <arcm:ListItem Name="OpenConversationRow"
+                           Content="{l:MobileLangResource ConversationOpen}"
+                           ShowChevron="True"
+                           IsVisible="{Binding CanOpenConversation}"
+                           Command="{Binding OpenConversationCommand}" />
+            <arcm:ListItem Name="OpenTerminalRow"
+                           Content="{l:MobileLangResource SessionOpenTerminal}"
+                           ShowChevron="True"
+                           IsVisible="{Binding CanOpenTerminal}"
+                           Command="{Binding OpenTerminalCommand}" />
+            <arcm:ListItem Name="BrowseFilesRow"
+                           Content="{l:MobileLangResource FilesBrowse}"
+                           ShowChevron="True"
+                           IsVisible="{Binding CanBrowseFiles}"
+                           Command="{Binding BrowseFilesCommand}" />
+            <arcm:ListItem Name="ViewChangesRow"
+                           Content="{l:MobileLangResource ChangesView}"
+                           ShowChevron="True"
+                           IsVisible="{Binding CanViewChanges}"
+                           Command="{Binding ViewChangesCommand}" />
+            <arcm:ListItem Name="RenameRow"
+                           Content="{l:MobileLangResource SessionRename}"
+                           Command="{Binding Actions.BeginRenameCommand}" />
+            <arcm:ListItem Name="RestartRow"
+                           Content="{l:MobileLangResource SessionRestart}"
+                           IsVisible="{Binding Actions.CanRestart}"
+                           Command="{Binding Actions.RestartCommand}" />
+            <arcm:ListItem Name="DuplicateRow"
+                           Content="{l:MobileLangResource SessionDuplicate}"
+                           Command="{Binding Actions.DuplicateCommand}" />
+        </arcm:ListGroup>
+
+        <arcm:ListGroup>
+            <arcm:ListItem Name="CloseRow" Command="{Binding Actions.BeginCloseCommand}">
+                <TextBlock Text="{l:MobileLangResource SessionClose}" Foreground="{arc:ArcDesignTokenResource Danger}" />
+            </arcm:ListItem>
+        </arcm:ListGroup>
+    </StackPanel>
+
+    <arcm:Page.Overlay>
+        <common:SessionActionOverlays Name="Overlays" DataContext="{Binding Actions}" />
+    </arcm:Page.Overlay>
+</arcm:Page>

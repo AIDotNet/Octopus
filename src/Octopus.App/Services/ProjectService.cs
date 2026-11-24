@@ -1,10 +1,11 @@
 using Octopus.App.Common;
+using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Storage;
 
 namespace Octopus.App.Services;
 
-public sealed class ProjectService(IProjectStore store, PathComparer paths) : IProjectService
+public sealed class ProjectService(IProjectStore store, PathComparer paths, ISettingsStore? settings = null) : IProjectService
 {
     /// <summary>Project colors are data: new projects take them in turn.</summary>
     public static readonly string[] Palette =
@@ -67,15 +68,16 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
     }
 
     /// <summary>
-    /// Open terminals and agents are not remembered across restarts (their processes end with the app). Files and
-    /// plugin tabs stay. A saved layout that named any dropped tab is cleared with them.
+    /// Open terminals are not remembered across restarts (their shell processes end with the app). Local agents stay
+    /// when "Restore agents on startup" is enabled; remote host copies and disabled agents are dropped. A saved layout
+    /// that named any dropped tab is cleared with them.
     /// </summary>
     private bool DropRunnableItems()
     {
         var any = false;
         foreach (var project in _document.Projects)
         {
-            if (project.Items.RemoveAll(IsTransientItem) > 0)
+            if (project.Items.RemoveAll(item => IsTransientItem(project, item)) > 0)
             {
                 project.DockLayout = null;
                 any = true;
@@ -84,8 +86,14 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
         return any;
     }
 
-    private static bool IsTransientItem(ProjectItem item) =>
-        item.Kind is ProjectItemKind.Terminal or ProjectItemKind.Agent;
+    private bool RestoreAgentsEnabled => settings?.Current.Terminal.RestoreItemsOnStartup ?? true;
+
+    private bool IsTransientItem(Project project, ProjectItem item) => item.Kind switch
+    {
+        ProjectItemKind.Terminal => true,
+        ProjectItemKind.Agent => !RestoreAgentsEnabled || ProjectLocation.IsOnRemoteHost(project),
+        _ => false,
+    };
 
     public Task FlushAsync()
     {
@@ -713,6 +721,46 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
         Raise(ProjectChangeKind.Layout, FindProjectOf(itemId));
     }
 
+    public void SetItemSessionId(string itemId, string? sessionId, bool isAcp = false)
+    {
+        var item = FindItem(itemId);
+        if (item is null || item.Kind != ProjectItemKind.Agent)
+        {
+            return;
+        }
+        var normalized = string.IsNullOrWhiteSpace(sessionId) ? null : sessionId.Trim();
+        if (isAcp)
+        {
+            var clearLaunch = normalized is null && item.Launch?.SessionId is not null;
+            if (string.Equals(item.AcpSessionId, normalized, StringComparison.Ordinal) && !clearLaunch)
+            {
+                return;
+            }
+            item.AcpSessionId = normalized;
+            if (normalized is null && item.Launch is not null)
+            {
+                item.Launch.SessionId = null;
+            }
+        }
+        else
+        {
+            if (string.Equals(item.Launch?.SessionId, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+            if (normalized is not null)
+            {
+                item.Launch ??= new AgentLaunchOptions();
+                item.Launch.SessionId = normalized;
+            }
+            else if (item.Launch is not null)
+            {
+                item.Launch.SessionId = null;
+            }
+        }
+        ScheduleSave();
+    }
+
     public void ActivateItem(string itemId)
     {
         var project = FindProjectOf(itemId);
@@ -801,8 +849,9 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
     }
 
     /// <summary>
-    /// Builds the document written to disk: open terminals and agents are omitted so restarts begin without them,
-    /// while projects, groups, workspaces, tunnels and open files/plugin tabs are preserved.
+    /// Builds the document written to disk: open terminals (and agents when restore is disabled or the project is on a
+    /// remote host) are omitted, while projects, groups, workspaces, tunnels, open files/plugin tabs and restorable
+    /// agents are preserved.
     /// </summary>
     private ProjectsDocument SnapshotForSave() => new()
     {
@@ -819,10 +868,10 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths) : IP
         Projects = [.. _document.Projects.Select(SnapshotProject)],
     };
 
-    private static Project SnapshotProject(Project project)
+    private Project SnapshotProject(Project project)
     {
-        var hasTransient = project.Items.Any(IsTransientItem);
-        var items = hasTransient ? project.Items.Where(i => !IsTransientItem(i)).ToList() : [.. project.Items];
+        var hasTransient = project.Items.Any(i => IsTransientItem(project, i));
+        var items = hasTransient ? project.Items.Where(i => !IsTransientItem(project, i)).ToList() : [.. project.Items];
         var activeItemId = project.ActiveItemId is { } active && items.Any(i => i.Id == active)
             ? active
             : items.FirstOrDefault()?.Id;

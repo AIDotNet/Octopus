@@ -15,10 +15,11 @@ public sealed class TerminalLaunchPlanner(
     public LaunchSpec PlanShell(string? workingDirectory, string? shellPath = null)
     {
         var shell = ResolveShell(shellPath);
+        var resolvedDirectory = ResolveDirectory(workingDirectory);
         return new LaunchSpec(
             shell.Path,
-            shells.GetInteractiveArguments(shell),
-            ResolveDirectory(workingDirectory),
+            shells.GetInteractiveArguments(shell, resolvedDirectory),
+            resolvedDirectory,
             environment.Build());
     }
 
@@ -26,6 +27,7 @@ public sealed class TerminalLaunchPlanner(
     public LaunchSpec PlanAgent(AgentCommand command, string? workingDirectory, string? shellPath = null)
     {
         var shell = ResolveShell(shellPath);
+        var resolvedDirectory = ResolveDirectory(workingDirectory);
         var commandLine = commandBuilder.Build(command.Executable, command.Arguments, shell.Kind);
         var builtEnv = environment.Build(command.Environment);
         if (command.UnsetEnvironment is { Count: > 0 } unsets)
@@ -45,10 +47,13 @@ public sealed class TerminalLaunchPlanner(
             builtEnv = filtered;
             commandLine = commandBuilder.WrapEnvironment(commandLine, shell.Kind, unsets, command.Environment);
         }
+        // Re-apply the target folder inside the login/interactive shell so /etc/profile (Git Bash), $PROFILE
+        // (PowerShell), ~/.bashrc / ~/.zshrc, or packaged shell launchers cannot leave the agent in C:\Users\...
+        commandLine = commandBuilder.WrapWorkingDirectory(commandLine, shell.Kind, resolvedDirectory);
         return new LaunchSpec(
             shell.Path,
             shells.GetCommandArguments(shell, commandLine),
-            ResolveDirectory(workingDirectory),
+            resolvedDirectory,
             builtEnv);
     }
 
@@ -123,6 +128,6 @@ public sealed class TerminalLaunchPlanner(
 
     private static string ResolveDirectory(string? directory) =>
         !string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory)
-            ? directory
+            ? Path.GetFullPath(directory)
             : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 }

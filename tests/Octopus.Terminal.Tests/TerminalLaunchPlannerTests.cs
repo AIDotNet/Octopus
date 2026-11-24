@@ -151,13 +151,38 @@ public class TerminalLaunchPlannerTests
             ["ANTHROPIC_API_KEY", "CLAUDE_CONFIG_DIR"]);
 
         var spec = planner.PlanAgent(command, Path.GetTempPath());
+        var expectedDir = new ShellCommandBuilder().Quote(Path.GetFullPath(Path.GetTempPath()), ShellKind.Posix);
 
         // ANTHROPIC_API_KEY was removed from LaunchSpec.Environment, while CLAUDE_CONFIG_DIR (present in command.Environment) stayed.
         Assert.False(spec.Environment.ContainsKey("ANTHROPIC_API_KEY"));
         Assert.Equal("/tmp/acc1", spec.Environment["CLAUDE_CONFIG_DIR"]);
         Assert.Equal(
-            "unset ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR; export CLAUDE_CONFIG_DIR=/tmp/acc1; claude --model opus",
+            $"cd -- {expectedDir}; unset ANTHROPIC_API_KEY CLAUDE_CONFIG_DIR; export CLAUDE_CONFIG_DIR=/tmp/acc1; claude --model opus",
             spec.Arguments[^1]);
+    }
+
+    [Fact]
+    public void PlanAgent_wraps_working_directory_inside_shell_command_for_powershell()
+    {
+        var pwshResolver = new PowerShellFakeResolver();
+        var planner = new TerminalLaunchPlanner(pwshResolver, new ShellCommandBuilder(), new FakeEnvironment());
+        var dir = Path.GetFullPath(Path.GetTempPath());
+        var command = new AgentCommand("claude", ["--model", "opus"], new Dictionary<string, string>());
+
+        var spec = planner.PlanAgent(command, dir);
+
+        Assert.Equal(dir, spec.WorkingDirectory);
+        Assert.StartsWith($"Set-Location -LiteralPath '{dir.Replace("'", "''")}'; ", spec.Arguments[^1]);
+        Assert.EndsWith("& claude --model opus", spec.Arguments[^1]);
+    }
+
+    private sealed class PowerShellFakeResolver : IShellResolver
+    {
+        private static readonly ShellInfo Pwsh = new(@"C:\Program Files\PowerShell\7\pwsh.exe", "pwsh", ShellKind.PowerShell);
+        public ShellInfo GetDefaultShell() => Pwsh;
+        public ShellInfo? Describe(string path) => null;
+        public IReadOnlyList<string> GetInteractiveArguments(ShellInfo shell) => ["-NoLogo"];
+        public IReadOnlyList<string> GetCommandArguments(ShellInfo shell, string commandLine) => ["-NoLogo", "-Command", commandLine];
     }
 
     private sealed class DirtyEnvironment : ITerminalEnvironment

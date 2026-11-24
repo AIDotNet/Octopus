@@ -48,19 +48,23 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid Background="{arc:ArcDesignTokenResource SurfaceMuted}" RowDefinitions="Auto,Auto,*">
-        <!-- The top row lines up with the window's top row; the right end stays free for the panel switch (and the caption buttons) the window floats there, see TrailingInset. -->
-        <Grid x:Name="TopBar" Height="{DynamicResource OctopusTopRowHeight}" Background="Transparent" ColumnDefinitions="Auto,*,44"
-              PointerPressed="OnTopBarPointerPressed">
-            <!-- The options are made by the code behind: Files always, Git while the folder is in a repository, Sessions
-                 for a folder on this computer, Tunnels for a project on an SSH host. The chosen one shows its name. -->
-            <arc:ToggleGroup x:Name="Tabs" Size="Small" Margin="8,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasProject}"
-                             SelectedValue="{Binding TabKey, Mode=TwoWay}"
-                             Label="{l:AppLangResource ExplorerTabs}" />
-        </Grid>
+    <Grid Background="{arc:ArcDesignTokenResource SurfaceMuted}" RowDefinitions="Auto,Auto,Auto,*">
+        <!-- The top row lines up with the window's top row and is where the window is dragged from. Its right end belongs
+             to what the window floats there (the account capsule, the panel switch, the caption buttons), see TrailingInset. -->
+        <Border x:Name="TopBar" Height="{DynamicResource OctopusTopRowHeight}" Background="Transparent"
+                PointerPressed="OnTopBarPointerPressed" />
+
+        <!-- The options are made by the code behind: Files always, Git while the folder is in a repository, Sessions
+             for a folder on this computer, Tunnels for a project on an SSH host. The chosen one shows its name.
+             They sit in the top row while they fit left of the trailing inset, and on a row of their own below it when
+             they do not (a narrow panel, or a wide corner such as the sign-in capsule beside the caption buttons). -->
+        <arc:ToggleGroup x:Name="Tabs" Size="Small" Margin="8,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                         IsVisible="{Binding HasProject}"
+                         SelectedValue="{Binding TabKey, Mode=TwoWay}"
+                         Label="{l:AppLangResource ExplorerTabs}" />
 
         <!-- Shown above Files / Git when following a branch worktree tab so the user never confuses worktree vs main. -->
-        <Border Grid.Row="1" IsVisible="{Binding HasWorkspaceBanner}"
+        <Border Grid.Row="2" IsVisible="{Binding HasWorkspaceBanner}"
                 Margin="8,2,8,4" Padding="8,4"
                 CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
                 Background="{arc:ArcDesignTokenResource AccentSubtle}"
@@ -75,18 +79,18 @@
         </Border>
 
         <!-- No project -->
-        <arc:EmptyState Grid.Row="2" IsVisible="{Binding HasNoProject}" VerticalAlignment="Top" Margin="12,24"
+        <arc:EmptyState Grid.Row="3" IsVisible="{Binding HasNoProject}" VerticalAlignment="Top" Margin="12,24"
                         Title="{l:AppLangResource ExplorerNoProject}" Description="{l:AppLangResource ExplorerNoProjectHint}"
                         Icon="{x:Static arc:ArcIcons.FileText}" />
 
-        <files:FilesTabView Grid.Row="2" IsVisible="{Binding IsFilesTab}" />
-        <Panel Grid.Row="2" IsVisible="{Binding IsGitTab}">
+        <files:FilesTabView Grid.Row="3" IsVisible="{Binding IsFilesTab}" />
+        <Panel Grid.Row="3" IsVisible="{Binding IsGitTab}">
             <git:GitTabView DataContext="{Binding Git}" />
         </Panel>
-        <Panel Grid.Row="2" IsVisible="{Binding IsTunnelsTab}">
+        <Panel Grid.Row="3" IsVisible="{Binding IsTunnelsTab}">
             <tunnels:TunnelsTabView DataContext="{Binding Tunnels}" />
         </Panel>
-        <Panel Grid.Row="2" IsVisible="{Binding IsSessionsTab}">
+        <Panel Grid.Row="3" IsVisible="{Binding IsSessionsTab}">
             <sessions:SessionsTabView DataContext="{Binding Sessions}" />
         </Panel>
     </Grid>

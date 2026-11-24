@@ -25,12 +25,16 @@ internal sealed class Computer : IAsyncDisposable
     /// <summary>The computer's registration at the relay; null for one without an account.</summary>
     public RelayHostLink? Link { get; }
 
-    private Computer(DeviceIdentity identity, string name, FakeRelay? relay = null, RelayTokens? tokens = null, bool advertiseWorkspaces = true)
+    private Computer(DeviceIdentity identity, string name, FakeRelay? relay = null, RelayTokens? tokens = null,
+        bool advertiseWorkspaces = true, bool advertiseFiles = true, bool advertiseGit = true, bool advertiseAcpGui = true)
     {
         Identity = identity;
         List<string> capabilities = advertiseWorkspaces
-            ? [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces]
+            ? [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityBrowse]
             : [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilitySizeRelease];
+        if (advertiseFiles) capabilities.Add(RemoteMethods.CapabilityFiles);
+        if (advertiseGit) capabilities.Add(RemoteMethods.CapabilityGit);
+        if (advertiseAcpGui) capabilities.Add(RemoteMethods.CapabilityAcpGui);
         Service = new RemoteHostService(identity, () => new DeviceDescription(name, DeviceKind.Desktop), new PairedPeerStore(null), Workspace,
             new HelloMessage { AppVersion = "1.0", Capabilities = capabilities });
         if (relay is null || tokens is null) return;
@@ -42,22 +46,23 @@ internal sealed class Computer : IAsyncDisposable
     public string Address => $"127.0.0.1:{Service.LanPort}";
 
     /// <summary>A computer of an account, reached through the relay.</summary>
-    public static async Task<Computer> StartAsync(FakeRelay relay, string name = "Studio", string account = "ada", bool advertiseWorkspaces = true)
+    public static async Task<Computer> StartAsync(FakeRelay relay, string name = "Studio", string account = "ada",
+        bool advertiseWorkspaces = true, bool advertiseFiles = true, bool advertiseGit = true, bool advertiseAcpGui = true)
     {
         var identity = DeviceIdentity.Create();
         var url = new Uri(relay.Url);
         var login = await RelayAccountClient.StartLoginAsync(url, identity, name);
         Assert.True(relay.Approve(login.UserCode, account));
         var (_, tokens) = await RelayAccountClient.PollLoginAsync(url, login, identity);
-        var computer = new Computer(identity, name, relay, tokens!, advertiseWorkspaces);
+        var computer = new Computer(identity, name, relay, tokens!, advertiseWorkspaces, advertiseFiles, advertiseGit, advertiseAcpGui);
         Assert.True(Phone.Until(() => computer.Link!.State == RelayLinkState.Online), "the computer registers at the relay: " + computer.Link!.Error);
         return computer;
     }
 
     /// <summary>A computer nobody signed in on: remote access is on, and it listens on the network.</summary>
-    public static Computer StartLocal(string name = "Den")
+    public static Computer StartLocal(string name = "Den", bool advertiseFiles = true, bool advertiseGit = true, bool advertiseAcpGui = true)
     {
-        var computer = new Computer(DeviceIdentity.Create(), name);
+        var computer = new Computer(DeviceIdentity.Create(), name, advertiseFiles: advertiseFiles, advertiseGit: advertiseGit, advertiseAcpGui: advertiseAcpGui);
         computer.Service.StartLan(0, IPAddress.Loopback);
         return computer;
     }

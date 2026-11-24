@@ -42,6 +42,12 @@ public interface IShellResolver
     IReadOnlyList<string> GetInteractiveArguments(ShellInfo shell);
 
     /// <summary>
+    /// Arguments that start <paramref name="shell"/> interactively in <paramref name="workingDirectory"/> when the shell
+    /// accepts an explicit directory option (for example PowerShell 7 <c>-WorkingDirectory</c>).
+    /// </summary>
+    IReadOnlyList<string> GetInteractiveArguments(ShellInfo shell, string? workingDirectory) => GetInteractiveArguments(shell);
+
+    /// <summary>
     /// Arguments that make <paramref name="shell"/> load the user's full environment (login + interactive where it
     /// applies), run <paramref name="commandLine"/> and exit with its exit code.
     /// </summary>
@@ -66,6 +72,13 @@ public interface IShellCommandBuilder
         ShellKind kind,
         IReadOnlyList<string>? unsetVariables = null,
         IReadOnlyDictionary<string, string>? setVariables = null) => commandLine;
+
+    /// <summary>
+    /// Prefixes <paramref name="commandLine"/> with a directory change to <paramref name="workingDirectory"/> so that
+    /// shell startup scripts (<c>/etc/profile</c>, <c>$PROFILE</c>, <c>~/.zshrc</c>) or packaged shell launchers cannot
+    /// leave the command in the wrong folder (for example <c>C:\Users\...</c>).
+    /// </summary>
+    string WrapWorkingDirectory(string commandLine, ShellKind kind, string? workingDirectory) => commandLine;
 
     /// <summary>Splits a user-typed command such as <c>rec --profile work</c> into arguments (POSIX-like quoting rules).</summary>
     IReadOnlyList<string> Split(string commandLine);

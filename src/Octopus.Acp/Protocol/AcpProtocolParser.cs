@@ -221,7 +221,7 @@ public static class AcpProtocolParser
             Name = TryStr(obj, "name"),
             Kind = TryStr(obj, "kind"),
             Status = TryStr(obj, "status"),
-            RawInput = TryClone(obj, "rawInput"),
+            RawInput = TryClone(obj, "rawInput") ?? TryClone(obj, "args"),
             RawOutput = TryClone(obj, "rawOutput"),
             Meta = TryClone(obj, "_meta"),
         };
@@ -280,16 +280,30 @@ public static class AcpProtocolParser
         {
             tc.Command ??= TryStr(rawIn, "command") ?? TryStr(rawIn, "cmd");
             tc.WorkingDirectory ??= TryStr(rawIn, "cwd");
-            tc.Description ??= TryStr(rawIn, "description");
-            if (TryBool(rawIn, "run_in_background") == true || TryBool(rawIn, "runInBackground") == true || TryBool(rawIn, "background") == true)
+            tc.Description ??= TryStr(rawIn, "description") ?? TryStr(rawIn, "toolSummary");
+            if (TryBool(rawIn, "run_in_background") == true || TryBool(rawIn, "runInBackground") == true || TryBool(rawIn, "background") == true || TryBool(rawIn, "IsDaemon") == true)
             {
                 tc.IsBackground = true;
             }
-            tc.SubagentType ??= TryStr(rawIn, "subagent_type") ?? TryStr(rawIn, "subagentType") ?? TryStr(rawIn, "agent_type") ?? TryStr(rawIn, "agentType");
-            tc.SubagentModel ??= TryStr(rawIn, "model");
-            tc.WorktreeIsolation ??= TryStr(rawIn, "isolation");
+            tc.SubagentType ??= TryStr(rawIn, "subagent_type")
+                ?? TryStr(rawIn, "subagentType")
+                ?? TryStr(rawIn, "agent_type")
+                ?? TryStr(rawIn, "agentType")
+                ?? TryStr(rawIn, "TypeName")
+                ?? TryStr(rawIn, "typeName");
+            var model = TryStr(rawIn, "model") ?? TryStr(rawIn, "Model");
+            if (!string.IsNullOrWhiteSpace(model) && !string.Equals(model, "inherit", StringComparison.OrdinalIgnoreCase))
+            {
+                tc.SubagentModel ??= model;
+            }
+            var isolation = TryStr(rawIn, "isolation") ?? TryStr(rawIn, "Workspace") ?? TryStr(rawIn, "workspace");
+            if (!string.IsNullOrWhiteSpace(isolation) && !string.Equals(isolation, "inherit", StringComparison.OrdinalIgnoreCase))
+            {
+                tc.WorktreeIsolation ??= isolation;
+            }
             tc.BackgroundTaskId ??= TryStr(rawIn, "task_id")
                 ?? TryStr(rawIn, "taskId")
+                ?? TryStr(rawIn, "TaskId")
                 ?? TryStr(rawIn, "shell_id")
                 ?? TryStr(rawIn, "shellId")
                 ?? TryStr(rawIn, "bash_id")
@@ -324,16 +338,42 @@ public static class AcpProtocolParser
         if (string.IsNullOrWhiteSpace(toolName) && !string.IsNullOrWhiteSpace(tc.Title))
         {
             var trimmed = tc.Title.Trim();
+            if (trimmed.StartsWith("Run ", StringComparison.OrdinalIgnoreCase))
+            {
+                trimmed = trimmed[4..].TrimStart();
+            }
             var sep = trimmed.IndexOfAny([':', '(', ' ']);
             var head = sep > 0 ? trimmed[..sep] : trimmed;
             if (head is "Agent" or "Task" or "TodoWrite" or "TaskCreate" or "TaskUpdate" or "EnterPlanMode" or "ExitPlanMode"
-                or "TaskOutput" or "BashOutput" or "TaskStop" or "KillShell" or "Bash")
+                or "TaskOutput" or "BashOutput" or "TaskStop" or "KillShell" or "Bash"
+                or "invoke_subagent" or "update_steps" or "manage_subagents" or "manage_task")
             {
                 toolName = head;
             }
         }
 
-        if (string.Equals(toolName, "Agent", StringComparison.OrdinalIgnoreCase)
+        if (string.Equals(toolName, "invoke_subagent", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.IsSubagentLaunch = true;
+            tc.IsBackground = true;
+            tc.SubagentRunsAsynchronously = true;
+            tc.SubagentType ??= "self";
+            if (tc.RawInput is { ValueKind: JsonValueKind.Object } ri)
+            {
+                tc.Description ??= TryStr(ri, "Role") ?? TryStr(ri, "role");
+                if (string.IsNullOrWhiteSpace(tc.Description) && TryStr(ri, "Prompt") is { Length: > 0 } prompt)
+                {
+                    var firstLine = prompt.Replace("\r\n", "\n")
+                        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(firstLine))
+                    {
+                        tc.Description = firstLine.Length > 100 ? firstLine[..100] + "…" : firstLine;
+                    }
+                }
+            }
+        }
+        else if (string.Equals(toolName, "Agent", StringComparison.OrdinalIgnoreCase)
             || string.Equals(toolName, "Task", StringComparison.OrdinalIgnoreCase)
             || !string.IsNullOrWhiteSpace(tc.SubagentType))
         {
@@ -354,6 +394,54 @@ public static class AcpProtocolParser
             if (tc.RawInput is { ValueKind: JsonValueKind.Object } ri && TryArr(ri, "todos") is { } todos)
             {
                 tc.WorkflowTasks = ParsePlanEntries(todos);
+            }
+        }
+        else if (string.Equals(toolName, "update_steps", StringComparison.OrdinalIgnoreCase))
+        {
+            tc.WorkflowAction = "todo_write";
+            if (tc.RawInput is { ValueKind: JsonValueKind.Object } ri && TryArr(ri, "steps") is { } steps)
+            {
+                tc.WorkflowTasks = ParsePlanEntries(steps);
+            }
+        }
+        else if (string.Equals(toolName, "manage_subagents", StringComparison.OrdinalIgnoreCase))
+        {
+            if (tc.RawInput is { ValueKind: JsonValueKind.Object } ri)
+            {
+                var action = TryStr(ri, "Action") ?? TryStr(ri, "action");
+                if (string.Equals(action, "kill_all", StringComparison.OrdinalIgnoreCase))
+                {
+                    tc.WorkflowAction = "subagent_stop_all";
+                }
+                else if (string.Equals(action, "kill", StringComparison.OrdinalIgnoreCase))
+                {
+                    tc.WorkflowAction = "subagent_stop";
+                    if (TryArr(ri, "ConversationIds") is { } ids)
+                    {
+                        foreach (var idEl in ids.EnumerateArray())
+                        {
+                            if (idEl.ValueKind == JsonValueKind.String && idEl.GetString() is { Length: > 0 } id)
+                            {
+                                tc.TargetSubagentIds.Add(id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else if (string.Equals(toolName, "manage_task", StringComparison.OrdinalIgnoreCase))
+        {
+            if (tc.RawInput is { ValueKind: JsonValueKind.Object } ri)
+            {
+                var action = TryStr(ri, "Action") ?? TryStr(ri, "action");
+                if (string.Equals(action, "status", StringComparison.OrdinalIgnoreCase))
+                {
+                    tc.WorkflowAction = "background_output";
+                }
+                else if (string.Equals(action, "kill", StringComparison.OrdinalIgnoreCase))
+                {
+                    tc.WorkflowAction = "background_stop";
+                }
             }
         }
         else if (string.Equals(toolName, "TaskCreate", StringComparison.OrdinalIgnoreCase))
@@ -577,15 +665,21 @@ public static class AcpProtocolParser
         foreach (var item in arr.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
-            var content = TryStr(item, "content") ?? TryStr(item, "subject");
+            var content = TryStr(item, "content") ?? TryStr(item, "subject") ?? TryStr(item, "title");
             if (string.IsNullOrEmpty(content)) continue;
+            var rawStatus = TryStr(item, "status") ?? "pending";
+            var normalizedStatus = rawStatus switch
+            {
+                "done" or "skipped" => "completed",
+                _ => rawStatus,
+            };
             var entry = new AcpPlanEntry
             {
                 Id = TryStr(item, "id"),
                 Content = content,
                 ActiveForm = TryStr(item, "activeForm"),
                 Priority = TryStr(item, "priority") ?? "medium",
-                Status = TryStr(item, "status") ?? "pending",
+                Status = normalizedStatus,
                 Owner = TryStr(item, "owner"),
             };
             if (TryArr(item, "blockedBy") is { } deps)

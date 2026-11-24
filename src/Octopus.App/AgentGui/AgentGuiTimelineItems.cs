@@ -957,6 +957,8 @@ public sealed class PermissionActionViewModel(AcpPermissionOption option, Action
 {
     public string OptionId { get; } = option.OptionId;
     public string Label { get; } = string.IsNullOrWhiteSpace(option.Name) ? option.OptionId : option.Name;
+    /// <summary>ACP's kind of the option (<c>allow_once</c>, <c>reject_always</c>…), for a device that shows the card.</summary>
+    public string Kind { get; } = option.Kind;
     public bool IsPrimary => option.Kind == "allow_once";
     public bool IsDanger => option.Kind is "reject_once" or "reject_always";
     public ButtonVariant Variant => option.Kind switch

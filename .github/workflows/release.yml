@@ -204,9 +204,11 @@ jobs:
             dist/*.run
           if-no-files-found: error
 
-  # The phone app's APK, to install by hand. It is signed with the Android SDK's default (debug) key, which each runner
-  # makes afresh: an install does not update in place to the next release's APK (uninstall it first). It is not in
-  # update.json (make-update-manifest.py takes win, osx and linux only).
+  # The phone app's APK (design/10-自动更新.md §15). With the secrets ANDROID_KEYSTORE, ANDROID_KEYSTORE_PASSWORD and
+  # ANDROID_KEY_ALIAS (tools/make-android-keystore.sh) it is signed with the release key, named Octopus-<v>-android.apk,
+  # and listed in update.json: the app updates itself to it, and an install of it updates in place. Without them it is
+  # signed with a throw-away debug key and named Octopus-<v>-android-debug.apk, which no manifest lists (it cannot
+  # install over anything, so it must never be offered as an update).
   android:
     name: Android (apk)
     needs: version
@@ -234,16 +236,33 @@ jobs:
           -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
 
       - name: Publish
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           V="${VERSION#v}"
           # versionName is the release's version; versionCode has to be an integer that grows: major·10⁷ + minor·10⁵ + patch.
           IFS=. read -r MAJOR MINOR PATCH <<< "${V%%-*}"
           CODE=$(( MAJOR * 10000000 + MINOR * 100000 + PATCH ))
+          SIGNING=()
+          NAME="Octopus-$V-android-debug.apk"
+          if [ -n "$ANDROID_KEYSTORE" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ]; then
+            STORE="$RUNNER_TEMP/octopus-release.keystore"
+            ( umask 077; printf '%s' "$ANDROID_KEYSTORE" | base64 -d > "$STORE" )
+            # The passwords are read from the environment (env:NAME), so they never appear on a command line.
+            SIGNING=(-p:AndroidKeyStore=true -p:AndroidSigningKeyStore="$STORE" -p:AndroidSigningKeyAlias="$ANDROID_KEY_ALIAS"
+                     -p:AndroidSigningStorePass=env:ANDROID_KEYSTORE_PASSWORD -p:AndroidSigningKeyPass=env:ANDROID_KEYSTORE_PASSWORD)
+            NAME="Octopus-$V-android.apk"
+          else
+            echo "::warning::ANDROID_KEYSTORE is not set: the APK is debug-signed ($NAME), not in update.json, and cannot install over an earlier one."
+          fi
           dotnet publish src/Octopus.Mobile.Android -c Release -p:Version="$V" \
             -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" \
-            -p:ApplicationDisplayVersion="$V" -p:ApplicationVersion="$CODE" -o build/android
+            -p:ApplicationDisplayVersion="$V" -p:ApplicationVersion="$CODE" "${SIGNING[@]}" -o build/android
+          rm -f "$RUNNER_TEMP/octopus-release.keystore"
           mkdir -p dist
-          cp build/android/*-Signed.apk "dist/Octopus-$V-android.apk"
+          cp build/android/*-Signed.apk "dist/$NAME"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -259,7 +278,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The whole history and the tags: the release notes list the commits since the previous release.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -267,15 +289,21 @@ jobs:
           pattern: octopus-*
           merge-multiple: true
 
-      # Generate release notes once so GitHub Releases and Octopus Server share the same changelog.
+      # Generate release notes once so GitHub Releases and Octopus Server share the same changelog. They list every
+      # commit since the previous release: GitHub's generated notes only list merged pull requests, and most changes
+      # go straight to main. GitHub's notes are the fallback if the script fails.
       - name: Generate release notes
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh api "repos/$GH_REPO/releases/generate-notes" \
-            -f tag_name="$GITHUB_REF_NAME" \
-            --jq '.body' > "$RUNNER_TEMP/release-notes.md" || true
+          if ! python3 tools/make-release-notes.py --tag "$GITHUB_REF_NAME" --repo "$GH_REPO" --out "$RUNNER_TEMP/release-notes.md"; then
+            echo "::warning::tools/make-release-notes.py failed; falling back to GitHub's generated notes."
+            gh api "repos/$GH_REPO/releases/generate-notes" \
+              -f tag_name="$GITHUB_REF_NAME" \
+              --jq '.body' > "$RUNNER_TEMP/release-notes.md" || true
+          fi
+          cat "$RUNNER_TEMP/release-notes.md" || true
 
       # update.json lists each platform's package with its size and SHA-256, signed with UPDATE_SIGNING_KEY
       # (design/10-自动更新.md §5). Installs only take a release whose manifest is signed by a key they trust.

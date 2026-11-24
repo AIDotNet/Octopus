@@ -45,4 +45,37 @@ public class WindowsShellResolverTests
         var shell = new WindowsShellResolver(new FakeLocator([])).GetDefaultShell();
         Assert.False(string.IsNullOrEmpty(shell.Path));
     }
+
+    [Fact]
+    public void Interactive_arguments_pass_working_directory_for_pwsh_only()
+    {
+        var resolver = new WindowsShellResolver(new FakeLocator([]));
+        var pwsh = new ShellInfo(@"C:\Program Files\PowerShell\7\pwsh.exe", "pwsh", ShellKind.PowerShell);
+        var powershell5 = new ShellInfo(@"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", "powershell", ShellKind.PowerShell);
+        var cmd = new ShellInfo(@"C:\Windows\System32\cmd.exe", "cmd", ShellKind.Cmd);
+        var gitBash = new ShellInfo(@"C:\Program Files\Git\bin\bash.exe", "bash", ShellKind.Posix);
+
+        Assert.Equal(["-NoLogo", "-WorkingDirectory", @"D:\code\app"], resolver.GetInteractiveArguments(pwsh, @"D:\code\app"));
+        Assert.Equal(["-NoLogo"], resolver.GetInteractiveArguments(pwsh, null));
+        Assert.Equal(["-NoLogo"], resolver.GetInteractiveArguments(powershell5, @"D:\code\app"));
+        Assert.Empty(resolver.GetInteractiveArguments(cmd, @"D:\code\app"));
+        Assert.Equal(["-l"], resolver.GetInteractiveArguments(gitBash, @"D:\code\app"));
+    }
+
+    [Fact]
+    public void WindowsTerminalEnvironment_sets_chere_invoking_and_strips_stale_pwd()
+    {
+        var env = new WindowsTerminalEnvironment(
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PATH"] = @"C:\Windows\System32",
+                ["PWD"] = @"C:\Users\me",
+                ["OLDPWD"] = @"C:\",
+            },
+            "1.0").Build();
+
+        Assert.Equal("enabled_from_arguments", env["CHERE_INVOKING"]);
+        Assert.False(env.ContainsKey("PWD"));
+        Assert.False(env.ContainsKey("OLDPWD"));
+    }
 }

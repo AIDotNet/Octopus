@@ -135,4 +135,35 @@ public class ShellCommandBuilderTests
 
         Assert.Equal("claude", _b.WrapEnvironment("claude", ShellKind.Posix, [], new Dictionary<string, string>()));
     }
+
+    [Fact]
+    public void WrapWorkingDirectory_handles_posix_fish_powershell_and_cmd()
+    {
+        Assert.Equal(
+            "cd -- '/Users/me/my project'; claude",
+            _b.WrapWorkingDirectory("claude", ShellKind.Posix, "/Users/me/my project"));
+
+        Assert.Equal(
+            "cd -- 'D:\\code\\my project'; claude",
+            _b.WrapWorkingDirectory("claude", ShellKind.Posix, @"D:\code\my project"));
+
+        Assert.Equal(
+            "cd -- '/Users/me/my project'; claude",
+            _b.WrapWorkingDirectory("claude", ShellKind.Fish, "/Users/me/my project"));
+
+        Assert.Equal(
+            "Set-Location -LiteralPath 'D:\\code\\my [app]''s'; & claude",
+            _b.WrapWorkingDirectory("& claude", ShellKind.PowerShell, @"D:\code\my [app]'s"));
+
+        Assert.Equal(
+            "cd /d \"D:\\code\\my project\" & claude",
+            _b.WrapWorkingDirectory("claude", ShellKind.Cmd, @"D:\code\my project"));
+
+        Assert.Equal(
+            "cd /d \"D:\\\" & claude",
+            _b.WrapWorkingDirectory("claude", ShellKind.Cmd, @"D:\"));
+
+        Assert.Equal("claude", _b.WrapWorkingDirectory("claude", ShellKind.PowerShell, null));
+        Assert.Equal("claude", _b.WrapWorkingDirectory("claude", ShellKind.PowerShell, "   "));
+    }
 }

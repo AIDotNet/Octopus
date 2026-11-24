@@ -386,4 +386,69 @@ public class AcpRuntimeAndPermissionTests
         var tool = Assert.Single(list.OfType<AcpToolCallEvent>());
         Assert.True(tool.IsReplay);
     }
+
+    [Fact]
+    public async Task Session_load_failure_falls_back_to_session_new_without_leaking_session_id()
+    {
+        using var clientToAgentServer = new AnonymousPipeServerStream(PipeDirection.In);
+        using var clientToAgentClient = new AnonymousPipeClientStream(PipeDirection.Out, clientToAgentServer.ClientSafePipeHandle);
+        using var agentToClientServer = new AnonymousPipeServerStream(PipeDirection.Out);
+        using var agentToClientClient = new AnonymousPipeClientStream(PipeDirection.In, agentToClientServer.ClientSafePipeHandle);
+
+        await using var runtime = new AcpSessionRuntime(agentToClientClient, clientToAgentClient);
+        var methods = new List<string>();
+        bool? newHadSessionId = null;
+
+        var serverTask = Task.Run(async () =>
+        {
+            using var reader = new StreamReader(clientToAgentServer, Encoding.UTF8);
+            await using var writer = new StreamWriter(agentToClientServer, new UTF8Encoding(false)) { AutoFlush = true };
+            async Task SendAsync(JsonNode node) => await writer.WriteLineAsync(node.ToJsonString());
+
+            using var initDoc = JsonDocument.Parse((await reader.ReadLineAsync())!);
+            await SendAsync(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = initDoc.RootElement.GetProperty("id").GetInt32(),
+                ["result"] = new JsonObject
+                {
+                    ["protocolVersion"] = 1,
+                    ["agentCapabilities"] = new JsonObject
+                    {
+                        ["loadSession"] = true,
+                        ["sessionCapabilities"] = new JsonObject { ["resume"] = new JsonObject() },
+                    },
+                },
+            });
+
+            // 1. session/load rejects the stale session id.
+            using var loadDoc = JsonDocument.Parse((await reader.ReadLineAsync())!);
+            methods.Add(loadDoc.RootElement.GetProperty("method").GetString()!);
+            await SendAsync(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = loadDoc.RootElement.GetProperty("id").GetInt32(),
+                ["error"] = new JsonObject { ["code"] = -32602, ["message"] = "session not found" },
+            });
+
+            // 2. Runtime falls back cleanly to session/new without forwarding the stale sessionId param.
+            using var newDoc = JsonDocument.Parse((await reader.ReadLineAsync())!);
+            methods.Add(newDoc.RootElement.GetProperty("method").GetString()!);
+            newHadSessionId = newDoc.RootElement.GetProperty("params").TryGetProperty("sessionId", out _);
+            await SendAsync(new JsonObject
+            {
+                ["jsonrpc"] = "2.0",
+                ["id"] = newDoc.RootElement.GetProperty("id").GetInt32(),
+                ["result"] = new JsonObject { ["sessionId"] = "fresh-sess-2" },
+            });
+        });
+
+        var started = await runtime.StartSessionAsync("/tmp", resumeSessionId: "stale-sess-1");
+        await serverTask.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(["session/load", "session/new"], methods);
+        Assert.False(newHadSessionId);
+        Assert.Equal("new", started.Kind);
+        Assert.Equal("fresh-sess-2", started.SessionId);
+    }
 }

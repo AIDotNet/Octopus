@@ -137,5 +137,105 @@
     <unit id="MeSwitchCustomHint"><segment><source>Connect to a self-hosted Octopus Server</source><target state="translated">连接你自己部署的 Octopus Server</target></segment></unit>
     <unit id="MeSignInCardTitle"><segment><source>Sign in to Octopus</source><target state="translated">登录 Octopus 账号</target></segment></unit>
     <unit id="MeSignInCardHint"><segment><source>Discover your computers automatically and reach them through an encrypted relay.</source><target state="translated">登录后自动发现账号下电脑并通过加密中继跨网访问。</target></segment></unit>
+    <unit id="TabMeUpdate"><segment><source>Me •</source><target state="translated">我的 •</target></segment></unit>
+    <unit id="MeSectionAbout"><segment><source>About</source><target state="translated">关于</target></segment></unit>
+    <unit id="UpdateRowTitle"><segment><source>App updates</source><target state="translated">检查更新</target></segment></unit>
+    <unit id="UpdateNotes"><segment><source>What's new</source><target state="translated">查看更新说明</target></segment></unit>
+    <unit id="UpdateCurrent"><segment><source>Version {0}</source><target state="translated">当前版本 {0}</target></segment></unit>
+    <unit id="UpdateDevBuild"><segment><source>Version {0} (development build, no updates)</source><target state="translated">当前版本 {0}（开发版本，不检查更新）</target></segment></unit>
+    <unit id="UpdateChecking"><segment><source>Checking for updates…</source><target state="translated">正在检查更新…</target></segment></unit>
+    <unit id="UpdateUpToDate"><segment><source>Version {0} is the latest</source><target state="translated">{0} 已是最新版本</target></segment></unit>
+    <unit id="UpdateAvailable"><segment><source>Version {0} is available</source><target state="translated">发现新版本 {0}</target></segment></unit>
+    <unit id="UpdateDownloading"><segment><source>Downloading… {0}%</source><target state="translated">正在下载… {0}%</target></segment></unit>
+    <unit id="UpdateReady"><segment><source>Version {0} is downloaded: tap to install</source><target state="translated">{0} 已下载，点按安装</target></segment></unit>
+    <unit id="UpdateActionDownload"><segment><source>Update</source><target state="translated">更新</target></segment></unit>
+    <unit id="UpdateActionInstall"><segment><source>Install</source><target state="translated">安装</target></segment></unit>
+    <unit id="UpdateFailedNetwork"><segment><source>Could not reach the update service. Tap to try again.</source><target state="translated">连不上更新服务，点按重试。</target></segment></unit>
+    <unit id="UpdateFailedBusy"><segment><source>The update service is busy. Try again later.</source><target state="translated">更新服务繁忙，请稍后再试。</target></segment></unit>
+    <unit id="UpdateFailedIntegrity"><segment><source>The download did not match the signed release and was discarded. Tap to try again.</source><target state="translated">下载的文件与签名的版本不符，已丢弃。点按重试。</target></segment></unit>
+    <unit id="UpdateFailedDisk"><segment><source>Not enough storage for the update. Tap to try again.</source><target state="translated">存储空间不足，无法保存更新。点按重试。</target></segment></unit>
+    <unit id="UpdateFailedInstall"><segment><source>The installer could not be opened: {0}</source><target state="translated">无法打开系统安装器：{0}</target></segment></unit>
+    <unit id="More"><segment><source>More</source><target state="translated">更多</target></segment></unit>
+    <unit id="SessionOpen"><segment><source>Open</source><target state="translated">打开</target></segment></unit>
+    <unit id="SessionRename"><segment><source>Rename</source><target state="translated">重命名</target></segment></unit>
+    <unit id="SessionRenamePlaceholder"><segment><source>Session name</source><target state="translated">会话名称</target></segment></unit>
+    <unit id="SessionRenameHint"><segment><source>Leave it empty to go back to the default name.</source><target state="translated">留空则恢复默认名称。</target></segment></unit>
+    <unit id="Save"><segment><source>Save</source><target state="translated">保存</target></segment></unit>
+    <unit id="SessionRestart"><segment><source>Restart program</source><target state="translated">重启程序</target></segment></unit>
+    <unit id="SessionRestarted"><segment><source>Restarted on the computer</source><target state="translated">已在电脑上重启</target></segment></unit>
+    <unit id="SessionDuplicate"><segment><source>Open another like it</source><target state="translated">用相同设置再开一个</target></segment></unit>
+    <unit id="SessionDetails"><segment><source>Session details</source><target state="translated">会话详情</target></segment></unit>
+    <unit id="SessionClose"><segment><source>Close session</source><target state="translated">关闭会话</target></segment></unit>
+    <unit id="SessionCloseTitle"><segment><source>Close “{0}”?</source><target state="translated">关闭“{0}”？</target></segment></unit>
+    <unit id="SessionCloseMessage"><segment><source>Its program on the computer ends. This cannot be undone.</source><target state="translated">主机上的程序会结束，这一步不能撤销。</target></segment></unit>
+    <unit id="SessionOpenTerminal"><segment><source>Open terminal</source><target state="translated">打开终端</target></segment></unit>
+    <unit id="FontLarger"><segment><source>Larger text</source><target state="translated">放大字号</target></segment></unit>
+    <unit id="FontSmaller"><segment><source>Smaller text</source><target state="translated">缩小字号</target></segment></unit>
+    <unit id="DetailHost"><segment><source>Computer</source><target state="translated">电脑</target></segment></unit>
+    <unit id="DetailProject"><segment><source>Project</source><target state="translated">项目</target></segment></unit>
+    <unit id="DetailAgent"><segment><source>Agent</source><target state="translated">智能体</target></segment></unit>
+    <unit id="DetailModel"><segment><source>Model</source><target state="translated">模型</target></segment></unit>
+    <unit id="DetailSurface"><segment><source>Runs as</source><target state="translated">运行方式</target></segment></unit>
+    <unit id="DetailStatus"><segment><source>Status</source><target state="translated">状态</target></segment></unit>
+    <unit id="SurfaceGui"><segment><source>GUI conversation</source><target state="translated">GUI 对话</target></segment></unit>
+    <unit id="GuiBadge"><segment><source>GUI</source><target state="translated">GUI</target></segment></unit>
+    <unit id="GuiNotice"><segment><source>This agent runs as a GUI conversation on the computer. The Octopus there is too old to show it on the phone: update it there. You can still rename or close it here.</source><target state="translated">这个智能体在电脑上以 GUI 对话方式运行。电脑上的 Octopus 版本太旧，手机上打不开这个对话，请先在电脑上更新。仍然可以在这里重命名或关闭它。</target></segment></unit>
+    <unit id="NewProject"><segment><source>New project</source><target state="translated">新建项目</target></segment></unit>
+    <unit id="NewSessionAction"><segment><source>New session</source><target state="translated">新建会话</target></segment></unit>
+    <unit id="HostEmptyAction"><segment><source>Make a folder of this computer a project to start sessions in it.</source><target state="translated">把这台电脑上的一个文件夹设为项目，就能在里面开会话。</target></segment></unit>
+    <unit id="FolderTitle"><segment><source>Choose a folder</source><target state="translated">选择文件夹</target></segment></unit>
+    <unit id="FolderDrives"><segment><source>All drives</source><target state="translated">所有磁盘</target></segment></unit>
+    <unit id="FolderIsProject"><segment><source>Already a project</source><target state="translated">已是项目</target></segment></unit>
+    <unit id="FolderEmpty"><segment><source>No folders in here</source><target state="translated">这里没有子文件夹</target></segment></unit>
+    <unit id="FolderUseAsProject"><segment><source>Make “{0}” a project</source><target state="translated">把“{0}”设为项目</target></segment></unit>
+    <unit id="FolderNew"><segment><source>New folder</source><target state="translated">新建文件夹</target></segment></unit>
+    <unit id="FolderNewPlaceholder"><segment><source>Folder name</source><target state="translated">文件夹名称</target></segment></unit>
+    <unit id="FolderCreate"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
+    <unit id="FolderUnsupportedHost"><segment><source>Update Octopus on the computer to browse its folders.</source><target state="translated">请更新电脑上的 Octopus，才能浏览它的文件夹。</target></segment></unit>
+    <unit id="FolderHome"><segment><source>Home</source><target state="translated">主目录</target></segment></unit>
+    <unit id="ConversationOpen"><segment><source>Open conversation</source><target state="translated">打开对话</target></segment></unit>
+    <unit id="ConversationConnecting"><segment><source>Connecting to the conversation…</source><target state="translated">正在连接对话…</target></segment></unit>
+    <unit id="ConversationWorking"><segment><source>Working</source><target state="translated">工作中</target></segment></unit>
+    <unit id="ConversationWaiting"><segment><source>Waiting for you</source><target state="translated">等你确认</target></segment></unit>
+    <unit id="ConversationFailed"><segment><source>Failed</source><target state="translated">出错了</target></segment></unit>
+    <unit id="ConversationEarlier"><segment><source>Earlier messages are on the computer.</source><target state="translated">更早的消息在电脑上。</target></segment></unit>
+    <unit id="ConversationEmpty"><segment><source>No messages yet. Send one to start.</source><target state="translated">还没有消息，发一条开始吧。</target></segment></unit>
+    <unit id="ConversationThought"><segment><source>Thought</source><target state="translated">思考过程</target></segment></unit>
+    <unit id="ConversationPlan"><segment><source>Plan {0}/{1}</source><target state="translated">计划 {0}/{1}</target></segment></unit>
+    <unit id="ConversationExitCode"><segment><source>exit {0}</source><target state="translated">退出码 {0}</target></segment></unit>
+    <unit id="ConversationResolved"><segment><source>Answered</source><target state="translated">已处理</target></segment></unit>
+    <unit id="ConversationPlaceholder"><segment><source>Message, or queue the next one…</source><target state="translated">补充说明，或排队下一条…</target></segment></unit>
+    <unit id="ConversationStop"><segment><source>Stop</source><target state="translated">停止</target></segment></unit>
+    <unit id="ConversationQueued"><segment><source>{0} queued</source><target state="translated">{0} 条排队中</target></segment></unit>
+    <unit id="ConversationModel"><segment><source>Model</source><target state="translated">模型</target></segment></unit>
+    <unit id="ConversationMode"><segment><source>Permissions</source><target state="translated">权限模式</target></segment></unit>
+    <unit id="ConversationEffort"><segment><source>Effort</source><target state="translated">思考强度</target></segment></unit>
+    <unit id="ConversationSubmit"><segment><source>Submit</source><target state="translated">提交</target></segment></unit>
+    <unit id="ConversationFreeText"><segment><source>Your answer</source><target state="translated">你的回答</target></segment></unit>
+    <unit id="ConversationUnsupportedHost"><segment><source>Update Octopus on the computer to open its GUI conversations on the phone.</source><target state="translated">请更新电脑上的 Octopus，才能在手机上打开 GUI 对话。</target></segment></unit>
+    <unit id="ConversationReconnect"><segment><source>Reload conversation</source><target state="translated">重新载入对话</target></segment></unit>
+    <unit id="FilesBrowse"><segment><source>Browse files</source><target state="translated">浏览文件</target></segment></unit>
+    <unit id="ChangesView"><segment><source>View changes</source><target state="translated">查看改动</target></segment></unit>
+    <unit id="FilesEmpty"><segment><source>This folder is empty</source><target state="translated">这个文件夹是空的</target></segment></unit>
+    <unit id="FilesUnsupportedHost"><segment><source>Update Octopus on the computer to look at its files.</source><target state="translated">请更新电脑上的 Octopus，才能查看它的文件。</target></segment></unit>
+    <unit id="FilesCapped"><segment><source>Only the first {0} entries are shown.</source><target state="translated">只列出前 {0} 项。</target></segment></unit>
+    <unit id="FileReadOnly"><segment><source>Read only</source><target state="translated">只读</target></segment></unit>
+    <unit id="FileLineCount"><segment><source>{0} lines</source><target state="translated">{0} 行</target></segment></unit>
+    <unit id="FileBinary"><segment><source>This file is not text and cannot be shown on the phone.</source><target state="translated">这不是文本文件，手机上无法显示。</target></segment></unit>
+    <unit id="FileTooLarge"><segment><source>This file is {0}; the phone shows files up to {1}.</source><target state="translated">这个文件有 {0}，手机上只显示 {1} 以内的文件。</target></segment></unit>
+    <unit id="LinesCapped"><segment><source>Only the first {0} of {1} lines are shown.</source><target state="translated">只显示前 {0} 行，共 {1} 行。</target></segment></unit>
+    <unit id="WrapLines"><segment><source>Wrap lines</source><target state="translated">自动换行</target></segment></unit>
+    <unit id="ChangesTitle"><segment><source>Changes</source><target state="translated">改动</target></segment></unit>
+    <unit id="ChangesCount"><segment><source>Uncommitted · {0} files</source><target state="translated">未提交 · {0} 个文件</target></segment></unit>
+    <unit id="ChangesEmpty"><segment><source>No uncommitted changes</source><target state="translated">没有未提交的改动</target></segment></unit>
+    <unit id="ChangesNotRepository"><segment><source>This folder is not in a git repository.</source><target state="translated">这个文件夹不在 git 仓库里。</target></segment></unit>
+    <unit id="ChangesUnsupportedHost"><segment><source>Update Octopus on the computer to review its changes.</source><target state="translated">请更新电脑上的 Octopus，才能查看它的改动。</target></segment></unit>
+    <unit id="ChangesFailed"><segment><source>git on the computer could not answer.</source><target state="translated">电脑上的 git 没能给出结果。</target></segment></unit>
+    <unit id="ChangesStaged"><segment><source>staged</source><target state="translated">已暂存</target></segment></unit>
+    <unit id="ChangesNewFolder"><segment><source>new folder</source><target state="translated">新文件夹</target></segment></unit>
+    <unit id="Refresh"><segment><source>Refresh</source><target state="translated">刷新</target></segment></unit>
+    <unit id="DiffBinary"><segment><source>A binary file: there are no lines to show.</source><target state="translated">二进制文件，没有可显示的行。</target></segment></unit>
+    <unit id="DiffTooLarge"><segment><source>This change is too large to show on the phone.</source><target state="translated">这处改动太大，手机上不显示。</target></segment></unit>
+    <unit id="DiffEmpty"><segment><source>There is no difference to show.</source><target state="translated">没有可显示的差异。</target></segment></unit>
   </file>
 </xliff>

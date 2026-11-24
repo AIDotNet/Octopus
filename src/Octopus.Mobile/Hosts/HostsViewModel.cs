@@ -8,6 +8,7 @@ using Octopus.Mobile.Account;
 using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
+using Octopus.Mobile.Updates;
 using Octopus.Mobile.Workspace;
 
 namespace Octopus.Mobile.Hosts;
@@ -30,8 +31,10 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     private readonly List<RemoteProject> _watchedProjects = [];
     private readonly List<RemoteSession> _watchedSessions = [];
 
-    public HostsViewModel(IRemoteWorkspace workspace, IAccountSession account, INavigator navigator, Action<Uri>? openBrowser = null)
+    public HostsViewModel(IRemoteWorkspace workspace, IAccountSession account, INavigator navigator, Action<Uri>? openBrowser = null, MobileUpdater? updater = null)
     {
+        Updater = updater ?? MobileUpdater.Unsupported;
+        Updater.PropertyChanged += OnUpdaterChanged;
         _workspace = workspace;
         _account = account;
         _navigator = navigator;
@@ -40,6 +43,9 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         workspace.Hosts.CollectionChanged += OnHostsChanged;
         RebuildAll();
     }
+
+    /// <summary>The app's updater: the "Me" tab's update row binds to it.</summary>
+    public MobileUpdater Updater { get; }
 
     /// <summary>Active bottom tab: 0 = Activity, 1 = Computers, 2 = Me.</summary>
     [ObservableProperty] public partial int SelectedTab { get; set; } = TabActivity;
@@ -54,6 +60,11 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         TabAccount => MobileLangResources.Get(MobileLangResourceKind.TabMe),
         _ => MobileLangResources.Get(MobileLangResourceKind.TabActivity),
     };
+
+    /// <summary>"Me", with a dot while a newer version waits in the update row.</summary>
+    public string MeTabLabel => Updater.HasNews
+        ? MobileLangResources.Get(MobileLangResourceKind.TabMeUpdate)
+        : MobileLangResources.Get(MobileLangResourceKind.TabMe);
 
     public string ActivityTabLabel => AttentionSessions.Count > 0
         ? MobileLangResources.Format(MobileLangResourceKind.TabActivityBadge, AttentionSessions.Count)
@@ -193,11 +204,17 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _workspace.Hosts.CollectionChanged -= OnHostsChanged;
+        Updater.PropertyChanged -= OnUpdaterChanged;
         UnwatchAll();
         ClearRows();
     }
 
     private void OnHostsChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildAll();
+
+    private void OnUpdaterChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MobileUpdater.HasNews) or nameof(MobileUpdater.State)) OnPropertyChanged(nameof(MeTabLabel));
+    }
 
     private void OnActivityStructureChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

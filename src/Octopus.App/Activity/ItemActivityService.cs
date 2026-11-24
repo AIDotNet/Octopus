@@ -22,6 +22,8 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
     private readonly HashSet<string> _promptTitled = [];
     /// <summary>Last session/conversation id seen for each item, so switching sessions (/new, /resume) resets naming.</summary>
     private readonly Dictionary<string, string> _sessionIds = [];
+    /// <summary>Items that switched away from their initial session in-place (so the old resumed title no longer applies).</summary>
+    private readonly HashSet<string> _sessionSwitched = [];
     private readonly Dictionary<string, long> _titleReadAt = [];
     private readonly ISignalHub? _signals;
 
@@ -81,6 +83,7 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         _sessionNamed.Remove(itemId);
         _promptTitled.Remove(itemId);
         _sessionIds.Remove(itemId);
+        _sessionSwitched.Remove(itemId);
         _titleReadAt.Remove(itemId);
         // A program that ended leaves nothing to look at, whatever it was doing.
         Set(itemId, ItemActivity.Idle, finished: false);
@@ -94,7 +97,8 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
     /// from the Sessions panel), while still running that same session.
     /// </summary>
     private bool HasResumedTitle(ProjectItem item) =>
-        item.Launch?.SessionId is { Length: > 0 } launched
+        !_sessionSwitched.Contains(item.Id)
+        && item.Launch?.SessionId is { Length: > 0 } launched
         && (!_sessionIds.TryGetValue(item.Id, out var current) || string.Equals(current, launched, StringComparison.Ordinal))
         && !string.IsNullOrWhiteSpace(item.Title)
         && !string.Equals(item.Title, AgentName(item), StringComparison.OrdinalIgnoreCase);
@@ -117,11 +121,14 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
             var previous = _sessionIds.TryGetValue(itemId, out var seen) ? seen : item.Launch?.SessionId;
             if (previous is { Length: > 0 } && !string.Equals(previous, sessionId, StringComparison.Ordinal))
             {
+                _sessionSwitched.Add(itemId);
                 _sessionNamed.Remove(itemId);
                 _promptTitled.Remove(itemId);
                 _titleReadAt.Remove(itemId);
             }
             _sessionIds[itemId] = sessionId;
+            // Persist the live session id so a restart resumes this exact conversation instead of guessing --continue.
+            _projects.SetItemSessionId(itemId, sessionId, isAcp: false);
         }
 
         var rawPrompt = isAgy ? AgySessionSource.ExtractUserRequest(payload.Prompt) : payload.Prompt;
@@ -225,6 +232,7 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
         _sessionNamed.Remove(itemId);
         _promptTitled.Remove(itemId);
         _sessionIds.Remove(itemId);
+        _sessionSwitched.Remove(itemId);
         _titleReadAt.Remove(itemId);
         _signals?.ForgetItem(itemId);
     }

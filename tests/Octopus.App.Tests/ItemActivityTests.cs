@@ -60,6 +60,9 @@ public class SessionNameTests
         Assert.Equal(
             new SessionPayload("反重力的标签没有拿到会话标题", "/a/brain/c1/.system_generated/logs/transcript.jsonl", "c1", "/a/brain/c1"),
             SessionName.ReadPayload("""{"lastUserInput":"反重力的标签没有拿到会话标题","transcriptPath":"/a/brain/c1/.system_generated/logs/transcript.jsonl","conversationId":"c1","artifactDirectoryPath":"/a/brain/c1"}"""));
+        Assert.Equal(
+            new SessionPayload(null, null, "codex-thread-1"),
+            SessionName.ReadPayload("""{"thread-id":"codex-thread-1"}"""));
         Assert.Equal(default, SessionName.ReadPayload("not json"));
         Assert.Equal(default, SessionName.ReadPayload("""{"prompt":3}"""));
     }
@@ -410,10 +413,11 @@ public class ItemActivityTests
         Frames.Pump();
         Assert.Equal("登陆的弹窗需要优化一下", agent.Title);
 
-        // Starting a different session in the same tab replaces the old title.
+        // Starting a different session in the same tab replaces the old title and updates the persisted session id.
         hub.Publish(new AgentSignal("agy", "invocation", agent.Id, "", 0, 0,
             """{"conversationId":"conv-new","lastUserInput":"修复标签标题"}"""));
         Frames.Pump();
         Assert.Equal("修复标签标题", agent.Title);
+        Assert.Equal("conv-new", agent.Launch?.SessionId);
     }
 }

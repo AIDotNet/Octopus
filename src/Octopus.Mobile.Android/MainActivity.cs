@@ -39,6 +39,7 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
         MobileHost.Workspace = remote.Workspace;
         MobileHost.Account = remote.Account;
         MobileHost.OpenBrowser = address => OpenBrowser(context, address);
+        MobileHost.Updater = Updates.MobileUpdater.Create(new AndroidUpdatePlatform(context), MobileHost.OpenBrowser);
     }
 
     /// <summary>What a computer shows for this phone: "Google Pixel 9", the maker and the model.</summary>

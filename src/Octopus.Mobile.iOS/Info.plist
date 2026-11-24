@@ -4,17 +4,22 @@
 <dict>
   <key>CFBundleDisplayName</key><string>Octopus</string>
   <key>LSRequiresIPhoneOS</key><true/>
-  <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+  <key>UIDeviceFamily</key><array><integer>1</integer></array>
   <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
   <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
-  <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
-  <key>UILaunchStoryboardName</key><string></string>
+  <!-- The launch screen, which App Store Connect requires of apps built with the iOS 27 SDK (ITMS-90870). A plain
+       system-background screen until Avalonia draws the first frame; UILaunchScreen needs iOS 14+, the app needs 15. -->
+  <key>UILaunchScreen</key>
+  <dict/>
   <!-- The UIKit scene lifecycle, which the iOS 27 SDK requires (MT7199). One window; the scene's configuration comes
        from Avalonia's app delegate (application:configurationForConnectingSceneSession:options:). -->
   <key>UIApplicationSceneManifest</key>
   <dict>
     <key>UIApplicationSupportsMultipleScenes</key><false/>
   </dict>
+  <!-- Only the operating system's encryption (TLS, and AES-GCM / ECDH through .NET's Apple crypto): exempt, as
+       declared in App Store Connect, so uploads skip the export compliance question. -->
+  <key>ITSAppUsesNonExemptEncryption</key><false/>
   <key>XSAppIconAssets</key><string>Assets.xcassets/AppIcon.appiconset</string>
   <!-- A host on the same network is ws://address:port. Not plain text: everything in it is the app's own end-to-end
        channel (design/remote/安全通道.md). The relay is wss:// and keeps the system's rules. -->

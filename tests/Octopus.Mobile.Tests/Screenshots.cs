@@ -1,7 +1,10 @@
 using Avalonia.Headless.XUnit;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Conversations;
+using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Terminals;
+using Octopus.Mobile.Workspace;
 using TKCode.Arc;
 using Xunit;
 
@@ -59,6 +62,123 @@ public class Screenshots
             shell.Keys.Single(key => key.IsControl).PressCommand.Execute(null);
             Phone.Settle();
             phone.Save("6-terminal-keys" + suffix);
+
+            // The same with the keyboard up: the key row sits on it, the terminal keeps what is left.
+            var keyboard = new TKCode.Arc.Mobile.KeyboardInsetSource();
+            TKCode.Arc.Mobile.Page.SetKeyboardInsetSource(phone.Shell, keyboard);
+            keyboard.Set(300, TimeSpan.Zero);
+            Phone.Settle(600);
+            phone.Save("6b-terminal-keyboard" + suffix);
+            keyboard.Set(0, TimeSpan.Zero);
+            Phone.Settle(400);
+
+            // The "⋯" menu.
+            shell.OpenMenuCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("6c-terminal-menu" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+            var hostPage = phone.Top<HostPage>();
+            var hostModel = (HostViewModel)hostPage.DataContext!;
+            // "+" (its menu closes as a row is chosen) and the folder picker.
+            hostModel.OpenAddMenuCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("2d-host-add-menu" + suffix);
+            hostModel.IsAddMenuOpen = false;
+            hostModel.NewProjectCommand.Execute(null);
+            Phone.Settle();
+            var picker = (FolderPickerViewModel)phone.Top<FolderPickerPage>().DataContext!;
+            picker.Folders.Single(folder => folder.Name == "code").OpenCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("2e-folder-picker" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+            // A held row's menu, then the session's details.
+            hostModel.ShowMenu(mac.Projects[0].Sessions[1]);
+            Phone.Settle();
+            phone.Save("2b-host-row-menu" + suffix);
+            hostModel.Actions.ShowDetailsCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("2c-session-details" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+
+            // A GUI conversation on the other computer: first on an older host (details + notice), then the live conversation page.
+            var station = phone.Workspace.Hosts.Single(h => h.Id == "station");
+            var gui = station.Projects[0].Sessions.Single(session => session.IsGui);
+            phone.Shell.ShowHost(station);
+            Phone.Settle();
+            phone.Save("2f-host-gui-row" + suffix);
+
+            phone.Workspace.ConversationsSupported = false;
+            phone.Shell.ShowSession(gui);
+            Phone.Settle();
+            phone.Save("2g-gui-details" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+            phone.Workspace.ConversationsSupported = true;
+            phone.Shell.ShowSession(gui);
+            Phone.Settle(400);
+            var convPage = phone.Top<ConversationPage>();
+            var convVm = (ConversationViewModel)convPage.DataContext!;
+            // Expand the latest edit tool so its diff is visible in the screenshot.
+            var lastAssistant = convVm.Entries.OfType<ConversationAssistantEntry>().Last();
+            lastAssistant.Tools[0].IsExpanded = true;
+            Phone.Settle(300);
+            phone.Save("17-conversation" + suffix);
+
+            // Question card with a selected choice.
+            phone.Workspace.Conversations[gui.Id].Ask();
+            Phone.Settle(300);
+            var question = convVm.Entries.OfType<ConversationQuestionEntry>().Last();
+            question.Fields[0].Choices[0].IsSelected = true;
+            question.Fields[1].Choices[0].IsSelected = true;
+            Phone.Settle(300);
+            phone.Save("17b-conversation-question" + suffix);
+
+            // Conversation with keyboard up: the composer stays directly above the keyboard.
+            keyboard.Set(300, TimeSpan.Zero);
+            Phone.Settle(400);
+            phone.Save("17c-conversation-keyboard" + suffix);
+            keyboard.Set(0, TimeSpan.Zero);
+            Phone.Settle(300);
+
+            // Files, file viewer, changes and diff (Route 2: Files/).
+            var octopus = mac.Projects[0];
+            phone.Shell.ShowFiles(octopus);
+            var files = (FilesViewModel)phone.Top<FilesPage>().DataContext!;
+            Assert.True(Phone.Until(() => !files.IsLoading && files.Entries.Count > 0));
+            files.Entries.Single(entry => entry.Name == "src").OpenCommand.Execute(null);
+            Assert.True(Phone.Until(() => !files.IsLoading && files.Crumbs.Count == 2));
+            Phone.Settle();
+            phone.Save("18-files" + suffix);
+
+            files.Entries.Single(entry => entry.Name == "Auth").OpenCommand.Execute(null);
+            Assert.True(Phone.Until(() => !files.IsLoading && files.Crumbs.Count == 3));
+            files.Entries.Single(entry => entry.Name == "TokenIssuer.cs").OpenCommand.Execute(null);
+            var viewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
+            Assert.True(Phone.Until(() => !viewer.IsLoading && viewer.Lines.Count > 0));
+            Phone.Settle();
+            phone.Save("19-file-viewer" + suffix);
+            phone.Shell.Back();
+            phone.Shell.Back();
+            Phone.Settle();
+
+            phone.Shell.ShowChanges(octopus);
+            var changes = (ChangesViewModel)phone.Top<ChangesPage>().DataContext!;
+            Assert.True(Phone.Until(() => !changes.IsLoading && changes.Rows.Count > 0));
+            Phone.Settle();
+            phone.Save("20-changes" + suffix);
+
+            changes.Rows.Single(row => row.Name == "TokenService.cs").OpenCommand.Execute(null);
+            var diff = (DiffViewModel)phone.Top<DiffPage>().DataContext!;
+            Assert.True(Phone.Until(() => !diff.IsLoading && diff.Lines.Count > 0));
+            Phone.Settle();
+            phone.Save("21-diff" + suffix);
         }
 
         using (var phone = new Phone())

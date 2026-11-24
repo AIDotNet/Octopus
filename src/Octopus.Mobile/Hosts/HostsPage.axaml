@@ -76,7 +76,18 @@
     </arcm:Page.Resources>
 
     <arcm:Page.Header>
-        <arcm:Navbar Title="{Binding CurrentTabTitle}" LargeTitle="True">
+        <!-- One compact row under the status bar: the tab's title on the left (no large-title row, no empty bar above
+             it) and the tab's actions on the right. The account lives in the "Me" tab, so no avatar button here. -->
+        <arcm:Navbar Name="TabNavbar">
+            <arcm:Navbar.Leading>
+                <TextBlock Name="TabTitle"
+                           Text="{Binding CurrentTabTitle}"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           FontSize="{arc:ArcDesignTokenResource TypeXL}"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis" />
+            </arcm:Navbar.Leading>
             <arcm:Navbar.Trailing>
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                     <!-- Quick add computer on Computers tab -->
@@ -85,13 +96,8 @@
                                      Command="{Binding AddHostCommand}"
                                      AutomationProperties.Name="{l:MobileLangResource AddHost}"
                                      IsVisible="{Binding IsHostsTab}" />
-                    <!-- Account entry on Activity & Computers tabs -->
+                    <!-- Without an account: a reminder on Activity & Computers that leads to the Me tab -->
                     <Panel IsVisible="{Binding !IsAccountTab}">
-                        <arcm:IconButton Name="AccountButton"
-                                         Icon="{x:Static arc:ArcIcons.User}"
-                                         Command="{Binding SelectAccountTabCommand}"
-                                         AutomationProperties.Name="{l:MobileLangResource Account}"
-                                         IsVisible="{Binding IsSignedIn}" />
                         <arcm:Button Name="SignedOutButton"
                                      Variant="Plain"
                                      Content="{l:MobileLangResource NotSignedIn}"
@@ -174,7 +180,7 @@
                             IsVisible="{Binding HasOnline}" />
 
             <!-- Empty state when no hosts exist yet -->
-            <StackPanel Name="ActivityEmpty" Margin="32,44,32,0" Spacing="16" IsVisible="{Binding IsEmpty}">
+            <StackPanel Name="ActivityEmpty" Margin="32,32,32,0" Spacing="16" IsVisible="{Binding IsEmpty}">
                 <TextBlock Classes="muted"
                            Text="{Binding EmptyText}"
                            TextWrapping="Wrap"
@@ -211,7 +217,7 @@
                                ShowChevron="True"
                                Command="{Binding AddHostCommand}" />
             </arcm:ListGroup>
-            <StackPanel Name="Empty" Margin="32,48,32,0" Spacing="18" IsVisible="{Binding IsEmpty}">
+            <StackPanel Name="Empty" Margin="32,32,32,0" Spacing="18" IsVisible="{Binding IsEmpty}">
                 <TextBlock Name="EmptyText"
                            Classes="muted"
                            Text="{Binding EmptyText}"
@@ -298,6 +304,33 @@
                                Command="{Binding AddHostCommand}" />
             </arcm:ListGroup>
 
+            <!-- App version and updates (Android only: a platform without an updater shows no group) -->
+            <arcm:ListGroup Name="MeAboutGroup"
+                            Header="{l:MobileLangResource MeSectionAbout}"
+                            IsVisible="{Binding Updater.IsSupported}">
+                <arcm:ListItem Name="MeUpdateRow"
+                               Icon="{x:Static arc:ArcIcons.RefreshCw}"
+                               Content="{l:MobileLangResource UpdateRowTitle}"
+                               Subtitle="{Binding Updater.StatusText}"
+                               ShowChevron="{Binding !Updater.IsBusy}"
+                               Command="{Binding Updater.ActCommand}">
+                    <arcm:ListItem.Trailing>
+                        <Panel>
+                            <arc:ArcSpinner IsVisible="{Binding Updater.IsBusy}" VerticalAlignment="Center" />
+                            <Border Classes="pill action" IsVisible="{Binding !!Updater.ActionText}">
+                                <TextBlock Text="{Binding Updater.ActionText}" />
+                            </Border>
+                        </Panel>
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+                <arcm:ListItem Name="MeUpdateNotesRow"
+                               Icon="{x:Static arc:ArcIcons.FileText}"
+                               Content="{l:MobileLangResource UpdateNotes}"
+                               ShowChevron="True"
+                               Command="{Binding Updater.OpenNotesCommand}"
+                               IsVisible="{Binding Updater.HasNews}" />
+            </arcm:ListGroup>
+
             <!-- Sign out / Leave local-only mode -->
             <Panel Margin="16,0">
                 <arcm:Button Name="MeSignOutButton"
@@ -331,7 +364,7 @@
                              Content="{l:MobileLangResource TabHosts}" />
             <arcm:TabbarItem Name="AccountTab"
                              Icon="{x:Static arc:ArcIcons.User}"
-                             Content="{l:MobileLangResource TabMe}" />
+                             Content="{Binding MeTabLabel}" />
         </arcm:Tabbar>
     </arcm:Page.Footer>
 

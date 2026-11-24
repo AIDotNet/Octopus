@@ -32,7 +32,7 @@ EXPECTED_ASSETS = [
     "Octopus-{v}-android.apk",
     "update.json", "update.json.sig",
 ]
-MANIFEST_TARGETS = ["osx-arm64", "osx-x64", "win-x64", "linux-x64"]
+MANIFEST_TARGETS = ["osx-arm64", "osx-x64", "win-x64", "linux-x64", "android"]
 
 
 class Version:
@@ -207,7 +207,10 @@ def cmd_verify(args):
         problems.append(f"isPrerelease is {info['isPrerelease']} for a {'preview' if v.preview is not None else 'release'}")
     for name in (n.format(v=str(v)) for n in EXPECTED_ASSETS):
         if name not in sizes:
-            problems.append(f"missing asset: {name}")
+            if name.endswith("-android.apk") and name.replace("-android.apk", "-android-debug.apk") in sizes:
+                problems.append("the APK is debug-signed (no ANDROID_KEYSTORE secret): phones cannot update to this release")
+            else:
+                problems.append(f"missing asset: {name}")
     if "update.json" in sizes and "update.json.sig" in sizes:
         with tempfile.TemporaryDirectory() as tmp:
             run(["gh", "release", "download", tag, "--pattern", "update.json*", "--dir", tmp])

@@ -848,21 +848,21 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="gui:SubagentRunViewModel">
                                     <Grid ColumnDefinitions="180,*" ColumnSpacing="8">
-                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                                            <Panel Width="12" Height="12" VerticalAlignment="Center">
+                                        <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="5" VerticalAlignment="Center">
+                                            <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
                                                 <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" />
                                                 <lucide:LucideIcon Kind="Check" Size="11" Foreground="#16A34A" IsVisible="{Binding IsDone}" />
                                                 <lucide:LucideIcon Kind="X" Size="11" Foreground="#DC2626" IsVisible="{Binding IsFailed}" />
                                                 <lucide:LucideIcon Kind="Minus" Size="11" Foreground="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsInterrupted}" />
                                             </Panel>
-                                            <Border Padding="4,0" CornerRadius="4" Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                            <Border Grid.Column="1" Padding="4,0" CornerRadius="4" Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding AgentType}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
                                                            FontSize="10" Foreground="{arc:ArcDesignTokenResource TextSecondary}" MaxLines="1" />
                                             </Border>
-                                            <TextBlock Text="{Binding DisplayTitle}" FontSize="11.5" MaxLines="1"
+                                            <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" FontSize="11.5" MaxLines="1"
                                                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                        </StackPanel>
+                                        </Grid>
                                         <Button Grid.Column="1" Classes="swimBar"
                                                 Classes.done="{Binding IsDone}"
                                                 Classes.failed="{Binding IsFailed}"
@@ -1528,15 +1528,18 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="gui:SubagentRunViewModel">
                                         <Grid ColumnDefinitions="200,*" ColumnSpacing="10">
-                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" />
-                                                <lucide:LucideIcon Kind="Check" Size="12" Foreground="#16A34A" IsVisible="{Binding IsDone}" />
-                                                <lucide:LucideIcon Kind="X" Size="12" Foreground="#DC2626" IsVisible="{Binding IsFailed}" />
-                                                <Border Padding="5,0" CornerRadius="4" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                                            <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6" VerticalAlignment="Center">
+                                                <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
+                                                    <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" />
+                                                    <lucide:LucideIcon Kind="Check" Size="12" Foreground="#16A34A" IsVisible="{Binding IsDone}" />
+                                                    <lucide:LucideIcon Kind="X" Size="12" Foreground="#DC2626" IsVisible="{Binding IsFailed}" />
+                                                    <lucide:LucideIcon Kind="Minus" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsInterrupted}" />
+                                                </Panel>
+                                                <Border Grid.Column="1" Padding="5,0" CornerRadius="4" Background="{arc:ArcDesignTokenResource SurfaceMuted}" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding AgentType}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10.5" />
                                                 </Border>
-                                                <TextBlock Text="{Binding DisplayTitle}" FontSize="12" MaxLines="1" TextTrimming="CharacterEllipsis" />
-                                            </StackPanel>
+                                                <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" FontSize="12" MaxLines="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            </Grid>
                                             <Button Grid.Column="1" Classes="swimBar" Classes.done="{Binding IsDone}" Classes.failed="{Binding IsFailed}" Command="{Binding SelectCommand}">
                                                 <TextBlock Text="{Binding BarLabel}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="11.5" MaxLines="1" TextTrimming="CharacterEllipsis" />
                                             </Button>

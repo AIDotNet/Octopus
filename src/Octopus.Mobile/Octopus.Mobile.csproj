@@ -33,5 +33,7 @@
         <ProjectReference Include="../Octopus.Remote.Client/Octopus.Remote.Client.csproj" />
         <ProjectReference Include="../Octopus.Terminal/Octopus.Terminal.csproj" />
         <ProjectReference Include="../Octopus.Terminal.Avalonia/Octopus.Terminal.Avalonia.csproj" />
+        <!-- The signed manifest, its check and the verified download (design/10-自动更新.md §15). -->
+        <ProjectReference Include="../Octopus.Updates/Octopus.Updates.csproj" />
     </ItemGroup>
 </Project>

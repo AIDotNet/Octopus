@@ -55,6 +55,31 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <Style Selector="Border.badge.large">
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="44" />
+        <Setter Property="CornerRadius" Value="12" />
+    </Style>
+    <Style Selector="Border.badge.large TextBlock">
+        <Setter Property="FontSize" Value="18" />
+    </Style>
+    <!-- "GUI" after the title of a session that runs as a GUI conversation on the computer. -->
+    <Style Selector="Border.guiTag">
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Padding" Value="5,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+    </Style>
+    <Style Selector="Border.guiTag TextBlock">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="TextBlock.detailTitle">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeLG}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
     <Style Selector="TextBlock.secondary">
         <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
         <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
@@ -210,5 +235,142 @@
         <Setter Property="CornerRadius" Value="4" />
         <Setter Property="Background" Value="{arc:ArcDesignTokenResource Success}" />
         <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Files, changes and diffs (Files/). -->
+    <Style Selector="arcm|IconButton.toggled">
+        <Setter Property="Variant" Value="Plain" />
+    </Style>
+    <Style Selector="arcm|IconButton.toggled.active">
+        <Setter Property="Variant" Value="Tinted" />
+    </Style>
+
+    <!-- Status letter before a changed file (A, M, D, R, !). -->
+    <Style Selector="Border.changeBadge">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+    </Style>
+    <Style Selector="Border.changeBadge TextBlock">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.changeBadge.added">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SuccessSubtle}" />
+    </Style>
+    <Style Selector="Border.changeBadge.added TextBlock">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Success}" />
+    </Style>
+    <Style Selector="Border.changeBadge.modified">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource WarningSubtle}" />
+    </Style>
+    <Style Selector="Border.changeBadge.modified TextBlock">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
+    </Style>
+    <Style Selector="Border.changeBadge.removed">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource DangerSubtle}" />
+    </Style>
+    <Style Selector="Border.changeBadge.removed TextBlock">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+
+    <Style Selector="TextBlock.diffStat">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.diffStat.added">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Success}" />
+    </Style>
+    <Style Selector="TextBlock.diffStat.removed">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+
+    <!-- Virtualized read-only code and diff lists: ArcTheme has no ListBox template, so list and rows are templated here. -->
+    <Style Selector="ListBox.codeList">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0,6" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
+                    <ScrollViewer Name="PART_ScrollViewer"
+                                  HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                                  VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}">
+                        <ItemsPresenter Name="PART_ItemsPresenter"
+                                        Margin="{TemplateBinding Padding}"
+                                        ItemsPanel="{TemplateBinding ItemsPanel}" />
+                    </ScrollViewer>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.codeList ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ContentPresenter Name="PART_ContentPresenter"
+                                  Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="TextBlock.codeNum">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="LineHeight" Value="19" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        <Setter Property="TextAlignment" Value="Right" />
+    </Style>
+    <Style Selector="TextBlock.codeText">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="LineHeight" Value="19" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="TextBlock.diffMarker">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="LineHeight" Value="19" />
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+    </Style>
+    <Style Selector="Border.diffLine">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.diffLine.added">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SuccessSubtle}" />
+    </Style>
+    <Style Selector="Border.diffLine.added TextBlock.diffMarker">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Success}" />
+    </Style>
+    <Style Selector="Border.diffLine.removed">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource DangerSubtle}" />
+    </Style>
+    <Style Selector="Border.diffLine.removed TextBlock.diffMarker">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+    <Style Selector="Border.diffLine.hunk">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        <Setter Property="Padding" Value="0,3" />
+    </Style>
+    <Style Selector="Border.diffLine.hunk TextBlock.codeText">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Border.diffLine.note TextBlock.codeText">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        <Setter Property="FontStyle" Value="Italic" />
     </Style>
 </Styles>

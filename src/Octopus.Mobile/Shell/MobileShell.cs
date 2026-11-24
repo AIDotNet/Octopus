@@ -1,8 +1,12 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Conversations;
+using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
+using Octopus.Mobile.Sessions;
 using Octopus.Mobile.Terminals;
+using Octopus.Mobile.Updates;
 using Octopus.Mobile.Workspace;
 using TKCode.Arc.Mobile;
 
@@ -17,17 +21,23 @@ public sealed class MobileShell : ContentControl, INavigator
     private readonly IRemoteWorkspace _workspace;
     private readonly IAccountSession _account;
     private readonly Action<Uri> _openBrowser;
+    private readonly MobileUpdater _updater;
     // The pages above the first one, bottom to top: the stack control only tells that a page left, not which.
     private readonly List<Control> _pages = [];
     private NavigationStack? _stack;
 
     protected override Type StyleKeyOverride => typeof(ContentControl);
 
-    public MobileShell(IRemoteWorkspace workspace, IAccountSession account, Action<Uri>? openBrowser = null)
+    public MobileShell(IRemoteWorkspace workspace, IAccountSession account, Action<Uri>? openBrowser = null, MobileUpdater? updater = null)
     {
         _workspace = workspace;
         _account = account;
         _openBrowser = openBrowser ?? (_ => { });
+        _updater = updater ?? MobileUpdater.Unsupported;
+        // Each Page keeps clear of the status bar, the gesture bar and the keyboard itself (Page.SafeArea). Avalonia
+        // would also pad the top level's content by the same safe area, and every page would sit twice as far from the
+        // edges: on Android 15+ (edge to edge) about a status bar's height of empty space above every header.
+        TopLevel.SetAutoSafeAreaPadding(this, false);
         account.Changed += OnAccountChanged;
         Show();
     }
@@ -43,7 +53,37 @@ public sealed class MobileShell : ContentControl, INavigator
 
     public void ShowHost(RemoteHost host) => Push(new HostPage(new HostViewModel(host, _workspace, this)));
 
-    public void ShowSession(RemoteSession session) => Push(new TerminalPage(new TerminalViewModel(session, _workspace, this)));
+    public void ShowSession(RemoteSession session)
+    {
+        // A GUI session opens its conversation when the host speaks acp.gui (G-A), or its details with an update note (G-0).
+        if (session.IsGui)
+        {
+            if (_workspace.SupportsConversations(session.Project.Host)) ShowConversation(session);
+            else ShowSessionDetails(session);
+            return;
+        }
+        Push(new TerminalPage(new TerminalViewModel(session, _workspace, this)));
+    }
+
+    public void ShowConversation(RemoteSession session) => Push(new ConversationPage(new ConversationViewModel(session, _workspace, this)));
+
+    public void ShowSessionDetails(RemoteSession session) => Push(new SessionDetailPage(new SessionDetailViewModel(session, _workspace, this)));
+
+    public void ShowFolderPicker(RemoteHost host, Action<RemoteProject>? created = null) =>
+        Push(new FolderPickerPage(new FolderPickerViewModel(host, _workspace, this, created)));
+
+    // Files, changes and diffs (Files/).
+    public void ShowFiles(RemoteProject project, string? folder = null) =>
+        Push(new FilesPage(new FilesViewModel(project, folder ?? project.Path, _workspace, this)));
+
+    public void ShowFile(RemoteProject project, string path, string? location = null) =>
+        Push(new FileViewerPage(new FileViewerViewModel(project, path, location, _workspace, this)));
+
+    public void ShowChanges(RemoteProject project, string? workspacePath = null) =>
+        Push(new ChangesPage(new ChangesViewModel(project, workspacePath, _workspace, this)));
+
+    public void ShowDiff(RemoteProject project, string? workspacePath, RemoteChange change) =>
+        Push(new DiffPage(new DiffViewModel(project, workspacePath, change, _workspace, this)));
 
     public void ShowPairing(RemoteHost host) => Push(new PairingPage(new PairingViewModel(host, _workspace, this)));
 
@@ -77,7 +117,7 @@ public sealed class MobileShell : ContentControl, INavigator
     {
         CloseAll();
         Control first = ShowsHosts
-            ? new HostsPage(new HostsViewModel(_workspace, _account, this, _openBrowser))
+            ? new HostsPage(new HostsViewModel(_workspace, _account, this, _openBrowser, _updater))
             : new WelcomePage(new WelcomeViewModel(_account, _workspace, this, _openBrowser));
         _stack = new NavigationStack { Root = first };
         _stack.Navigated += OnNavigated;

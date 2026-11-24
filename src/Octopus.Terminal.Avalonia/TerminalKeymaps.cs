@@ -5,5 +5,7 @@ public static class TerminalKeymaps
 {
     /// <summary>The only operating-system check in this library.</summary>
     public static ITerminalKeymap ForCurrentPlatform() =>
-        OperatingSystem.IsMacOS() ? new MacTerminalKeymap() : new DefaultTerminalKeymap();
+        OperatingSystem.IsMacOS()
+            ? new MacTerminalKeymap()
+            : new DefaultTerminalKeymap(pasteWithoutShift: OperatingSystem.IsWindows());
 }

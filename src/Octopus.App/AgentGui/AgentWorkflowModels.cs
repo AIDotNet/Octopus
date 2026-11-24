@@ -234,6 +234,13 @@ public sealed partial class SubagentRunViewModel : ObservableObject
     public string Id { get; }
     public DateTimeOffset StartedAt { get; }
     public DateTimeOffset? EndedAt { get; private set; }
+    /// <summary>True when the launch tool returns immediately while the subagent runs asynchronously (e.g. Antigravity <c>invoke_subagent</c>).</summary>
+    public bool RunsAsynchronously { get; private set; }
+    /// <summary>Underlying subagent conversation id discovered from the parent transcript (Antigravity CLI).</summary>
+    public string? ConversationId { get; set; }
+    /// <summary>Path to the subagent's own live transcript file when tracked locally (Antigravity CLI).</summary>
+    public string? TranscriptPath { get; set; }
+    internal long TranscriptOffset { get; set; }
 
     [ObservableProperty] public partial string AgentType { get; set; } = "general-purpose";
     [ObservableProperty] public partial string Description { get; set; } = "";
@@ -279,6 +286,11 @@ public sealed partial class SubagentRunViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(desc)) Description = desc!;
         if (!string.IsNullOrWhiteSpace(update.SubagentModel)) Model = update.SubagentModel;
         if (update.IsBackground) IsBackground = true;
+        if (update.SubagentRunsAsynchronously)
+        {
+            RunsAsynchronously = true;
+            IsBackground = true;
+        }
         if (!string.IsNullOrWhiteSpace(update.WorktreeIsolation)) WorktreeIsolation = update.WorktreeIsolation;
 
         if (update.TextOutputs.Count > 0)
@@ -294,7 +306,7 @@ public sealed partial class SubagentRunViewModel : ObservableObject
             Summary = str.Trim();
         }
 
-        if (update.Status == "completed")
+        if (update.Status == "completed" && !RunsAsynchronously)
         {
             Status = "done";
             EndedAt ??= now;
@@ -305,6 +317,53 @@ public sealed partial class SubagentRunViewModel : ObservableObject
             EndedAt ??= now;
         }
 
+        Tick(now);
+        NotifyDerived();
+    }
+
+    public void CompleteOldestRunningSteps(int count, bool failed)
+    {
+        if (count <= 0) return;
+        var remaining = count;
+        var targetStatus = failed ? "failed" : "completed";
+        foreach (var step in Steps)
+        {
+            if (remaining <= 0) break;
+            if (!step.IsRunning) continue;
+            step.Apply(new AcpToolCallUpdate { ToolCallId = step.ToolCallId, Status = targetStatus });
+            remaining--;
+        }
+        NotifyDerived();
+    }
+
+    public void MarkCompleted(string? summary, DateTimeOffset now)
+    {
+        if (!string.IsNullOrWhiteSpace(summary))
+        {
+            Summary = summary.Trim();
+        }
+        CompleteOldestRunningSteps(Steps.Count, failed: false);
+        if (Status != "done")
+        {
+            Status = "done";
+            EndedAt ??= now;
+        }
+        Tick(now);
+        NotifyDerived();
+    }
+
+    public void MarkFailed(string? summary, DateTimeOffset now)
+    {
+        if (!string.IsNullOrWhiteSpace(summary))
+        {
+            Summary = summary.Trim();
+        }
+        CompleteOldestRunningSteps(Steps.Count, failed: true);
+        if (Status != "failed")
+        {
+            Status = "failed";
+            EndedAt ??= now;
+        }
         Tick(now);
         NotifyDerived();
     }

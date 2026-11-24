@@ -21,6 +21,8 @@
         <PackageVersion Include="TKCode.Arc.Dock" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Fonts" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Highlighting" Version="$(ArcVersion)" />
+        <!-- Mermaid diagrams in the Markdown preview (Mermaider and Svg.Skia, no browser). -->
+        <PackageVersion Include="TKCode.Arc.StreamMark.Mermaid" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Icons.Lucide" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Themes.Corners" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Terminal" Version="$(ArcVersion)" />

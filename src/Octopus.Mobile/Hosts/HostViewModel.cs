@@ -20,6 +20,7 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
         Host = host;
         _navigator = navigator;
         NewSession = new NewSessionViewModel(host, workspace, navigator.ShowSession);
+        Actions = new SessionActionsViewModel(workspace, navigator);
         host.Projects.CollectionChanged += OnProjectsChanged;
         Rebuild();
     }
@@ -28,13 +29,32 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
     public string Title => Host.Name;
     public ObservableCollection<ProjectSectionViewModel> Sections { get; } = [];
     public NewSessionViewModel NewSession { get; }
+    /// <summary>The long-press menu of a session row, and what it opens.</summary>
+    public SessionActionsViewModel Actions { get; }
     [ObservableProperty] public partial bool IsEmpty { get; private set; }
+    /// <summary>The "+" menu: a new session in a project, or a new project.</summary>
+    [ObservableProperty] public partial bool IsAddMenuOpen { get; set; }
 
     [RelayCommand]
     private void Back() => _navigator.Back();
 
     [RelayCommand]
+    private void OpenAddMenu()
+    {
+        // Without a project there is nothing to start a session in: straight to picking a folder.
+        if (Host.Projects.Count == 0) NewProject();
+        else IsAddMenuOpen = true;
+    }
+
+    [RelayCommand]
     private void OpenNewSession() => NewSession.Open();
+
+    /// <summary>Picks a folder of the host for a new project; once made, the "New" sheet opens on it.</summary>
+    [RelayCommand]
+    private void NewProject() => _navigator.ShowFolderPicker(Host, project => NewSession.Open(project));
+
+    /// <summary>A row was held: its menu, with "Open" first.</summary>
+    public void ShowMenu(RemoteSession session) => Actions.ShowMenu(session, includeOpen: true);
 
     public void Dispose()
     {

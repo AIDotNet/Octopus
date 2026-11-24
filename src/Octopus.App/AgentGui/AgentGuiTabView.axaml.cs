@@ -16,6 +16,7 @@ public partial class AgentGuiTabView : UserControl, ITabContent
 
     private AgentGuiTabViewModel? _model;
     private bool _started;
+    private bool _isAttached;
     private bool _programmaticScroll;
     private bool _scrollQueued;
     private bool _pointerPressedInTimeline;
@@ -59,11 +60,43 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         {
             _model.ScrollToBottomRequested += OnScrollToBottom;
             _model.FocusComposerRequested += OnFocusComposerRequested;
-            if (!_started)
-            {
-                _started = true;
-                _ = _model.ConnectAsync();
-            }
+            TryStartIfVisible();
+        }
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _isAttached = true;
+        // First time on screen: only now does the ACP process start (a restored tab that is never shown never runs).
+        TryStartIfVisible();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _isAttached = false;
+    }
+
+    private void TryStartIfVisible()
+    {
+        if (!_started && _isAttached && _model is not null)
+        {
+            _started = true;
+            _ = _model.ConnectAsync();
+        }
+    }
+
+    /// <summary>
+    /// Starts the ACP session if it has not been started yet, so a remote device attaching before this tab is ever
+    /// shown on screen still brings the conversation up without double-connecting when the tab is later opened here.
+    /// </summary>
+    internal void EnsureStarted()
+    {
+        if (!_started && _model is not null)
+        {
+            _started = true;
+            _ = _model.ConnectAsync();
         }
     }
 

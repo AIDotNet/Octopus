@@ -18,7 +18,7 @@ namespace Octopus.Mobile.Remote;
 /// the addresses it was reached at before, else through the relay when signed in) and says its projects, items and
 /// what they are doing. Everything the pages bind to changes on the UI thread; the network happens elsewhere.
 /// </summary>
-internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
+internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
 {
     /// <summary>How long a computer named by its address has to answer before it counts as out of reach.</summary>
     private static readonly TimeSpan ReachLimit = TimeSpan.FromSeconds(15);
@@ -226,6 +226,82 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         }
     }
 
+    public Task RenameSessionAsync(RemoteSession session, string? title, CancellationToken cancellationToken = default) =>
+        WithClientAsync(session.Project.Host, async client =>
+        {
+            var trimmed = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+            await client.RenameItemAsync(session.Id, trimmed, cancellationToken).ConfigureAwait(false);
+            // The host's "item changed" brings the title too; a new one shows at once. Cleared, only the host knows the default.
+            if (trimmed is not null) await UiAsync(() => session.Title = trimmed).ConfigureAwait(false);
+        });
+
+    public Task CloseSessionAsync(RemoteSession session, CancellationToken cancellationToken = default) =>
+        WithClientAsync(session.Project.Host, async client =>
+        {
+            await client.RemoveItemAsync(session.Id, cancellationToken).ConfigureAwait(false);
+            await UiAsync(() => session.Project.Sessions.Remove(session)).ConfigureAwait(false);
+        });
+
+    public Task RestartSessionAsync(RemoteSession session, CancellationToken cancellationToken = default) =>
+        WithClientAsync(session.Project.Host, client => client.RestartItemAsync(session.Id, cancellationToken));
+
+    public async Task<RemoteFolderListing> BrowseFolderAsync(RemoteHost host, string? path, CancellationToken cancellationToken = default)
+    {
+        BrowseFolderResultMessage? page = null;
+        await WithClientAsync(host, async client =>
+        {
+            if (!client.SupportsBrowse) throw new IOException(MobileLangResources.Get(MobileLangResourceKind.FolderUnsupportedHost));
+            // Null is the host's home, empty its list of drives; a folder that went away shows the nearest one above it.
+            page = await client.BrowseFolderAsync(string.IsNullOrEmpty(path) ? null : path, listRoots: path is { Length: 0 },
+                fallbackToParent: path is { Length: > 0 }, cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+        return new RemoteFolderListing(page!.Path, page.Parent, page.Separator, page.Home,
+            [.. page.Roots.Select(FolderOf)], [.. page.Entries.Where(entry => !entry.IsHidden).Select(FolderOf)]);
+    }
+
+    public async Task<string> CreateFolderAsync(RemoteHost host, string parentPath, string name, CancellationToken cancellationToken = default)
+    {
+        var created = "";
+        await WithClientAsync(host, async client =>
+            created = await client.BrowseCreateDirectoryAsync(parentPath, name.Trim(), cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        return created;
+    }
+
+    public async Task<RemoteProject> CreateProjectAsync(RemoteHost host, string path, CancellationToken cancellationToken = default)
+    {
+        ProjectMessage? message = null;
+        await WithClientAsync(host, async client =>
+            message = await client.CreateProjectAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+        return await UiAsync(() =>
+        {
+            // The host's "something changed" may have brought it here already.
+            if (host.Projects.FirstOrDefault(known => known.Id == message!.Id) is { } known) return known;
+            var project = new RemoteProject(host, message!.Id, message.Name, message.Path)
+            {
+                IsGitRepository = message.IsGitRepository,
+                DefaultBranch = message.DefaultBranch,
+            };
+            host.Projects.Add(project);
+            return project;
+        }).ConfigureAwait(false);
+    }
+
+    private static RemoteFolderEntry FolderOf(BrowseEntryMessage entry) => new(entry.Name, entry.Path, entry.Kind, entry.IsExistingProject);
+
+    /// <summary>Runs a call on the host's connection (making one when there is none); what the host refuses comes back as an <see cref="IOException"/> with its words.</summary>
+    private async Task WithClientAsync(RemoteHost host, Func<RemoteHostClient, Task> call)
+    {
+        try
+        {
+            var client = _connections.ClientOf(host.Id) ?? await _connections.ConnectAsync(host.Id).ConfigureAwait(false);
+            await call(client).ConfigureAwait(false);
+        }
+        catch (RemoteException e)
+        {
+            throw new IOException(e.Message, e);
+        }
+    }
+
     public ITerminalConnectionFactory OpenTerminal(RemoteSession session)
     {
         var host = session.Project.Host;
@@ -279,6 +355,8 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         _connections.ItemChanged -= OnItemChanged;
         _session.Changed -= OnAccountChanged;
         _settings.LocalOnlyChanged -= OnModeChanged;
+        // GUI conversations (RemoteWorkspace.Conversations.cs).
+        DisposeConversations();
     }
 
     // The same pairing as the desktop's "add a host": to an address the person typed (then both sides show a number),
@@ -557,7 +635,9 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
             ReplaceValues(project.Workspaces, workspaces);
             var sessions = items.GetValueOrDefault(project.Id, []).Select(item =>
             {
-                if (project.Sessions.FirstOrDefault(known => known.Id == item.Id) is not { } session) return NewSession(state, project, item);
+                // Switched between GUI and terminal on the host: a new object, since how it opens changed.
+                if (project.Sessions.FirstOrDefault(known => known.Id == item.Id && known.IsGui == (item.Surface == ItemSurfaces.Gui)) is not { } session)
+                    return NewSession(state, project, item);
                 session.Title = item.Title;
                 session.Activity = ActivityOf(item.Activity);
                 UpdateSessionWorkspace(project, session, item);
@@ -599,18 +679,21 @@ internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
         var agent = item.AgentId is null ? null : state?.Agents.GetValueOrDefault(item.AgentId);
         var isAgent = item.Kind == ItemKinds.Agent;
         var ws = string.IsNullOrEmpty(item.WorkspaceId) ? null : project.Workspaces.FirstOrDefault(w => w.Id == item.WorkspaceId);
+        var model = agent?.Models.FirstOrDefault(choice => choice.Id == item.Model)?.Label ?? item.Model;
+        var effort = agent?.Efforts.FirstOrDefault(choice => choice.Id == item.Effort)?.Label ?? item.Effort;
         return new RemoteSession(project, item.Id, isAgent ? SessionKind.Agent : SessionKind.Terminal, item.Title)
         {
             AgentId = item.AgentId,
+            Model = isAgent ? model : null,
+            Effort = isAgent ? effort : null,
+            IsGui = item.Surface == ItemSurfaces.Gui,
             WorkspaceId = item.WorkspaceId,
             WorkspaceBranch = item.WorkspaceBranch ?? ws?.DisplayName,
             WorkspaceTaskKey = ws?.TaskKey,
             // Model and effort as the host labels them; the agent's name when neither was chosen.
-            Detail = !isAgent ? null : string.Join(" · ", new[]
-            {
-                agent?.Models.FirstOrDefault(model => model.Id == item.Model)?.Label ?? item.Model,
-                agent?.Efforts.FirstOrDefault(effort => effort.Id == item.Effort)?.Label ?? item.Effort,
-            }.Where(part => !string.IsNullOrEmpty(part))) is { Length: > 0 } detail ? detail : agent?.Name ?? item.AgentId,
+            Detail = !isAgent ? null : string.Join(" · ", new[] { model, effort }.Where(part => !string.IsNullOrEmpty(part))) is { Length: > 0 } detail
+                ? detail
+                : agent?.Name ?? item.AgentId,
             Activity = ActivityOf(item.Activity),
             SizeOwner = project.Host.Name,
         };

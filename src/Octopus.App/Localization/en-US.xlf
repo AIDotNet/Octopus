@@ -485,6 +485,10 @@
     <unit id="TrayWaiting"><segment><source>Octopus · {0} waiting for you</source></segment></unit>
     <unit id="TrayShow"><segment><source>Show Octopus</source></segment></unit>
     <unit id="TrayQuit"><segment><source>Quit Octopus</source></segment></unit>
+    <unit id="SettingsRestoreAgents"><segment><source>Restore agents on startup</source></segment></unit>
+    <unit id="SettingsRestoreAgentsHint"><segment><source>Keep open agent tabs in the sidebar across restarts. Background tabs start when you switch to them.</source></segment></unit>
+    <unit id="SettingsResumeAgents"><segment><source>Continue agent sessions on restart</source></segment></unit>
+    <unit id="SettingsResumeAgentsHint"><segment><source>Resume each restored agent from its previous session when supported, instead of starting fresh.</source></segment></unit>
     <unit id="SettingsTrayShow"><segment><source>Show the tray icon</source></segment></unit>
     <unit id="SettingsTrayShowHint"><segment><source>An Octopus icon in the notification area (the menu bar on macOS) brings the window back and has a Quit command.</source></segment></unit>
     <unit id="SettingsTrayClose"><segment><source>Keep running in the tray when the window is closed</source></segment></unit>

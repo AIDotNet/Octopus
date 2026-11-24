@@ -58,7 +58,7 @@ public class KeyInputTests
             () => Task.FromResult<string?>(null), () => Task.FromResult<string?>(null), _ => Task.CompletedTask, (_, _) => Task.FromResult(true), () => { });
         if (viaSendKey) router.SendKey(key, mods);
         else router.HandleKey(new TerminalKeyEventArgs(new KeyInput(key, KeyAction.Press, mods), global::Avalonia.Input.KeyModifiers.None));
-        for (var i = 0; i < 50 && rec.Written.Count == 0; i++) await Task.Delay(20);
+        for (var i = 0; i < 50 && rec.Written.Count == 0; i++) await Task.Delay(20, TestContext.Current.CancellationToken);
         return rec.Text().Replace("\x1b", "ESC").Replace("\r", "\\r").Replace("\n", "\\n").Replace("\x7f", "DEL");
     }
 
@@ -172,5 +172,76 @@ public class KeyInputTests
         Assert.Equal(TerminalShortcut.None, new DefaultTerminalKeymap().Match(new KeyInput(TerminalKey.C, KeyAction.Release, KeyMods.Ctrl)));
         Assert.Equal(TerminalShortcut.None, new DefaultTerminalKeymap().Match(new KeyInput(TerminalKey.C, KeyAction.Press, KeyMods.Ctrl | KeyMods.Alt)));
         Assert.Equal(TerminalShortcut.None, new MacTerminalKeymap().Match(ctrlC));
+    }
+
+    [Fact]
+    public void Paste_shortcuts_include_ctrl_v_on_windows_and_shift_insert_on_windows_and_linux()
+    {
+        ITerminalKeymap windows = new DefaultTerminalKeymap(pasteWithoutShift: true);
+        ITerminalKeymap linux = new DefaultTerminalKeymap(pasteWithoutShift: false);
+        ITerminalKeymap mac = new MacTerminalKeymap();
+
+        var ctrlV = new KeyInput(TerminalKey.V, KeyAction.Press, KeyMods.Ctrl);
+        var ctrlShiftV = new KeyInput(TerminalKey.V, KeyAction.Press, KeyMods.Ctrl | KeyMods.Shift);
+        var shiftInsert = new KeyInput(TerminalKey.Insert, KeyAction.Press, KeyMods.Shift);
+
+        Assert.True(windows.CopyWithoutShift);
+        Assert.True(linux.CopyWithoutShift);
+        Assert.False(mac.CopyWithoutShift);
+
+        Assert.Equal(TerminalShortcut.Paste, windows.Match(ctrlV));
+        Assert.Equal(TerminalShortcut.Paste, windows.Match(ctrlShiftV));
+        Assert.Equal(TerminalShortcut.Paste, windows.Match(shiftInsert));
+        Assert.Equal(TerminalShortcut.None, windows.Match(new KeyInput(TerminalKey.V, KeyAction.Release, KeyMods.Ctrl)));
+        Assert.Equal(TerminalShortcut.None, windows.Match(new KeyInput(TerminalKey.V, KeyAction.Press, KeyMods.Ctrl | KeyMods.Alt)));
+        Assert.Equal(TerminalShortcut.None, windows.Match(new KeyInput(TerminalKey.Insert, KeyAction.Release, KeyMods.Shift)));
+
+        Assert.Equal(TerminalShortcut.None, linux.Match(ctrlV));
+        Assert.Equal(TerminalShortcut.Paste, linux.Match(ctrlShiftV));
+        Assert.Equal(TerminalShortcut.Paste, linux.Match(shiftInsert));
+
+        Assert.Equal(TerminalShortcut.None, mac.Match(ctrlV));
+        Assert.Equal(TerminalShortcut.None, mac.Match(shiftInsert));
+    }
+
+    [Fact]
+    public async Task Right_click_copies_selection_and_pastes_when_nothing_is_selected_on_default_keymap()
+    {
+        var rec = new Recorder();
+        await using var session = new TerminalSession(
+            new LaunchSpec("x", [], null, new Dictionary<string, string>()), rec, new TerminalSize(80, 24, 0, 0),
+            TerminalPalettes.Dark, ColorScheme.Dark, 100, () => false);
+        session.Start();
+        session.Use(c => c.Write("hello world\r\n"u8));
+
+        string? copied = null;
+        ITerminalKeymap keymap = new DefaultTerminalKeymap(pasteWithoutShift: true);
+        using var router = new TerminalInputRouter(session, () => keymap,
+            () => Task.FromResult<string?>("pasted text"), () => Task.FromResult<string?>(null),
+            text => { copied = text; return Task.CompletedTask; },
+            (_, _) => Task.FromResult(true), () => { });
+
+        var geometry = new MouseGeometry(800, 480, 10, 20, 0, 0, 0, 0);
+        TerminalPointerEventArgs RightRelease() => new(
+            TerminalPointerKind.Release,
+            new ViewportPoint(0, 0),
+            new MouseInput(MouseAction.Release, MouseButton.Right, KeyMods.None, 0, 0),
+            geometry,
+            0);
+
+        // With a selection, right click copies and clears it without pasting.
+        session.Use(c => c.Select(SelectionRequest.Range(new ViewportPoint(0, 0), new ViewportPoint(4, 0))));
+        var copyArgs = RightRelease();
+        router.HandlePointer(copyArgs);
+        Assert.True(copyArgs.Handled);
+        Assert.Equal("hello", copied);
+        Assert.False(session.Read(c => c.HasSelection));
+
+        // With nothing selected, right click pastes clipboard text.
+        var pasteArgs = RightRelease();
+        router.HandlePointer(pasteArgs);
+        Assert.True(pasteArgs.Handled);
+        for (var i = 0; i < 50 && rec.Written.Count == 0; i++) await Task.Delay(20, TestContext.Current.CancellationToken);
+        Assert.Equal("pasted text", rec.Text());
     }
 }
