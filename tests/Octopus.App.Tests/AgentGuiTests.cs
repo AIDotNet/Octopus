@@ -40,6 +40,7 @@ public sealed class FakeAcpSession : IAcpSession
     public int CancelCount { get; private set; }
 
     public Func<FakeAcpSession, string, IReadOnlyList<AcpPromptAttachment>?, CancellationToken, Task<AcpPromptResult>>? PromptHandler { get; set; }
+    public Func<FakeAcpSession, Task>? CancelHandler { get; set; }
 
     public event Action<AcpRuntimeEvent>? EventReceived;
 
@@ -100,7 +101,7 @@ public sealed class FakeAcpSession : IAcpSession
     public Task CancelAsync()
     {
         CancelCount++;
-        return Task.CompletedTask;
+        return CancelHandler is not null ? CancelHandler(this) : Task.CompletedTask;
     }
 
     public Task SetModeAsync(string modeId, CancellationToken cancellationToken = default)
@@ -1242,6 +1243,334 @@ public class AgentGuiTests
             fakeFactory.ConfigureNext = null;
             window.Close();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Queue_tray_supports_send_now_edit_reorder_remove_and_pause_on_manual_stop()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-queue-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "acp-gui-queue");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        var events = new List<string>();
+        var activeTurns = 0;
+        var maxConcurrentTurns = 0;
+        TaskCompletionSource<AcpPromptResult>? currentGate = null;
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.PromptHandler = async (s, prompt, _, ct) =>
+            {
+                var concurrent = Interlocked.Increment(ref activeTurns);
+                if (concurrent > maxConcurrentTurns) maxConcurrentTurns = concurrent;
+                events.Add($"start:{prompt}");
+                try
+                {
+                    if (prompt.StartsWith("Hold", StringComparison.Ordinal))
+                    {
+                        var gate = new TaskCompletionSource<AcpPromptResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        currentGate = gate;
+                        using var reg = ct.Register(() => gate.TrySetCanceled(ct));
+                        var result = await gate.Task;
+                        events.Add($"end:{prompt}:{result.StopReason}");
+                        return result;
+                    }
+                    s.Emit(new AcpTextDeltaEvent("assistant", $"Done: {prompt}", null));
+                    events.Add($"end:{prompt}:end_turn");
+                    return new AcpPromptResult { StopReason = "end_turn" };
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref activeTurns);
+                }
+            };
+            session.CancelHandler = _ =>
+            {
+                events.Add("cancel");
+                currentGate?.TrySetResult(new AcpPromptResult { StopReason = "cancelled" });
+                return Task.CompletedTask;
+            };
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 960, Height = 700, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+
+            // 1. Start a holding turn so the agent stays busy while we manipulate the queue tray.
+            vm.InputText = "Hold 1";
+            var turn1Task = vm.SendPromptAsync();
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Working);
+
+            var sendNowButton = view.FindControl<TKCode.Arc.Button>("SendNowButton");
+            Assert.NotNull(sendNowButton);
+            Assert.True(sendNowButton!.IsVisible);
+            Assert.False(vm.CanSendNow);
+
+            // Queue 3 prompts (first one carries an attachment).
+            vm.AddAttachment(new AcpPromptAttachment { Kind = "file", Path = Path.Combine(tempDir, "README.md"), DisplayName = "README.md" });
+            vm.InputText = "Task A\nsecond line";
+            Assert.True(vm.CanSend);
+            Assert.True(vm.CanSendNow);
+            Assert.True(vm.SendPromptCommand.CanExecute(null));
+            Assert.True(vm.SendPromptNowCommand.CanExecute(null));
+            await vm.SendPromptAsync();
+
+            vm.InputText = "Task B";
+            await vm.SendPromptAsync();
+            vm.InputText = "Task C";
+            await vm.SendPromptAsync();
+
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(3, vm.QueuedPrompts.Count);
+            Assert.Equal([1, 2, 3], vm.QueuedPrompts.Select(q => q.Position));
+            Assert.Equal([false, true, true], vm.QueuedPrompts.Select(q => q.CanMoveUp));
+            Assert.Equal([true, true, false], vm.QueuedPrompts.Select(q => q.CanMoveDown));
+            Assert.True(vm.QueuedPrompts[0].HasAttachments);
+            Assert.Equal("Task A second line", vm.QueuedPrompts[0].PreviewText);
+
+            // Collapse/expand preview works cleanly.
+            vm.ToggleQueueExpandedCommand.Execute(null);
+            Assert.False(vm.IsQueueExpanded);
+            Assert.True(vm.ShowCollapsedQueuePreview);
+            Assert.Equal("Task A second line", vm.FirstQueuedPreview);
+            vm.ToggleQueueExpandedCommand.Execute(null);
+            Assert.True(vm.IsQueueExpanded);
+
+            // Reorder: move Task C up -> [A, C, B], then remove Task B -> [A, C].
+            vm.QueuedPrompts[2].MoveUpCommand.Execute(null);
+            Assert.Equal(["Task A\nsecond line", "Task C", "Task B"], vm.QueuedPrompts.Select(q => q.Text));
+            Assert.Equal([1, 2, 3], vm.QueuedPrompts.Select(q => q.Position));
+            vm.QueuedPrompts[2].RemoveCommand.Execute(null);
+            Assert.Equal(["Task A\nsecond line", "Task C"], vm.QueuedPrompts.Select(q => q.Text));
+
+            // Edit Task A back into composer while preserving an unsent composer draft!
+            vm.InputText = "Draft D";
+            vm.QueuedPrompts[0].EditCommand.Execute(null);
+            Assert.Equal("Task A\nsecond line", vm.InputText);
+            Assert.Single(vm.Attachments);
+            Assert.Equal(["Task C", "Draft D"], vm.QueuedPrompts.Select(q => q.Text));
+
+            // 2. Immediate Send from composer via Cmd/Ctrl+Enter keyboard shortcut:
+            // gracefully cancels Hold 1, sends Urgent first, then drains [Task C, Draft D].
+            vm.InputText = "Urgent from composer";
+            var composerInput = view.FindControl<Avalonia.Controls.TextBox>("ComposerInput")!;
+            var sendNowMod = OperatingSystem.IsMacOS() ? Avalonia.Input.KeyModifiers.Meta : Avalonia.Input.KeyModifiers.Control;
+            composerInput.RaiseEvent(new Avalonia.Input.KeyEventArgs
+            {
+                RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent,
+                Key = Avalonia.Input.Key.Enter,
+                KeyModifiers = sendNowMod,
+            });
+            await turn1Task;
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready && !vm.HasQueuedPrompts);
+
+            Assert.Equal(1, maxConcurrentTurns);
+            Assert.False(vm.HasQueuedPrompts);
+            Assert.Equal(AgentGuiState.Ready, vm.State);
+            Assert.Equal(
+                [
+                    "start:Hold 1",
+                    "cancel",
+                    "end:Hold 1:cancelled",
+                    "start:Urgent from composer",
+                    "end:Urgent from composer:end_turn",
+                    "start:Task C",
+                    "end:Task C:end_turn",
+                    "start:Draft D",
+                    "end:Draft D:end_turn",
+                ],
+                events);
+
+            // 3. Immediate Send on a specific queued item (#2) interrupts current turn and runs #2 before #1.
+            events.Clear();
+            vm.InputText = "Hold 2";
+            var turn2Task = vm.SendPromptAsync();
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Working);
+
+            vm.InputText = "Queued 1";
+            await vm.SendPromptAsync();
+            vm.InputText = "Queued 2";
+            await vm.SendPromptAsync();
+
+            var secondQueued = vm.QueuedPrompts[1];
+            await secondQueued.SendNowCommand.ExecuteAsync(null);
+            await turn2Task;
+
+            Assert.Equal(
+                [
+                    "start:Hold 2",
+                    "cancel",
+                    "end:Hold 2:cancelled",
+                    "start:Queued 2",
+                    "end:Queued 2:end_turn",
+                    "start:Queued 1",
+                    "end:Queued 1:end_turn",
+                ],
+                events);
+
+            // 4. Manual Stop pauses queue draining instead of auto-sending remaining queued items; Resume drains them.
+            events.Clear();
+            vm.InputText = "Hold 3";
+            var turn3Task = vm.SendPromptAsync();
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Working);
+
+            vm.InputText = "Paused 1";
+            await vm.SendPromptAsync();
+            vm.InputText = "Paused 2";
+            await vm.SendPromptAsync();
+
+            await vm.CancelTurnAsync();
+            await turn3Task;
+
+            Assert.Equal(AgentGuiState.Ready, vm.State);
+            Assert.True(vm.IsQueuePaused);
+            Assert.True(vm.ShowResumeQueueButton);
+            Assert.Equal(["Paused 1", "Paused 2"], vm.QueuedPrompts.Select(q => q.Text));
+            Assert.Equal(["start:Hold 3", "cancel", "end:Hold 3:cancelled"], events);
+
+            await vm.ResumeQueueAsync();
+            Assert.False(vm.IsQueuePaused);
+            Assert.False(vm.HasQueuedPrompts);
+            Assert.Equal(
+                [
+                    "start:Hold 3",
+                    "cancel",
+                    "end:Hold 3:cancelled",
+                    "start:Paused 1",
+                    "end:Paused 1:end_turn",
+                    "start:Paused 2",
+                    "end:Paused 2:end_turn",
+                ],
+                events);
+            Assert.Equal(1, maxConcurrentTurns);
+        }
+        finally
+        {
+            fakeFactory.ConfigureNext = null;
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Send_now_works_during_waiting_approval_and_falls_back_when_agent_ignores_cancel()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-waiting-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "acp-gui-waiting");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        var prompts = new List<string>();
+        CancellationTokenSource? incomingCts = null;
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.PromptHandler = async (s, prompt, _, ct) =>
+            {
+                prompts.Add(prompt);
+                if (prompt == "Ask question")
+                {
+                    incomingCts = new CancellationTokenSource();
+                    using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, incomingCts.Token);
+                    await s.Callbacks.OnQuestionRequest!(new AcpQuestionRequest
+                    {
+                        RequestId = "q-wait",
+                        Title = "Need input",
+                        Questions = [new AcpQuestionItem { Id = "a", Prompt = "Proceed?", AllowFreeText = true }],
+                    }, linked.Token);
+                    // Simulate an agent returning JSON-RPC -32800 (RequestCancelled) on cancel.
+                    throw new Octopus.Acp.Transport.AcpRpcException(-32800, "Request cancelled");
+                }
+                if (prompt == "Stuck agent")
+                {
+                    // Ignores CancelAsync(); only completes when local _turnCts force-cancels after CancelGraceTimeout!
+                    await Task.Delay(Timeout.Infinite, ct);
+                }
+                s.Emit(new AcpTextDeltaEvent("assistant", $"Handled: {prompt}", null));
+                return new AcpPromptResult { StopReason = "end_turn" };
+            };
+            session.CancelHandler = _ =>
+            {
+                incomingCts?.Cancel();
+                return Task.CompletedTask;
+            };
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        vm.CancelGraceTimeout = TimeSpan.FromMilliseconds(80);
+        var window = new Window { Width = 920, Height = 640, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+
+            // 1. Active turn enters Waiting (open QuestionCard).
+            vm.InputText = "Ask question";
+            var waitTurnTask = vm.SendPromptAsync();
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Waiting && vm.Timeline.OfType<QuestionCardItem>().Any());
+
+            // Regular SendPromptAsync during Waiting MUST queue instead of firing an overlapping prompt!
+            vm.InputText = "Queued while waiting";
+            await vm.SendPromptAsync();
+            Assert.Single(prompts);
+            Assert.Single(vm.QueuedPrompts);
+
+            // SendPromptNowAsync interrupts Waiting, cancels the question card, ignores -32800 cleanly, and runs urgent + queued!
+            vm.InputText = "Interrupt waiting";
+            await vm.SendPromptNowAsync();
+            await waitTurnTask;
+
+            var qCard = vm.Timeline.OfType<QuestionCardItem>().Single();
+            Assert.True(qCard.IsResolved);
+            Assert.Equal(["Ask question", "Interrupt waiting", "Queued while waiting"], prompts);
+            Assert.All(vm.Timeline.OfType<AssistantTurnItem>(), t => Assert.False(t.HasError));
+
+            // 2. Non-compliant agent ignores session/cancel -> grace timeout force-cancels and still sends urgent prompt!
+            prompts.Clear();
+            vm.InputText = "Stuck agent";
+            var stuckTask = vm.SendPromptAsync();
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Working);
+
+            vm.InputText = "Force interrupt";
+            await vm.SendPromptNowAsync();
+            await stuckTask;
+
+            Assert.Equal(["Stuck agent", "Force interrupt"], prompts);
+            Assert.Equal(AgentGuiState.Ready, vm.State);
+            Assert.All(vm.Timeline.OfType<AssistantTurnItem>(), t => Assert.False(t.HasError));
+        }
+        finally
+        {
+            fakeFactory.ConfigureNext = null;
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
         }
     }
 

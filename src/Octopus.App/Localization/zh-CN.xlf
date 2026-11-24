@@ -1097,6 +1097,21 @@
     <unit id="AgentGuiCopyPrompt"><segment><source>Copy message</source><target state="translated">复制消息</target></segment></unit>
     <unit id="AgentGuiClearSession"><segment><source>Clear view</source><target state="translated">清屏</target></segment></unit>
     <unit id="AgentGuiQueuedBadge"><segment><source>Queued ({0})</source><target state="translated">待发送 ({0})</target></segment></unit>
+    <unit id="AgentGuiSendNow"><segment><source>Send now</source><target state="translated">立即发送</target></segment></unit>
+    <unit id="AgentGuiSendNowTip"><segment><source>Interrupt current turn and send immediately ({0})</source><target state="translated">打断当前回合并立即发送（{0}）</target></segment></unit>
+    <unit id="AgentGuiQueuePrompt"><segment><source>Queue</source><target state="translated">排队</target></segment></unit>
+    <unit id="AgentGuiQueuePromptTip"><segment><source>Add to send queue (Enter)</source><target state="translated">加入待发送队列（Enter）</target></segment></unit>
+    <unit id="AgentGuiQueuePaused"><segment><source>Paused</source><target state="translated">已暂停</target></segment></unit>
+    <unit id="AgentGuiQueueResume"><segment><source>Resume</source><target state="translated">继续发送</target></segment></unit>
+    <unit id="AgentGuiQueueClear"><segment><source>Clear all</source><target state="translated">清空</target></segment></unit>
+    <unit id="AgentGuiQueueToggle"><segment><source>Toggle queue list</source><target state="translated">展开或收起队列</target></segment></unit>
+    <unit id="AgentGuiQueueSendNowItemTip"><segment><source>Interrupt current turn and send this message now</source><target state="translated">打断当前回合并立即发送此消息</target></segment></unit>
+    <unit id="AgentGuiQueueEditItemTip"><segment><source>Edit in composer</source><target state="translated">放回输入框编辑</target></segment></unit>
+    <unit id="AgentGuiQueueMoveUpTip"><segment><source>Move up</source><target state="translated">上移</target></segment></unit>
+    <unit id="AgentGuiQueueMoveDownTip"><segment><source>Move down</source><target state="translated">下移</target></segment></unit>
+    <unit id="AgentGuiQueueRemoveItemTip"><segment><source>Remove from queue</source><target state="translated">移除</target></segment></unit>
+    <unit id="AgentGuiStopping"><segment><source>Stopping…</source><target state="translated">停止中…</target></segment></unit>
+    <unit id="AgentGuiQueueAttachmentCount"><segment><source>{0} attachment(s)</source><target state="translated">{0} 个附件</target></segment></unit>
     <unit id="AgentGuiComposerHint"><segment><source>Enter send · ⇧Enter newline · ↑↓ history</source><target state="translated">Enter 发送 · ⇧Enter 换行 · ↑↓ 历史</target></segment></unit>
     <unit id="AgentGuiQuickPromptOverview"><segment><source>Summarize this repository</source><target state="translated">概览当前仓库结构</target></segment></unit>
     <unit id="AgentGuiQuickPromptDiff"><segment><source>Review recent git changes</source><target state="translated">检查最近 Git 改动</target></segment></unit>

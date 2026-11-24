@@ -52,17 +52,28 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         if (_model is not null)
         {
             _model.ScrollToBottomRequested -= OnScrollToBottom;
+            _model.FocusComposerRequested -= OnFocusComposerRequested;
         }
         _model = DataContext as AgentGuiTabViewModel;
         if (_model is not null)
         {
             _model.ScrollToBottomRequested += OnScrollToBottom;
+            _model.FocusComposerRequested += OnFocusComposerRequested;
             if (!_started)
             {
                 _started = true;
                 _ = _model.ConnectAsync();
             }
         }
+    }
+
+    private void OnFocusComposerRequested(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            ComposerInput.Focus();
+            ComposerInput.CaretIndex = ComposerInput.Text?.Length ?? 0;
+        }, DispatcherPriority.Input);
     }
 
     private void OnTimelineScrollChanged(object? sender, ScrollChangedEventArgs e)
@@ -134,7 +145,7 @@ public partial class AgentGuiTabView : UserControl, ITabContent
                 _model.IsFilePopupOpen = false;
                 return;
             }
-            if (_model.IsWorking)
+            if (_model.IsTurnActive)
             {
                 e.Handled = true;
                 _ = _model.CancelTurnAsync();
@@ -177,7 +188,16 @@ public partial class AgentGuiTabView : UserControl, ITabContent
 
         if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
-            if (_model.CanSend)
+            var sendNowModifier = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+            if (e.KeyModifiers.HasFlag(sendNowModifier))
+            {
+                if (_model.CanSend)
+                {
+                    e.Handled = true;
+                    _ = _model.SendPromptNowAsync();
+                }
+            }
+            else if (e.KeyModifiers == KeyModifiers.None && _model.CanSend)
             {
                 e.Handled = true;
                 _ = _model.SendPromptAsync();

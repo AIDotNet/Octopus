@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -20,6 +21,7 @@ using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Storage;
+using TKCode.Arc.Icons.Lucide;
 
 namespace Octopus.App.AgentGui;
 
@@ -34,8 +36,130 @@ public enum AgentGuiState
     Error,
 }
 
-/// <summary>A queued follow-up prompt waiting for the active turn to finish.</summary>
-public sealed record QueuedPrompt(string Text, IReadOnlyList<AcpPromptAttachment> Attachments);
+/// <summary>A queued follow-up prompt waiting for dispatch in the ACP GUI queue tray.</summary>
+public sealed partial class QueuedPrompt : ObservableObject
+{
+    private readonly Func<QueuedPrompt, Task>? _onSendNow;
+    private readonly Action<QueuedPrompt>? _onEdit;
+    private readonly Action<QueuedPrompt>? _onMoveUp;
+    private readonly Action<QueuedPrompt>? _onMoveDown;
+    private readonly Action<QueuedPrompt>? _onRemove;
+
+    public QueuedPrompt(
+        string text,
+        IReadOnlyList<AcpPromptAttachment> attachments,
+        Func<QueuedPrompt, Task>? onSendNow = null,
+        Action<QueuedPrompt>? onEdit = null,
+        Action<QueuedPrompt>? onMoveUp = null,
+        Action<QueuedPrompt>? onMoveDown = null,
+        Action<QueuedPrompt>? onRemove = null)
+    {
+        Text = text;
+        Attachments = attachments;
+        _onSendNow = onSendNow;
+        _onEdit = onEdit;
+        _onMoveUp = onMoveUp;
+        _onMoveDown = onMoveDown;
+        _onRemove = onRemove;
+    }
+
+    public string Text { get; }
+    public IReadOnlyList<AcpPromptAttachment> Attachments { get; }
+
+    [ObservableProperty] public partial int Position { get; set; } = 1;
+    [ObservableProperty] public partial bool CanMoveUp { get; set; }
+    [ObservableProperty] public partial bool CanMoveDown { get; set; }
+
+    public string PositionText => Position.ToString();
+    public bool IsNext => Position == 1;
+    public int AttachmentCount => Attachments.Count;
+    public bool HasAttachments => Attachments.Count > 0;
+    public LucideIconKind AttachmentIcon => Attachments.Count > 0 && Attachments.All(a => a.Kind == "image")
+        ? LucideIconKind.Image
+        : LucideIconKind.FileText;
+
+    public string PreviewText
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Text))
+            {
+                return CollapseWhitespace(Text);
+            }
+            if (Attachments.Count > 0)
+            {
+                return string.Join(", ", Attachments.Select(AttachmentName));
+            }
+            return "";
+        }
+    }
+
+    public string FullTooltip
+    {
+        get
+        {
+            var body = Text.Length > 800 ? Text[..800] + "…" : Text;
+            if (Attachments.Count == 0) return body;
+            var names = string.Join(", ", Attachments.Select(AttachmentName));
+            return string.IsNullOrWhiteSpace(body) ? names : $"{body}\n[{names}]";
+        }
+    }
+
+    public string AttachmentTooltip =>
+        string.Join("\n", Attachments.Select(AttachmentName));
+
+    partial void OnPositionChanged(int value)
+    {
+        OnPropertyChanged(nameof(PositionText));
+        OnPropertyChanged(nameof(IsNext));
+    }
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private Task SendNowAsync() => _onSendNow?.Invoke(this) ?? Task.CompletedTask;
+
+    [RelayCommand]
+    private void Edit() => _onEdit?.Invoke(this);
+
+    [RelayCommand]
+    private void MoveUp() => _onMoveUp?.Invoke(this);
+
+    [RelayCommand]
+    private void MoveDown() => _onMoveDown?.Invoke(this);
+
+    [RelayCommand]
+    private void Remove() => _onRemove?.Invoke(this);
+
+    private static string AttachmentName(AcpPromptAttachment attachment) =>
+        string.IsNullOrWhiteSpace(attachment.DisplayName) ? Path.GetFileName(attachment.Path) : attachment.DisplayName;
+
+    private static string CollapseWhitespace(string value)
+    {
+        var sb = new StringBuilder(Math.Min(value.Length, 200));
+        var prevSpace = false;
+        foreach (var ch in value.Trim())
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                if (!prevSpace)
+                {
+                    sb.Append(' ');
+                    prevSpace = true;
+                }
+            }
+            else
+            {
+                sb.Append(ch);
+                prevSpace = false;
+            }
+            if (sb.Length >= 200)
+            {
+                sb.Append('…');
+                break;
+            }
+        }
+        return sb.ToString();
+    }
+}
 
 /// <summary>
 /// ViewModel for an ACP Agent GUI tab with Scheme D orchestration (Live Workflow Swimlane, Floating HUD Capsules,
@@ -74,6 +198,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private DispatcherTimer? _liveTickTimer;
     private CancellationTokenSource? _connectCts;
     private CancellationTokenSource? _turnCts;
+    private Task? _pumpTask;
+    private TaskCompletionSource? _activeTurnSettled;
+    private TaskCompletionSource? _cancellingTurn;
+    private QueuedPrompt? _urgentPrompt;
+    private bool _isTurnActive;
+    private bool _manualStopRequested;
     private readonly List<string> _workspaceFiles = [];
     private readonly List<string> _promptHistory = [];
     private int _historyCursor = -1;
@@ -197,6 +327,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     [ObservableProperty] public partial SubagentRunViewModel? SelectedSubagent { get; set; }
     [ObservableProperty] public partial BackgroundBashViewModel? SelectedBackgroundShell { get; set; }
     [ObservableProperty] public partial WorkflowPhase CurrentPhase { get; private set; } = WorkflowPhase.Idle;
+    [ObservableProperty] public partial bool IsQueueExpanded { get; set; } = true;
+    [ObservableProperty] public partial bool IsQueuePaused { get; private set; }
+    [ObservableProperty] public partial bool IsCancelling { get; private set; }
+
+    /// <summary>Grace period to wait for the ACP agent to reply to <c>session/prompt</c> after <c>session/cancel</c> before force-cancelling locally.</summary>
+    internal TimeSpan CancelGraceTimeout { get; set; } = TimeSpan.FromSeconds(2);
 
     public bool IsWorkflowHudOpen => ActiveHudPanel == HudPanelKind.Workflow;
     public bool IsSubagentsHudOpen => ActiveHudPanel == HudPanelKind.Subagents;
@@ -273,14 +409,27 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public bool IsConnecting => State == AgentGuiState.Connecting;
     public bool IsBusy => State is AgentGuiState.Connecting or AgentGuiState.Working;
     public bool IsWorking => State == AgentGuiState.Working;
+    public bool IsTurnActive => State is AgentGuiState.Working or AgentGuiState.Waiting;
     public bool CanSend => State is AgentGuiState.Ready or AgentGuiState.Waiting or AgentGuiState.Working
         && (!string.IsNullOrWhiteSpace(InputText) || Attachments.Count > 0);
+    public bool CanSendNow => IsTurnActive && CanSend;
     public bool ShowEmptyState => Timeline.Count == 0 && !HasErrorBanner && !IsAuthRequired;
     public bool HasTimeline => Timeline.Count > 0;
     public bool HasErrorBanner => !string.IsNullOrWhiteSpace(ErrorBanner);
     public bool HasAttachments => Attachments.Count > 0;
+    public int QueuedCount => QueuedPrompts.Count;
     public bool HasQueuedPrompts => QueuedPrompts.Count > 0;
+    public bool ShowResumeQueueButton => IsQueuePaused && HasQueuedPrompts && !IsTurnActive && State == AgentGuiState.Ready;
+    public string FirstQueuedPreview => QueuedPrompts.Count > 0 ? QueuedPrompts[0].PreviewText : "";
+    public bool ShowCollapsedQueuePreview => !IsQueueExpanded && HasQueuedPrompts;
     public string QueuedBadgeText => AppLangResources.Format(AppLangResourceKind.AgentGuiQueuedBadge, QueuedPrompts.Count);
+    public string SendNowTooltip => AppLangResources.Format(AppLangResourceKind.AgentGuiSendNowTip, OperatingSystem.IsMacOS() ? "⌘↵" : "Ctrl+↵");
+    public string SendButtonTooltip => IsTurnActive
+        ? AppLangResources.Get(AppLangResourceKind.AgentGuiQueuePromptTip)
+        : AppLangResources.Get(AppLangResourceKind.AgentGuiSend);
+    public string StopButtonLabel => IsCancelling
+        ? AppLangResources.Get(AppLangResourceKind.AgentGuiStopping)
+        : AppLangResources.Get(AppLangResourceKind.AgentGuiStop);
     public bool HasContextUsage => ContextSize > 0;
     public bool HasDiagnostics => !string.IsNullOrWhiteSpace(DiagnosticsText);
     public bool ShowReconnect => State is AgentGuiState.Disconnected or AgentGuiState.Error || IsAuthRequired;
@@ -320,7 +469,18 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     partial void OnStatusDetailChanged(string? value) => OnPropertyChanged(nameof(StatusText));
 
+    partial void OnIsQueueExpandedChanged(bool value) => OnPropertyChanged(nameof(ShowCollapsedQueuePreview));
+
+    partial void OnIsQueuePausedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowResumeQueueButton));
+        ResumeQueueCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsCancellingChanged(bool value) => OnPropertyChanged(nameof(StopButtonLabel));
+
     public event EventHandler<bool>? ScrollToBottomRequested;
+    public event EventHandler? FocusComposerRequested;
 
     partial void OnIsPinnedToBottomChanged(bool value) => OnPropertyChanged(nameof(ShowJumpToBottom));
 
@@ -329,11 +489,17 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         OnPropertyChanged(nameof(IsConnecting));
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(IsWorking));
+        OnPropertyChanged(nameof(IsTurnActive));
         OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(CanSendNow));
+        OnPropertyChanged(nameof(ShowResumeQueueButton));
+        OnPropertyChanged(nameof(SendButtonTooltip));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(ShowReconnect));
         SendPromptCommand.NotifyCanExecuteChanged();
+        SendPromptNowCommand.NotifyCanExecuteChanged();
         CancelTurnCommand.NotifyCanExecuteChanged();
+        ResumeQueueCommand.NotifyCanExecuteChanged();
 
         var mapped = value switch
         {
@@ -353,7 +519,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             _historyCursor = -1;
         }
         OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(CanSendNow));
         SendPromptCommand.NotifyCanExecuteChanged();
+        SendPromptNowCommand.NotifyCanExecuteChanged();
         UpdateInlinePickers(value);
     }
 
@@ -494,12 +662,26 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanSend))]
-    public async Task SendPromptAsync()
+    private QueuedPrompt CreateQueuedPrompt(string text, IReadOnlyList<AcpPromptAttachment> attachments) =>
+        new(
+            text,
+            attachments,
+            onSendNow: SendQueuedPromptNowAsync,
+            onEdit: EditQueuedPrompt,
+            onMoveUp: MoveQueuedPromptUp,
+            onMoveDown: MoveQueuedPromptDown,
+            onRemove: RemoveQueuedPrompt);
+
+    private void EnqueuePrompt(string text, IReadOnlyList<AcpPromptAttachment> attachments)
     {
-        var session = _session;
+        QueuedPrompts.Add(CreateQueuedPrompt(text, attachments));
+        RefreshQueueState();
+    }
+
+    private (string Text, List<AcpPromptAttachment> Attachments)? CaptureComposerPrompt()
+    {
         var text = InputText.Trim();
-        if (session is null || (text.Length == 0 && Attachments.Count == 0)) return;
+        if (text.Length == 0 && Attachments.Count == 0) return null;
 
         var attached = Attachments.Select(c => c.Attachment).ToList();
         InputText = "";
@@ -507,37 +689,243 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         IsCommandPopupOpen = false;
         IsFilePopupOpen = false;
         OnPropertyChanged(nameof(HasAttachments));
+        OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(CanSendNow));
+        SendPromptCommand.NotifyCanExecuteChanged();
+        SendPromptNowCommand.NotifyCanExecuteChanged();
 
         if (text.Length > 0 && (_promptHistory.Count == 0 || _promptHistory[^1] != text))
         {
             _promptHistory.Add(text);
         }
         _historyCursor = -1;
+        return (text, attached);
+    }
 
-        // If the agent is currently busy, queue this follow-up and dispatch automatically after the active turn finishes.
-        if (State == AgentGuiState.Working)
+    [RelayCommand(CanExecute = nameof(CanSend), AllowConcurrentExecutions = true)]
+    public async Task SendPromptAsync()
+    {
+        if (_session is null) return;
+        if (CaptureComposerPrompt() is not { } captured) return;
+
+        // If a turn is currently active (Working or Waiting for approval/question), queue this follow-up.
+        if (_isTurnActive || IsTurnActive)
         {
-            QueuedPrompts.Add(new QueuedPrompt(text, attached));
-            OnPropertyChanged(nameof(HasQueuedPrompts));
-            OnPropertyChanged(nameof(QueuedBadgeText));
+            EnqueuePrompt(captured.Text, captured.Attachments);
             return;
         }
 
-        await ExecutePromptAsync(session, text, attached);
+        await StartPumpAsync(CreateQueuedPrompt(captured.Text, captured.Attachments));
+    }
 
-        // Drain queued follow-up prompts sequentially if the session stays ready.
-        while (!_disposed && State == AgentGuiState.Ready && QueuedPrompts.Count > 0 && _session is { } activeSession)
+    /// <summary>Interrupts any active turn gracefully and immediately sends the composer's message.</summary>
+    [RelayCommand(CanExecute = nameof(CanSendNow), AllowConcurrentExecutions = true)]
+    public async Task SendPromptNowAsync()
+    {
+        if (_session is null) return;
+        if (CaptureComposerPrompt() is not { } captured) return;
+
+        var prompt = CreateQueuedPrompt(captured.Text, captured.Attachments);
+        if (_isTurnActive || IsTurnActive)
         {
-            var next = QueuedPrompts[0];
-            QueuedPrompts.RemoveAt(0);
-            OnPropertyChanged(nameof(HasQueuedPrompts));
-            OnPropertyChanged(nameof(QueuedBadgeText));
+            await InterruptAndSendAsync(prompt);
+            return;
+        }
+
+        await StartPumpAsync(prompt);
+    }
+
+    /// <summary>Promotes a queued prompt and sends it immediately (gracefully interrupting any active turn).</summary>
+    public async Task SendQueuedPromptNowAsync(QueuedPrompt item)
+    {
+        if (_disposed || _session is null) return;
+        if (!QueuedPrompts.Remove(item)) return;
+        RefreshQueueState();
+
+        if (_isTurnActive || IsTurnActive)
+        {
+            await InterruptAndSendAsync(item);
+            return;
+        }
+
+        await StartPumpAsync(item);
+    }
+
+    /// <summary>Moves a queued prompt back into the composer for editing without losing any existing draft.</summary>
+    public void EditQueuedPrompt(QueuedPrompt item)
+    {
+        var idx = QueuedPrompts.IndexOf(item);
+        if (idx < 0) return;
+        QueuedPrompts.RemoveAt(idx);
+
+        var existingText = InputText.Trim();
+        var existingAttachments = Attachments.Select(c => c.Attachment).ToList();
+        if (existingText.Length > 0 || existingAttachments.Count > 0)
+        {
+            QueuedPrompts.Add(CreateQueuedPrompt(existingText, existingAttachments));
+        }
+
+        Attachments.Clear();
+        foreach (var att in item.Attachments)
+        {
+            Attachments.Add(AttachmentChipViewModel.Removable(att, RemoveAttachment));
+        }
+        InputText = item.Text;
+        OnPropertyChanged(nameof(HasAttachments));
+        OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(CanSendNow));
+        SendPromptCommand.NotifyCanExecuteChanged();
+        SendPromptNowCommand.NotifyCanExecuteChanged();
+        RefreshQueueState();
+        FocusComposerRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void MoveQueuedPromptUp(QueuedPrompt item)
+    {
+        var idx = QueuedPrompts.IndexOf(item);
+        if (idx <= 0) return;
+        QueuedPrompts.Move(idx, idx - 1);
+        RefreshQueueState();
+    }
+
+    public void MoveQueuedPromptDown(QueuedPrompt item)
+    {
+        var idx = QueuedPrompts.IndexOf(item);
+        if (idx < 0 || idx >= QueuedPrompts.Count - 1) return;
+        QueuedPrompts.Move(idx, idx + 1);
+        RefreshQueueState();
+    }
+
+    public void RemoveQueuedPrompt(QueuedPrompt item)
+    {
+        if (QueuedPrompts.Remove(item))
+        {
+            RefreshQueueState();
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleQueueExpanded() => IsQueueExpanded = !IsQueueExpanded;
+
+    [RelayCommand(CanExecute = nameof(ShowResumeQueueButton), AllowConcurrentExecutions = true)]
+    public async Task ResumeQueueAsync()
+    {
+        if (_disposed || _session is null || QueuedPrompts.Count == 0) return;
+        IsQueuePaused = false;
+        RefreshQueueState();
+        if (_isTurnActive || IsTurnActive) return;
+        await StartPumpAsync();
+    }
+
+    private async Task InterruptAndSendAsync(QueuedPrompt urgent)
+    {
+        if (_disposed || _session is null) return;
+
+        // If another urgent prompt was already waiting for cancellation, keep it at the head of the queue.
+        if (_urgentPrompt is { } previousUrgent)
+        {
+            QueuedPrompts.Insert(0, previousUrgent);
+            RefreshQueueState();
+        }
+        _urgentPrompt = urgent;
+        _manualStopRequested = false;
+
+        if (_isTurnActive || IsTurnActive)
+        {
+            await RequestCancelActiveTurnAsync(isManualStop: false);
+            if (_pumpTask is { } pump)
+            {
+                await pump;
+            }
+        }
+
+        // Guard against the narrow window where the previous pump exited just as _urgentPrompt was set.
+        if (!_disposed && ReferenceEquals(_urgentPrompt, urgent))
+        {
+            _urgentPrompt = null;
+            await StartPumpAsync(urgent);
+        }
+    }
+
+    private Task StartPumpAsync(QueuedPrompt? initialPrompt = null)
+    {
+        if (_pumpTask is { IsCompleted: false })
+        {
+            if (initialPrompt is not null)
+            {
+                QueuedPrompts.Insert(0, initialPrompt);
+                RefreshQueueState();
+            }
+            return _pumpTask;
+        }
+
+        _pumpTask = RunTurnPumpAsync(initialPrompt);
+        return _pumpTask;
+    }
+
+    private async Task RunTurnPumpAsync(QueuedPrompt? initialPrompt)
+    {
+        var next = initialPrompt;
+        while (!_disposed && _session is { } activeSession)
+        {
+            if (next is null)
+            {
+                if (_urgentPrompt is { } urgent)
+                {
+                    _urgentPrompt = null;
+                    next = urgent;
+                }
+                else if (!_manualStopRequested && !IsQueuePaused && State == AgentGuiState.Ready && QueuedPrompts.Count > 0)
+                {
+                    next = QueuedPrompts[0];
+                    QueuedPrompts.RemoveAt(0);
+                    RefreshQueueState();
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            _manualStopRequested = false;
             await ExecutePromptAsync(activeSession, next.Text, next.Attachments);
+            next = null;
+
+            // 1. An urgent "Send Now" prompt always dispatches immediately after the cancelled turn settles.
+            if (_urgentPrompt is not null && State is not (AgentGuiState.Disconnected or AgentGuiState.Error))
+            {
+                if (State != AgentGuiState.Ready) SetUi(() => State = AgentGuiState.Ready);
+                continue;
+            }
+
+            // 2. Manual Stop pauses automatic queue draining so remaining queued prompts stay safe for user review.
+            if (_manualStopRequested)
+            {
+                _manualStopRequested = false;
+                if (QueuedPrompts.Count > 0)
+                {
+                    SetUi(() =>
+                    {
+                        IsQueuePaused = true;
+                        RefreshQueueState();
+                    });
+                }
+                break;
+            }
+
+            if (State != AgentGuiState.Ready || IsQueuePaused || QueuedPrompts.Count == 0)
+            {
+                break;
+            }
         }
     }
 
     private async Task ExecutePromptAsync(IAcpSession session, string text, IReadOnlyList<AcpPromptAttachment> attached)
     {
+        var turnSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _activeTurnSettled = turnSettled;
+        _isTurnActive = true;
+
         var userTurn = new UserTurnItem(text, attached, ReusePrompt);
         var assistantTurn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript);
         _activeTurn = assistantTurn;
@@ -568,11 +956,19 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             SetUi(() =>
             {
                 assistantTurn.Complete();
-                if (State == AgentGuiState.Working) State = AgentGuiState.Ready;
+                if (State is AgentGuiState.Working or AgentGuiState.Waiting) State = AgentGuiState.Ready;
                 RefreshDiagnostics();
             });
         }
         catch (OperationCanceledException)
+        {
+            SetUi(() =>
+            {
+                assistantTurn.Complete();
+                if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
+            });
+        }
+        catch (AcpRpcException ex) when (ex.Code == -32800)
         {
             SetUi(() =>
             {
@@ -605,21 +1001,54 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             {
                 _activeTurn = null;
             }
+            _isTurnActive = false;
+            if (ReferenceEquals(_activeTurnSettled, turnSettled))
+            {
+                _activeTurnSettled = null;
+            }
+            if (ReferenceEquals(_cancellingTurn, turnSettled))
+            {
+                _cancellingTurn = null;
+                SetUi(() => IsCancelling = false);
+            }
+            turnSettled.TrySetResult();
         }
+    }
+
+    private void RefreshQueueState()
+    {
+        for (var i = 0; i < QueuedPrompts.Count; i++)
+        {
+            var entry = QueuedPrompts[i];
+            entry.Position = i + 1;
+            entry.CanMoveUp = i > 0;
+            entry.CanMoveDown = i < QueuedPrompts.Count - 1;
+        }
+        if (QueuedPrompts.Count == 0 && IsQueuePaused)
+        {
+            IsQueuePaused = false;
+        }
+        OnPropertyChanged(nameof(QueuedCount));
+        OnPropertyChanged(nameof(HasQueuedPrompts));
+        OnPropertyChanged(nameof(QueuedBadgeText));
+        OnPropertyChanged(nameof(FirstQueuedPreview));
+        OnPropertyChanged(nameof(ShowCollapsedQueuePreview));
+        OnPropertyChanged(nameof(ShowResumeQueueButton));
+        ResumeQueueCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand]
     private void ClearQueuedPrompts()
     {
         QueuedPrompts.Clear();
-        OnPropertyChanged(nameof(HasQueuedPrompts));
-        OnPropertyChanged(nameof(QueuedBadgeText));
+        IsQueuePaused = false;
+        RefreshQueueState();
     }
 
     [RelayCommand]
     private void ClearTimeline()
     {
-        if (IsWorking) return;
+        if (IsTurnActive) return;
         Timeline.Clear();
         IsPinnedToBottom = true;
         OnPropertyChanged(nameof(ShowEmptyState));
@@ -631,11 +1060,16 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     [RelayCommand]
     public async Task NewSessionAsync()
     {
-        if (IsWorking) await CancelTurnAsync();
+        if (IsTurnActive || _isTurnActive) await CancelTurnAsync();
         _item.AcpSessionId = null;
         if (_item.Launch is not null) _item.Launch.SessionId = null;
         _titledFromPrompt = false;
+        _urgentPrompt = null;
+        _cancellingTurn = null;
+        _manualStopRequested = false;
         QueuedPrompts.Clear();
+        IsQueuePaused = false;
+        IsQueueExpanded = true;
         Timeline.Clear();
         ResetOrchestrationState();
         ContextUsed = 0;
@@ -643,8 +1077,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         ContextCostAmount = null;
         ContextCostCurrency = null;
         IsPinnedToBottom = true;
-        OnPropertyChanged(nameof(HasQueuedPrompts));
-        OnPropertyChanged(nameof(QueuedBadgeText));
+        RefreshQueueState();
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(HasTimeline));
         OnPropertyChanged(nameof(ShowJumpToBottom));
@@ -657,6 +1090,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         if (string.IsNullOrWhiteSpace(text)) return;
         InputText = text;
+        FocusComposerRequested?.Invoke(this, EventArgs.Empty);
     }
 
     [RelayCommand]
@@ -677,18 +1111,75 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    [RelayCommand(CanExecute = nameof(IsWorking))]
-    public async Task CancelTurnAsync()
+    [RelayCommand(CanExecute = nameof(IsTurnActive), AllowConcurrentExecutions = true)]
+    public Task CancelTurnAsync() => RequestCancelActiveTurnAsync(isManualStop: true);
+
+    private async Task RequestCancelActiveTurnAsync(bool isManualStop)
     {
-        if (_session is null) return;
-        _turnCts?.Cancel();
+        var session = _session;
+        if (session is null || (!_isTurnActive && !IsTurnActive)) return;
+
+        if (isManualStop)
+        {
+            _manualStopRequested = true;
+            if (_urgentPrompt is { } pendingUrgent)
+            {
+                _urgentPrompt = null;
+                QueuedPrompts.Insert(0, pendingUrgent);
+                RefreshQueueState();
+            }
+        }
+
+        var turnSettled = _activeTurnSettled;
+        var turnCts = _turnCts;
+        if (turnSettled is null || turnSettled.Task.IsCompleted) return;
+
+        // Clicking Stop a second time on the same active turn forces an immediate local abort.
+        if (ReferenceEquals(_cancellingTurn, turnSettled))
+        {
+            try { turnCts?.Cancel(); } catch (ObjectDisposedException) { }
+            return;
+        }
+
+        _cancellingTurn = turnSettled;
+        var settledTask = turnSettled.Task;
+        SetUi(() => IsCancelling = true);
+
         try
         {
-            await _session.CancelAsync();
+            try
+            {
+                await session.CancelAsync();
+            }
+            catch
+            {
+                // Best-effort cancellation notification.
+            }
+
+            if (!settledTask.IsCompleted)
+            {
+                using var graceCts = new CancellationTokenSource();
+                var delayTask = Task.Delay(CancelGraceTimeout, graceCts.Token);
+                var completed = await Task.WhenAny(settledTask, delayTask);
+                if (ReferenceEquals(completed, settledTask))
+                {
+                    graceCts.Cancel();
+                }
+                else
+                {
+                    // Agent did not settle session/prompt within grace window -> force local RPC abort.
+                    try { turnCts?.Cancel(); } catch (ObjectDisposedException) { }
+                    try { await settledTask.WaitAsync(TimeSpan.FromMilliseconds(500)); } catch { }
+                }
+            }
         }
-        catch
+        finally
         {
-            // Best-effort cancellation.
+            if (ReferenceEquals(_cancellingTurn, turnSettled))
+            {
+                _cancellingTurn = null;
+                SetUi(() => IsCancelling = false);
+            }
         }
     }
 
@@ -1012,7 +1503,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         Attachments.Add(AttachmentChipViewModel.Removable(attachment, RemoveAttachment));
         OnPropertyChanged(nameof(HasAttachments));
         OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(CanSendNow));
         SendPromptCommand.NotifyCanExecuteChanged();
+        SendPromptNowCommand.NotifyCanExecuteChanged();
     }
 
     private void RemoveAttachment(AttachmentChipViewModel chip)
@@ -1020,7 +1513,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         Attachments.Remove(chip);
         OnPropertyChanged(nameof(HasAttachments));
         OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(CanSendNow));
         SendPromptCommand.NotifyCanExecuteChanged();
+        SendPromptNowCommand.NotifyCanExecuteChanged();
     }
 
     private void UpdateInlinePickers(string text)
@@ -1641,7 +2136,15 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (request.IsPlanApproval)
         {
             PlanApprovalCardItem? planCard = null;
-            var planReg = ct.Register(() => tcs.TrySetResult(null));
+            CancellationTokenRegistration planReg = default;
+            planReg = ct.Register(() =>
+            {
+                tcs.TrySetResult(null);
+                SetUi(() =>
+                {
+                    if (planCard is { IsResolved: false }) planCard.CancelCommand.Execute(null);
+                });
+            });
             SetUi(() =>
             {
                 var prev = State;
@@ -1658,9 +2161,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     tcs.TrySetResult(optionId);
                     if (!string.IsNullOrWhiteSpace(feedback))
                     {
-                        QueuedPrompts.Add(new QueuedPrompt(feedback!, []));
-                        OnPropertyChanged(nameof(HasQueuedPrompts));
-                        OnPropertyChanged(nameof(QueuedBadgeText));
+                        EnqueuePrompt(feedback!, []);
                     }
                 });
                 Timeline.Add(planCard);
@@ -1729,14 +2230,24 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?> HandleQuestionRequestAsync(AcpQuestionRequest request, CancellationToken ct)
     {
         var tcs = new TaskCompletionSource<IReadOnlyDictionary<string, IReadOnlyList<string>>?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var reg = ct.Register(() => tcs.TrySetResult(null));
+        QuestionCardItem? card = null;
+        CancellationTokenRegistration reg = default;
+        reg = ct.Register(() =>
+        {
+            tcs.TrySetResult(null);
+            SetUi(() =>
+            {
+                if (card is { IsResolved: false }) card.CancelCommand.Execute(null);
+            });
+        });
 
         SetUi(() =>
         {
             var prev = State;
             State = AgentGuiState.Waiting;
-            var card = new QuestionCardItem(request, answers =>
+            card = new QuestionCardItem(request, answers =>
             {
+                reg.Dispose();
                 if (State == AgentGuiState.Waiting) State = prev == AgentGuiState.Working ? AgentGuiState.Working : AgentGuiState.Ready;
                 tcs.TrySetResult(answers);
             });
@@ -1843,6 +2354,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         _activeTurn?.Complete();
         _activeTurn = null;
+        _urgentPrompt = null;
+        _cancellingTurn = null;
+        _manualStopRequested = false;
+        _isTurnActive = false;
+        SetUi(() => IsCancelling = false);
         _connectCts?.Cancel();
         _connectCts?.Dispose();
         _connectCts = null;

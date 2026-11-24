@@ -221,6 +221,96 @@
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
         </Style>
 
+        <!-- Docked queued prompts tray above composer -->
+        <Style Selector="Border.queueTray">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.16" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.queueTray.paused">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Warning}" />
+        </Style>
+        <Style Selector="Border.queueItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="6,4" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.queueItem:pointerover">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+        <Style Selector="Border.queueItem StackPanel.queueActions">
+            <Setter Property="Opacity" Value="0.72" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.queueItem:pointerover StackPanel.queueActions, Border.queueItem:focus-within StackPanel.queueActions">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Border.queueIndex">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        </Style>
+        <Style Selector="Border.queueIndex.next">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        </Style>
+        <Style Selector="Border.queueIndex TextBlock">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+        <Style Selector="Border.queueIndex.next TextBlock">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+        </Style>
+        <Style Selector="Button.queueSendNowChip">
+            <Setter Property="Height" Value="21" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            </Style>
+        </Style>
+
         <!-- Frameless multiline TextBox integrated cleanly inside ComposerCard (no double border) -->
         <Style Selector="TextBox.composerInput">
             <Setter Property="Background" Value="Transparent" />
@@ -1881,20 +1971,205 @@
         <!-- Compact Floating Dynamic Agent-Driven Composer -->
         <Border Grid.Row="2" Padding="{DynamicResource OctopusAgentGuiComposerMargin}" Background="{arc:ArcDesignTokenResource Background}">
             <StackPanel MaxWidth="860" HorizontalAlignment="Stretch" Spacing="4">
-                <!-- Queued follow-up indicator while agent is busy -->
+                <!-- Docked queued prompts tray above composer -->
                 <common:SmoothCollapse IsExpanded="{Binding HasQueuedPrompts}">
-                    <Border Padding="8,3" CornerRadius="6"
-                            Background="{arc:ArcDesignTokenResource AccentSubtle}"
-                            BorderBrush="{arc:ArcDesignTokenResource AccentStrong}"
-                            BorderThickness="1">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-                            <lucide:LucideIcon Kind="Clock" Size="12" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1" Classes="hint" Foreground="{arc:ArcDesignTokenResource AccentStrong}"
-                                       Text="{Binding QueuedBadgeText}" VerticalAlignment="Center" />
-                            <Button Grid.Column="2" Classes="row" Width="16" Height="16" Command="{Binding ClearQueuedPromptsCommand}">
-                                <lucide:LucideIcon Kind="X" Size="11" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Button>
-                        </Grid>
+                    <Border x:Name="QueuedPromptsTray"
+                            Classes="queueTray"
+                            Classes.paused="{Binding IsQueuePaused}">
+                        <StackPanel Spacing="0">
+                            <!-- Queue Tray Header -->
+                            <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                    Padding="8,4">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
+                                    <Button Grid.Column="0" Classes="row" Padding="2,1"
+                                            Command="{Binding ToggleQueueExpandedCommand}"
+                                            AutomationProperties.Name="{l:AppLangResource AgentGuiQueueToggle}"
+                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiQueueToggle}">
+                                        <Grid ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="6">
+                                            <lucide:LucideIcon Grid.Column="0"
+                                                               Kind="Clock" Size="12"
+                                                               IsVisible="{Binding !IsQueuePaused}"
+                                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                               VerticalAlignment="Center" />
+                                            <lucide:LucideIcon Grid.Column="0"
+                                                               Kind="Pause" Size="12"
+                                                               IsVisible="{Binding IsQueuePaused}"
+                                                               Foreground="{arc:ArcDesignTokenResource Warning}"
+                                                               VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1"
+                                                       FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                                       Text="{Binding QueuedBadgeText}"
+                                                       VerticalAlignment="Center" />
+                                            <Border Grid.Column="2"
+                                                    IsVisible="{Binding IsQueuePaused}"
+                                                    Padding="5,0"
+                                                    CornerRadius="4"
+                                                    Background="{arc:ArcDesignTokenResource Surface}"
+                                                    BorderBrush="{arc:ArcDesignTokenResource Warning}"
+                                                    BorderThickness="1"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock FontSize="10" FontWeight="SemiBold"
+                                                           Foreground="{arc:ArcDesignTokenResource Warning}"
+                                                           Text="{l:AppLangResource AgentGuiQueuePaused}" />
+                                            </Border>
+                                            <TextBlock Grid.Column="3"
+                                                       IsVisible="{Binding ShowCollapsedQueuePreview}"
+                                                       Classes="hint"
+                                                       MaxLines="1"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Text="{Binding FirstQueuedPreview}"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Button>
+
+                                    <arc:Button Grid.Column="1"
+                                                x:Name="ResumeQueueButton"
+                                                Size="Small" Variant="Secondary"
+                                                IsVisible="{Binding ShowResumeQueueButton}"
+                                                Command="{Binding ResumeQueueCommand}">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <lucide:LucideIcon Kind="Play" Size="10" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                                            <TextBlock FontSize="11" Text="{l:AppLangResource AgentGuiQueueResume}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </arc:Button>
+
+                                    <Button Grid.Column="2"
+                                            x:Name="ClearQueueButton"
+                                            Classes="composerChip" Height="22" Padding="6,0"
+                                            Command="{Binding ClearQueuedPromptsCommand}"
+                                            AutomationProperties.Name="{l:AppLangResource AgentGuiQueueClear}"
+                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiQueueClear}">
+                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                            <lucide:LucideIcon Kind="Trash2" Size="11" VerticalAlignment="Center" />
+                                            <TextBlock FontSize="11" Text="{l:AppLangResource AgentGuiQueueClear}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+
+                                    <Button Grid.Column="3"
+                                            x:Name="ToggleQueueExpandButton"
+                                            Classes="composerChip" Width="22" Height="22" Padding="0"
+                                            Command="{Binding ToggleQueueExpandedCommand}"
+                                            AutomationProperties.Name="{l:AppLangResource AgentGuiQueueToggle}"
+                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiQueueToggle}">
+                                        <lucide:LucideIcon Classes="chevronPop" Classes.open="{Binding IsQueueExpanded}"
+                                                           Kind="ChevronDown" Size="12"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Button>
+                                </Grid>
+                            </Border>
+
+                            <!-- Collapsible Scrollable Queue List -->
+                            <common:SmoothCollapse IsExpanded="{Binding IsQueueExpanded}">
+                                <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                        BorderThickness="0,1,0,0">
+                                    <arc:ScrollArea MaxHeight="168" Orientation="Vertical" FadeLength="0" Padding="5,4">
+                                        <ItemsControl x:Name="QueuedPromptsList" ItemsSource="{Binding QueuedPrompts}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Spacing="2" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="gui:QueuedPrompt">
+                                                    <Border Classes="queueItem">
+                                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                                                            <!-- 1-based queue order badge -->
+                                                            <Border Grid.Column="0"
+                                                                    Classes="queueIndex"
+                                                                    Classes.next="{Binding IsNext}"
+                                                                    Width="18" Height="18"
+                                                                    CornerRadius="4"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding PositionText}"
+                                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                           FontSize="10.5"
+                                                                           FontWeight="SemiBold"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center" />
+                                                            </Border>
+
+                                                            <!-- Prompt preview with full-text tooltip -->
+                                                            <TextBlock Grid.Column="1"
+                                                                       Text="{Binding PreviewText}"
+                                                                       arc:Tooltip.Tip="{Binding FullTooltip}"
+                                                                       FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                                       Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                                                       MaxLines="1"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       VerticalAlignment="Center" />
+
+                                                            <!-- Attachment count badge -->
+                                                            <Border Grid.Column="2"
+                                                                    IsVisible="{Binding HasAttachments}"
+                                                                    Padding="5,1" CornerRadius="4"
+                                                                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                                                    BorderThickness="1"
+                                                                    VerticalAlignment="Center"
+                                                                    arc:Tooltip.Tip="{Binding AttachmentTooltip}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                                    <lucide:LucideIcon Kind="{Binding AttachmentIcon}" Size="10"
+                                                                                       Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                                                       VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding AttachmentCount}"
+                                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                               FontSize="10"
+                                                                               Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                                               VerticalAlignment="Center" />
+                                                                </StackPanel>
+                                                            </Border>
+
+                                                            <!-- Per-item quick actions -->
+                                                            <StackPanel Grid.Column="3" Classes="queueActions" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                                                <Button Classes="queueSendNowChip"
+                                                                        Command="{Binding SendNowCommand}"
+                                                                        AutomationProperties.Name="{l:AppLangResource AgentGuiSendNow}"
+                                                                        arc:Tooltip.Tip="{l:AppLangResource AgentGuiQueueSendNowItemTip}">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                                                        <lucide:LucideIcon Kind="Zap" Size="10.5" VerticalAlignment="Center" />
+                                                                        <TextBlock FontSize="10.5" FontWeight="Medium"
+                                                                                   Text="{l:AppLangResource AgentGuiSendNow}"
+                                                                                   VerticalAlignment="Center" />
+                                                                    </StackPanel>
+                                                                </Button>
+                                                                <arc:Button Classes="icon" Variant="Ghost"
+                                                                            IsVisible="{Binding CanMoveUp}"
+                                                                            Command="{Binding MoveUpCommand}"
+                                                                            AutomationProperties.Name="{l:AppLangResource AgentGuiQueueMoveUpTip}"
+                                                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiQueueMoveUpTip}">
+                                                                    <lucide:LucideIcon Kind="ArrowUp" Size="11" />
+                                                                </arc:Button>
+                                                                <arc:Button Classes="icon" Variant="Ghost"
+                                                                            IsVisible="{Binding CanMoveDown}"
+                                                                            Command="{Binding MoveDownCommand}"
+                                                                            AutomationProperties.Name="{l:AppLangResource AgentGuiQueueMoveDownTip}"
+                                                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiQueueMoveDownTip}">
+                                                                    <lucide:LucideIcon Kind="ArrowDown" Size="11" />
+                                                                </arc:Button>
+                                                                <arc:Button Classes="icon" Variant="Ghost"
+                                                                            Command="{Binding EditCommand}"
+                                                                            AutomationProperties.Name="{l:AppLangResource AgentGuiQueueEditItemTip}"
+                                                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiQueueEditItemTip}">
+                                                                    <lucide:LucideIcon Kind="Pencil" Size="11" />
+                                                                </arc:Button>
+                                                                <arc:Button Classes="icon" Variant="Ghost"
+                                                                            Command="{Binding RemoveCommand}"
+                                                                            AutomationProperties.Name="{l:AppLangResource AgentGuiQueueRemoveItemTip}"
+                                                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiQueueRemoveItemTip}">
+                                                                    <lucide:LucideIcon Kind="X" Size="11" />
+                                                                </arc:Button>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </arc:ScrollArea>
+                                </Border>
+                            </common:SmoothCollapse>
+                        </StackPanel>
                     </Border>
                 </common:SmoothCollapse>
 
@@ -2292,23 +2567,41 @@
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                                 <TextBlock Classes="hint" Opacity="0.6" VerticalAlignment="Center"
-                                           IsVisible="{Binding !IsWorking}"
+                                           IsVisible="{Binding !IsTurnActive}"
                                            Text="{l:AppLangResource AgentGuiComposerHint}" />
                                 <arc:Button x:Name="StopButton"
                                             Variant="Secondary" Size="Small"
-                                            IsVisible="{Binding IsWorking}"
+                                            IsVisible="{Binding IsTurnActive}"
                                             Command="{Binding CancelTurnCommand}"
-                                            AutomationProperties.Name="{l:AppLangResource AgentGuiStop}">
+                                            AutomationProperties.Name="{Binding StopButtonLabel}">
                                     <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <lucide:LucideIcon Kind="Square" Size="11" VerticalAlignment="Center" />
-                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" Text="{l:AppLangResource AgentGuiStop}" VerticalAlignment="Center" />
+                                        <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsCancelling}" VerticalAlignment="Center" />
+                                        <lucide:LucideIcon Kind="Square" Size="11" IsVisible="{Binding !IsCancelling}" VerticalAlignment="Center" />
+                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" Text="{Binding StopButtonLabel}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </arc:Button>
+                                <arc:Button x:Name="SendNowButton"
+                                            Variant="Secondary" Size="Small"
+                                            IsVisible="{Binding IsTurnActive}"
+                                            Command="{Binding SendPromptNowCommand}"
+                                            AutomationProperties.Name="{l:AppLangResource AgentGuiSendNow}"
+                                            arc:Tooltip.Tip="{Binding SendNowTooltip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <lucide:LucideIcon Kind="Zap" Size="11.5" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" Text="{l:AppLangResource AgentGuiSendNow}" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </arc:Button>
                                 <arc:Button x:Name="SendButton"
                                             Size="Small"
                                             Command="{Binding SendPromptCommand}"
-                                            AutomationProperties.Name="{l:AppLangResource AgentGuiSend}">
-                                    <lucide:LucideIcon Kind="ArrowUp" Size="13" VerticalAlignment="Center" />
+                                            AutomationProperties.Name="{Binding SendButtonTooltip}"
+                                            arc:Tooltip.Tip="{Binding SendButtonTooltip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <lucide:LucideIcon Kind="Clock" Size="12" IsVisible="{Binding IsTurnActive}" VerticalAlignment="Center" />
+                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" IsVisible="{Binding IsTurnActive}"
+                                                   Text="{l:AppLangResource AgentGuiQueuePrompt}" VerticalAlignment="Center" />
+                                        <lucide:LucideIcon Kind="ArrowUp" Size="13" IsVisible="{Binding !IsTurnActive}" VerticalAlignment="Center" />
+                                    </StackPanel>
                                 </arc:Button>
                             </StackPanel>
                         </Grid>
