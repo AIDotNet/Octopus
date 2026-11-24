@@ -166,6 +166,34 @@ public sealed class PluginViewTests
         Assert.Equal(2, split.Children.OfType<GridSplitter>().Count());
     }
 
+    [AvaloniaFact]
+    public void Progress_Height_SizesTheTrackWithoutClipping()
+    {
+        var renderer = new UiRenderer(new RecordingSink());
+        var progress = (Progress)renderer.Render(Node("""{ "t": "Progress", "p": { "value": 0.25, "height": 4 } }"""), null);
+        var window = new Window { Width = 300, Height = 100, Content = new StackPanel { Children = { progress } } };
+        window.Show();
+        Frames.Pump();
+
+        var track = progress.GetVisualDescendants().OfType<Control>().Single(c => c.Name == Progress.TrackPart);
+        Assert.True(double.IsNaN(progress.Height));
+        Assert.Equal(4, track.Bounds.Height);
+        Assert.Equal(4, progress.Bounds.Height);
+
+        // Removing height restores Arc's default track height (7px) instead of staying clipped at 4px.
+        renderer.Render(Node("""{ "t": "Progress", "p": { "value": 0.25 } }"""), progress);
+        Frames.Pump();
+        Assert.Equal(7, track.Bounds.Height);
+        Assert.Equal(7, progress.Bounds.Height);
+
+        // With a label, numeric height thins only the track so the label above it is not clipped.
+        renderer.Render(Node("""{ "t": "Progress", "p": { "value": 0.25, "label": "5h", "height": 4 } }"""), progress);
+        Frames.Pump();
+        Assert.Equal(4, track.Bounds.Height);
+        Assert.True(progress.Bounds.Height > track.Bounds.Height);
+        window.Close();
+    }
+
     private sealed class RecordingSurface : IPluginSurface
     {
         public List<JsonNode?> Trees { get; } = [];

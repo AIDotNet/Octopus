@@ -118,7 +118,7 @@ public sealed class UiRenderer(IUiEventSink sink)
                 state.Children = ReconcileChildren(state.Children, node["c"] as JsonArray);
                 state.Component.SetChildren(control, state, state.Children);
             }
-            if (!unchanged) UiLayout.ApplyCommon(control, props);
+            if (!unchanged) UiLayout.ApplyCommon(control, props, applyHeight: !state.Component.OwnsHeight);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException or FormatException or OverflowException)
         {
@@ -244,6 +244,8 @@ public sealed class UiRenderer(IUiEventSink sink)
 internal interface IUiComponent
 {
     bool HasChildren => false;
+    /// <summary>True when the component applies numeric <c>height</c> itself instead of sizing the outer control.</summary>
+    bool OwnsHeight => false;
     Control Create(NodeState state, UiRenderer renderer);
     void Update(Control control, NodeState state, UiRenderer renderer);
     void SetChildren(Control control, NodeState state, IReadOnlyList<Control> children) { }
@@ -289,7 +291,7 @@ internal static class UiLayout
         _ => default,
     };
 
-    public static void ApplyCommon(Control control, JsonObject p)
+    public static void ApplyCommon(Control control, JsonObject p, bool applyHeight = true)
     {
         control.IsVisible = UiProps.Bool(p, "visible") ?? true;
         if (p["margin"] is { } margin) control.Margin = Spacing(margin);
@@ -304,7 +306,7 @@ internal static class UiLayout
         }
         switch (p["height"])
         {
-            case JsonValue v when v.TryGetValue<double>(out var h):
+            case JsonValue v when applyHeight && v.TryGetValue<double>(out var h):
                 control.Height = Math.Clamp(h, 0, 4000);
                 break;
             case JsonValue v when v.TryGetValue<string>(out var s) && s == "fill":

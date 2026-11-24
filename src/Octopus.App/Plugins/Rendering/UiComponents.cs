@@ -549,6 +549,8 @@ internal sealed class KbdComponent : IUiComponent
 
 internal sealed class ProgressComponent : IUiComponent
 {
+    public bool OwnsHeight => true;
+
     public Control Create(NodeState state, UiRenderer renderer) => new Progress { Maximum = 1 };
 
     public void Update(Control control, NodeState state, UiRenderer renderer)
@@ -557,6 +559,19 @@ internal sealed class ProgressComponent : IUiComponent
         progress.Value = Math.Clamp(Num(state.Props, "value") ?? 0, 0, 1);
         progress.Label = Str(state.Props, "label");
         progress.IsValueVisible = Str(state.Props, "label") is not null;
+        ApplyTrackHeight(progress, state.Props);
+    }
+
+    /// <summary>
+    /// Arc's <see cref="Progress"/> sizes its bar from <see cref="ProgressTokenKind.TrackHeight"/> (default 7px).
+    /// Setting <c>Control.Height</c> clips the track vertically instead of thinning it, so numeric <c>height</c>
+    /// overrides the track token while keeping the outer height automatic (leaving any label above the track intact).
+    /// </summary>
+    internal static void ApplyTrackHeight(Progress progress, JsonObject props)
+    {
+        var key = ProgressTokens.Key(ProgressTokenKind.TrackHeight);
+        if (Num(props, "height") is { } h) progress.Resources[key] = Math.Clamp(h, 3, 4000);
+        else progress.Resources.Remove(key);
     }
 }
 
@@ -668,6 +683,8 @@ internal sealed class TooltipComponent : IUiComponent
 /// <summary>A labeled usage bar (value of max) whose color follows the level.</summary>
 internal sealed class MeterComponent : IUiComponent
 {
+    public bool OwnsHeight => true;
+
     public Control Create(NodeState state, UiRenderer renderer) => new Progress { IsValueVisible = true };
 
     public void Update(Control control, NodeState state, UiRenderer renderer)
@@ -676,6 +693,7 @@ internal sealed class MeterComponent : IUiComponent
         meter.Maximum = Num(state.Props, "max") ?? 100;
         meter.Value = Math.Clamp(Num(state.Props, "value") ?? 0, 0, meter.Maximum);
         meter.Label = Str(state.Props, "label") is { } label && Str(state.Props, "detail") is { } detail ? $"{label} · {detail}" : Str(state.Props, "label");
+        ProgressComponent.ApplyTrackHeight(meter, state.Props);
     }
 }
 
