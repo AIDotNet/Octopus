@@ -17,9 +17,11 @@ public sealed partial class NdjsonLineFramer
 {
     public const int DefaultMaxLineBytes = 16 * 1024 * 1024;
     private const int PrefixCaptureBytes = 4096;
+    private const int InitialBufferCapacity = 4096;
+    private const int ShrinkBufferThreshold = 64 * 1024;
 
     private readonly int _maxLineBytes;
-    private readonly MemoryStream _buffer = new(4096);
+    private MemoryStream _buffer = new(InitialBufferCapacity);
     private readonly List<byte> _oversizedPrefix = new(PrefixCaptureBytes);
     private bool _droppingOversized;
     private long _oversizedBytes;
@@ -66,10 +68,24 @@ public sealed partial class NdjsonLineFramer
 
     public void Reset()
     {
-        _buffer.SetLength(0);
+        ResetBuffer();
         _oversizedPrefix.Clear();
         _droppingOversized = false;
         _oversizedBytes = 0;
+    }
+
+    private void ResetBuffer()
+    {
+        if (_buffer.Capacity > ShrinkBufferThreshold)
+        {
+            // Release multi-megabyte backing array retained after a large tool output line.
+            _buffer.Dispose();
+            _buffer = new MemoryStream(InitialBufferCapacity);
+        }
+        else
+        {
+            _buffer.SetLength(0);
+        }
     }
 
     private void AppendSegment(ReadOnlySpan<byte> segment)
@@ -93,7 +109,7 @@ public sealed partial class NdjsonLineFramer
                 CapturePrefix(existing.AsSpan());
             }
             CapturePrefix(segment);
-            _buffer.SetLength(0);
+            ResetBuffer();
             return;
         }
 
@@ -129,41 +145,73 @@ public sealed partial class NdjsonLineFramer
 
         if (_buffer.Length == 0) return;
 
-        var raw = _buffer.TryGetBuffer(out var seg) ? seg.AsSpan() : _buffer.ToArray().AsSpan();
-        // Strip trailing CR from CRLF lines.
-        if (!raw.IsEmpty && raw[^1] == (byte)'\r')
-        {
-            raw = raw[..^1];
-        }
-        var copy = raw.ToArray();
-        _buffer.SetLength(0);
+        var hasUnderlying = _buffer.TryGetBuffer(out var seg);
+        var raw = hasUnderlying ? seg.AsSpan() : _buffer.ToArray().AsSpan();
 
-        // Skip empty / whitespace-only lines silently.
-        var trimmed = Encoding.UTF8.GetString(copy).Trim();
-        if (trimmed.Length == 0) return;
+        // Trim ASCII whitespace without allocating a full UTF-8 string on the hot JSON path.
+        var start = 0;
+        var end = raw.Length;
+        while (start < end && IsAsciiWhitespace(raw[start])) start++;
+        while (end > start && IsAsciiWhitespace(raw[end - 1])) end--;
 
-        if (!trimmed.StartsWith('{'))
+        if (start >= end)
         {
-            onOtherLine(trimmed);
+            ResetBuffer();
             return;
+        }
+
+        var trimmedSpan = raw[start..end];
+        if (trimmedSpan[0] != (byte)'{')
+        {
+            var other = Encoding.UTF8.GetString(trimmedSpan).Trim();
+            ResetBuffer();
+            if (other.Length > 0)
+            {
+                onOtherLine(other);
+            }
+            return;
+        }
+
+        // Parse directly from the pooled buffer slice; callbacks must consume/dispose doc synchronously.
+        var slice = hasUnderlying
+            ? new ReadOnlyMemory<byte>(seg.Array!, seg.Offset + start, end - start)
+            : trimmedSpan.ToArray();
+
+        JsonDocument? doc = null;
+        string? fallbackOther = null;
+        try
+        {
+            doc = JsonDocument.Parse(slice);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                doc.Dispose();
+                doc = null;
+                fallbackOther = Encoding.UTF8.GetString(trimmedSpan).Trim();
+            }
+        }
+        catch (JsonException)
+        {
+            fallbackOther = Encoding.UTF8.GetString(trimmedSpan).Trim();
         }
 
         try
         {
-            var doc = JsonDocument.Parse(copy);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            if (doc is not null)
             {
-                doc.Dispose();
-                onOtherLine(trimmed);
-                return;
+                onMessage(doc);
             }
-            onMessage(doc);
+            else if (!string.IsNullOrEmpty(fallbackOther))
+            {
+                onOtherLine(fallbackOther);
+            }
         }
-        catch (JsonException)
+        finally
         {
-            onOtherLine(trimmed);
+            ResetBuffer();
         }
     }
+
+    private static bool IsAsciiWhitespace(byte b) => b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
 
     internal static string? TryExtractId(string prefix)
     {

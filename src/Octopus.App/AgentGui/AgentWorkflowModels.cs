@@ -62,7 +62,16 @@ public sealed partial class ScriptPreviewViewModel : ObservableObject
     }
 
     [RelayCommand]
-    public void Close() => IsOpen = false;
+    public void Close()
+    {
+        IsOpen = false;
+        Lines.Clear();
+        FullScript = "";
+        Title = "";
+        Language = "";
+        LineCountText = "";
+        OnPropertyChanged(nameof(HasLanguage));
+    }
 }
 
 /// <summary>One task entry in Claude Code's workflow DAG (<c>TodoWrite</c>, <c>TaskCreate</c>, <c>TaskUpdate</c>, or ACP <c>plan</c>).</summary>
@@ -368,6 +377,8 @@ public sealed partial class SubagentRunViewModel : ObservableObject
         NotifyDerived();
     }
 
+    private const int MaxSteps = 200;
+
     public void UpsertStep(AcpToolCallUpdate update)
     {
         var id = string.IsNullOrWhiteSpace(update.ToolCallId) ? $"step-{Steps.Count + 1}" : update.ToolCallId;
@@ -376,6 +387,12 @@ public sealed partial class SubagentRunViewModel : ObservableObject
             step = new SubagentStepViewModel(id);
             _stepsById[id] = step;
             Steps.Add(step);
+            while (Steps.Count > MaxSteps)
+            {
+                var oldest = Steps[0];
+                Steps.RemoveAt(0);
+                _stepsById.Remove(oldest.ToolCallId);
+            }
         }
         step.Apply(update);
         LastAction = step.ActionSummary;

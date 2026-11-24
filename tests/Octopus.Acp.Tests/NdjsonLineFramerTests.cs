@@ -61,4 +61,27 @@ public class NdjsonLineFramerTests
         Assert.Equal(43, parsed.RootElement.GetProperty("id").GetInt32());
         Assert.Empty(others);
     }
+
+    [Fact]
+    public void Shrinks_buffer_after_large_line_and_handles_whitespace_padded_json()
+    {
+        var framer = new NdjsonLineFramer();
+        var ids = new List<int>();
+        var others = new List<string>();
+        var oversized = new List<OversizedAcpLine>();
+
+        var largePayload = "  {\"jsonrpc\":\"2.0\",\"id\":100,\"result\":{\"data\":\"" + new string('a', 100_000) + "\"}}  \r\n"
+            + "   \t  \n"
+            + "  {\"jsonrpc\":\"2.0\",\"id\":101,\"result\":{\"ok\":true}}\n";
+
+        framer.Feed(
+            Encoding.UTF8.GetBytes(largePayload),
+            doc => { ids.Add(doc.RootElement.GetProperty("id").GetInt32()); doc.Dispose(); },
+            others.Add,
+            oversized.Add);
+
+        Assert.Equal([100, 101], ids);
+        Assert.Empty(others);
+        Assert.Empty(oversized);
+    }
 }

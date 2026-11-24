@@ -1890,6 +1890,88 @@ public class AgentGuiTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task Performance_optimizations_strip_base64_bound_tool_outputs_freeze_markdown_and_lazy_mount_collapse()
+    {
+        // 1. UserTurnItem strips Base64Data from sent image attachments so payloads are not pinned in history.
+        var imgAtt = new AcpPromptAttachment
+        {
+            Kind = "image",
+            Path = "/tmp/shot.png",
+            DisplayName = "shot.png",
+            MimeType = "image/png",
+            Base64Data = new string('B', 64 * 1024),
+        };
+        var userTurn = new UserTurnItem("Look at this", [imgAtt]);
+        var chip = Assert.Single(userTurn.Attachments);
+        Assert.Equal("shot.png", chip.Label);
+        Assert.Null(chip.Attachment.Base64Data);
+        // Original attachment passed to PromptAsync remains intact.
+        Assert.NotNull(imgAtt.Base64Data);
+
+        // 2. ToolCallItemViewModel truncates oversized stdout/output while preserving both head and tail.
+        var tool = new ToolCallItemViewModel("tc-huge");
+        var hugeStdout = "HEAD_MARKER\n" + new string('x', 80_000) + "\nTAIL_MARKER";
+        tool.Apply(new AcpToolCallUpdate { ToolCallId = "tc-huge", Kind = "execute", Status = "completed", Stdout = hugeStdout });
+        Assert.NotNull(tool.Stdout);
+        Assert.True(tool.Stdout!.Length <= ToolCallItemViewModel.MaxOutputChars + 64);
+        Assert.StartsWith("HEAD_MARKER", tool.Stdout);
+        Assert.EndsWith("TAIL_MARKER", tool.Stdout);
+
+        // 3. MarkdownBlockViewModel freezes completed paragraphs without splitting open fenced code blocks.
+        var md = new MarkdownBlockViewModel("");
+        var para1 = "Paragraph one " + new string('a', 300);
+        var fenced = "```csharp\nvar x = 1;\n\nvar y = 2;\n```";
+        var para2 = "Final paragraph " + new string('b', 200);
+        md.Append(para1 + "\n\n" + fenced + "\n\n" + para2);
+        Assert.NotEmpty(md.FrozenChunks);
+        Assert.Equal(para1 + "\n\n" + fenced + "\n\n" + para2, md.Text);
+        // Open fence must not be split across frozen/live chunks.
+        var mdOpenFence = new MarkdownBlockViewModel("");
+        var openCode = "```python\n" + new string('z', 500) + "\n\nprint(1)";
+        mdOpenFence.Append(openCode);
+        Assert.Empty(mdOpenFence.FrozenChunks);
+        Assert.Equal(openCode, mdOpenFence.LiveText);
+
+        // 4. SmoothCollapse lazy-template mode builds zero children when collapsed, mounts on expand,
+        // and unmounts once the collapse transition finishes.
+        var builtCount = 0;
+        var collapse = new Octopus.App.Common.SmoothCollapse
+        {
+            IsExpanded = false,
+            LazyData = "payload",
+            ContentTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<object?>((_, _) =>
+            {
+                builtCount++;
+                return new TextBlock { Text = "Lazy child" };
+            }),
+        };
+        var window = new Window { Width = 400, Height = 300, Content = collapse };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.Null(collapse.Content);
+            Assert.Equal(0, builtCount);
+
+            collapse.IsExpanded = true;
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.Equal("payload", collapse.Content);
+            Assert.Equal(1, builtCount);
+
+            collapse.IsExpanded = false;
+            await WaitUntilAsync(() => collapse.Content is null, timeoutMs: 1500);
+            Assert.Null(collapse.Content);
+        }
+        finally
+        {
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);

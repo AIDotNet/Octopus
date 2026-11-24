@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Text;
 using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -27,7 +28,17 @@ public sealed partial class UserTurnItem : AgentTimelineItem
         {
             foreach (var att in attachments)
             {
-                Attachments.Add(new AttachmentChipViewModel(att));
+                // Strip Base64 image payloads once sent: the timeline chip only displays icon + label.
+                var lightweight = string.IsNullOrEmpty(att.Base64Data)
+                    ? att
+                    : new AcpPromptAttachment
+                    {
+                        Kind = att.Kind,
+                        Path = att.Path,
+                        DisplayName = att.DisplayName,
+                        MimeType = att.MimeType,
+                    };
+                Attachments.Add(new AttachmentChipViewModel(lightweight));
             }
         }
     }
@@ -60,14 +71,13 @@ public sealed partial class UserTurnItem : AgentTimelineItem
 /// <summary>An attachment pill shown in the composer or inside a sent user turn.</summary>
 public sealed class AttachmentChipViewModel
 {
-    private readonly Action? _removeAction;
-
     public AttachmentChipViewModel(AcpPromptAttachment attachment, Action<AttachmentChipViewModel>? onRemove = null)
     {
         Attachment = attachment;
         if (onRemove is not null)
         {
-            _removeAction = () => onRemove(this);
+            CanRemove = true;
+            RemoveChipCommand = new RelayCommand(() => onRemove(this));
         }
     }
 
@@ -76,8 +86,8 @@ public sealed class AttachmentChipViewModel
         ? Path.GetFileName(Attachment.Path)
         : Attachment.DisplayName;
     public LucideIconKind Icon => Attachment.Kind == "image" ? LucideIconKind.Image : LucideIconKind.FileText;
-    public bool CanRemove => _removeAction is not null;
-    public IRelayCommand RemoveChipCommand => new RelayCommand(() => _removeAction?.Invoke());
+    public bool CanRemove { get; }
+    public IRelayCommand? RemoveChipCommand { get; }
 
     public static AttachmentChipViewModel Removable(AcpPromptAttachment attachment, Action<AttachmentChipViewModel> onRemove) =>
         new(attachment, onRemove);
@@ -104,10 +114,19 @@ public sealed class PlanEntryViewModel(AcpPlanEntry entry)
 /// <summary>One tool execution row inside an assistant turn, updated in place by <see cref="ToolCallId"/>.</summary>
 public sealed partial class ToolCallItemViewModel : ObservableObject
 {
-    private readonly List<string> _textOutputs = [];
+    /// <summary>Maximum characters retained per output stream (Stdout / Stderr / OutputText) to bound memory in long sessions.</summary>
+    internal const int MaxOutputChars = 32 * 1024;
+    private const int OutputHeadChars = 4 * 1024;
+    private const int MaxDiffLines = 120;
+
     private readonly Action<string>? _openFile;
     private readonly Action<string>? _openDiff;
     private readonly Action<ToolCallItemViewModel>? _openScript;
+
+    // Cached command metadata recomputed only when CommandText changes.
+    private int _commandLineCount;
+    private string _singleLineCommandPreview = "";
+    private string? _scriptLanguage;
 
     public ToolCallItemViewModel(
         string toolCallId,
@@ -151,19 +170,19 @@ public sealed partial class ToolCallItemViewModel : ObservableObject
     public string RemovedStatsText => $"-{RemovedLines}";
     public string DiffStatsText => $"+{AddedLines} -{RemovedLines}";
     public bool HasCommand => !string.IsNullOrWhiteSpace(CommandText);
-    public int CommandLineCount => string.IsNullOrWhiteSpace(CommandText) ? 0 : CommandText!.Replace("\r\n", "\n").Split('\n').Length;
+    public int CommandLineCount => _commandLineCount;
     /// <summary>Bash Style 2: multi-line or long commands fold into a 1-line capsule above output with a full-script modal button.</summary>
-    public bool IsLargeCommand => HasCommand && (CommandLineCount >= 4 || CommandText!.Length > 180);
+    public bool IsLargeCommand => HasCommand && (_commandLineCount >= 4 || CommandText!.Length > 180);
     public bool IsCompactCommand => HasCommand && !IsLargeCommand;
-    public string? ScriptLanguage => DetectScriptLanguage(CommandText);
-    public bool HasScriptLanguage => IsLargeCommand && !string.IsNullOrWhiteSpace(ScriptLanguage);
-    public string LinesBadgeText => CommandLineCount >= 2 ? AppLangResources.Format(AppLangResourceKind.AgentGuiBashLinesBadge, CommandLineCount) : "";
-    public bool ShowLinesBadge => IsLargeCommand && CommandLineCount >= 2;
-    public string LinesCollapsedText => AppLangResources.Format(AppLangResourceKind.AgentGuiBashLinesCollapsed, Math.Max(1, CommandLineCount));
-    public string SingleLineCommandPreview => BuildSingleLineCommandPreview(CommandText) ?? "";
+    public string? ScriptLanguage => _scriptLanguage;
+    public bool HasScriptLanguage => IsLargeCommand && !string.IsNullOrWhiteSpace(_scriptLanguage);
+    public string LinesBadgeText => _commandLineCount >= 2 ? AppLangResources.Format(AppLangResourceKind.AgentGuiBashLinesBadge, _commandLineCount) : "";
+    public bool ShowLinesBadge => IsLargeCommand && _commandLineCount >= 2;
+    public string LinesCollapsedText => AppLangResources.Format(AppLangResourceKind.AgentGuiBashLinesCollapsed, Math.Max(1, _commandLineCount));
+    public string SingleLineCommandPreview => _singleLineCommandPreview;
     public string? SecondaryHeaderPreview =>
         HasCommand && !string.IsNullOrWhiteSpace(Description)
-            ? SingleLineCommandPreview
+            ? _singleLineCommandPreview
             : null;
     public bool HasSecondaryHeaderPreview => !string.IsNullOrWhiteSpace(SecondaryHeaderPreview);
     public bool HasInputSummary => !HasCommand && !string.IsNullOrWhiteSpace(InputSummary);
@@ -194,6 +213,40 @@ public sealed partial class ToolCallItemViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(OutputText)) parts.Add(OutputText);
             return string.Join("\n", parts);
         }
+    }
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        if (value)
+        {
+            OnPropertyChanged(nameof(CopyableOutput));
+        }
+    }
+
+    partial void OnCommandTextChanged(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _commandLineCount = 0;
+            _singleLineCommandPreview = "";
+            _scriptLanguage = null;
+        }
+        else
+        {
+            _commandLineCount = CountLines(value);
+            _singleLineCommandPreview = BuildSingleLineCommandPreview(value) ?? "";
+            _scriptLanguage = DetectScriptLanguage(value);
+        }
+    }
+
+    private static int CountLines(string text)
+    {
+        var count = 1;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n') count++;
+        }
+        return count;
     }
 
     /// <summary>Always a clean single-line header: never explodes the collapsed card on multi-line Bash scripts.</summary>
@@ -276,36 +329,59 @@ public sealed partial class ToolCallItemViewModel : ObservableObject
 
     public void Apply(AcpToolCallUpdate update)
     {
-        if (!string.IsNullOrWhiteSpace(update.Kind)) Kind = update.Kind;
-        if (!string.IsNullOrWhiteSpace(update.Title)) Title = update.Title;
-        if (!string.IsNullOrWhiteSpace(update.Description)) Description = update.Description;
-        if (!string.IsNullOrWhiteSpace(update.Status)) Status = update.Status;
-        if (!string.IsNullOrWhiteSpace(update.Command)) CommandText = update.Command;
-        if (update.IsBackground) IsBackground = true;
-        if (update.Stdout is not null) Stdout = update.Stdout;
-        if (update.Stderr is not null) Stderr = update.Stderr;
-        if (update.ExitCode.HasValue) ExitCode = update.ExitCode;
+        var kindChanged = false;
+        var titleChanged = false;
+        var descChanged = false;
+        var statusChanged = false;
+        var commandChanged = false;
+        var inputChanged = false;
+        var outputChanged = false;
+        var exitChanged = false;
+        var pathChanged = false;
+        var diffChanged = false;
+        var bgChanged = false;
+
+        if (!string.IsNullOrWhiteSpace(update.Kind) && update.Kind != Kind) { Kind = update.Kind; kindChanged = true; }
+        if (!string.IsNullOrWhiteSpace(update.Title) && update.Title != Title) { Title = update.Title; titleChanged = true; }
+        if (!string.IsNullOrWhiteSpace(update.Description) && update.Description != Description) { Description = update.Description; descChanged = true; }
+        if (!string.IsNullOrWhiteSpace(update.Status) && update.Status != Status) { Status = update.Status; statusChanged = true; }
+        if (!string.IsNullOrWhiteSpace(update.Command) && update.Command != CommandText) { CommandText = update.Command; commandChanged = true; }
+        if (update.IsBackground && !IsBackground) { IsBackground = true; bgChanged = true; }
+        if (update.Stdout is not null)
+        {
+            var bounded = TruncateOutput(update.Stdout, MaxOutputChars);
+            if (bounded != Stdout) { Stdout = bounded; outputChanged = true; }
+        }
+        if (update.Stderr is not null)
+        {
+            var bounded = TruncateOutput(update.Stderr, MaxOutputChars);
+            if (bounded != Stderr) { Stderr = bounded; outputChanged = true; }
+        }
+        if (update.ExitCode.HasValue && update.ExitCode != ExitCode) { ExitCode = update.ExitCode; exitChanged = true; }
 
         if (update.Locations.Count > 0 && string.IsNullOrEmpty(PrimaryPath))
         {
             PrimaryPath = update.Locations[0].Path;
+            pathChanged = true;
         }
 
         if (string.IsNullOrEmpty(InputSummary) && update.RawInput is { ValueKind: System.Text.Json.JsonValueKind.Object } rawIn)
         {
-            InputSummary = SummarizeRawInput(rawIn);
+            var summary = SummarizeRawInput(rawIn);
+            if (summary != InputSummary) { InputSummary = summary; inputChanged = true; }
         }
 
         if (update.TextOutputs.Count > 0)
         {
-            _textOutputs.AddRange(update.TextOutputs);
-            OutputText = string.Join("\n", _textOutputs);
+            var nextOut = AppendBoundedOutput(OutputText, update.TextOutputs, MaxOutputChars);
+            if (nextOut != OutputText) { OutputText = nextOut; outputChanged = true; }
         }
         else if (string.IsNullOrEmpty(Stdout) && string.IsNullOrEmpty(OutputText)
             && update.RawOutput is { ValueKind: System.Text.Json.JsonValueKind.String } rawOutStr
             && rawOutStr.GetString() is { Length: > 0 } rawStr)
         {
-            OutputText = rawStr;
+            OutputText = TruncateOutput(rawStr, MaxOutputChars);
+            outputChanged = true;
         }
 
         if (update.Diffs.Count > 0)
@@ -313,58 +389,146 @@ public sealed partial class ToolCallItemViewModel : ObservableObject
             DiffLines.Clear();
             var added = 0;
             var removed = 0;
+            var remainingBudget = MaxDiffLines;
+            var overflowLines = 0;
             foreach (var diff in update.Diffs)
             {
                 if (string.IsNullOrEmpty(PrimaryPath) && !string.IsNullOrEmpty(diff.Path))
                 {
                     PrimaryPath = diff.Path;
+                    pathChanged = true;
                 }
-                var lines = BuildSimpleDiff(diff.OldText, diff.NewText, ref added, ref removed);
+                var lines = BuildSimpleDiff(diff.OldText, diff.NewText, remainingBudget, ref added, ref removed, ref overflowLines);
                 foreach (var l in lines) DiffLines.Add(l);
+                remainingBudget = Math.Max(0, MaxDiffLines - DiffLines.Count);
+            }
+            if (overflowLines > 0)
+            {
+                DiffLines.Add(new DiffLineViewModel(" ", $"… ({overflowLines} more lines)", false, false));
             }
             AddedLines = added;
             RemovedLines = removed;
+            diffChanged = true;
         }
 
-        OnPropertyChanged(nameof(DisplayTitle));
-        OnPropertyChanged(nameof(IsRunning));
-        OnPropertyChanged(nameof(IsCompleted));
-        OnPropertyChanged(nameof(IsFailed));
-        OnPropertyChanged(nameof(StatusText));
-        OnPropertyChanged(nameof(KindIcon));
-        OnPropertyChanged(nameof(HasDiff));
-        OnPropertyChanged(nameof(HasAddedStats));
-        OnPropertyChanged(nameof(HasRemovedStats));
-        OnPropertyChanged(nameof(AddedStatsText));
-        OnPropertyChanged(nameof(RemovedStatsText));
-        OnPropertyChanged(nameof(DiffStatsText));
-        OnPropertyChanged(nameof(HasCommand));
-        OnPropertyChanged(nameof(CommandLineCount));
-        OnPropertyChanged(nameof(IsLargeCommand));
-        OnPropertyChanged(nameof(IsCompactCommand));
-        OnPropertyChanged(nameof(ScriptLanguage));
-        OnPropertyChanged(nameof(HasScriptLanguage));
-        OnPropertyChanged(nameof(LinesBadgeText));
-        OnPropertyChanged(nameof(ShowLinesBadge));
-        OnPropertyChanged(nameof(LinesCollapsedText));
-        OnPropertyChanged(nameof(SingleLineCommandPreview));
-        OnPropertyChanged(nameof(SecondaryHeaderPreview));
-        OnPropertyChanged(nameof(HasSecondaryHeaderPreview));
-        OnPropertyChanged(nameof(HasInputSummary));
-        OnPropertyChanged(nameof(HasStdout));
-        OnPropertyChanged(nameof(HasStderr));
-        OnPropertyChanged(nameof(HasOutputText));
-        OnPropertyChanged(nameof(HasExitCode));
-        OnPropertyChanged(nameof(ExitCodeText));
-        OnPropertyChanged(nameof(HasDetails));
-        OnPropertyChanged(nameof(CanExpand));
-        OnPropertyChanged(nameof(IsRunningWithoutOutput));
-        OnPropertyChanged(nameof(CanOpenFile));
-        OnPropertyChanged(nameof(CanOpenDiff));
-        OnPropertyChanged(nameof(CanOpenScriptPreview));
-        OnPropertyChanged(nameof(IsReadOnlyExploration));
-        OnPropertyChanged(nameof(IsCompletedCommand));
-        OnPropertyChanged(nameof(CopyableOutput));
+        if (kindChanged || titleChanged || descChanged || commandChanged || pathChanged)
+        {
+            OnPropertyChanged(nameof(DisplayTitle));
+        }
+        if (kindChanged)
+        {
+            OnPropertyChanged(nameof(KindIcon));
+        }
+        if (statusChanged)
+        {
+            OnPropertyChanged(nameof(IsRunning));
+            OnPropertyChanged(nameof(IsCompleted));
+            OnPropertyChanged(nameof(IsFailed));
+            OnPropertyChanged(nameof(StatusText));
+        }
+        if (diffChanged)
+        {
+            OnPropertyChanged(nameof(HasDiff));
+            OnPropertyChanged(nameof(HasAddedStats));
+            OnPropertyChanged(nameof(HasRemovedStats));
+            OnPropertyChanged(nameof(AddedStatsText));
+            OnPropertyChanged(nameof(RemovedStatsText));
+            OnPropertyChanged(nameof(DiffStatsText));
+        }
+        if (commandChanged)
+        {
+            OnPropertyChanged(nameof(HasCommand));
+            OnPropertyChanged(nameof(CommandLineCount));
+            OnPropertyChanged(nameof(IsLargeCommand));
+            OnPropertyChanged(nameof(IsCompactCommand));
+            OnPropertyChanged(nameof(ScriptLanguage));
+            OnPropertyChanged(nameof(HasScriptLanguage));
+            OnPropertyChanged(nameof(LinesBadgeText));
+            OnPropertyChanged(nameof(ShowLinesBadge));
+            OnPropertyChanged(nameof(LinesCollapsedText));
+            OnPropertyChanged(nameof(SingleLineCommandPreview));
+            OnPropertyChanged(nameof(CanOpenScriptPreview));
+        }
+        if (commandChanged || descChanged)
+        {
+            OnPropertyChanged(nameof(SecondaryHeaderPreview));
+            OnPropertyChanged(nameof(HasSecondaryHeaderPreview));
+        }
+        if (commandChanged || inputChanged)
+        {
+            OnPropertyChanged(nameof(HasInputSummary));
+        }
+        if (outputChanged)
+        {
+            OnPropertyChanged(nameof(HasStdout));
+            OnPropertyChanged(nameof(HasStderr));
+            OnPropertyChanged(nameof(HasOutputText));
+        }
+        if (exitChanged)
+        {
+            OnPropertyChanged(nameof(HasExitCode));
+            OnPropertyChanged(nameof(ExitCodeText));
+        }
+        if (diffChanged || commandChanged || inputChanged || outputChanged || statusChanged)
+        {
+            OnPropertyChanged(nameof(HasDetails));
+            OnPropertyChanged(nameof(CanExpand));
+            OnPropertyChanged(nameof(IsRunningWithoutOutput));
+        }
+        if (pathChanged)
+        {
+            OnPropertyChanged(nameof(CanOpenFile));
+        }
+        if (pathChanged || diffChanged || kindChanged)
+        {
+            OnPropertyChanged(nameof(CanOpenDiff));
+        }
+        if (statusChanged || kindChanged)
+        {
+            OnPropertyChanged(nameof(IsReadOnlyExploration));
+        }
+        if (statusChanged || bgChanged || kindChanged || commandChanged || exitChanged)
+        {
+            OnPropertyChanged(nameof(IsCompletedCommand));
+        }
+        // Only notify CopyableOutput when expanded so collapsed cards never allocate a joined output string.
+        if (IsExpanded && (commandChanged || inputChanged || diffChanged || outputChanged))
+        {
+            OnPropertyChanged(nameof(CopyableOutput));
+        }
+    }
+
+    internal static string TruncateOutput(string text, int maxChars)
+    {
+        if (text.Length <= maxChars) return text;
+        var headLen = Math.Min(OutputHeadChars, maxChars / 4);
+        var tailLen = maxChars - headLen - 48;
+        if (tailLen < 128) tailLen = Math.Max(0, maxChars - headLen);
+        var omitted = text.Length - headLen - tailLen;
+        if (omitted <= 0) return text;
+        var headEnd = headLen;
+        if (headEnd > 0 && char.IsHighSurrogate(text[headEnd - 1])) headEnd--;
+        var tailStart = text.Length - tailLen;
+        if (tailStart < text.Length && char.IsLowSurrogate(text[tailStart])) tailStart++;
+        return $"{text[..headEnd]}\n… ({omitted:N0} chars truncated) …\n{text[tailStart..]}";
+    }
+
+    private static string AppendBoundedOutput(string existing, IReadOnlyList<string> additions, int maxChars)
+    {
+        var total = existing.Length;
+        for (var i = 0; i < additions.Count; i++)
+        {
+            if (total > 0 || i > 0) total++;
+            total += additions[i].Length;
+        }
+        var sb = new StringBuilder(Math.Min(total, maxChars + 1024));
+        if (existing.Length > 0) sb.Append(existing);
+        for (var i = 0; i < additions.Count; i++)
+        {
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(additions[i]);
+        }
+        return TruncateOutput(sb.ToString(), maxChars);
     }
 
     internal static string? ToSingleLine(string? text)
@@ -418,11 +582,16 @@ public sealed partial class ToolCallItemViewModel : ObservableObject
         return lines.Count > 0 ? string.Join("\n", lines) : null;
     }
 
-    private static List<DiffLineViewModel> BuildSimpleDiff(string? oldText, string newText, ref int added, ref int removed)
+    private static List<DiffLineViewModel> BuildSimpleDiff(
+        string? oldText,
+        string newText,
+        int maxLines,
+        ref int added,
+        ref int removed,
+        ref int overflowLines)
     {
-        var result = new List<DiffLineViewModel>();
-        var oldLines = string.IsNullOrEmpty(oldText) ? [] : oldText.Replace("\r\n", "\n").Split('\n');
-        var newLines = string.IsNullOrEmpty(newText) ? [] : newText.Replace("\r\n", "\n").Split('\n');
+        var oldLines = SplitLinesNormalized(oldText);
+        var newLines = SplitLinesNormalized(newText);
 
         var prefix = 0;
         while (prefix < oldLines.Length && prefix < newLines.Length && oldLines[prefix] == newLines[prefix])
@@ -437,32 +606,53 @@ public sealed partial class ToolCallItemViewModel : ObservableObject
             suffix++;
         }
 
+        var oldChangedEnd = oldLines.Length - suffix;
+        var newChangedEnd = newLines.Length - suffix;
+        removed += oldChangedEnd - prefix;
+        added += newChangedEnd - prefix;
+
+        var result = new List<DiffLineViewModel>(Math.Min(maxLines, 32));
+        var overflow = 0;
+        void AddLine(string linePrefix, string text, bool isAdd, bool isRemove)
+        {
+            if (result.Count < maxLines)
+            {
+                result.Add(new DiffLineViewModel(linePrefix, text, isAdd, isRemove));
+            }
+            else
+            {
+                overflow++;
+            }
+        }
+
         var contextStart = Math.Max(0, prefix - 2);
         for (var i = contextStart; i < prefix; i++)
         {
-            result.Add(new DiffLineViewModel(" ", oldLines[i], false, false));
+            AddLine(" ", oldLines[i], false, false);
         }
-        for (var i = prefix; i < oldLines.Length - suffix; i++)
+        for (var i = prefix; i < oldChangedEnd; i++)
         {
-            result.Add(new DiffLineViewModel("-", oldLines[i], false, true));
-            removed++;
+            AddLine("-", oldLines[i], false, true);
         }
-        for (var i = prefix; i < newLines.Length - suffix; i++)
+        for (var i = prefix; i < newChangedEnd; i++)
         {
-            result.Add(new DiffLineViewModel("+", newLines[i], true, false));
-            added++;
+            AddLine("+", newLines[i], true, false);
         }
-        var contextEnd = Math.Min(newLines.Length, newLines.Length - suffix + 2);
-        for (var i = newLines.Length - suffix; i < contextEnd; i++)
+        var contextEnd = Math.Min(newLines.Length, newChangedEnd + 2);
+        for (var i = newChangedEnd; i < contextEnd; i++)
         {
-            result.Add(new DiffLineViewModel(" ", newLines[i], false, false));
+            AddLine(" ", newLines[i], false, false);
         }
 
-        if (result.Count > 120)
-        {
-            result = [.. result.Take(120), new DiffLineViewModel(" ", $"… ({result.Count - 120} more lines)", false, false)];
-        }
+        overflowLines += overflow;
         return result;
+    }
+
+    private static string[] SplitLinesNormalized(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return [];
+        var normalized = text.Contains('\r') ? text.Replace("\r\n", "\n") : text;
+        return normalized.Split('\n');
     }
 }
 
@@ -472,9 +662,16 @@ public abstract class AssistantTurnBlock : ObservableObject;
 /// <summary>An independent collapsible Thinking segment in an assistant turn's chronological stream.</summary>
 public sealed partial class ThoughtBlockViewModel : AssistantTurnBlock
 {
-    public ThoughtBlockViewModel(string initialText, string? messageId = null)
+    private StringBuilder? _buffer;
+
+    public ThoughtBlockViewModel(string initialText, string? messageId = null, bool sealedInitial = false)
     {
         MessageId = messageId;
+        if (!sealedInitial)
+        {
+            _buffer = new StringBuilder(Math.Max(256, initialText.Length));
+            _buffer.Append(initialText);
+        }
         Text = initialText;
     }
 
@@ -483,33 +680,202 @@ public sealed partial class ThoughtBlockViewModel : AssistantTurnBlock
     [ObservableProperty] public partial string Text { get; set; } = "";
     [ObservableProperty] public partial bool IsExpanded { get; set; }
 
+    public int CharLength => _buffer?.Length ?? Text.Length;
+
     public string Header =>
-        $"{AppLangResources.Get(AppLangResourceKind.AgentGuiThinkingLabel)} · {Text.Length}";
+        $"{AppLangResources.Get(AppLangResourceKind.AgentGuiThinkingLabel)} · {CharLength}";
 
     [RelayCommand]
     private void Toggle() => IsExpanded = !IsExpanded;
 
     public void Append(string delta)
     {
-        Text += delta;
+        if (string.IsNullOrEmpty(delta)) return;
+        _buffer ??= new StringBuilder(Text, Math.Max(256, Text.Length + delta.Length));
+        _buffer.Append(delta);
+        Text = _buffer.ToString();
         OnPropertyChanged(nameof(Header));
+    }
+
+    /// <summary>Releases the mutable streaming buffer once the turn completes.</summary>
+    public void Seal()
+    {
+        if (_buffer is not null)
+        {
+            if (Text.Length != _buffer.Length)
+            {
+                Text = _buffer.ToString();
+                OnPropertyChanged(nameof(Header));
+            }
+            _buffer = null;
+        }
     }
 }
 
-/// <summary>An independent Markdown response segment in an assistant turn's chronological stream.</summary>
+/// <summary>
+/// An independent Markdown response segment in an assistant turn's chronological stream.
+/// Splits completed paragraphs/code-blocks into immutable <see cref="FrozenChunks"/> during long streaming replies
+/// so Avalonia's Markdown renderer only re-parses the short active <see cref="LiveText"/> tail.
+/// </summary>
 public sealed partial class MarkdownBlockViewModel : AssistantTurnBlock
 {
-    public MarkdownBlockViewModel(string initialText, string? messageId = null)
+    private const int FreezeThresholdChars = 480;
+
+    private StringBuilder? _liveBuffer;
+    private int _frozenCharLength;
+
+    public MarkdownBlockViewModel(string initialText, string? messageId = null, bool sealedInitial = false)
     {
         MessageId = messageId;
-        Text = initialText;
+        if (!sealedInitial)
+        {
+            _liveBuffer = new StringBuilder(Math.Max(256, initialText.Length));
+            _liveBuffer.Append(initialText);
+            TryFreezeCompletedParagraphs();
+        }
+        else
+        {
+            LiveText = initialText;
+        }
     }
 
     public string? MessageId { get; internal set; }
 
-    [ObservableProperty] public partial string Text { get; set; } = "";
+    public ObservableCollection<string> FrozenChunks { get; } = [];
+    [ObservableProperty] public partial string LiveText { get; set; } = "";
 
-    public void Append(string delta) => Text += delta;
+    public bool HasFrozenChunks => FrozenChunks.Count > 0;
+    public bool HasLiveText => LiveText.Length > 0;
+
+    public int CharLength => _frozenCharLength + (_liveBuffer?.Length ?? LiveText.Length);
+
+    public string Text
+    {
+        get
+        {
+            if (FrozenChunks.Count == 0) return LiveText;
+            var total = _frozenCharLength + LiveText.Length + FrozenChunks.Count * 2;
+            var sb = new StringBuilder(total);
+            for (var i = 0; i < FrozenChunks.Count; i++)
+            {
+                if (i > 0) sb.Append("\n\n");
+                sb.Append(FrozenChunks[i]);
+            }
+            if (LiveText.Length > 0)
+            {
+                sb.Append("\n\n");
+                sb.Append(LiveText);
+            }
+            return sb.ToString();
+        }
+    }
+
+    public void Append(string delta)
+    {
+        if (string.IsNullOrEmpty(delta)) return;
+        _liveBuffer ??= new StringBuilder(LiveText, Math.Max(256, LiveText.Length + delta.Length));
+        _liveBuffer.Append(delta);
+        TryFreezeCompletedParagraphs();
+        OnPropertyChanged(nameof(Text));
+    }
+
+    /// <summary>Releases the mutable streaming buffer once the turn completes.</summary>
+    public void Seal()
+    {
+        if (_liveBuffer is not null)
+        {
+            if (LiveText.Length != _liveBuffer.Length)
+            {
+                LiveText = _liveBuffer.ToString();
+                OnPropertyChanged(nameof(HasLiveText));
+                OnPropertyChanged(nameof(Text));
+            }
+            _liveBuffer = null;
+        }
+    }
+
+    private void TryFreezeCompletedParagraphs()
+    {
+        if (_liveBuffer is null) return;
+        if (_liveBuffer.Length >= FreezeThresholdChars)
+        {
+            var current = _liveBuffer.ToString();
+            var splitIdx = FindSafeMarkdownSplitIndex(current);
+            if (splitIdx > 0 && splitIdx + 2 < current.Length)
+            {
+                var frozen = current[..splitIdx];
+                var tail = current[(splitIdx + 2)..];
+                if (frozen.Length > 0 && tail.Length > 0)
+                {
+                    FrozenChunks.Add(frozen);
+                    _frozenCharLength += frozen.Length;
+                    OnPropertyChanged(nameof(HasFrozenChunks));
+                    _liveBuffer.Clear();
+                    _liveBuffer.Append(tail);
+                    LiveText = tail;
+                    OnPropertyChanged(nameof(HasLiveText));
+                    return;
+                }
+            }
+            LiveText = current;
+            OnPropertyChanged(nameof(HasLiveText));
+            return;
+        }
+        LiveText = _liveBuffer.ToString();
+        OnPropertyChanged(nameof(HasLiveText));
+    }
+
+    /// <summary>
+    /// Finds the last top-level blank-line (<c>\n\n</c>) boundary outside fenced code blocks so completed paragraphs
+    /// can be frozen without corrupting open fences or tables.
+    /// </summary>
+    internal static int FindSafeMarkdownSplitIndex(string text)
+    {
+        var inFence = false;
+        var fenceChar = '\0';
+        var fenceLen = 0;
+        var lastSafe = -1;
+        var lineStart = 0;
+
+        while (lineStart < text.Length)
+        {
+            var nl = text.IndexOf('\n', lineStart);
+            var lineEnd = nl < 0 ? text.Length : nl;
+            var span = text.AsSpan(lineStart, lineEnd - lineStart).TrimStart();
+
+            if (span.Length >= 3 && (span[0] is '`' or '~'))
+            {
+                var ch = span[0];
+                var run = 0;
+                while (run < span.Length && span[run] == ch) run++;
+                if (!inFence)
+                {
+                    inFence = true;
+                    fenceChar = ch;
+                    fenceLen = run;
+                }
+                else if (ch == fenceChar && run >= fenceLen && span[run..].Trim().IsEmpty)
+                {
+                    inFence = false;
+                }
+            }
+
+            if (!inFence && nl >= 0 && nl + 1 < text.Length && text[nl + 1] == '\n')
+            {
+                // Avoid splitting inside markdown tables (adjacent pipe-prefixed lines) or list continuations
+                var afterBlank = nl + 2;
+                if (afterBlank < text.Length && text[afterBlank] != '|' && !span.StartsWith("|"))
+                {
+                    lastSafe = nl;
+                }
+            }
+
+            if (nl < 0) break;
+            lineStart = nl + 1;
+        }
+
+        return lastSafe;
+    }
 }
 
 /// <summary>A contiguous burst of tool executions in an assistant turn, with local exploration and command folding.</summary>
@@ -577,18 +943,61 @@ public sealed partial class ToolRunBlockViewModel : AssistantTurnBlock
         ObservableCollection<ToolCallItemViewModel> commandTarget,
         ObservableCollection<ToolCallItemViewModel> primaryTarget)
     {
-        var completedExplorations = all.Where(t => t.IsReadOnlyExploration).ToList();
-        var nextExplore = completedExplorations.Count >= 2 ? completedExplorations : [];
+        if (all.Count < 2)
+        {
+            if (explorationTarget.Count > 0) explorationTarget.Clear();
+            if (commandTarget.Count > 0) commandTarget.Clear();
+            if (all.Count == 0)
+            {
+                if (primaryTarget.Count > 0) primaryTarget.Clear();
+            }
+            else if (primaryTarget.Count != 1 || !ReferenceEquals(primaryTarget[0], all[0]))
+            {
+                SyncCollection(primaryTarget, [all[0]]);
+            }
+            return;
+        }
 
-        var completedCommands = all.Where(t => t.IsCompletedCommand).ToList();
-        var nextCommands = completedCommands.Count >= 2 ? completedCommands : [];
+        var exploreCount = 0;
+        var cmdCount = 0;
+        for (var i = 0; i < all.Count; i++)
+        {
+            var t = all[i];
+            if (t.IsReadOnlyExploration) exploreCount++;
+            if (t.IsCompletedCommand) cmdCount++;
+        }
 
-        var foldedSet = new HashSet<ToolCallItemViewModel>(nextExplore);
-        foreach (var cmd in nextCommands) foldedSet.Add(cmd);
+        if (exploreCount < 2 && cmdCount < 2)
+        {
+            if (explorationTarget.Count > 0) explorationTarget.Clear();
+            if (commandTarget.Count > 0) commandTarget.Clear();
+            SyncCollection(primaryTarget, all is List<ToolCallItemViewModel> list ? list : [.. all]);
+            return;
+        }
 
-        var nextPrimary = foldedSet.Count > 0
-            ? all.Where(t => !foldedSet.Contains(t)).ToList()
-            : [.. all];
+        var nextExplore = exploreCount >= 2 ? new List<ToolCallItemViewModel>(exploreCount) : [];
+        var nextCommands = cmdCount >= 2 ? new List<ToolCallItemViewModel>(cmdCount) : [];
+        var nextPrimary = new List<ToolCallItemViewModel>(all.Count);
+
+        for (var i = 0; i < all.Count; i++)
+        {
+            var t = all[i];
+            var folded = false;
+            if (exploreCount >= 2 && t.IsReadOnlyExploration)
+            {
+                nextExplore.Add(t);
+                folded = true;
+            }
+            if (cmdCount >= 2 && t.IsCompletedCommand)
+            {
+                nextCommands.Add(t);
+                folded = true;
+            }
+            if (!folded)
+            {
+                nextPrimary.Add(t);
+            }
+        }
 
         SyncCollection(explorationTarget, nextExplore);
         SyncCollection(commandTarget, nextCommands);
@@ -654,34 +1063,53 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     private readonly Action<string>? _openFile;
     private readonly Action<string>? _openDiff;
     private readonly Action<ToolCallItemViewModel>? _openScript;
-    private readonly Stopwatch _elapsed = Stopwatch.StartNew();
+    private readonly Stopwatch? _elapsed;
     private DispatcherTimer? _statusTimer;
     private int _phraseIndex = Random.Shared.Next(WorkingPhrases.Length);
     private int _statusTicks;
+    private int _thoughtCharLength;
+    private bool _hasThoughtContent;
+    private bool _hasMarkdownContent;
 
     public AssistantTurnItem(
         string agentId,
         string agentName,
         Action<string>? openFile = null,
         Action<string>? openDiff = null,
-        Action<ToolCallItemViewModel>? openScript = null)
+        Action<ToolCallItemViewModel>? openScript = null,
+        bool isReplay = false)
     {
         AgentId = agentId;
         AgentName = agentName;
         _openFile = openFile;
         _openDiff = openDiff;
         _openScript = openScript;
-        StartStatusTimer();
+        if (isReplay)
+        {
+            IsStreaming = false;
+        }
+        else
+        {
+            _elapsed = Stopwatch.StartNew();
+            StartStatusTimer();
+        }
     }
 
     public string AgentId { get; }
     public string AgentName { get; }
 
-    [ObservableProperty] public partial string ThoughtText { get; set; } = "";
+    /// <summary>Computed on demand from <see cref="Blocks"/> so large thought streams are never duplicated in memory.</summary>
+    public string ThoughtText => JoinBlockText<ThoughtBlockViewModel>(b => b.Text);
+
+    /// <summary>Computed on demand from <see cref="Blocks"/> so large Markdown replies are never duplicated in memory.</summary>
+    public string MarkdownText => JoinBlockText<MarkdownBlockViewModel>(b => b.Text);
+
+    /// <summary>Only materialized for the Copy button once streaming has finished, avoiding LOH allocations while streaming.</summary>
+    public string CopyReplyValue => IsStreaming || !_hasMarkdownContent ? "" : MarkdownText;
+
     [ObservableProperty] public partial bool IsThoughtExpanded { get; set; }
     [ObservableProperty] public partial bool IsExplorationExpanded { get; set; }
     [ObservableProperty] public partial bool IsCommandsExpanded { get; set; }
-    [ObservableProperty] public partial string MarkdownText { get; set; } = "";
     [ObservableProperty] public partial string? PlanMarkdown { get; set; }
     [ObservableProperty] public partial bool IsStreaming { get; set; } = true;
     [ObservableProperty] public partial bool IsWaitingForInput { get; set; }
@@ -700,7 +1128,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     /// <summary>Prominent tools across the turn (running, failed, edits, or a lone exploration/command step).</summary>
     public ObservableCollection<ToolCallItemViewModel> PrimaryTools { get; } = [];
 
-    public bool HasThought => !string.IsNullOrWhiteSpace(ThoughtText);
+    public bool HasThought => _hasThoughtContent;
     public bool HasPlan => PlanEntries.Count > 0 || !string.IsNullOrWhiteSpace(PlanMarkdown);
     public bool HasPlanEntries => PlanEntries.Count > 0;
     public bool HasPlanMarkdown => !string.IsNullOrWhiteSpace(PlanMarkdown);
@@ -708,16 +1136,42 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     public bool HasExplorationGroup => ExplorationTools.Count > 0;
     public bool HasCommandGroup => CommandTools.Count > 0;
     public bool HasPrimaryTools => PrimaryTools.Count > 0;
-    public bool HasMarkdown => !string.IsNullOrWhiteSpace(MarkdownText);
+    public bool HasMarkdown => _hasMarkdownContent;
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorText);
     public bool HasDuration => !string.IsNullOrEmpty(DurationText);
-    public bool CanCopyReply => !IsStreaming && HasMarkdown;
+    public bool CanCopyReply => !IsStreaming && _hasMarkdownContent;
     public bool ShowLiveStatus => IsStreaming && !IsWaitingForInput;
     public bool HasLiveElapsed => !string.IsNullOrEmpty(LiveElapsedText);
     public string LiveStatusText => AppLangResources.Get(WorkingPhrases[_phraseIndex]);
 
     public string ThoughtHeader =>
-        $"{AppLangResources.Get(AppLangResourceKind.AgentGuiThinkingLabel)} · {ThoughtText.Length}";
+        $"{AppLangResources.Get(AppLangResourceKind.AgentGuiThinkingLabel)} · {_thoughtCharLength}";
+
+    private string JoinBlockText<TBlock>(Func<TBlock, string> selector) where TBlock : AssistantTurnBlock
+    {
+        string? single = null;
+        StringBuilder? sb = null;
+        for (var i = 0; i < Blocks.Count; i++)
+        {
+            if (Blocks[i] is not TBlock block) continue;
+            var text = selector(block);
+            if (single is null)
+            {
+                single = text;
+            }
+            else
+            {
+                if (sb is null)
+                {
+                    sb = new StringBuilder(single.Length + text.Length + 2);
+                    sb.Append(single);
+                }
+                sb.Append("\n\n");
+                sb.Append(text);
+            }
+        }
+        return sb is not null ? sb.ToString() : (single ?? "");
+    }
 
     public string ExplorationSummary => ToolRunBlockViewModel.FormatExplorationSummary(ExplorationTools);
 
@@ -809,6 +1263,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
 
     private void UpdateLiveElapsed()
     {
+        if (_elapsed is null) return;
         var secs = (int)_elapsed.Elapsed.TotalSeconds;
         var next = secs switch
         {
@@ -827,6 +1282,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     {
         if (string.IsNullOrEmpty(delta)) return;
 
+        var addedBlock = false;
         if (Blocks.Count > 0
             && Blocks[^1] is ThoughtBlockViewModel lastThought
             && CanContinueMessage(lastThought.MessageId, messageId))
@@ -840,11 +1296,17 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         else
         {
             if (string.IsNullOrWhiteSpace(delta)) return;
-            Blocks.Add(new ThoughtBlockViewModel(delta, messageId));
+            Blocks.Add(new ThoughtBlockViewModel(delta, messageId, sealedInitial: !IsStreaming));
+            addedBlock = true;
         }
 
-        ThoughtText = string.Join("\n\n", Blocks.OfType<ThoughtBlockViewModel>().Select(b => b.Text));
-        OnPropertyChanged(nameof(HasThought));
+        if (addedBlock && _thoughtCharLength > 0) _thoughtCharLength += 2;
+        _thoughtCharLength += delta.Length;
+        var becameNonEmpty = !_hasThoughtContent && !string.IsNullOrWhiteSpace(delta);
+        if (becameNonEmpty) _hasThoughtContent = true;
+
+        OnPropertyChanged(nameof(ThoughtText));
+        if (becameNonEmpty) OnPropertyChanged(nameof(HasThought));
         OnPropertyChanged(nameof(ThoughtHeader));
     }
 
@@ -865,12 +1327,18 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         else
         {
             if (string.IsNullOrWhiteSpace(delta)) return;
-            Blocks.Add(new MarkdownBlockViewModel(delta, messageId));
+            Blocks.Add(new MarkdownBlockViewModel(delta, messageId, sealedInitial: !IsStreaming));
         }
 
-        MarkdownText = string.Join("\n\n", Blocks.OfType<MarkdownBlockViewModel>().Select(b => b.Text));
-        OnPropertyChanged(nameof(HasMarkdown));
-        OnPropertyChanged(nameof(CanCopyReply));
+        var becameNonEmpty = !_hasMarkdownContent && !string.IsNullOrWhiteSpace(delta);
+        if (becameNonEmpty) _hasMarkdownContent = true;
+
+        OnPropertyChanged(nameof(MarkdownText));
+        if (becameNonEmpty)
+        {
+            OnPropertyChanged(nameof(HasMarkdown));
+            OnPropertyChanged(nameof(CanCopyReply));
+        }
     }
 
     private static bool CanContinueMessage(string? existingId, string? incomingId) =>
@@ -932,15 +1400,23 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     public void Complete(string? error = null, bool showDuration = true)
     {
         StopStatusTimer();
+        foreach (var block in Blocks)
+        {
+            if (block is ThoughtBlockViewModel tb) tb.Seal();
+            else if (block is MarkdownBlockViewModel mb) mb.Seal();
+        }
         IsStreaming = false;
         IsWaitingForInput = false;
-        _elapsed.Stop();
-        if (showDuration && _elapsed.Elapsed.TotalMilliseconds >= 100)
+        if (_elapsed is not null)
         {
-            DurationText = _elapsed.Elapsed.TotalSeconds < 60
-                ? $"{_elapsed.Elapsed.TotalSeconds:0.#}s"
-                : $"{(int)_elapsed.Elapsed.TotalMinutes}m {_elapsed.Elapsed.Seconds}s";
-            OnPropertyChanged(nameof(HasDuration));
+            _elapsed.Stop();
+            if (showDuration && _elapsed.Elapsed.TotalMilliseconds >= 100)
+            {
+                DurationText = _elapsed.Elapsed.TotalSeconds < 60
+                    ? $"{_elapsed.Elapsed.TotalSeconds:0.#}s"
+                    : $"{(int)_elapsed.Elapsed.TotalMinutes}m {_elapsed.Elapsed.Seconds}s";
+                OnPropertyChanged(nameof(HasDuration));
+            }
         }
         if (!string.IsNullOrWhiteSpace(error))
         {
@@ -948,6 +1424,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             OnPropertyChanged(nameof(HasError));
         }
         OnPropertyChanged(nameof(CanCopyReply));
+        OnPropertyChanged(nameof(CopyReplyValue));
         OnPropertyChanged(nameof(ShowLiveStatus));
     }
 }

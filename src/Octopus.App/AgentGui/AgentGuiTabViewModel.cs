@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Text;
 using Avalonia;
@@ -173,6 +174,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
     };
 
+    private static readonly ConcurrentDictionary<string, (DateTimeOffset IndexedAt, string[] Files)> SharedWorkspaceFileCache = new(StringComparer.Ordinal);
+    private static readonly TimeSpan WorkspaceFileCacheTtl = TimeSpan.FromSeconds(60);
+    private const int MaxCachedWorkspaces = 16;
+    private const int StreamFlushIntervalMs = 32;
+
     private readonly Project _project;
     private readonly ProjectItem _item;
     private readonly AgentDefinition _definition;
@@ -215,7 +221,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private QueuedPrompt? _urgentPrompt;
     private bool _isTurnActive;
     private bool _manualStopRequested;
-    private readonly List<string> _workspaceFiles = [];
+    private string[] _workspaceFiles = [];
+    private bool _workspaceIndexing;
+    private string _lastFileFilterQuery = "";
     private readonly List<string> _promptHistory = [];
     private int _historyCursor = -1;
     private string _historyDraft = "";
@@ -223,8 +231,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private bool _initialPromptSent;
     private bool _titledFromPrompt;
     private bool _hasConnectedOnce;
-    private bool _acceptReplay;
-    private UserTurnItem? _replayUserTurn;
+    private volatile bool _acceptReplay;
+    private readonly object _replayGate = new();
+    private readonly List<AcpRuntimeEvent> _replayBuffer = [];
+    private readonly object _streamGate = new();
+    private readonly List<(string Channel, string? MessageId, StringBuilder Buffer)> _pendingDeltas = [];
+    private bool _deltaFlushScheduled;
     private bool _disposed;
 
     public AgentGuiTabViewModel(
@@ -293,7 +305,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         ];
 
         WeakReferenceMessenger.Default.Register(this);
-        IndexWorkspaceFilesAsync();
+        ScriptPreview.PropertyChanged += OnScriptPreviewPropertyChanged;
     }
 
     public ProjectItem Item => _item;
@@ -363,6 +375,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public bool IsSubagentsHudOpen => ActiveHudPanel == HudPanelKind.Subagents;
     public bool IsShellsHudOpen => ActiveHudPanel == HudPanelKind.BackgroundShells;
     public bool IsAnyHudOpen => ActiveHudPanel != HudPanelKind.None;
+    public AgentGuiTabViewModel? TopologyContent => IsTopologyView ? this : null;
+    public AgentGuiTabViewModel? WorkflowHudContent => IsWorkflowHudOpen ? this : null;
+    public AgentGuiTabViewModel? SubagentsHudContent => IsSubagentsHudOpen ? this : null;
+    public AgentGuiTabViewModel? ShellsHudContent => IsShellsHudOpen ? this : null;
+    public ScriptPreviewViewModel? ActiveScriptPreview => ScriptPreview.IsOpen ? ScriptPreview : null;
     public bool HasWorkflowTasks => WorkflowTasks.Count > 0;
     public bool HasSubagents => Subagents.Count > 0;
     public bool HasBackgroundShells => BackgroundShells.Count > 0;
@@ -408,6 +425,19 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         OnPropertyChanged(nameof(IsSubagentsHudOpen));
         OnPropertyChanged(nameof(IsShellsHudOpen));
         OnPropertyChanged(nameof(IsAnyHudOpen));
+        OnPropertyChanged(nameof(WorkflowHudContent));
+        OnPropertyChanged(nameof(SubagentsHudContent));
+        OnPropertyChanged(nameof(ShellsHudContent));
+    }
+
+    partial void OnIsTopologyViewChanged(bool value) => OnPropertyChanged(nameof(TopologyContent));
+
+    private void OnScriptPreviewPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ScriptPreviewViewModel.IsOpen))
+        {
+            OnPropertyChanged(nameof(ActiveScriptPreview));
+        }
     }
 
     partial void OnSelectedSubagentChanged(SubagentRunViewModel? value) => OnPropertyChanged(nameof(HasSelectedSubagent));
@@ -615,7 +645,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 // Rebuild history from session/load replay only when nothing is on screen yet
                 // (reopened tab / app restart); a reconnect in a live tab already shows it.
                 _acceptReplay = Timeline.Count == 0;
-                _replayUserTurn = null;
+                ClearReplayBuffer();
             });
 
             var skipRestoredResume = !_hasConnectedOnce
@@ -636,11 +666,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             {
                 _projects.SetItemSessionId(_item.Id, started.SessionId, isAcp: true);
                 InitAgyTranscriptMonitor(started.SessionId);
-                if (!string.IsNullOrWhiteSpace(requestedResumeId) && started.Kind == "new" && _acceptReplay && Timeline.Count > 0)
+                if (!string.IsNullOrWhiteSpace(requestedResumeId) && started.Kind == "new" && _acceptReplay)
                 {
-                    Timeline.Clear();
-                    _activeTurn = null;
-                    _replayUserTurn = null;
+                    // session/load fell back to session/new -> discard any partial replay buffer without touching Timeline.
+                    ClearReplayBuffer();
+                    _acceptReplay = false;
                 }
                 FinishHistoryReplay();
                 Composer.UpdateFromSession(
@@ -992,6 +1022,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             await session.PromptAsync(text, attached, _turnCts.Token);
             SetUi(() =>
             {
+                FlushPendingTextDeltas();
                 assistantTurn.Complete();
                 if (State is AgentGuiState.Working or AgentGuiState.Waiting) State = AgentGuiState.Ready;
                 RefreshDiagnostics();
@@ -1005,6 +1036,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             SetUi(() =>
             {
+                FlushPendingTextDeltas();
                 assistantTurn.Complete();
                 InterruptRunningAsyncSubagents();
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
@@ -1014,6 +1046,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             SetUi(() =>
             {
+                FlushPendingTextDeltas();
                 assistantTurn.Complete();
                 InterruptRunningAsyncSubagents();
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
@@ -1023,6 +1056,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             SetUi(() =>
             {
+                FlushPendingTextDeltas();
                 assistantTurn.Complete(AppLangResources.Get(AppLangResourceKind.AgentGuiAuthRequiredTitle));
                 IsAuthRequired = true;
                 State = AgentGuiState.Disconnected;
@@ -1033,6 +1067,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             SetUi(() =>
             {
+                FlushPendingTextDeltas();
                 assistantTurn.Complete(ex.Message);
                 State = AgentGuiState.Ready;
                 RefreshDiagnostics();
@@ -1642,6 +1677,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     private void FilterFiles(string query)
     {
+        _lastFileFilterQuery = query;
+        EnsureWorkspaceFilesIndexed();
         FilteredFiles.Clear();
         foreach (var rel in _workspaceFiles)
         {
@@ -1655,164 +1692,308 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         SyncPickerHighlights();
     }
 
-    private void OnSessionEvent(AcpRuntimeEvent evt) => UiContext.Run(() =>
+    private void OnSessionEvent(AcpRuntimeEvent evt)
     {
         if (_disposed) return;
+
+        // Buffer session/load history replay off the UI thread so reopening a long conversation
+        // builds the timeline in a single batch instead of posting hundreds of UI mutations.
         if (evt.IsReplay)
         {
-            if (_acceptReplay) ApplyReplayEvent(evt);
+            if (!_acceptReplay) return;
+            lock (_replayGate)
+            {
+                if (_acceptReplay) _replayBuffer.Add(evt);
+            }
             return;
         }
-        switch (evt)
+
+        // Coalesce high-frequency streaming text deltas (~30fps) off the UI thread to avoid
+        // per-token Dispatcher hops and repeated Markdown re-layouts.
+        if (evt is AcpTextDeltaEvent textDelta)
         {
-            case AcpTextDeltaEvent delta:
-                var turn = EnsureActiveTurn();
-                if (delta.Channel == "reasoning") turn.AppendThought(delta.Text, delta.MessageId);
-                else turn.AppendMessage(delta.Text, delta.MessageId);
-                RequestAutoScrollIfPinned();
-                break;
-
-            case AcpToolCallEvent tc:
-                HandleToolCallUpdate(tc.Update);
-                RequestAutoScrollIfPinned();
-                break;
-
-            case AcpPlanEvent plan:
-                EnsureActiveTurn().SetPlan(plan.Entries, plan.Markdown);
-                if (plan.Entries.Count > 0)
-                {
-                    SyncWorkflowTasksFromEntries(plan.Entries);
-                }
-                RequestAutoScrollIfPinned();
-                break;
-
-            case AcpUsageEvent usage:
-                ContextUsed = usage.Usage.Used;
-                ContextSize = usage.Usage.Size;
-                ContextCostAmount = usage.Usage.CostAmount;
-                ContextCostCurrency = usage.Usage.CostCurrency;
-                OnPropertyChanged(nameof(HasContextUsage));
-                OnPropertyChanged(nameof(ContextUsageText));
-                OnPropertyChanged(nameof(ContextUsagePercent));
-                break;
-
-            case AcpCommandsUpdatedEvent:
-            case AcpModesUpdatedEvent:
-            case AcpModelsUpdatedEvent:
-            case AcpConfigOptionsUpdatedEvent:
-                if (_session is not null)
-                {
-                    // When launched with fullAccessArgs (e.g. agy acp --dangerously-skip-permissions), the server's
-                    // reported mode may still say "default" even though full access is active -> preserve user's mode.
-                    var preservePerm = Composer.SelectedPermissionId == PermissionModes.Full
-                        && _definition.Acp?.FullAccessArgs is { Count: > 0 };
-                    Composer.UpdateFromSession(
-                        _session.Initialized,
-                        _session.Modes,
-                        _session.Models,
-                        _session.ConfigOptions,
-                        _session.AvailableCommands,
-                        preserveConfiguredPermission: preservePerm);
-                }
-                break;
-
-            case AcpTitleUpdatedEvent title:
-                if (!string.IsNullOrWhiteSpace(title.Title))
-                {
-                    _projects.SetItemTitle(_item.Id, title.Title);
-                }
-                break;
-
-            case AcpClosedEvent closed:
-                _activeTurn?.Complete();
-                _activeTurn = null;
-                State = AgentGuiState.Disconnected;
-                if (!string.IsNullOrWhiteSpace(closed.Reason.Message) && string.IsNullOrWhiteSpace(ErrorBanner))
-                {
-                    ErrorBanner = closed.Reason.Message;
-                    OnPropertyChanged(nameof(HasErrorBanner));
-                }
-                RefreshDiagnostics();
-                break;
+            EnqueueTextDelta(textDelta);
+            return;
         }
-    });
 
-    /// <summary>Renders one replayed history event (session/load) into the timeline without live side effects.</summary>
-    private void ApplyReplayEvent(AcpRuntimeEvent evt)
-    {
-        switch (evt)
+        UiContext.Run(() =>
         {
-            case AcpUserMessageEvent user:
-                if (_activeTurn is not null)
-                {
-                    _activeTurn.Complete(showDuration: false);
+            if (_disposed) return;
+            // Flush any pending text before non-text events so chronological block ordering is exact.
+            FlushPendingTextDeltas();
+            switch (evt)
+            {
+                case AcpToolCallEvent tc:
+                    HandleToolCallUpdate(tc.Update);
+                    RequestAutoScrollIfPinned();
+                    break;
+
+                case AcpPlanEvent plan:
+                    EnsureActiveTurn().SetPlan(plan.Entries, plan.Markdown);
+                    if (plan.Entries.Count > 0)
+                    {
+                        SyncWorkflowTasksFromEntries(plan.Entries);
+                    }
+                    RequestAutoScrollIfPinned();
+                    break;
+
+                case AcpUsageEvent usage:
+                    ContextUsed = usage.Usage.Used;
+                    ContextSize = usage.Usage.Size;
+                    ContextCostAmount = usage.Usage.CostAmount;
+                    ContextCostCurrency = usage.Usage.CostCurrency;
+                    OnPropertyChanged(nameof(HasContextUsage));
+                    OnPropertyChanged(nameof(ContextUsageText));
+                    OnPropertyChanged(nameof(ContextUsagePercent));
+                    break;
+
+                case AcpCommandsUpdatedEvent:
+                case AcpModesUpdatedEvent:
+                case AcpModelsUpdatedEvent:
+                case AcpConfigOptionsUpdatedEvent:
+                    if (_session is not null)
+                    {
+                        // When launched with fullAccessArgs (e.g. agy acp --dangerously-skip-permissions), the server's
+                        // reported mode may still say "default" even though full access is active -> preserve user's mode.
+                        var preservePerm = Composer.SelectedPermissionId == PermissionModes.Full
+                            && _definition.Acp?.FullAccessArgs is { Count: > 0 };
+                        Composer.UpdateFromSession(
+                            _session.Initialized,
+                            _session.Modes,
+                            _session.Models,
+                            _session.ConfigOptions,
+                            _session.AvailableCommands,
+                            preserveConfiguredPermission: preservePerm);
+                    }
+                    break;
+
+                case AcpTitleUpdatedEvent title:
+                    if (!string.IsNullOrWhiteSpace(title.Title))
+                    {
+                        _projects.SetItemTitle(_item.Id, title.Title);
+                    }
+                    break;
+
+                case AcpClosedEvent closed:
+                    _activeTurn?.Complete();
                     _activeTurn = null;
-                }
-                if (_replayUserTurn is not null
-                    && ReferenceEquals(Timeline.LastOrDefault(), _replayUserTurn)
-                    && (string.IsNullOrEmpty(user.MessageId) || user.MessageId == _replayUserTurn.MessageId))
+                    State = AgentGuiState.Disconnected;
+                    if (!string.IsNullOrWhiteSpace(closed.Reason.Message) && string.IsNullOrWhiteSpace(ErrorBanner))
+                    {
+                        ErrorBanner = closed.Reason.Message;
+                        OnPropertyChanged(nameof(HasErrorBanner));
+                    }
+                    RefreshDiagnostics();
+                    break;
+            }
+        });
+    }
+
+    private void EnqueueTextDelta(AcpTextDeltaEvent delta)
+    {
+        if (string.IsNullOrEmpty(delta.Text)) return;
+        var shouldSchedule = false;
+        lock (_streamGate)
+        {
+            if (_pendingDeltas.Count > 0)
+            {
+                var last = _pendingDeltas[^1];
+                var compatibleId = string.IsNullOrEmpty(last.MessageId)
+                    || string.IsNullOrEmpty(delta.MessageId)
+                    || string.Equals(last.MessageId, delta.MessageId, StringComparison.Ordinal);
+                if (last.Channel == delta.Channel && compatibleId)
                 {
-                    _replayUserTurn.Append(user.Text);
+                    if (string.IsNullOrEmpty(last.MessageId) && !string.IsNullOrEmpty(delta.MessageId))
+                    {
+                        _pendingDeltas[^1] = (last.Channel, delta.MessageId, last.Buffer);
+                    }
+                    last.Buffer.Append(delta.Text);
                 }
                 else
                 {
-                    _replayUserTurn = new UserTurnItem(user.Text, null, ReusePrompt) { MessageId = user.MessageId };
-                    Timeline.Add(_replayUserTurn);
-                    OnPropertyChanged(nameof(ShowEmptyState));
-                    OnPropertyChanged(nameof(HasTimeline));
+                    _pendingDeltas.Add((delta.Channel, delta.MessageId, new StringBuilder(delta.Text)));
                 }
-                break;
-
-            case AcpTextDeltaEvent delta:
-                _replayUserTurn = null;
-                var turn = EnsureActiveTurn();
-                if (delta.Channel == "reasoning") turn.AppendThought(delta.Text, delta.MessageId);
-                else turn.AppendMessage(delta.Text, delta.MessageId);
-                break;
-
-            case AcpToolCallEvent tc:
+            }
+            else
             {
-                _replayUserTurn = null;
-                var update = tc.Update;
-                // Sub-agent internals and background-shell/task bookkeeping only make sense live.
-                if (!string.IsNullOrWhiteSpace(update.ParentToolCallId)) break;
-                if (update.WorkflowAction is "task_create" or "task_update" or "background_output" or "background_stop" or "subagent_stop" or "subagent_stop_all") break;
-                if (update.WorkflowAction == "todo_write" && update.WorkflowTasks.Count > 0)
-                {
-                    EnsureActiveTurn().SetPlan(update.WorkflowTasks, null);
-                    break;
-                }
-                if (update.WorkflowAction == "exit_plan" && !string.IsNullOrWhiteSpace(update.PlanMarkdown))
-                {
-                    EnsureActiveTurn().SetPlan([], update.PlanMarkdown);
-                }
-                EnsureActiveTurn().UpsertToolCall(update);
-                break;
+                _pendingDeltas.Add((delta.Channel, delta.MessageId, new StringBuilder(delta.Text)));
             }
 
-            case AcpPlanEvent plan:
-                _replayUserTurn = null;
-                EnsureActiveTurn().SetPlan(plan.Entries, plan.Markdown);
-                break;
+            if (!_deltaFlushScheduled)
+            {
+                _deltaFlushScheduled = true;
+                shouldSchedule = true;
+            }
+        }
+
+        if (shouldSchedule)
+        {
+            _ = Task.Delay(StreamFlushIntervalMs).ContinueWith(
+                _ => UiContext.PostToUi(FlushPendingTextDeltas),
+                TaskScheduler.Default);
         }
     }
 
-    /// <summary>Closes out the replayed history once session/load has returned.</summary>
+    private void FlushPendingTextDeltas()
+    {
+        List<(string Channel, string? MessageId, string Text)>? batch = null;
+        lock (_streamGate)
+        {
+            _deltaFlushScheduled = false;
+            if (_pendingDeltas.Count == 0) return;
+            batch = new List<(string, string?, string)>(_pendingDeltas.Count);
+            for (var i = 0; i < _pendingDeltas.Count; i++)
+            {
+                var item = _pendingDeltas[i];
+                batch.Add((item.Channel, item.MessageId, item.Buffer.ToString()));
+            }
+            _pendingDeltas.Clear();
+        }
+
+        if (_disposed || batch is null) return;
+
+        var turn = EnsureActiveTurn();
+        for (var i = 0; i < batch.Count; i++)
+        {
+            var (channel, messageId, text) = batch[i];
+            if (channel == "reasoning") turn.AppendThought(text, messageId);
+            else turn.AppendMessage(text, messageId);
+        }
+        RequestAutoScrollIfPinned();
+    }
+
+    private void ClearPendingTextDeltas()
+    {
+        lock (_streamGate)
+        {
+            _pendingDeltas.Clear();
+            _deltaFlushScheduled = false;
+        }
+    }
+
+    private void ClearReplayBuffer()
+    {
+        lock (_replayGate)
+        {
+            _replayBuffer.Clear();
+        }
+    }
+
+    /// <summary>Materializes buffered <c>session/load</c> replay events into the timeline in one batch without live timers.</summary>
     private void FinishHistoryReplay()
     {
-        var replayed = _acceptReplay && Timeline.Count > 0;
-        _acceptReplay = false;
-        _replayUserTurn = null;
-        if (!replayed) return;
-
-        if (_activeTurn is not null)
+        List<AcpRuntimeEvent>? events = null;
+        lock (_replayGate)
         {
-            _activeTurn.Complete(showDuration: false);
-            _activeTurn = null;
+            if (_acceptReplay && _replayBuffer.Count > 0)
+            {
+                events = [.. _replayBuffer];
+            }
+            _replayBuffer.Clear();
+            _acceptReplay = false;
         }
+
+        if (events is null || events.Count == 0) return;
+
+        var built = new List<AgentTimelineItem>();
+        UserTurnItem? currentUser = null;
+        StringBuilder? userBuf = null;
+        AssistantTurnItem? currentAssistant = null;
+
+        void CommitUser()
+        {
+            if (currentUser is null) return;
+            if (userBuf is not null)
+            {
+                currentUser = new UserTurnItem(userBuf.ToString(), null, ReusePrompt) { MessageId = currentUser.MessageId };
+                userBuf = null;
+            }
+            built.Add(currentUser);
+            currentUser = null;
+        }
+
+        AssistantTurnItem EnsureReplayAssistant()
+        {
+            CommitUser();
+            if (currentAssistant is not null) return currentAssistant;
+            currentAssistant = new AssistantTurnItem(
+                AgentId,
+                AgentName,
+                OpenToolFile,
+                _workspaceCommands is null ? null : OpenToolDiff,
+                OpenToolScript,
+                isReplay: true);
+            built.Add(currentAssistant);
+            return currentAssistant;
+        }
+
+        foreach (var evt in events)
+        {
+            switch (evt)
+            {
+                case AcpUserMessageEvent user:
+                    if (currentAssistant is not null)
+                    {
+                        currentAssistant.Complete(showDuration: false);
+                        currentAssistant = null;
+                    }
+                    if (currentUser is not null
+                        && (string.IsNullOrEmpty(user.MessageId) || user.MessageId == currentUser.MessageId))
+                    {
+                        userBuf ??= new StringBuilder(currentUser.Text);
+                        userBuf.Append(user.Text);
+                    }
+                    else
+                    {
+                        CommitUser();
+                        currentUser = new UserTurnItem(user.Text, null, ReusePrompt) { MessageId = user.MessageId };
+                    }
+                    break;
+
+                case AcpTextDeltaEvent delta:
+                {
+                    var turn = EnsureReplayAssistant();
+                    if (delta.Channel == "reasoning") turn.AppendThought(delta.Text, delta.MessageId);
+                    else turn.AppendMessage(delta.Text, delta.MessageId);
+                    break;
+                }
+
+                case AcpToolCallEvent tc:
+                {
+                    var update = tc.Update;
+                    // Sub-agent internals and background-shell/task bookkeeping only make sense live.
+                    if (!string.IsNullOrWhiteSpace(update.ParentToolCallId)) break;
+                    if (update.WorkflowAction is "task_create" or "task_update" or "background_output" or "background_stop" or "subagent_stop" or "subagent_stop_all") break;
+                    if (update.WorkflowAction == "todo_write" && update.WorkflowTasks.Count > 0)
+                    {
+                        EnsureReplayAssistant().SetPlan(update.WorkflowTasks, null);
+                        break;
+                    }
+                    if (update.WorkflowAction == "exit_plan" && !string.IsNullOrWhiteSpace(update.PlanMarkdown))
+                    {
+                        EnsureReplayAssistant().SetPlan([], update.PlanMarkdown);
+                    }
+                    EnsureReplayAssistant().UpsertToolCall(update);
+                    break;
+                }
+
+                case AcpPlanEvent plan:
+                    EnsureReplayAssistant().SetPlan(plan.Entries, plan.Markdown);
+                    break;
+            }
+        }
+
+        CommitUser();
+        currentAssistant?.Complete(showDuration: false);
+
+        foreach (var item in built)
+        {
+            Timeline.Add(item);
+        }
+
         if (_promptHistory.Count == 0)
         {
-            foreach (var user in Timeline.OfType<UserTurnItem>())
+            foreach (var user in built.OfType<UserTurnItem>())
             {
                 if (!string.IsNullOrWhiteSpace(user.Text)) _promptHistory.Add(user.Text.Trim());
             }
@@ -2541,6 +2722,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             });
             SetUi(() =>
             {
+                FlushPendingTextDeltas();
                 var prev = State;
                 State = AgentGuiState.Waiting;
                 CurrentPhase = WorkflowPhase.PlanGate;
@@ -2578,6 +2760,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         SetUi(() =>
         {
+            FlushPendingTextDeltas();
             var prev = State;
             State = AgentGuiState.Waiting;
             card = new PermissionCardItem(request, optionId =>
@@ -2637,6 +2820,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         SetUi(() =>
         {
+            FlushPendingTextDeltas();
             var prev = State;
             State = AgentGuiState.Waiting;
             card = new QuestionCardItem(request, answers =>
@@ -2686,10 +2870,21 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         try { await _session.SetBooleanConfigOptionAsync(configId, value); } catch { }
     }
 
-    private void IndexWorkspaceFilesAsync()
+    private void EnsureWorkspaceFilesIndexed()
     {
         var root = WorkingDirectory;
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return;
+        if (string.IsNullOrWhiteSpace(root)) return;
+
+        var now = DateTimeOffset.UtcNow;
+        if (SharedWorkspaceFileCache.TryGetValue(root, out var cached)
+            && now - cached.IndexedAt < WorkspaceFileCacheTtl)
+        {
+            _workspaceFiles = cached.Files;
+            return;
+        }
+
+        if (_workspaceIndexing || !Directory.Exists(root)) return;
+        _workspaceIndexing = true;
         _ = Task.Run(() =>
         {
             var found = new List<string>(256);
@@ -2717,11 +2912,34 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             {
                 // Best-effort workspace file indexing for @ mentions.
             }
+
+            var snapshot = found.ToArray();
+            if (SharedWorkspaceFileCache.Count >= MaxCachedWorkspaces)
+            {
+                // Evict oldest cached workspace entry to keep static cache bounded.
+                string? oldestKey = null;
+                var oldestTime = DateTimeOffset.MaxValue;
+                foreach (var kv in SharedWorkspaceFileCache)
+                {
+                    if (kv.Value.IndexedAt < oldestTime)
+                    {
+                        oldestTime = kv.Value.IndexedAt;
+                        oldestKey = kv.Key;
+                    }
+                }
+                if (oldestKey is not null) SharedWorkspaceFileCache.TryRemove(oldestKey, out _);
+            }
+            SharedWorkspaceFileCache[root] = (DateTimeOffset.UtcNow, snapshot);
+
             UiContext.PostToUi(() =>
             {
+                _workspaceIndexing = false;
                 if (_disposed) return;
-                _workspaceFiles.Clear();
-                _workspaceFiles.AddRange(found);
+                _workspaceFiles = snapshot;
+                if (IsFilePopupOpen)
+                {
+                    FilterFiles(_lastFileFilterQuery);
+                }
             });
         });
     }
@@ -2746,6 +2964,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     private async Task DisconnectInternalAsync()
     {
+        ClearPendingTextDeltas();
+        ClearReplayBuffer();
         _activeTurn?.Complete();
         _activeTurn = null;
         _urgentPrompt = null;
@@ -2773,7 +2993,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (_disposed) return;
         _disposed = true;
         WeakReferenceMessenger.Default.UnregisterAll(this);
+        ScriptPreview.PropertyChanged -= OnScriptPreviewPropertyChanged;
         StopLiveTickTimer();
+        ClearPendingTextDeltas();
+        ClearReplayBuffer();
         _activeTurn?.Complete();
         _activeTurn = null;
         _connectCts?.Cancel();
@@ -2784,6 +3007,19 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             old.EventReceived -= OnSessionEvent;
             _ = old.DisposeAsync();
         }
+        // Release collections & transient buffers promptly when a tab closes.
+        UiContext.Run(() =>
+        {
+            Timeline.Clear();
+            QueuedPrompts.Clear();
+            Attachments.Clear();
+            FilteredCommands.Clear();
+            FilteredFiles.Clear();
+            ResetOrchestrationState();
+            DiagnosticsText = "";
+        });
+        _workspaceFiles = [];
+        _promptHistory.Clear();
     }
 
     private static void SetUi(Action action) => UiContext.Run(action);

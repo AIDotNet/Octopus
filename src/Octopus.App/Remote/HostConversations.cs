@@ -220,11 +220,13 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
         private readonly Dictionary<AgentTimelineItem, ItemWatcher> _watched = [];
         private readonly HashSet<AgentTimelineItem> _dirty = [];
 
-        // What the devices were last told: the ids in order and each entry as it went out.
+        // What the devices were last told: the ids in order and each entry's byte size + content hash
+        // (avoids retaining a duplicate serialized JSON string per timeline turn in memory).
         private List<string> _sentOrder = [];
-        private readonly Dictionary<string, (AcpEntryMessage Entry, string Json)> _sent = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (AcpEntryMessage Entry, int ByteLength, ulong Hash)> _sent = new(StringComparer.Ordinal);
         private (string State, string? StatusDetail, string? ErrorText, int QueuedCount) _sentHeader;
-        private string _sentComposer = "";
+        private ulong _sentComposerHash;
+        private int _sentComposerLength;
         private bool _structureChanged;
         private bool _scheduled;
         private int _generation;
@@ -290,11 +292,12 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             {
                 if (ToEntry(item) is not { } entry) continue;
                 order.Add(entry.Id);
-                _sent[entry.Id] = (entry, Serialize(entry));
+                var (len, hash) = Fingerprint(entry);
+                _sent[entry.Id] = (entry, len, hash);
             }
             _sentOrder = order;
             _sentHeader = HeaderNow();
-            _sentComposer = JsonSerializer.Serialize(ComposerNow(), RemoteJsonContext.Default.AcpComposerMessage);
+            (_sentComposerLength, _sentComposerHash) = Fingerprint(ComposerNow());
             _dirty.Clear();
             _structureChanged = false;
         }
@@ -317,8 +320,8 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             var taken = new List<AcpEntryMessage>();
             for (var i = _sentOrder.Count - 1; i >= 0 && taken.Count < AcpLimits.SnapshotEntries; i--)
             {
-                var (entry, json) = _sent[_sentOrder[i]];
-                budget -= ByteCount(json);
+                var (entry, byteLength, _) = _sent[_sentOrder[i]];
+                budget -= byteLength;
                 if (budget < 0 && taken.Count > 0) break;
                 taken.Add(entry);
             }
@@ -480,14 +483,14 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
                 foreach (var item in Model.Timeline)
                 {
                     var id = IdOf(item);
-                    var known = _sent.ContainsKey(id);
+                    var known = _sent.TryGetValue(id, out var prevSent);
                     if (!known || _dirty.Contains(item))
                     {
                         if (ToEntry(item) is not { } entry) continue;
-                        var json = Serialize(entry);
-                        if (!known || _sent[id].Json != json)
+                        var (len, hash) = Fingerprint(entry);
+                        if (!known || prevSent.ByteLength != len || prevSent.Hash != hash)
                         {
-                            _sent[id] = (entry, json);
+                            _sent[id] = (entry, len, hash);
                             // A device that has the entry ignores this; one that lacks it (it was older than its
                             // snapshot) puts it in its place.
                             update.Upserts.Add(Positioned(entry, previous));
@@ -517,8 +520,14 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             _sentHeader = header;
 
             var composer = ComposerNow();
-            var composerJson = JsonSerializer.Serialize(composer, RemoteJsonContext.Default.AcpComposerMessage);
-            if (composerJson != _sentComposer) (update.Composer, changed, _sentComposer) = (composer, true, composerJson);
+            var (composerLen, composerHash) = Fingerprint(composer);
+            if (composerLen != _sentComposerLength || composerHash != _sentComposerHash)
+            {
+                update.Composer = composer;
+                changed = true;
+                _sentComposerLength = composerLen;
+                _sentComposerHash = composerHash;
+            }
 
             if (!changed) return;
             foreach (var part in Split(update))
@@ -558,7 +567,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             var size = 0;
             foreach (var entry in update.Upserts)
             {
-                var length = ByteCount(Serialize(entry));
+                var length = SerializeLength(entry);
                 if (part.Upserts.Count > 0 && size + length > MessageBudget)
                 {
                     yield return first ? WithHeader(part, update) : part;
@@ -654,11 +663,34 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
 
     // ---- the timeline as entries ----
 
-    private static string Serialize(AcpEntryMessage entry) => JsonSerializer.Serialize(entry, RemoteJsonContext.Default.AcpEntryMessage);
+    private static (int ByteLength, ulong Hash) Fingerprint(AcpEntryMessage entry)
+    {
+        var utf8 = JsonSerializer.SerializeToUtf8Bytes(entry, RemoteJsonContext.Default.AcpEntryMessage);
+        return (utf8.Length, HashFnv1a64(utf8));
+    }
 
-    private static int ByteCount(string json) => Encoding.UTF8.GetByteCount(json);
+    private static (int ByteLength, ulong Hash) Fingerprint(AcpComposerMessage composer)
+    {
+        var utf8 = JsonSerializer.SerializeToUtf8Bytes(composer, RemoteJsonContext.Default.AcpComposerMessage);
+        return (utf8.Length, HashFnv1a64(utf8));
+    }
+
+    private static int SerializeLength(AcpEntryMessage entry) => JsonSerializer.SerializeToUtf8Bytes(entry, RemoteJsonContext.Default.AcpEntryMessage).Length;
 
     private static int Serialize(AcpUpdateMessage update) => JsonSerializer.SerializeToUtf8Bytes(update, RemoteJsonContext.Default.AcpUpdateMessage).Length;
+
+    private static ulong HashFnv1a64(ReadOnlySpan<byte> data)
+    {
+        const ulong offsetBasis = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+        var hash = offsetBasis;
+        for (var i = 0; i < data.Length; i++)
+        {
+            hash ^= data[i];
+            hash *= prime;
+        }
+        return hash;
+    }
 
     /// <summary>The entry a timeline item shows as on a device; null for what only this computer's window shows.</summary>
     internal static AcpEntryMessage? ToEntry(AgentTimelineItem item)
@@ -764,13 +796,13 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
     /// </summary>
     private static AcpEntryMessage Fit(AcpEntryMessage entry)
     {
-        if (ByteCount(Serialize(entry)) <= EntryBudget) return entry;
+        if (SerializeLength(entry) <= EntryBudget) return entry;
         foreach (var tool in entry.Tools ?? [])
         {
             tool.Output = Tail(tool.Output, 512);
             if (tool.Diff is { Count: > 40 } diff) tool.Diff = diff[..40];
         }
-        if (ByteCount(Serialize(entry)) <= EntryBudget) return entry;
+        if (SerializeLength(entry) <= EntryBudget) return entry;
         entry.Thought = Tail(entry.Thought, 2 * 1024);
         foreach (var tool in entry.Tools ?? [])
         {
@@ -778,7 +810,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             tool.Diff = null;
             tool.Command = Tail(tool.Command, 256);
         }
-        if (ByteCount(Serialize(entry)) <= EntryBudget) return entry;
+        if (SerializeLength(entry) <= EntryBudget) return entry;
         entry.Text = Tail(entry.Text, 8 * 1024);
         entry.Thought = null;
         if (entry.Tools is { Count: > 100 } tools) entry.Tools = tools[^100..];

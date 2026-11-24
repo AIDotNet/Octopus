@@ -291,24 +291,26 @@ public sealed class AcpJsonRpcPeer : IAsyncDisposable
             if (hasMethod)
             {
                 var method = methodEl.GetString()!;
-                JsonElement? parameters = root.TryGetProperty("params", out var pEl) ? pEl.Clone() : null;
+                var hasParams = root.TryGetProperty("params", out var pEl);
 
                 if (hasId)
                 {
                     if (_drainingNotifications) return;
-                    HandleIncomingRequest(idEl.Clone(), method, parameters);
+                    // Incoming requests execute asynchronously after doc is disposed -> clone params & id.
+                    HandleIncomingRequest(idEl.Clone(), method, hasParams ? pEl.Clone() : null);
                     return;
                 }
 
                 if (method == "$/cancel_request")
                 {
-                    HandleIncomingCancel(parameters);
+                    HandleIncomingCancel(hasParams ? pEl : null);
                     return;
                 }
 
                 try
                 {
-                    _handlers.OnNotification?.Invoke(method, parameters);
+                    // Notifications are parsed synchronously within this using(doc) scope: avoid cloning the entire payload.
+                    _handlers.OnNotification?.Invoke(method, hasParams ? pEl : null);
                 }
                 catch (Exception ex)
                 {

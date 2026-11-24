@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
@@ -7,6 +8,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Octopus.App.Workspace;
+using TKCode.Arc;
 
 namespace Octopus.App.AgentGui;
 
@@ -15,6 +17,7 @@ public partial class AgentGuiTabView : UserControl, ITabContent
     private const double BottomPinThreshold = 42.0;
 
     private AgentGuiTabViewModel? _model;
+    private ScrollArea? _timelineScroller;
     private bool _started;
     private bool _isAttached;
     private bool _programmaticScroll;
@@ -25,14 +28,29 @@ public partial class AgentGuiTabView : UserControl, ITabContent
     {
         InitializeComponent();
         ComposerInput.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
-        TimelineScroller.ScrollChanged += OnTimelineScrollChanged;
-        TimelineScroller.AddHandler(PointerPressedEvent, OnTimelinePointerPressed, RoutingStrategies.Tunnel);
-        TimelineScroller.AddHandler(PointerReleasedEvent, OnTimelinePointerReleased, RoutingStrategies.Tunnel);
+        TimelineList.TemplateApplied += OnTimelineTemplateApplied;
         ModelPickerPopover.PropertyChanged += OnModelPopoverPropertyChanged;
 
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDropAsync);
+    }
+
+    private void OnTimelineTemplateApplied(object? sender, TemplateAppliedEventArgs e)
+    {
+        if (_timelineScroller is not null)
+        {
+            _timelineScroller.ScrollChanged -= OnTimelineScrollChanged;
+            _timelineScroller.RemoveHandler(PointerPressedEvent, OnTimelinePointerPressed);
+            _timelineScroller.RemoveHandler(PointerReleasedEvent, OnTimelinePointerReleased);
+        }
+        _timelineScroller = e.NameScope.Find<ScrollArea>("PART_ScrollViewer");
+        if (_timelineScroller is not null)
+        {
+            _timelineScroller.ScrollChanged += OnTimelineScrollChanged;
+            _timelineScroller.AddHandler(PointerPressedEvent, OnTimelinePointerPressed, RoutingStrategies.Tunnel);
+            _timelineScroller.AddHandler(PointerReleasedEvent, OnTimelinePointerReleased, RoutingStrategies.Tunnel);
+        }
     }
 
     private void OnTimelinePointerPressed(object? sender, PointerPressedEventArgs e) => _pointerPressedInTimeline = true;
@@ -76,6 +94,14 @@ public partial class AgentGuiTabView : UserControl, ITabContent
     {
         base.OnDetachedFromVisualTree(e);
         _isAttached = false;
+        _pointerPressedInTimeline = false;
+        // Release transient overlays when switching away from this tab.
+        if (_model is not null)
+        {
+            _model.IsCommandPopupOpen = false;
+            _model.IsFilePopupOpen = false;
+            if (_model.ScriptPreview.IsOpen) _model.ScriptPreview.Close();
+        }
     }
 
     private void TryStartIfVisible()
@@ -111,15 +137,15 @@ public partial class AgentGuiTabView : UserControl, ITabContent
 
     private void OnTimelineScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_model is null || _programmaticScroll) return;
-        var extentY = TimelineScroller.Extent.Height;
-        var viewportY = TimelineScroller.Viewport.Height;
+        if (_model is null || _timelineScroller is null || _programmaticScroll) return;
+        var extentY = _timelineScroller.Extent.Height;
+        var viewportY = _timelineScroller.Viewport.Height;
         if (extentY <= viewportY + 1)
         {
             _model.IsPinnedToBottom = true;
             return;
         }
-        var distanceFromBottom = extentY - viewportY - TimelineScroller.Offset.Y;
+        var distanceFromBottom = extentY - viewportY - _timelineScroller.Offset.Y;
         _model.IsPinnedToBottom = distanceFromBottom <= BottomPinThreshold;
     }
 
@@ -130,9 +156,9 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         Dispatcher.UIThread.Post(() =>
         {
             _scrollQueued = false;
-            if (_model is null || (!force && (!_model.IsPinnedToBottom || _pointerPressedInTimeline))) return;
+            if (_model is null || _timelineScroller is null || (!force && (!_model.IsPinnedToBottom || _pointerPressedInTimeline))) return;
             _programmaticScroll = true;
-            try { TimelineScroller.ScrollToEnd(); }
+            try { _timelineScroller.ScrollToEnd(); }
             finally { _programmaticScroll = false; }
         }, DispatcherPriority.Background);
     }
