@@ -18,7 +18,7 @@ namespace Octopus.Mobile.Remote;
 /// the addresses it was reached at before, else through the relay when signed in) and says its projects, items and
 /// what they are doing. Everything the pages bind to changes on the UI thread; the network happens elsewhere.
 /// </summary>
-internal sealed class RemoteWorkspace : IRemoteWorkspace, IDisposable
+internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
 {
     /// <summary>How long a computer named by its address has to answer before it counts as out of reach.</summary>
     private static readonly TimeSpan ReachLimit = TimeSpan.FromSeconds(15);

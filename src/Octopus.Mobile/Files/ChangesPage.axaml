@@ -1,0 +1,79 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Files"
+           x:Class="Octopus.Mobile.Files.ChangesPage"
+           x:DataType="vm:ChangesViewModel"
+           IsScrollable="False">
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource ChangesTitle}"
+                     ShowBack="True"
+                     BackCommand="{Binding BackCommand}">
+            <arcm:Navbar.Trailing>
+                <arcm:IconButton Name="RefreshButton"
+                                 Icon="{x:Static arc:ArcIcons.RefreshCw}"
+                                 Command="{Binding RefreshCommand}"
+                                 AutomationProperties.Name="{l:MobileLangResource Refresh}" />
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
+    </arcm:Page.Header>
+
+    <Grid RowDefinitions="Auto,*">
+        <Border Classes="strip" Grid.Row="0" Padding="14,5">
+            <TextBlock Name="SubtitleText" Classes="secondary" Text="{Binding Subtitle}" />
+        </Border>
+
+        <arcm:PullToRefresh Grid.Row="1"
+                            IsRefreshing="{Binding IsRefreshing, Mode=TwoWay}"
+                            Command="{Binding RefreshCommand}">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,12,0,24" Spacing="12">
+                    <arc:ArcSpinner HorizontalAlignment="Center" Margin="0,24" IsVisible="{Binding IsLoading}" />
+
+                    <Border Name="ErrorCard" Classes="alertCard danger" Margin="16,0" IsVisible="{Binding HasError}">
+                        <TextBlock Name="ErrorText" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+                    </Border>
+
+                    <arcm:ListGroup Name="ChangeList"
+                                    Header="{Binding CountText}"
+                                    ItemsSource="{Binding Rows}"
+                                    IsVisible="{Binding HasRows}">
+                        <arcm:ListGroup.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ChangeRowViewModel">
+                                <arcm:ListItem Content="{Binding Name}"
+                                               Subtitle="{Binding Subtitle}"
+                                               ShowChevron="True"
+                                               Command="{Binding OpenCommand}">
+                                    <arcm:ListItem.Leading>
+                                        <Border Classes="changeBadge"
+                                                Classes.added="{Binding IsAdded}"
+                                                Classes.modified="{Binding IsModified}"
+                                                Classes.removed="{Binding IsRemoved}">
+                                            <TextBlock Text="{Binding Badge}" />
+                                        </Border>
+                                    </arcm:ListItem.Leading>
+                                    <arcm:ListItem.Trailing>
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" IsVisible="{Binding HasCounts}">
+                                            <TextBlock Classes="diffStat added" Text="{Binding AddedText}" IsVisible="{Binding HasAdded}" />
+                                            <TextBlock Classes="diffStat removed" Text="{Binding RemovedText}" IsVisible="{Binding HasRemoved}" />
+                                        </StackPanel>
+                                    </arcm:ListItem.Trailing>
+                                </arcm:ListItem>
+                            </DataTemplate>
+                        </arcm:ListGroup.ItemTemplate>
+                    </arcm:ListGroup>
+
+                    <TextBlock Name="EmptyText" Classes="muted" Text="{l:MobileLangResource ChangesEmpty}"
+                               HorizontalAlignment="Center" Margin="20,36" TextWrapping="Wrap" TextAlignment="Center"
+                               IsVisible="{Binding IsEmpty}" />
+
+                    <TextBlock Name="NotRepositoryText" Classes="muted" Text="{l:MobileLangResource ChangesNotRepository}"
+                               HorizontalAlignment="Center" Margin="20,36" TextWrapping="Wrap" TextAlignment="Center"
+                               IsVisible="{Binding IsNotRepository}" />
+                </StackPanel>
+            </ScrollViewer>
+        </arcm:PullToRefresh>
+    </Grid>
+</arcm:Page>

@@ -17,6 +17,15 @@ public interface INavigator
     void ShowSessionDetails(RemoteSession session);
     /// <summary>Picks a folder of a host and makes it a project there; <paramref name="created"/> runs after the page left.</summary>
     void ShowFolderPicker(RemoteHost host, Action<RemoteProject>? created = null);
+    // Files, changes and diffs (Files/).
+    /// <summary>Lists the files and folders inside <paramref name="folder"/> (or <paramref name="project"/>'s own folder when null).</summary>
+    void ShowFiles(RemoteProject project, string? folder = null);
+    /// <summary>Shows one file of <paramref name="project"/> read-only; <paramref name="location"/> is shown under its name.</summary>
+    void ShowFile(RemoteProject project, string path, string? location = null);
+    /// <summary>Lists the uncommitted git changes of <paramref name="workspacePath"/> (or <paramref name="project"/>'s own folder when null).</summary>
+    void ShowChanges(RemoteProject project, string? workspacePath = null);
+    /// <summary>Shows the diff of one change listed by <see cref="ShowChanges"/>.</summary>
+    void ShowDiff(RemoteProject project, string? workspacePath, RemoteChange change);
     void ShowPairing(RemoteHost host);
     /// <summary>The number of a pairing that is already under way: a computer the person named by its address.</summary>
     void ShowPairing(string hostName, PairingAttempt attempt);

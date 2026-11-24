@@ -1,0 +1,76 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Files"
+           x:Class="Octopus.Mobile.Files.FileViewerPage"
+           x:DataType="vm:FileViewerViewModel"
+           IsScrollable="False">
+    <arcm:Page.Resources>
+        <StreamGeometry x:Key="WrapGlyph">M3 6h18 M3 12h15a3 3 0 1 1 0 6h-4 M16 16l-2 2 2 2 M3 18h7</StreamGeometry>
+    </arcm:Page.Resources>
+
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{Binding Title}"
+                     ShowBack="True"
+                     BackCommand="{Binding BackCommand}">
+            <arcm:Navbar.Trailing>
+                <arcm:IconButton Name="WrapButton"
+                                 Classes="toggled"
+                                 Classes.active="{Binding IsWrapped}"
+                                 Icon="{StaticResource WrapGlyph}"
+                                 Command="{Binding ToggleWrapCommand}"
+                                 AutomationProperties.Name="{l:MobileLangResource WrapLines}" />
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
+    </arcm:Page.Header>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Where the file lives, read-only, and its line count once read. -->
+        <Border Classes="strip" Grid.Row="0" Padding="14,5">
+            <TextBlock Name="SubtitleText" Classes="secondary" Text="{Binding Subtitle}" />
+        </Border>
+
+        <Panel Grid.Row="1">
+            <!-- Virtualized line list so multi-thousand-line files stay responsive on the phone. -->
+            <ListBox Name="CodeLines"
+                     Classes="codeList"
+                     ItemsSource="{Binding Lines}"
+                     IsVisible="{Binding !HasMessage}"
+                     ScrollViewer.HorizontalScrollBarVisibility="{Binding HorizontalScroll}"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FileLine">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="10,1">
+                            <TextBlock Classes="codeNum"
+                                       Width="{Binding $parent[ListBox].((vm:FileViewerViewModel)DataContext).NumberWidth}"
+                                       Text="{Binding Number}" />
+                            <TextBlock Grid.Column="1"
+                                       Classes="codeText"
+                                       Text="{Binding Text}"
+                                       TextWrapping="{Binding $parent[ListBox].((vm:FileViewerViewModel)DataContext).Wrapping}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <arc:ArcSpinner HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsLoading}" />
+
+            <Border Name="MessageCard" Classes="emptyCard" Margin="20" VerticalAlignment="Center" IsVisible="{Binding HasMessage}">
+                <TextBlock Name="MessageText" Classes="secondary" Text="{Binding Message}"
+                           TextWrapping="Wrap" TextAlignment="Center" />
+            </Border>
+        </Panel>
+
+        <Border Name="CappedBanner" Grid.Row="2" Classes="strip" Padding="14,6" IsVisible="{Binding IsCapped}">
+            <TextBlock Name="CappedText" Classes="muted" Text="{Binding CappedText}"
+                       TextWrapping="Wrap" HorizontalAlignment="Center" />
+        </Border>
+    </Grid>
+</arcm:Page>

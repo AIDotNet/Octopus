@@ -128,8 +128,9 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
     private void Back() => _navigator.Back();
 
     /// <summary>
-    /// The "⋯" menu: fit or give the size back and the text size first, then what can be done to any session
-    /// (rename, restart, another like it, details, close).
+    /// The "⋯" menu: fit or give the size back and the text size first, then the project's files and uncommitted
+    /// changes when the host supports them, then what can be done to any session (rename, restart, another like it,
+    /// details, close).
     /// </summary>
     [RelayCommand]
     private void OpenMenu()
@@ -142,8 +143,16 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         };
         if (FontSize < MaxFontSize) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.FontLarger), LargerTextCommand));
         if (FontSize > MinFontSize) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.FontSmaller), SmallerTextCommand));
+        if (_workspace.SupportsFiles(Session.Project.Host)) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.FilesBrowse), BrowseFilesCommand));
+        if (_workspace.SupportsGit(Session.Project.Host)) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.ChangesView), ViewChangesCommand));
         Actions.ShowMenu(Session, leading);
     }
+
+    [RelayCommand]
+    private void BrowseFiles() => _navigator.ShowFiles(Session.Project, RemoteFolders.WorkspacePathOf(Session));
+
+    [RelayCommand]
+    private void ViewChanges() => _navigator.ShowChanges(Session.Project, RemoteFolders.WorkspacePathOf(Session));
 
     [RelayCommand]
     private void LargerText() => FontSize = Math.Min(MaxFontSize, FontSize + 1);

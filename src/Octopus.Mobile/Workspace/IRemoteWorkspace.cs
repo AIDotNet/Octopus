@@ -8,7 +8,7 @@ namespace Octopus.Mobile.Workspace;
 /// (design/12-远程操作.md §6). The pages only use this; <see cref="Demo.DemoWorkspace"/> stands in for the preview and
 /// the layout tests. Every collection and property changes on the UI thread.
 /// </summary>
-public interface IRemoteWorkspace
+public partial interface IRemoteWorkspace
 {
     /// <summary>
     /// Paired hosts, and while signed in the account's other computers that are not paired yet. Without an account

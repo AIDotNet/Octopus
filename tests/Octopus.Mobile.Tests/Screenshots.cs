@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Terminals;
 using TKCode.Arc;
@@ -111,6 +112,39 @@ public class Screenshots
             phone.Shell.ShowSession(station.Projects[0].Sessions.Single(session => session.IsGui));
             Phone.Settle();
             phone.Save("2g-gui-details" + suffix);
+
+            // Files, file viewer, changes and diff (Route 2: Files/).
+            var octopus = mac.Projects[0];
+            phone.Shell.ShowFiles(octopus);
+            var files = (FilesViewModel)phone.Top<FilesPage>().DataContext!;
+            Assert.True(Phone.Until(() => !files.IsLoading && files.Entries.Count > 0));
+            files.Entries.Single(entry => entry.Name == "src").OpenCommand.Execute(null);
+            Assert.True(Phone.Until(() => !files.IsLoading && files.Crumbs.Count == 2));
+            Phone.Settle();
+            phone.Save("18-files" + suffix);
+
+            files.Entries.Single(entry => entry.Name == "Auth").OpenCommand.Execute(null);
+            Assert.True(Phone.Until(() => !files.IsLoading && files.Crumbs.Count == 3));
+            files.Entries.Single(entry => entry.Name == "TokenIssuer.cs").OpenCommand.Execute(null);
+            var viewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
+            Assert.True(Phone.Until(() => !viewer.IsLoading && viewer.Lines.Count > 0));
+            Phone.Settle();
+            phone.Save("19-file-viewer" + suffix);
+            phone.Shell.Back();
+            phone.Shell.Back();
+            Phone.Settle();
+
+            phone.Shell.ShowChanges(octopus);
+            var changes = (ChangesViewModel)phone.Top<ChangesPage>().DataContext!;
+            Assert.True(Phone.Until(() => !changes.IsLoading && changes.Rows.Count > 0));
+            Phone.Settle();
+            phone.Save("20-changes" + suffix);
+
+            changes.Rows.Single(row => row.Name == "TokenService.cs").OpenCommand.Execute(null);
+            var diff = (DiffViewModel)phone.Top<DiffPage>().DataContext!;
+            Assert.True(Phone.Until(() => !diff.IsLoading && diff.Lines.Count > 0));
+            Phone.Settle();
+            phone.Save("21-diff" + suffix);
         }
 
         using (var phone = new Phone())

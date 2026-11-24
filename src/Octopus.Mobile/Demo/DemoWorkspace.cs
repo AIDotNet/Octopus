@@ -14,7 +14,7 @@ namespace Octopus.Mobile.Demo;
 /// yet, and six sessions of which one waits for the user. Without an account (<c>localOnly</c>) only the two that need
 /// no service are there. Nothing here talks to a network.
 /// </summary>
-public sealed class DemoWorkspace : IRemoteWorkspace
+public sealed partial class DemoWorkspace : IRemoteWorkspace
 {
     private static readonly AgentOption Claude = new("claude", "Claude", "C", "#D97757", ["Fable 5.2", "Opus 5.5", "Sonnet 5.5"], ["低", "中", "高", "极高"]);
     private static readonly AgentOption Codex = new("codex", "Codex", "X", "#1F9D74", ["GPT-6", "GPT-6 mini"], ["低", "中", "高"]);

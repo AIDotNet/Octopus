@@ -229,12 +229,65 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
         return Task.CompletedTask;
     }
 
-    // Files and git are not what these tests are about.
+    /// <summary>In-memory files keyed by full host path (with forward slashes), for <c>fs/list</c> and <c>fs/read</c> tests.</summary>
+    public Dictionary<string, byte[]> Files { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Optional handler for <c>git/call</c> (<c>(method, argumentsJson) =&gt; replyJson</c>).</summary>
+    public Func<string, string, string>? GitHandler { get; set; }
+
     private static RemoteException NotHere() => new(RemoteMethods.NotAllowed, "Not available in this test host.");
     public Task<string> ResolveAsync(string path) => throw NotHere();
-    public Task<IReadOnlyList<FileEntryMessage>> ListAsync(string directory) => throw NotHere();
+
+    public Task<IReadOnlyList<FileEntryMessage>> ListAsync(string directory)
+    {
+        var dir = directory.TrimEnd('/');
+        var prefix = dir + "/";
+        var folders = new HashSet<string>(StringComparer.Ordinal);
+        var entries = new List<FileEntryMessage>();
+        var matchedAny = false;
+        lock (_gate)
+        {
+            matchedAny = _projects.Any(project => project.Path.TrimEnd('/') == dir
+                || (project.Workspaces?.Any(ws => ws.Path.TrimEnd('/') == dir) ?? false));
+            foreach (var key in Files.Keys)
+            {
+                if (!key.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                matchedAny = true;
+                var rest = key[prefix.Length..];
+                if (rest.IndexOf('/') is var slash and >= 0)
+                {
+                    var name = rest[..slash];
+                    if (folders.Add(name))
+                    {
+                        entries.Add(new FileEntryMessage { Name = name, Path = prefix + name, IsDirectory = true, IsHidden = name.StartsWith('.') });
+                    }
+                }
+                else
+                {
+                    entries.Add(new FileEntryMessage { Name = rest, Path = key, IsDirectory = false, IsHidden = rest.StartsWith('.') });
+                }
+            }
+        }
+        if (!matchedAny) throw new RemoteException(RemoteMethods.NotFound, $"Folder '{directory}' was not found.");
+        return Task.FromResult<IReadOnlyList<FileEntryMessage>>(entries);
+    }
+
     public Task<bool> ExistsAsync(string path) => throw NotHere();
-    public Task<(byte[] Data, long Size)> ReadAsync(string path, long offset, int length) => throw NotHere();
+
+    public Task<(byte[] Data, long Size)> ReadAsync(string path, long offset, int length)
+    {
+        byte[] bytes;
+        lock (_gate)
+        {
+            if (!Files.TryGetValue(path, out bytes!)) throw new RemoteException(RemoteMethods.NotFound, $"File '{path}' was not found.");
+        }
+        var start = (int)Math.Clamp(offset, 0, bytes.LongLength);
+        var count = (int)Math.Min(length, bytes.LongLength - start);
+        var slice = new byte[count];
+        Array.Copy(bytes, start, slice, 0, count);
+        return Task.FromResult((slice, bytes.LongLength));
+    }
+
     public Task WriteAsync(string path, string upload, byte[] data, bool last) => throw NotHere();
     public Task CreateFileAsync(string path) => throw NotHere();
     public Task CreateDirectoryAsync(string path) => throw NotHere();
@@ -259,141 +312,7 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
         });
     }
     public Task<string> BrowseCreateDirectoryAsync(CreateBrowseFolderMessage request) => throw NotHere();
-    public Task<string> GitAsync(string method, string arguments) => throw NotHere();
-}
+    public Task<string> GitAsync(string method, string arguments) =>
+        GitHandler is { } handler ? Task.FromResult(handler(method, arguments)) : throw NotHere();
 
-/// <summary>A terminal of the test host: what it shows, what was typed into it, its size and which view decides that.</summary>
-internal sealed class FakeTerminal(string screen)
-{
-    private readonly object _gate = new();
-    private readonly List<View> _views = [];
-    private readonly StringBuilder _screen = new(screen);
-    private readonly StringBuilder _typed = new();
-    private ulong _position;
-    private View? _owner;
-
-    public int Columns { get; private set; } = FakeHostWorkspace.OwnColumns;
-    public int Rows { get; private set; } = FakeHostWorkspace.OwnRows;
-
-    /// <summary>Everything devices typed, in order.</summary>
-    public string Typed
-    {
-        get { lock (_gate) return _typed.ToString(); }
-    }
-
-    /// <summary>True while a device's view decides the size; false while it is this computer's own window.</summary>
-    public bool IsOwnedByDevice
-    {
-        get { lock (_gate) return _owner is not null; }
-    }
-
-    public int Viewers
-    {
-        get { lock (_gate) return _views.Count; }
-    }
-
-    /// <summary>The program prints something.</summary>
-    public void Print(string text)
-    {
-        lock (_gate) Output(Encoding.UTF8.GetBytes(text));
-    }
-
-    public ISessionAttachment Attach(ISessionSink sink, int columns, int rows, bool claim)
-    {
-        lock (_gate)
-        {
-            var view = new View(this, sink, (columns, rows));
-            if (claim) Claim(view, columns, rows);
-            view.Begin(Encoding.UTF8.GetBytes(_screen.ToString()), _position, Columns, Rows);
-            _views.Add(view);
-            return view;
-        }
-    }
-
-    // Under the gate.
-    private void Output(byte[] bytes)
-    {
-        _screen.Append(Encoding.UTF8.GetString(bytes));
-        foreach (var view in _views) view.Sink.Output(_position, bytes);
-        _position += (ulong)bytes.Length;
-    }
-
-    private void Claim(View view, int columns, int rows)
-    {
-        _owner = view;
-        SetSize(columns, rows);
-    }
-
-    private void SetSize(int columns, int rows)
-    {
-        if ((columns, rows) == (Columns, Rows)) return;
-        (Columns, Rows) = (columns, rows);
-        foreach (var view in _views) view.Sink.Resized(_position, columns, rows);
-        _position++;
-    }
-
-    private sealed class View(FakeTerminal terminal, ISessionSink sink, (int Columns, int Rows) wanted) : ISessionAttachment
-    {
-        private byte[]? _snapshot = [];
-        public ISessionSink Sink { get; } = sink;
-        public ulong Position { get; private set; }
-        public bool IsNative => false;
-        public int SnapshotLength { get; private set; }
-        public byte[] TakeSnapshot() => Interlocked.Exchange(ref _snapshot, null) ?? [];
-        public int Columns { get; private set; }
-        public int Rows { get; private set; }
-        public string? Title => null;
-        public bool IsRunning => true;
-        public int? ExitCode => null;
-        public bool OwnsSize => ReferenceEquals(terminal._owner, this);
-
-        public void Begin(byte[] snapshot, ulong position, int columns, int rows) => (_snapshot, SnapshotLength, Position, Columns, Rows) = (snapshot, snapshot.Length, position, columns, rows);
-
-        public void Input(ReadOnlySpan<byte> bytes)
-        {
-            var copy = bytes.ToArray();
-            lock (terminal._gate)
-            {
-                terminal._typed.Append(Encoding.UTF8.GetString(copy));
-                // Echoed, as a line editor would.
-                terminal.Output(copy);
-            }
-        }
-
-        public (bool Applied, int Columns, int Rows) Resize(int columns, int rows, bool claim)
-        {
-            lock (terminal._gate)
-            {
-                wanted = (columns, rows);
-                if (claim) terminal.Claim(this, columns, rows);
-                else if (OwnsSize) terminal.SetSize(columns, rows);
-                return (OwnsSize, terminal.Columns, terminal.Rows);
-            }
-        }
-
-        public (int Columns, int Rows) ReleaseSize()
-        {
-            lock (terminal._gate)
-            {
-                if (OwnsSize)
-                {
-                    // Back to this computer's own window and its size.
-                    terminal._owner = null;
-                    terminal.SetSize(FakeHostWorkspace.OwnColumns, FakeHostWorkspace.OwnRows);
-                }
-                return (terminal.Columns, terminal.Rows);
-            }
-        }
-
-        public void Dispose()
-        {
-            lock (terminal._gate)
-            {
-                terminal._views.Remove(this);
-                if (!OwnsSize) return;
-                terminal._owner = null;
-                terminal.SetSize(FakeHostWorkspace.OwnColumns, FakeHostWorkspace.OwnRows);
-            }
-        }
-    }
 }

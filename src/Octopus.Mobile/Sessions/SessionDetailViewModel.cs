@@ -15,11 +15,13 @@ namespace Octopus.Mobile.Sessions;
 /// </summary>
 public sealed partial class SessionDetailViewModel : ObservableObject, IDisposable
 {
+    private readonly IRemoteWorkspace _workspace;
     private readonly INavigator _navigator;
 
     public SessionDetailViewModel(RemoteSession session, IRemoteWorkspace workspace, INavigator navigator)
     {
         Session = session;
+        _workspace = workspace;
         _navigator = navigator;
         // Closed from here: nothing left to show.
         Actions = new SessionActionsViewModel(workspace, navigator, session, _ => navigator.Back());
@@ -38,6 +40,8 @@ public sealed partial class SessionDetailViewModel : ObservableObject, IDisposab
     public bool IsTerminal => !IsAgent;
     public bool IsGui => Session.IsGui;
     public bool CanOpenTerminal => !Session.IsGui;
+    public bool CanBrowseFiles => _workspace.SupportsFiles(Session.Project.Host);
+    public bool CanViewChanges => _workspace.SupportsGit(Session.Project.Host);
     public string Initial { get; }
     public IBrush? Tint { get; }
 
@@ -66,6 +70,12 @@ public sealed partial class SessionDetailViewModel : ObservableObject, IDisposab
     {
         if (!Session.IsGui) _navigator.ShowSession(Session);
     }
+
+    [RelayCommand]
+    private void BrowseFiles() => _navigator.ShowFiles(Session.Project, RemoteFolders.WorkspacePathOf(Session));
+
+    [RelayCommand]
+    private void ViewChanges() => _navigator.ShowChanges(Session.Project, RemoteFolders.WorkspacePathOf(Session));
 
     public void Dispose() => Session.PropertyChanged -= OnSessionChanged;
 

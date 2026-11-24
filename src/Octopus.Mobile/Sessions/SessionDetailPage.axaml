@@ -68,6 +68,16 @@
                            ShowChevron="True"
                            IsVisible="{Binding CanOpenTerminal}"
                            Command="{Binding OpenTerminalCommand}" />
+            <arcm:ListItem Name="BrowseFilesRow"
+                           Content="{l:MobileLangResource FilesBrowse}"
+                           ShowChevron="True"
+                           IsVisible="{Binding CanBrowseFiles}"
+                           Command="{Binding BrowseFilesCommand}" />
+            <arcm:ListItem Name="ViewChangesRow"
+                           Content="{l:MobileLangResource ChangesView}"
+                           ShowChevron="True"
+                           IsVisible="{Binding CanViewChanges}"
+                           Command="{Binding ViewChangesCommand}" />
             <arcm:ListItem Name="RenameRow"
                            Content="{l:MobileLangResource SessionRename}"
                            Command="{Binding Actions.BeginRenameCommand}" />

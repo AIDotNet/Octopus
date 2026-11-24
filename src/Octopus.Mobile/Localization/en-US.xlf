@@ -193,5 +193,28 @@
     <unit id="FolderCreate"><segment><source>Create</source></segment></unit>
     <unit id="FolderUnsupportedHost"><segment><source>Update Octopus on the computer to browse its folders.</source></segment></unit>
     <unit id="FolderHome"><segment><source>Home</source></segment></unit>
+    <unit id="FilesBrowse"><segment><source>Browse files</source></segment></unit>
+    <unit id="ChangesView"><segment><source>View changes</source></segment></unit>
+    <unit id="FilesEmpty"><segment><source>This folder is empty</source></segment></unit>
+    <unit id="FilesUnsupportedHost"><segment><source>Update Octopus on the computer to look at its files.</source></segment></unit>
+    <unit id="FilesCapped"><segment><source>Only the first {0} entries are shown.</source></segment></unit>
+    <unit id="FileReadOnly"><segment><source>Read only</source></segment></unit>
+    <unit id="FileLineCount"><segment><source>{0} lines</source></segment></unit>
+    <unit id="FileBinary"><segment><source>This file is not text and cannot be shown on the phone.</source></segment></unit>
+    <unit id="FileTooLarge"><segment><source>This file is {0}; the phone shows files up to {1}.</source></segment></unit>
+    <unit id="LinesCapped"><segment><source>Only the first {0} of {1} lines are shown.</source></segment></unit>
+    <unit id="WrapLines"><segment><source>Wrap lines</source></segment></unit>
+    <unit id="ChangesTitle"><segment><source>Changes</source></segment></unit>
+    <unit id="ChangesCount"><segment><source>Uncommitted · {0} files</source></segment></unit>
+    <unit id="ChangesEmpty"><segment><source>No uncommitted changes</source></segment></unit>
+    <unit id="ChangesNotRepository"><segment><source>This folder is not in a git repository.</source></segment></unit>
+    <unit id="ChangesUnsupportedHost"><segment><source>Update Octopus on the computer to review its changes.</source></segment></unit>
+    <unit id="ChangesFailed"><segment><source>git on the computer could not answer.</source></segment></unit>
+    <unit id="ChangesStaged"><segment><source>staged</source></segment></unit>
+    <unit id="ChangesNewFolder"><segment><source>new folder</source></segment></unit>
+    <unit id="Refresh"><segment><source>Refresh</source></segment></unit>
+    <unit id="DiffBinary"><segment><source>A binary file: there are no lines to show.</source></segment></unit>
+    <unit id="DiffTooLarge"><segment><source>This change is too large to show on the phone.</source></segment></unit>
+    <unit id="DiffEmpty"><segment><source>There is no difference to show.</source></segment></unit>
   </file>
 </xliff>

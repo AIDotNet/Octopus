@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Sessions;
 using Octopus.Mobile.Terminals;
@@ -62,6 +63,19 @@ public sealed class MobileShell : ContentControl, INavigator
 
     public void ShowFolderPicker(RemoteHost host, Action<RemoteProject>? created = null) =>
         Push(new FolderPickerPage(new FolderPickerViewModel(host, _workspace, this, created)));
+
+    // Files, changes and diffs (Files/).
+    public void ShowFiles(RemoteProject project, string? folder = null) =>
+        Push(new FilesPage(new FilesViewModel(project, folder ?? project.Path, _workspace, this)));
+
+    public void ShowFile(RemoteProject project, string path, string? location = null) =>
+        Push(new FileViewerPage(new FileViewerViewModel(project, path, location, _workspace, this)));
+
+    public void ShowChanges(RemoteProject project, string? workspacePath = null) =>
+        Push(new ChangesPage(new ChangesViewModel(project, workspacePath, _workspace, this)));
+
+    public void ShowDiff(RemoteProject project, string? workspacePath, RemoteChange change) =>
+        Push(new DiffPage(new DiffViewModel(project, workspacePath, change, _workspace, this)));
 
     public void ShowPairing(RemoteHost host) => Push(new PairingPage(new PairingViewModel(host, _workspace, this)));
 

@@ -69,7 +69,7 @@ public class SessionPagesTests
         terminal.OpenMenuCommand.Execute(null);
         Phone.Pump();
         Assert.True(overlays.IsMenuOpen);
-        Assert.Equal(["适应手机", "放大字号", "缩小字号", "重命名", "重启程序", "用相同设置再开一个", "会话详情", "关闭会话"], overlays.MenuLabels);
+        Assert.Equal(["适应手机", "放大字号", "缩小字号", "浏览文件", "查看改动", "重命名", "重启程序", "用相同设置再开一个", "会话详情", "关闭会话"], overlays.MenuLabels);
 
         terminal.LargerTextCommand.Execute(null);
         Assert.Equal(TerminalViewModel.DefaultFontSize + 1, terminal.FontSize);

@@ -193,5 +193,28 @@
     <unit id="FolderCreate"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
     <unit id="FolderUnsupportedHost"><segment><source>Update Octopus on the computer to browse its folders.</source><target state="translated">请更新电脑上的 Octopus，才能浏览它的文件夹。</target></segment></unit>
     <unit id="FolderHome"><segment><source>Home</source><target state="translated">主目录</target></segment></unit>
+    <unit id="FilesBrowse"><segment><source>Browse files</source><target state="translated">浏览文件</target></segment></unit>
+    <unit id="ChangesView"><segment><source>View changes</source><target state="translated">查看改动</target></segment></unit>
+    <unit id="FilesEmpty"><segment><source>This folder is empty</source><target state="translated">这个文件夹是空的</target></segment></unit>
+    <unit id="FilesUnsupportedHost"><segment><source>Update Octopus on the computer to look at its files.</source><target state="translated">请更新电脑上的 Octopus，才能查看它的文件。</target></segment></unit>
+    <unit id="FilesCapped"><segment><source>Only the first {0} entries are shown.</source><target state="translated">只列出前 {0} 项。</target></segment></unit>
+    <unit id="FileReadOnly"><segment><source>Read only</source><target state="translated">只读</target></segment></unit>
+    <unit id="FileLineCount"><segment><source>{0} lines</source><target state="translated">{0} 行</target></segment></unit>
+    <unit id="FileBinary"><segment><source>This file is not text and cannot be shown on the phone.</source><target state="translated">这不是文本文件，手机上无法显示。</target></segment></unit>
+    <unit id="FileTooLarge"><segment><source>This file is {0}; the phone shows files up to {1}.</source><target state="translated">这个文件有 {0}，手机上只显示 {1} 以内的文件。</target></segment></unit>
+    <unit id="LinesCapped"><segment><source>Only the first {0} of {1} lines are shown.</source><target state="translated">只显示前 {0} 行，共 {1} 行。</target></segment></unit>
+    <unit id="WrapLines"><segment><source>Wrap lines</source><target state="translated">自动换行</target></segment></unit>
+    <unit id="ChangesTitle"><segment><source>Changes</source><target state="translated">改动</target></segment></unit>
+    <unit id="ChangesCount"><segment><source>Uncommitted · {0} files</source><target state="translated">未提交 · {0} 个文件</target></segment></unit>
+    <unit id="ChangesEmpty"><segment><source>No uncommitted changes</source><target state="translated">没有未提交的改动</target></segment></unit>
+    <unit id="ChangesNotRepository"><segment><source>This folder is not in a git repository.</source><target state="translated">这个文件夹不在 git 仓库里。</target></segment></unit>
+    <unit id="ChangesUnsupportedHost"><segment><source>Update Octopus on the computer to review its changes.</source><target state="translated">请更新电脑上的 Octopus，才能查看它的改动。</target></segment></unit>
+    <unit id="ChangesFailed"><segment><source>git on the computer could not answer.</source><target state="translated">电脑上的 git 没能给出结果。</target></segment></unit>
+    <unit id="ChangesStaged"><segment><source>staged</source><target state="translated">已暂存</target></segment></unit>
+    <unit id="ChangesNewFolder"><segment><source>new folder</source><target state="translated">新文件夹</target></segment></unit>
+    <unit id="Refresh"><segment><source>Refresh</source><target state="translated">刷新</target></segment></unit>
+    <unit id="DiffBinary"><segment><source>A binary file: there are no lines to show.</source><target state="translated">二进制文件，没有可显示的行。</target></segment></unit>
+    <unit id="DiffTooLarge"><segment><source>This change is too large to show on the phone.</source><target state="translated">这处改动太大，手机上不显示。</target></segment></unit>
+    <unit id="DiffEmpty"><segment><source>There is no difference to show.</source><target state="translated">没有可显示的差异。</target></segment></unit>
   </file>
 </xliff>
