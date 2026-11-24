@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Octopus.Acp.Dialects;
@@ -1690,6 +1691,216 @@ public class AgentGuiTests
             window3.Close();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Antigravity_gui_tracks_async_invoke_subagent_update_steps_and_live_transcript_progress()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-agy-gui-sub-").FullName;
+        var agyDataDir = Path.Combine(tempDir, "agy-data");
+        var parentSessionId = "agy-parent-1";
+        var sub1ConvId = "agy-child-1";
+        var sub2ConvId = "agy-child-2";
+
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "agy-subagents");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+        var subagentService = AppHost.Get<ISubagentService>();
+        var agyDialect = new AcpDialectRegistry().Resolve("antigravity");
+
+        var releasePrompt = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var launchesEmitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeAcpSession? capturedSession = null;
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            capturedSession = session;
+            session.SessionId = parentSessionId;
+            session.PromptHandler = async (s, _, _, ct) =>
+            {
+                using var stepsDoc = JsonDocument.Parse("""
+                    {
+                      "toolCallId": "call_steps",
+                      "name": "update_steps",
+                      "title": "Run update_steps",
+                      "status": "completed",
+                      "rawInput": {
+                        "steps": [
+                          { "status": "done", "title": "Inspect worktrees" },
+                          { "status": "in_progress", "title": "Finish host bridge" }
+                        ]
+                      }
+                    }
+                    """);
+                s.Emit(new AcpToolCallEvent(AcpProtocolParser.ParseToolCallUpdate(stepsDoc.RootElement, agyDialect)));
+
+                using var sub1Doc = JsonDocument.Parse("""
+                    {
+                      "toolCallId": "call_sub_1",
+                      "name": "invoke_subagent",
+                      "title": "Run invoke_subagent",
+                      "status": "completed",
+                      "rawInput": {
+                        "TypeName": "self",
+                        "Role": "Host ACP Bridge Engineer",
+                        "Model": "inherit",
+                        "Workspace": "share"
+                      }
+                    }
+                    """);
+                s.Emit(new AcpToolCallEvent(AcpProtocolParser.ParseToolCallUpdate(sub1Doc.RootElement, agyDialect)));
+
+                using var sub2Doc = JsonDocument.Parse("""
+                    {
+                      "toolCallId": "call_sub_2",
+                      "name": "invoke_subagent",
+                      "title": "Run invoke_subagent",
+                      "status": "completed",
+                      "rawInput": {
+                        "TypeName": "research",
+                        "Role": "Mobile UI Engineer",
+                        "Model": "flash_lite"
+                      }
+                    }
+                    """);
+                s.Emit(new AcpToolCallEvent(AcpProtocolParser.ParseToolCallUpdate(sub2Doc.RootElement, agyDialect)));
+                s.Emit(new AcpTextDeltaEvent("assistant", "已启动 2 个并行子代理。", "m1"));
+
+                launchesEmitted.TrySetResult();
+                await releasePrompt.Task.WaitAsync(ct);
+                return new AcpPromptResult { StopReason = "end_turn" };
+            };
+        };
+
+        var item = opener.OpenAgent("agy")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        vm.AgyAppDataDirOverride = agyDataDir;
+        var window = new Window { Width = 1100, Height = 760, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            vm.InputText = "Continue worktrees";
+            var sendTask = vm.SendPromptAsync();
+            await launchesEmitted.Task;
+            await WaitUntilAsync(() => vm.Subagents.Count == 2);
+
+            // Workflow tasks from update_steps are visible, and both async invoke_subagent calls remain Running
+            // even though their ACP tool_call status already reported "completed".
+            Assert.Equal(2, vm.WorkflowTasks.Count);
+            Assert.True(vm.WorkflowTasks[0].IsCompleted);
+            Assert.True(vm.WorkflowTasks[1].IsInProgress);
+            Assert.Contains(vm.Timeline, t => t is WorkflowSwimlaneItem);
+            Assert.True(vm.HasSubagents);
+            Assert.True(vm.HasRunningSubagents);
+            Assert.All(vm.Subagents, s => Assert.True(s.IsRunning));
+            Assert.Equal("Host ACP Bridge Engineer", vm.Subagents[0].DisplayTitle);
+            Assert.Equal("share", vm.Subagents[0].WorktreeIsolation);
+            Assert.Equal("flash_lite", vm.Subagents[1].Model);
+            Assert.Equal(2, subagentService.Of(item.Id).Count);
+
+            // Simulate Antigravity writing parent spawn records and subagent #1's own tool calls to disk.
+            var parentTranscript = Octopus.Agents.Subagents.AgySubagentTranscript.TranscriptPathFor(parentSessionId, agyDataDir);
+            var sub1Transcript = Octopus.Agents.Subagents.AgySubagentTranscript.TranscriptPathFor(sub1ConvId, agyDataDir);
+            var sub2Transcript = Octopus.Agents.Subagents.AgySubagentTranscript.TranscriptPathFor(sub2ConvId, agyDataDir);
+            Directory.CreateDirectory(Path.GetDirectoryName(parentTranscript)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(sub1Transcript)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(sub2Transcript)!);
+
+            File.WriteAllLines(parentTranscript,
+            [
+                JsonSerializer.Serialize(new
+                {
+                    type = "GENERIC",
+                    status = "DONE",
+                    content = $"Created the following subagent:\n{{\n  \"conversationId\": \"{sub1ConvId}\",\n  \"logAbsoluteUri\": \"{new Uri(sub1Transcript).AbsoluteUri}\"\n}}",
+                }),
+                JsonSerializer.Serialize(new
+                {
+                    type = "GENERIC",
+                    status = "DONE",
+                    content = $"Created the following subagent:\n{{\n  \"conversationId\": \"{sub2ConvId}\",\n  \"logAbsoluteUri\": \"{new Uri(sub2Transcript).AbsoluteUri}\"\n}}",
+                }),
+            ]);
+            File.WriteAllLines(sub1Transcript,
+            [
+                """{"type":"PLANNER_RESPONSE","status":"DONE","tool_calls":[{"name":"read_file","args":{"Path":"\"/repo/HostConversations.cs\""}},{"name":"run_command","args":{"CommandLine":"\"dotnet test\"","toolSummary":"\"Run RemoteConversationTests\""}}],"content":""}""",
+                """{"type":"GENERIC","status":"DONE","content":"ok"}""",
+            ]);
+
+            await vm.PollAgySubagentsNowAsync();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(sub1ConvId, vm.Subagents[0].ConversationId);
+            Assert.Equal(2, vm.Subagents[0].Steps.Count);
+            Assert.True(vm.Subagents[0].Steps[0].IsCompleted);
+            Assert.True(vm.Subagents[0].Steps[1].IsRunning);
+            Assert.Contains("Run RemoteConversationTests", vm.Subagents[0].LastAction);
+
+            // Parent receives subagent #1's completion message, and calls manage_subagents kill on subagent #2.
+            File.AppendAllLines(parentTranscript,
+            [
+                JsonSerializer.Serialize(new
+                {
+                    type = "SYSTEM_MESSAGE",
+                    status = "DONE",
+                    content = $"<SYSTEM_MESSAGE>\n[Message] timestamp=2026-11-24T09:33:37Z sender={sub1ConvId} priority=MESSAGE_PRIORITY_HIGH content=Host bridge complete and 60/60 tests passed.\n</SYSTEM_MESSAGE>",
+                }),
+            ]);
+            await vm.PollAgySubagentsNowAsync();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            Assert.True(vm.Subagents[0].IsDone);
+            Assert.Contains("60/60 tests passed", vm.Subagents[0].Summary);
+            Assert.All(vm.Subagents[0].Steps, st => Assert.True(st.IsCompleted));
+
+            using (var killDoc = JsonDocument.Parse($$"""
+                {
+                  "toolCallId": "call_kill_2",
+                  "name": "manage_subagents",
+                  "status": "completed",
+                  "rawInput": { "Action": "kill", "ConversationIds": ["{{sub2ConvId}}"] }
+                }
+                """))
+            {
+                capturedSession!.Emit(new AcpToolCallEvent(AcpProtocolParser.ParseToolCallUpdate(killDoc.RootElement, agyDialect)));
+            }
+            await WaitUntilAsync(() => vm.Subagents[1].IsInterrupted);
+            Assert.False(vm.HasRunningSubagents);
+
+            releasePrompt.TrySetResult();
+            await sendTask;
+        }
+        finally
+        {
+            fakeFactory.ConfigureNext = null;
+            releasePrompt.TrySetResult();
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Timed out waiting for headless UI condition.");
+            }
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            await Task.Delay(15);
         }
     }
 }

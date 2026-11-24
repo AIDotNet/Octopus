@@ -217,4 +217,127 @@ public class AcpDialectsTests
         Assert.Equal("b7a9c1", bgBash.BackgroundTaskId);
         Assert.Equal("Start dev server", bgBash.Description);
     }
+
+    [Fact]
+    public void Antigravity_dialect_parses_invoke_subagent_update_steps_manage_subagents_and_run_command()
+    {
+        var agy = _registry.Resolve("antigravity");
+        Assert.True(agy.ReactiveWakeups);
+
+        // 1. invoke_subagent launch (async by design in Antigravity CLI)
+        using var subDoc = JsonDocument.Parse("""
+            {
+              "toolCallId": "call_sub_1",
+              "name": "invoke_subagent",
+              "title": "Run invoke_subagent",
+              "kind": "other",
+              "status": "completed",
+              "rawInput": {
+                "TypeName": "self",
+                "Role": "G-A Host ACP Bridge Engineer",
+                "Model": "inherit",
+                "Workspace": "share",
+                "Prompt": "Finish host ACP bridge"
+              }
+            }
+            """);
+        var sub = AcpProtocolParser.ParseToolCallUpdate(subDoc.RootElement, agy);
+        Assert.True(sub.IsSubagentLaunch);
+        Assert.True(sub.SubagentRunsAsynchronously);
+        Assert.True(sub.IsBackground);
+        Assert.Equal("self", sub.SubagentType);
+        Assert.Equal("G-A Host ACP Bridge Engineer", sub.Description);
+        Assert.Equal("G-A Host ACP Bridge Engineer", sub.Title);
+        Assert.Null(sub.SubagentModel);
+        Assert.Equal("share", sub.WorktreeIsolation);
+
+        // Explicit non-inherit model is preserved; inherit workspace is omitted
+        using var subDoc2 = JsonDocument.Parse("""
+            {
+              "toolCallId": "call_sub_2",
+              "name": "invoke_subagent",
+              "title": "Run invoke_subagent",
+              "status": "in_progress",
+              "rawInput": {
+                "TypeName": "research",
+                "Role": "Greeter",
+                "Model": "flash_lite",
+                "Workspace": "inherit"
+              }
+            }
+            """);
+        var sub2 = AcpProtocolParser.ParseToolCallUpdate(subDoc2.RootElement, agy);
+        Assert.True(sub2.IsSubagentLaunch);
+        Assert.Equal("research", sub2.SubagentType);
+        Assert.Equal("flash_lite", sub2.SubagentModel);
+        Assert.Null(sub2.WorktreeIsolation);
+
+        // 2. update_steps -> workflow tasks with "done" normalized to "completed"
+        using var stepsDoc = JsonDocument.Parse("""
+            {
+              "toolCallId": "call_steps_1",
+              "name": "update_steps",
+              "title": "Run update_steps",
+              "status": "completed",
+              "rawInput": {
+                "steps": [
+                  { "status": "done", "title": "Inspect worktrees" },
+                  { "status": "in_progress", "title": "Finish G-A host ACP bridge" },
+                  { "status": "pending", "title": "Run full tests" }
+                ]
+              }
+            }
+            """);
+        var steps = AcpProtocolParser.ParseToolCallUpdate(stepsDoc.RootElement, agy);
+        Assert.Equal("todo_write", steps.WorkflowAction);
+        Assert.Equal(3, steps.WorkflowTasks.Count);
+        Assert.Equal("completed", steps.WorkflowTasks[0].Status);
+        Assert.Equal("Inspect worktrees", steps.WorkflowTasks[0].Content);
+        Assert.Equal("in_progress", steps.WorkflowTasks[1].Status);
+
+        // 3. manage_subagents kill & kill_all
+        using var killDoc = JsonDocument.Parse("""
+            {
+              "toolCallId": "call_kill_1",
+              "name": "manage_subagents",
+              "status": "completed",
+              "rawInput": {
+                "Action": "kill",
+                "ConversationIds": ["bf1142f9-15a0-43b6-a074-b3d2e0bacaab"]
+              }
+            }
+            """);
+        var kill = AcpProtocolParser.ParseToolCallUpdate(killDoc.RootElement, agy);
+        Assert.Equal("subagent_stop", kill.WorkflowAction);
+        Assert.Equal(["bf1142f9-15a0-43b6-a074-b3d2e0bacaab"], kill.TargetSubagentIds);
+
+        using var killAllDoc = JsonDocument.Parse("""
+            {
+              "toolCallId": "call_kill_all",
+              "name": "manage_subagents",
+              "status": "completed",
+              "rawInput": { "Action": "kill_all" }
+            }
+            """);
+        Assert.Equal("subagent_stop_all", AcpProtocolParser.ParseToolCallUpdate(killAllDoc.RootElement, agy).WorkflowAction);
+
+        // 4. run_command toolSummary & IsDaemon
+        using var cmdDoc = JsonDocument.Parse("""
+            {
+              "toolCallId": "call_cmd_1",
+              "name": "run_command",
+              "kind": "execute",
+              "status": "in_progress",
+              "rawInput": {
+                "CommandLine": "dotnet watch run",
+                "toolSummary": "Start dev server",
+                "IsDaemon": true
+              }
+            }
+            """);
+        var cmd = AcpProtocolParser.ParseToolCallUpdate(cmdDoc.RootElement, agy);
+        Assert.Equal("dotnet watch run", cmd.Command);
+        Assert.Equal("Start dev server", cmd.Description);
+        Assert.True(cmd.IsBackground);
+    }
 }

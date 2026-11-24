@@ -11,6 +11,7 @@ using Octopus.Acp.Protocol;
 using Octopus.Acp.Transport;
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
+using Octopus.Agents.Subagents;
 using Octopus.App.Activity;
 using Octopus.App.Common;
 using Octopus.App.Files;
@@ -193,6 +194,16 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private AssistantTurnItem? _activeTurn;
     private WorkflowSwimlaneItem? _activeSwimlane;
     private readonly Dictionary<string, SubagentRunViewModel> _subagentsById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SubagentRunViewModel> _agySubagentsByConvId = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<AgySubagentSpawn> _agyUnmatchedSpawns = new();
+    private readonly Dictionary<string, AgySubagentMessage> _agyBufferedMessages = new(StringComparer.OrdinalIgnoreCase);
+    private string? _agyParentTranscriptPath;
+    private long _agyParentTranscriptOffset;
+    private bool _agyPolling;
+    private bool _agyPollAgain;
+    private bool _agyFinalizeOnRepoll;
+    private Task? _agyPollTask;
+    private string? _agyAppDataDirOverride;
     private readonly Dictionary<string, BackgroundBashViewModel> _shellsById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, BackgroundBashViewModel> _shellsByTaskId = new(StringComparer.OrdinalIgnoreCase);
     private DispatcherTimer? _liveTickTimer;
@@ -335,6 +346,18 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     /// <summary>Grace period to wait for the ACP agent to reply to <c>session/prompt</c> after <c>session/cancel</c> before force-cancelling locally.</summary>
     internal TimeSpan CancelGraceTimeout { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>Optional Antigravity CLI app data directory override for deterministic subagent transcript tests.</summary>
+    internal string? AgyAppDataDirOverride
+    {
+        get => _agyAppDataDirOverride;
+        set
+        {
+            _agyAppDataDirOverride = value;
+            _agyParentTranscriptPath = null;
+            _agyParentTranscriptOffset = 0;
+        }
+    }
 
     public bool IsWorkflowHudOpen => ActiveHudPanel == HudPanelKind.Workflow;
     public bool IsSubagentsHudOpen => ActiveHudPanel == HudPanelKind.Subagents;
@@ -612,6 +635,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             SetUi(() =>
             {
                 _projects.SetItemSessionId(_item.Id, started.SessionId, isAcp: true);
+                InitAgyTranscriptMonitor(started.SessionId);
                 if (!string.IsNullOrWhiteSpace(requestedResumeId) && started.Kind == "new" && _acceptReplay && Timeline.Count > 0)
                 {
                     Timeline.Clear();
@@ -971,6 +995,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 assistantTurn.Complete();
                 if (State is AgentGuiState.Working or AgentGuiState.Waiting) State = AgentGuiState.Ready;
                 RefreshDiagnostics();
+                if (Subagents.Any(s => s.IsRunning && s.RunsAsynchronously))
+                {
+                    PollAgySubagents(finalizeMissingTranscript: true);
+                }
             });
         }
         catch (OperationCanceledException)
@@ -978,6 +1006,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             SetUi(() =>
             {
                 assistantTurn.Complete();
+                InterruptRunningAsyncSubagents();
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
         }
@@ -986,6 +1015,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             SetUi(() =>
             {
                 assistantTurn.Complete();
+                InterruptRunningAsyncSubagents();
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
         }
@@ -1710,7 +1740,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 var update = tc.Update;
                 // Sub-agent internals and background-shell/task bookkeeping only make sense live.
                 if (!string.IsNullOrWhiteSpace(update.ParentToolCallId)) break;
-                if (update.WorkflowAction is "task_create" or "task_update" or "background_output" or "background_stop") break;
+                if (update.WorkflowAction is "task_create" or "task_update" or "background_output" or "background_stop" or "subagent_stop" or "subagent_stop_all") break;
                 if (update.WorkflowAction == "todo_write" && update.WorkflowTasks.Count > 0)
                 {
                     EnsureActiveTurn().SetPlan(update.WorkflowTasks, null);
@@ -1783,7 +1813,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         var now = DateTimeOffset.Now;
 
-        // 1. SubAgent launch / update (Claude Code Agent / Task tool)
+        // 1. SubAgent launch / update (Claude Code Agent / Task tool, Antigravity invoke_subagent)
         if (update.IsSubagentLaunch)
         {
             var id = string.IsNullOrWhiteSpace(update.ToolCallId) ? $"sub-{Subagents.Count + 1}" : update.ToolCallId;
@@ -1805,6 +1835,49 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 }
             }
             sub.ApplyLaunchUpdate(update, now);
+            if (sub.RunsAsynchronously)
+            {
+                EnsureAgyTranscriptMonitor();
+                if (string.IsNullOrEmpty(sub.ConversationId) && _agyUnmatchedSpawns.Count > 0)
+                {
+                    BindAgySpawn(sub, _agyUnmatchedSpawns.Dequeue(), now);
+                }
+                if (update.Status == "completed" && sub.IsRunning)
+                {
+                    PollAgySubagents();
+                }
+            }
+            SyncSidebarSubagents();
+            NotifyOrchestrationProperties();
+            EnsureLiveTickTimer();
+            return;
+        }
+
+        // 1b. SubAgent management actions (Antigravity manage_subagents kill / kill_all)
+        if (update.WorkflowAction == "subagent_stop_all")
+        {
+            foreach (var running in Subagents.Where(s => s.IsRunning))
+            {
+                running.MarkInterrupted(now);
+            }
+            SyncSidebarSubagents();
+            NotifyOrchestrationProperties();
+            EnsureLiveTickTimer();
+            return;
+        }
+        if (update.WorkflowAction == "subagent_stop")
+        {
+            foreach (var targetId in update.TargetSubagentIds)
+            {
+                if (_agySubagentsByConvId.TryGetValue(targetId, out var byConv) && byConv.IsRunning)
+                {
+                    byConv.MarkInterrupted(now);
+                }
+                else if (_subagentsById.TryGetValue(targetId, out var byId) && byId.IsRunning)
+                {
+                    byId.MarkInterrupted(now);
+                }
+            }
             SyncSidebarSubagents();
             NotifyOrchestrationProperties();
             EnsureLiveTickTimer();
@@ -2072,6 +2145,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         WorkflowTasks.Clear();
         Subagents.Clear();
         _subagentsById.Clear();
+        _agySubagentsByConvId.Clear();
+        _agyUnmatchedSpawns.Clear();
+        _agyBufferedMessages.Clear();
+        _agyParentTranscriptPath = null;
+        _agyParentTranscriptOffset = 0;
         BackgroundShells.Clear();
         _shellsById.Clear();
         _shellsByTaskId.Clear();
@@ -2141,6 +2219,272 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         foreach (var sh in BackgroundShells)
         {
             if (sh.IsRunning) sh.Tick(now);
+        }
+        if (Subagents.Any(s => s.IsRunning && s.RunsAsynchronously))
+        {
+            PollAgySubagents();
+        }
+    }
+
+    private void InitAgyTranscriptMonitor(string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return;
+        var isAgy = string.Equals(_definition.Acp?.Dialect, "antigravity", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(_definition.Id, "agy", StringComparison.OrdinalIgnoreCase);
+        if (!isAgy) return;
+
+        var path = AgySubagentTranscript.TranscriptPathFor(sessionId, AgyAppDataDirOverride);
+        if (string.Equals(_agyParentTranscriptPath, path, StringComparison.Ordinal)) return;
+        _agyParentTranscriptPath = path;
+        _agyParentTranscriptOffset = AgySubagentTranscript.CurrentLength(path);
+    }
+
+    private void EnsureAgyTranscriptMonitor()
+    {
+        if (!string.IsNullOrEmpty(_agyParentTranscriptPath)) return;
+        var sid = _session?.SessionId ?? _item.AcpSessionId;
+        if (string.IsNullOrWhiteSpace(sid)) return;
+        _agyParentTranscriptPath = AgySubagentTranscript.TranscriptPathFor(sid, AgyAppDataDirOverride);
+        _agyParentTranscriptOffset = 0;
+    }
+
+    private void InterruptRunningAsyncSubagents()
+    {
+        var now = DateTimeOffset.Now;
+        var changed = false;
+        foreach (var s in Subagents)
+        {
+            if (s.IsRunning && s.RunsAsynchronously)
+            {
+                s.MarkInterrupted(now);
+                changed = true;
+            }
+        }
+        if (changed)
+        {
+            SyncSidebarSubagents();
+            NotifyOrchestrationProperties();
+            EnsureLiveTickTimer();
+        }
+    }
+
+    private void PollAgySubagents(bool finalizeMissingTranscript = false)
+    {
+        var task = PollAgySubagentsCoreAsync(finalizeMissingTranscript);
+        if (!task.IsCompleted)
+        {
+            _agyPollTask = task;
+        }
+    }
+
+    /// <summary>Runs one deterministic Antigravity subagent transcript poll cycle. For tests.</summary>
+    internal async Task PollAgySubagentsNowAsync(bool finalizeMissingTranscript = false)
+    {
+        while (_agyPolling || _agyPollTask is { IsCompleted: false })
+        {
+            if (_agyPollTask is { IsCompleted: false } inflight)
+            {
+                await inflight;
+            }
+            else
+            {
+                await Task.Yield();
+            }
+        }
+        var task = PollAgySubagentsCoreAsync(finalizeMissingTranscript);
+        _agyPollTask = task;
+        await task;
+    }
+
+    private sealed record AgyChildPollWork(SubagentRunViewModel Subagent, string Path, long Offset);
+    private sealed record AgyChildPollResult(SubagentRunViewModel Subagent, AgyChildTranscriptDelta Delta);
+
+    private async Task PollAgySubagentsCoreAsync(bool finalizeMissingTranscript)
+    {
+        if (_disposed) return;
+        if (_agyPolling)
+        {
+            _agyPollAgain = true;
+            if (finalizeMissingTranscript) _agyFinalizeOnRepoll = true;
+            return;
+        }
+        EnsureAgyTranscriptMonitor();
+        var parentPath = _agyParentTranscriptPath;
+        var parentOffset = _agyParentTranscriptOffset;
+        var appDataDir = AgyAppDataDirOverride;
+
+        var runningAsync = Subagents.Where(s => s.IsRunning && s.RunsAsynchronously).ToList();
+        if (runningAsync.Count == 0) return;
+
+        _agyPolling = true;
+        try
+        {
+            // Step 1: Read parent transcript delta off the UI thread.
+            AgyParentTranscriptDelta? parentDelta = null;
+            var parentExists = false;
+            if (!string.IsNullOrEmpty(parentPath))
+            {
+                (parentExists, parentDelta) = await Task.Run(() =>
+                {
+                    var exists = File.Exists(parentPath);
+                    var delta = exists
+                        ? AgySubagentTranscript.ReadParentDelta(parentPath, parentOffset, appDataDir)
+                        : null;
+                    return (exists, delta);
+                }).ConfigureAwait(false);
+            }
+
+            // Step 2: Bind newly spawned subagents on the UI thread (before reading children so fast subagents still get their steps read).
+            List<AgyChildPollWork> childWork = [];
+            List<AgySubagentMessage> messages = [];
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                var now = DateTimeOffset.Now;
+                if (parentDelta is not null)
+                {
+                    _agyParentTranscriptOffset = parentDelta.ToOffset;
+                    foreach (var spawn in parentDelta.Spawns)
+                    {
+                        if (_agySubagentsByConvId.ContainsKey(spawn.ConversationId)) continue;
+                        var unbound = Subagents.FirstOrDefault(s => s.RunsAsynchronously && string.IsNullOrEmpty(s.ConversationId));
+                        if (unbound is not null)
+                        {
+                            BindAgySpawn(unbound, spawn, now);
+                        }
+                        else
+                        {
+                            _agyUnmatchedSpawns.Enqueue(spawn);
+                        }
+                    }
+                    messages.AddRange(parentDelta.Messages);
+                }
+
+                foreach (var sub in Subagents)
+                {
+                    if (sub.IsRunning && sub.RunsAsynchronously && !string.IsNullOrEmpty(sub.TranscriptPath))
+                    {
+                        childWork.Add(new AgyChildPollWork(sub, sub.TranscriptPath!, sub.TranscriptOffset));
+                    }
+                }
+            });
+
+            // Step 3: Read each bound child's transcript delta off the UI thread.
+            List<AgyChildPollResult> childResults = [];
+            if (childWork.Count > 0)
+            {
+                childResults = await Task.Run(() =>
+                    childWork.Select(w => new AgyChildPollResult(w.Subagent, AgySubagentTranscript.ReadChildDelta(w.Path, w.Offset))).ToList()
+                ).ConfigureAwait(false);
+            }
+
+            // Step 4: Apply child tool steps, then completion/error messages on the UI thread.
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                var now = DateTimeOffset.Now;
+                var changed = false;
+
+                foreach (var res in childResults)
+                {
+                    var sub = res.Subagent;
+                    var delta = res.Delta;
+                    if (delta.ToOffset != sub.TranscriptOffset)
+                    {
+                        sub.TranscriptOffset = delta.ToOffset;
+                    }
+                    foreach (var call in delta.ToolCalls)
+                    {
+                        sub.UpsertStep(new AcpToolCallUpdate
+                        {
+                            ToolCallId = $"agy-{sub.Steps.Count + 1}",
+                            Name = call.Name,
+                            Kind = call.Kind,
+                            Title = call.Target ?? call.Name,
+                            Description = call.Target,
+                            Status = "in_progress",
+                        });
+                        changed = true;
+                    }
+                    if (delta.CompletedResults > 0)
+                    {
+                        sub.CompleteOldestRunningSteps(delta.CompletedResults, failed: false);
+                        changed = true;
+                    }
+                    if (delta.FailedResults > 0)
+                    {
+                        sub.CompleteOldestRunningSteps(delta.FailedResults, failed: true);
+                        changed = true;
+                    }
+                }
+
+                foreach (var msg in messages)
+                {
+                    if (_agySubagentsByConvId.TryGetValue(msg.ConversationId, out var target))
+                    {
+                        ApplyAgyMessage(target, msg, now);
+                        changed = true;
+                    }
+                    else
+                    {
+                        _agyBufferedMessages[msg.ConversationId] = msg;
+                    }
+                }
+
+                if (finalizeMissingTranscript && !parentExists)
+                {
+                    foreach (var sub in Subagents)
+                    {
+                        if (sub.IsRunning && sub.RunsAsynchronously && string.IsNullOrEmpty(sub.TranscriptPath))
+                        {
+                            sub.MarkCompleted(null, now);
+                            changed = true;
+                        }
+                    }
+                }
+
+                if (changed)
+                {
+                    SyncSidebarSubagents();
+                    NotifyOrchestrationProperties();
+                    EnsureLiveTickTimer();
+                }
+            });
+        }
+        finally
+        {
+            _agyPolling = false;
+            if (_agyPollAgain && !_disposed)
+            {
+                var repollFinalize = _agyFinalizeOnRepoll;
+                _agyPollAgain = false;
+                _agyFinalizeOnRepoll = false;
+                PollAgySubagents(repollFinalize);
+            }
+        }
+    }
+
+    private void BindAgySpawn(SubagentRunViewModel sub, AgySubagentSpawn spawn, DateTimeOffset now)
+    {
+        sub.ConversationId = spawn.ConversationId;
+        sub.TranscriptPath = spawn.TranscriptPath;
+        sub.TranscriptOffset = 0;
+        _agySubagentsByConvId[spawn.ConversationId] = sub;
+        if (_agyBufferedMessages.Remove(spawn.ConversationId, out var buffered))
+        {
+            ApplyAgyMessage(sub, buffered, now);
+        }
+    }
+
+    private static void ApplyAgyMessage(SubagentRunViewModel sub, AgySubagentMessage msg, DateTimeOffset now)
+    {
+        if (msg.IsError)
+        {
+            sub.MarkFailed(msg.Content, now);
+        }
+        else
+        {
+            sub.MarkCompleted(msg.Content, now);
         }
     }
 

@@ -215,6 +215,14 @@ public sealed partial class AntigravityAcpDialect : IAcpDialect
                 ?? DialectJsonHelpers.Str(input, "working_dir")
                 ?? DialectJsonHelpers.Str(input, "workingDir")
                 ?? DialectJsonHelpers.Str(input, "cwd");
+            update.Description ??= DialectJsonHelpers.Str(input, "toolSummary");
+        }
+        if (update.IsSubagentLaunch
+            && !string.IsNullOrWhiteSpace(update.Description)
+            && (string.IsNullOrWhiteSpace(update.Title)
+                || string.Equals(update.Title, "Run invoke_subagent", StringComparison.OrdinalIgnoreCase)))
+        {
+            update.Title = update.Description;
         }
         if (update.RawOutput is { ValueKind: JsonValueKind.Object } output)
         {

@@ -186,14 +186,18 @@ public sealed class AcpToolCallUpdate
     public int? ExitCode { get; set; }
     /// <summary>True when started with <c>run_in_background: true</c> or reported as a background shell/subagent.</summary>
     public bool IsBackground { get; set; }
-    /// <summary>True when this tool call spawns a subagent (<c>Agent</c> / <c>Task</c>).</summary>
+    /// <summary>True when this tool call spawns a subagent (<c>Agent</c> / <c>Task</c> / <c>invoke_subagent</c>).</summary>
     public bool IsSubagentLaunch { get; set; }
+    /// <summary>True when the launch tool completes as soon as the subagent is spawned while the subagent keeps running asynchronously (e.g. Antigravity <c>invoke_subagent</c>).</summary>
+    public bool SubagentRunsAsynchronously { get; set; }
     public string? SubagentType { get; set; }
     public string? SubagentModel { get; set; }
     public string? WorktreeIsolation { get; set; }
+    /// <summary>Subagent conversation or tool-call IDs targeted by a management tool (e.g. Antigravity <c>manage_subagents</c>).</summary>
+    public List<string> TargetSubagentIds { get; set; } = [];
     /// <summary>Identifier linking a background Bash/Task with follow-up <c>TaskOutput</c>/<c>BashOutput</c>/<c>TaskStop</c>/<c>KillShell</c> calls.</summary>
     public string? BackgroundTaskId { get; set; }
-    /// <summary>Structured Claude Code workflow tool kind: <c>enter_plan</c> | <c>exit_plan</c> | <c>todo_write</c> | <c>task_create</c> | <c>task_update</c> | <c>background_output</c> | <c>background_stop</c>.</summary>
+    /// <summary>Structured workflow tool kind: <c>enter_plan</c> | <c>exit_plan</c> | <c>todo_write</c> | <c>task_create</c> | <c>task_update</c> | <c>background_output</c> | <c>background_stop</c> | <c>subagent_stop</c> | <c>subagent_stop_all</c>.</summary>
     public string? WorkflowAction { get; set; }
     /// <summary>Tasks parsed from <c>TodoWrite</c>, <c>TaskCreate</c>, or <c>TaskUpdate</c>.</summary>
     public List<AcpPlanEntry> WorkflowTasks { get; set; } = [];
