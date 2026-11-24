@@ -48,11 +48,13 @@ public class SubagentListTests
         Frames.Pump();
         var list = Row().Subagents!;
         Assert.True(list.HasAny);
-        // Collapsed by default: shown as compact [done|total icon] pill on the parent row until clicked.
+        // Collapsed by default: shown as compact icon pill on the parent row until clicked.
         Assert.False(list.ShowList);
         Assert.Equal("0|2", list.CountText);
         Assert.Equal("0", list.FinishedCountText);
         Assert.Equal("2", list.TotalCountText);
+        Assert.Equal(2, list.PillIcons.Count);
+        Assert.False(list.HasPillOverflow);
         Assert.Equal(["构建 Studio 预览窗口", "查找模板生成代码"], list.Active.Select(c => c.Title));
         Assert.All(list.Active, c => Assert.True(c.IsRunning));
         Assert.Null(panel.Items.Single(r => r.Id == terminal.Id).Subagents);
@@ -102,6 +104,46 @@ public class SubagentListTests
         Frames.Pump();
         Assert.False(list.HasAny);
         Assert.False(list.ShowList);
+        Assert.Empty(list.PillIcons);
+        Assert.False(list.HasPillOverflow);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public void Subagent_pill_shows_up_to_four_icons_and_overflow_ellipsis_beyond_four()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-subagents-overflow-").FullName;
+        var transcript = Path.Combine(dir, "session.jsonl");
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var agent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Overflow Test" };
+        projects.AddItem(project, agent);
+        var panel = AppHost.Get<ShellViewModel>().Panel;
+        var hub = AppHost.Get<ISignalHub>();
+        void Send(string channel, object payload) =>
+            hub.Publish(new AgentSignal("claude", channel, agent.Id, "", 0, 0, JsonSerializer.Serialize(payload)));
+        SubagentListViewModel List() => panel.Items.Single(r => r.Id == agent.Id).Subagents!;
+
+        Send("prompt-submit", new { prompt = "many" });
+        for (var i = 1; i <= 4; i++)
+        {
+            Send("subagent-start", new { agent_id = $"a{i}", agent_type = "Explore", transcript_path = transcript });
+            Frames.Pump();
+            Assert.Equal(i, List().PillIcons.Count);
+            Assert.False(List().HasPillOverflow);
+        }
+
+        // Finish a1 and a2, then add a 5th running subagent: pill caps at 4 icons with overflow, keeping active ones first.
+        Send("subagent-stop", new { agent_id = "a1" });
+        Send("subagent-stop", new { agent_id = "a2" });
+        Send("subagent-start", new { agent_id = "a5", agent_type = "Explore", transcript_path = transcript });
+        Frames.Pump();
+
+        var list = List();
+        Assert.Equal(4, list.PillIcons.Count);
+        Assert.True(list.HasPillOverflow);
+        Assert.Equal(["a3", "a4", "a5", "a1"], list.PillIcons.Select(c => c.Run.Id));
+        Assert.True(list.PillIcons[0].IsRunning);
+        Assert.True(list.PillIcons[3].IsDone);
     }
 
     [AvaloniaFact]

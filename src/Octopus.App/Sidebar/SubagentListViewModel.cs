@@ -10,11 +10,14 @@ namespace Octopus.App.Sidebar;
 public sealed record FocusSubagentRequested(string ItemId, string SubagentId);
 
 /// <summary>
-/// The subagents under an agent's row: collapsed by default as a compact <c>[done | total icon]</c> pill on the parent row,
+/// The subagents under an agent's row: collapsed by default as a compact icon pill on the parent row
+/// (one bot icon per subagent, up to <see cref="MaxPillIcons"/> plus an ellipsis when more exist),
 /// and expanded on click to reveal active cards plus a folded "N finished" group. Kept per item across panel rebuilds.
 /// </summary>
 public sealed partial class SubagentListViewModel : ObservableObject
 {
+    public const int MaxPillIcons = 4;
+
     private readonly Action _activate;
     private readonly Action<string>? _focusSubagent;
 
@@ -30,13 +33,18 @@ public sealed partial class SubagentListViewModel : ObservableObject
     /// <summary>Done and interrupted ones, behind the fold.</summary>
     public ObservableCollection<SubagentCardViewModel> Finished { get; } = [];
 
+    /// <summary>Up to <see cref="MaxPillIcons"/> subagents shown as icons in the collapsed pill (active first, then finished).</summary>
+    public ObservableCollection<SubagentCardViewModel> PillIcons { get; } = [];
+
     [ObservableProperty] public partial bool HasAny { get; private set; }
+    [ObservableProperty] public partial bool HasPillOverflow { get; private set; }
     [ObservableProperty] public partial bool IsExpanded { get; private set; }
     [ObservableProperty] public partial bool IsFoldOpen { get; private set; }
     /// <summary>"1|3": finished of all.</summary>
     [ObservableProperty] public partial string CountText { get; private set; } = "";
     [ObservableProperty] public partial string FinishedCountText { get; private set; } = "0";
     [ObservableProperty] public partial string TotalCountText { get; private set; } = "0";
+    [ObservableProperty] public partial string ToggleTip { get; private set; } = "";
     [ObservableProperty] public partial bool HasRunning { get; private set; }
     [ObservableProperty] public partial bool HasFailed { get; private set; }
     [ObservableProperty] public partial string FinishedText { get; private set; } = "";
@@ -69,19 +77,59 @@ public sealed partial class SubagentListViewModel : ObservableObject
         Reconcile(Finished, finished, now);
 
         HasAny = runs.Count > 0;
+        HasPillOverflow = runs.Count > MaxPillIcons;
+        SyncPillIcons();
         FinishedCountText = finished.Count.ToString();
         TotalCountText = runs.Count.ToString();
         CountText = $"{finished.Count}|{runs.Count}";
+        ToggleTip = HasAny
+            ? $"{AppLangResources.Get(AppLangResourceKind.SubagentsToggle)} · {finished.Count}/{runs.Count}"
+            : AppLangResources.Get(AppLangResourceKind.SubagentsToggle);
         HasRunning = runs.Any(r => r.State == SubagentState.Running);
         HasFailed = runs.Any(r => r.State == SubagentState.Failed);
         FinishedText = AppLangResources.Format(AppLangResourceKind.SubagentsFinished, finished.Count);
         OnPropertyChanged(nameof(HasFinished));
 
-        // Collapsed by default: the parent row displays the compact [done|total icon] pill and only expands on click.
+        // Collapsed by default: the parent row displays the compact icon pill and only expands on click.
         if (!HasAny)
         {
             IsExpanded = false;
             IsFoldOpen = false;
+        }
+    }
+
+    private void SyncPillIcons()
+    {
+        var desired = new List<SubagentCardViewModel>(MaxPillIcons);
+        foreach (var card in Active)
+        {
+            if (desired.Count >= MaxPillIcons) break;
+            desired.Add(card);
+        }
+        foreach (var card in Finished)
+        {
+            if (desired.Count >= MaxPillIcons) break;
+            desired.Add(card);
+        }
+
+        for (var i = PillIcons.Count - 1; i >= 0; i--)
+        {
+            if (!desired.Contains(PillIcons[i]))
+            {
+                PillIcons.RemoveAt(i);
+            }
+        }
+        for (var i = 0; i < desired.Count; i++)
+        {
+            var at = PillIcons.IndexOf(desired[i]);
+            if (at < 0)
+            {
+                PillIcons.Insert(i, desired[i]);
+            }
+            else if (at != i)
+            {
+                PillIcons.Move(at, i);
+            }
         }
     }
 
