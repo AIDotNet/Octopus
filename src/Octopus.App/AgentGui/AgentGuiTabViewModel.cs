@@ -698,7 +698,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             session.EventReceived += OnSessionEvent;
             _session = session;
 
-            SetUi(() =>
+            // Set the replay flag before StartAsync: the session emits session/load history synchronously, and a
+            // fire-and-forget UI post can run after those events and drop them (empty timeline on reopen).
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 SourceLabel = session.SourceLabel;
                 // Rebuild history from session/load replay only when nothing is on screen yet

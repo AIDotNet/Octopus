@@ -102,7 +102,7 @@ public sealed class JsonSettingsStore(IAppPaths paths) : ISettingsStore, IDispos
                 }
                 _dirty = false;
                 // Under the gate: Update mutates the same object.
-                text = JsonSerializer.Serialize(Current, OctopusJsonContext.FileOptions.GetTypeInfo<AppSettingsModel>());
+                text = JsonSerializer.Serialize(Current, OctopusJsonContext.FileTypeInfo<AppSettingsModel>());
             }
             try
             {
@@ -126,7 +126,7 @@ public sealed class JsonSettingsStore(IAppPaths paths) : ISettingsStore, IDispos
         if (!File.Exists(_path) || !AtomicFile.TryReadAllText(_path, out var text)) return new AppSettingsModel();
         try
         {
-            var settings = JsonSerializer.Deserialize(text, OctopusJsonContext.FileOptions.GetTypeInfo<AppSettingsModel>());
+            var settings = JsonSerializer.Deserialize(text, OctopusJsonContext.FileTypeInfo<AppSettingsModel>());
             return SettingsNormalizer.Normalize(settings);
         }
         catch (JsonException)

@@ -21,7 +21,7 @@ public sealed class JsonProjectStore(IAppPaths paths) : IProjectStore
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new ProjectsDocument(); }
             try
             {
-                var document = JsonSerializer.Deserialize(text, OctopusJsonContext.FileOptions.GetTypeInfo<ProjectsDocument>());
+                var document = JsonSerializer.Deserialize(text, OctopusJsonContext.FileTypeInfo<ProjectsDocument>());
                 if (document is null) throw new JsonException("null document");
                 return ProjectsDocumentNormalizer.Normalize(document);
             }
@@ -39,7 +39,7 @@ public sealed class JsonProjectStore(IAppPaths paths) : IProjectStore
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var text = JsonSerializer.Serialize(document, OctopusJsonContext.FileOptions.GetTypeInfo<ProjectsDocument>());
+            var text = JsonSerializer.Serialize(document, OctopusJsonContext.FileTypeInfo<ProjectsDocument>());
             await Task.Run(() => AtomicFile.WriteAllText(_path, text), cancellationToken).ConfigureAwait(false);
         }
         finally { _gate.Release(); }

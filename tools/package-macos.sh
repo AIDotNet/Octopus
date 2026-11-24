@@ -27,8 +27,10 @@ OUT="$(cd "$OUT" && pwd)"
 NUMERIC_VERSION="${VERSION%%[-+]*}"
 
 echo "==> publish ($RID)"
-# A Release publish for a runtime is NativeAOT (Octopus.App.csproj): one native executable, no managed .dll files that
-# would count as unsigned nested code in Contents/MacOS; the native libraries stay beside it as real Mach-O files.
+# A Release publish is NativeAOT on Windows and Linux; on macOS it is a single-file, self-contained build with the
+# native libraries beside the executable, because .NET 10's NativeAOT Apple crypto references Swift libraries that
+# macOS 13 does not have (Octopus.App.csproj). Either way Contents/MacOS holds Mach-O files only, not managed .dll
+# files that would count as unsigned nested code.
 dotnet publish "$ROOT/src/Octopus.App" -c Release -r "$RID" \
   -p:Version="$VERSION" -p:DebugType=None -p:DebugSymbols=false -o "$WORK/publish"
 # The stripped symbols (Octopus.dSYM) are not shipped.

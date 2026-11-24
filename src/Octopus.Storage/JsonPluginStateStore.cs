@@ -37,7 +37,7 @@ public sealed class JsonPluginStateStore(IAppPaths paths) : IPluginStateStore
             Current = Normalize(Current);
             try
             {
-                var text = JsonSerializer.Serialize(Current, OctopusJsonContext.FileOptions.GetTypeInfo<PluginsDocument>());
+                var text = JsonSerializer.Serialize(Current, OctopusJsonContext.FileTypeInfo<PluginsDocument>());
                 AtomicFile.WriteAllText(_path, text);
                 LastError = null;
             }
@@ -54,7 +54,7 @@ public sealed class JsonPluginStateStore(IAppPaths paths) : IPluginStateStore
         if (!File.Exists(_path) || !AtomicFile.TryReadAllText(_path, out var text)) return new PluginsDocument();
         try
         {
-            return Normalize(JsonSerializer.Deserialize(text, OctopusJsonContext.FileOptions.GetTypeInfo<PluginsDocument>()));
+            return Normalize(JsonSerializer.Deserialize(text, OctopusJsonContext.FileTypeInfo<PluginsDocument>()));
         }
         catch (JsonException)
         {

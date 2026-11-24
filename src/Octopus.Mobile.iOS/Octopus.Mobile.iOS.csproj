@@ -4,7 +4,7 @@
          Simulator:  dotnet build -t:Run src/Octopus.Mobile.iOS -p:RuntimeIdentifier=iossimulator-arm64
          A device needs a signing identity and provisioning profile (CodesignKey, CodesignProvision). -->
     <PropertyGroup>
-        <TargetFramework>net11.0-ios</TargetFramework>
+        <TargetFramework>net10.0-ios</TargetFramework>
         <OutputType>Exe</OutputType>
         <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
         <RootNamespace>Octopus.Mobile.iOS</RootNamespace>

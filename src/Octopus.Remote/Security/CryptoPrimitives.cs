@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -12,6 +14,11 @@ internal static class CryptoPrimitives
     public const int HashLength = 32;
     public const int KeyLength = 32;
     public const int TagLength = 16;
+
+    // P-256 (secp256r1). .NET 11 validates that an imported EC point lies on the curve; net10.0 on macOS
+    // does not, so check it here instead of accepting a point an attacker chose to learn bits of a key.
+    private static readonly BigInteger P = BigInteger.Parse("00ffffffff00000001000000000000000000000000ffffffffffffffffffffffff", NumberStyles.HexNumber);
+    private static readonly BigInteger B = BigInteger.Parse("005ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b", NumberStyles.HexNumber);
 
     public static byte[] Label(string text) => Encoding.ASCII.GetBytes(text);
 
@@ -61,7 +68,20 @@ internal static class CryptoPrimitives
         };
         // Refuses a point that is not on the curve (an attacker's way to learn bits of a private key).
         parameters.Validate();
+        EnsureOnCurve(parameters.Q);
         return parameters;
+    }
+
+    private static void EnsureOnCurve(ECPoint point)
+    {
+        if (point.X is null || point.Y is null) throw new CryptographicException("Missing P-256 coordinate.");
+        var x = new BigInteger(point.X, isUnsigned: true, isBigEndian: true);
+        var y = new BigInteger(point.Y, isUnsigned: true, isBigEndian: true);
+        if (x >= P || y >= P) throw new CryptographicException("P-256 coordinate out of range.");
+        var left = BigInteger.ModPow(y, 2, P);
+        var right = (BigInteger.ModPow(x, 3, P) - 3 * x + B) % P;
+        if (right < 0) right += P;
+        if (left != right) throw new CryptographicException("Not a point of the P-256 curve.");
     }
 
     // Coordinates come without leading zero bytes on some platforms: right-align them in 32 bytes.
