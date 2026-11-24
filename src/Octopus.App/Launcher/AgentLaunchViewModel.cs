@@ -18,11 +18,16 @@ namespace Octopus.App.Launcher;
 public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
 {
     private readonly AgentDefinition _definition;
+    private readonly AgentProfile _profile;
     private readonly IAgentCommandCompiler _compiler;
+    private readonly IModelDiscovery _discovery;
+    private readonly string? _executable;
     private readonly Action<AgentLaunchOptions> _launch;
     private readonly List<AgentOption> _known = [];
+    private readonly List<AgentOption> _customModels = [];
     private readonly IReadOnlyList<AgentAccountRecord> _accounts;
     private readonly string _permissionId;
+    private int _discoverGeneration;
 
     public AgentLaunchViewModel(
         AgentDefinition definition,
@@ -38,7 +43,10 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         bool? allowGui = null)
     {
         _definition = definition;
+        _profile = profile;
         _compiler = compiler;
+        _discovery = discovery;
+        _executable = executable;
         _launch = launch;
         _accounts = accounts ?? [];
 
@@ -74,9 +82,9 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         RebuildEfforts();
         ArcLanguage.Changed += OnLanguageChanged;
 
-        if (capabilities.Model?.Discover is not null && executable is not null)
+        if (CanDiscover())
         {
-            _ = DiscoverAsync(discovery, executable);
+            _ = DiscoverAsync();
         }
     }
 
@@ -121,16 +129,31 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         RebuildEfforts();
     }
 
+    partial void OnSelectedAccountIdChanged(string? value)
+    {
+        if (CanDiscover())
+        {
+            _ = DiscoverAsync();
+        }
+    }
+
     private void SelectModel(ModelOptionViewModel? option)
     {
         if (option is null)
         {
             return;
         }
-        if (option.IsCustom && option.Id is { } customId && _known.All(o => o.Id != customId))
+        if (option.IsCustom && option.Id is { } customId)
         {
-            // Keep a typed model id in the list so it stays visible (and checked) once the search is cleared.
-            _known.Add(new AgentOption { Id = customId });
+            if (_customModels.All(o => o.Id != customId))
+            {
+                _customModels.Add(new AgentOption { Id = customId });
+            }
+            if (_known.All(o => o.Id != customId))
+            {
+                // Keep a typed model id in the list so it stays visible (and checked) once the search is cleared.
+                _known.Add(new AgentOption { Id = customId });
+            }
         }
         SelectedModelId = option.Id;
         if (option.IsCustom)
@@ -252,20 +275,90 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task DiscoverAsync(IModelDiscovery discovery, string executable)
+    private bool CanDiscover()
     {
+        var discover = _definition.Capabilities.Model?.Discover;
+        if (discover is null) return false;
+        if (!string.Equals(discover.Kind, "command", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return _executable is not null;
+    }
+
+    private Dictionary<string, string> BuildDiscoveryEnvironmentOverrides()
+    {
+        var env = new Dictionary<string, string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        if (_definition.Accounts is { Env.Length: > 0 } accCap
+            && !string.IsNullOrWhiteSpace(SelectedAccountId)
+            && _accounts.FirstOrDefault(a => a.Id == SelectedAccountId) is { IsDefaultOrigin: false, Directory.Length: > 0 } chosen)
+        {
+            env[accCap.Env] = chosen.Directory;
+        }
+        foreach (var feature in _definition.Capabilities.Features)
+        {
+            if (string.IsNullOrEmpty(feature.Env)) continue;
+            if (!_profile.Features.TryGetValue(feature.Id, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+            if (feature.Type == "bool")
+            {
+                if (string.Equals(raw.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    env[feature.Env] = string.IsNullOrEmpty(feature.EnvValue) ? "true" : feature.EnvValue;
+                }
+            }
+            else if (feature.Type == "list")
+            {
+                var items = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (items.Length > 0) env[feature.Env] = string.Join(',', items);
+            }
+            else
+            {
+                env[feature.Env] = raw;
+            }
+        }
+        foreach (var (k, v) in _profile.Env)
+        {
+            env[k] = v;
+        }
+        return env;
+    }
+
+    private async Task DiscoverAsync()
+    {
+        var gen = Interlocked.Increment(ref _discoverGeneration);
+        var envOverrides = BuildDiscoveryEnvironmentOverrides();
         IsDiscovering = true;
         try
         {
-            var found = await Task.Run(() => discovery.DiscoverAsync(_definition, executable));
+            var found = await Task.Run(() => _discovery.DiscoverAsync(
+                _definition,
+                _executable ?? "",
+                environmentOverrides: envOverrides));
             UiContext.PostToUi(() =>
             {
+                if (gen != _discoverGeneration) return;
+                // Rebuild cleanly from discovered -> custom -> static -> profile so switching accounts never leaks stale models.
+                _known.Clear();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var option in found)
                 {
-                    if (_known.All(o => o.Id != option.Id))
+                    if (seen.Add(option.Id)) _known.Add(option);
+                }
+                foreach (var option in _customModels)
+                {
+                    if (seen.Add(option.Id)) _known.Add(option);
+                }
+                if (_definition.Capabilities.Model is { } modelCap)
+                {
+                    foreach (var option in modelCap.Options)
                     {
-                        _known.Add(option);
+                        if (seen.Add(option.Id)) _known.Add(option);
                     }
+                }
+                if (!string.IsNullOrEmpty(_profile.Model) && seen.Add(_profile.Model))
+                {
+                    _known.Add(new AgentOption { Id = _profile.Model });
                 }
                 RebuildModels();
             });
@@ -276,7 +369,10 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            UiContext.PostToUi(() => IsDiscovering = false);
+            UiContext.PostToUi(() =>
+            {
+                if (gen == _discoverGeneration) IsDiscovering = false;
+            });
         }
     }
 

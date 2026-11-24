@@ -28,6 +28,7 @@ public partial class AgentGuiTabView : UserControl, ITabContent
     {
         InitializeComponent();
         ComposerInput.AddHandler(KeyDownEvent, OnComposerKeyDown, RoutingStrategies.Tunnel);
+        ModelSearchBox.AddHandler(KeyDownEvent, OnModelSearchKeyDown, RoutingStrategies.Tunnel);
         TimelineList.TemplateApplied += OnTimelineTemplateApplied;
         ModelPickerPopover.PropertyChanged += OnModelPopoverPropertyChanged;
 
@@ -62,6 +63,20 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         if (e.Property == TKCode.Arc.Popover.IsOpenProperty && e.GetNewValue<bool>() && ModelSearchBox.IsVisible)
         {
             Dispatcher.UIThread.Post(() => ModelSearchBox.Focus(), DispatcherPriority.Input);
+        }
+    }
+
+    private void OnModelSearchKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (_model is null) return;
+        if (e.Key == Key.Enter && _model.Composer.CommitModelSearch())
+        {
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && _model.Composer.IsModelPickerOpen)
+        {
+            _model.Composer.IsModelPickerOpen = false;
+            e.Handled = true;
         }
     }
 

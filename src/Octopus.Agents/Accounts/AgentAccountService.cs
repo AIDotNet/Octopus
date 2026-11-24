@@ -154,7 +154,7 @@ public sealed class AgentAccountService : IAgentAccountService
             var accounts = GetAccounts(definition);
             var chosenId = FirstValidId(accounts, launch?.AccountId, project?.AgentAccounts.GetValueOrDefault(definition.Id), profile.DefaultAccountId, GetActiveGlobalAccountId(definition.Id));
             var chosen = chosenId is null ? null : accounts.FirstOrDefault(a => a.Id == chosenId);
-            return new ResolvedAgentAccount(chosen, null, unsets);
+            return new ResolvedAgentAccount(chosen, null, accounts.Count > 0 ? unsets : null);
         }
 
         if (string.IsNullOrEmpty(cap.Env))
@@ -196,6 +196,13 @@ public sealed class AgentAccountService : IAgentAccountService
         if (!string.IsNullOrWhiteSpace(account.Directory) && Directory.Exists(account.Directory))
         {
             _signals?.RegisterAccount(definition.Id, account.Directory, account.IsDefaultOrigin ? null : account.Label);
+        }
+
+        // When no additional accounts are configured (only the implicit default exists), leave the user's shell
+        // API keys and config directory variables intact so third-party API gateways work out of the box.
+        if (all.Count <= 1 && account.IsDefaultOrigin)
+        {
+            return new ResolvedAgentAccount(account, null, null);
         }
 
         Dictionary<string, string>? env = null;

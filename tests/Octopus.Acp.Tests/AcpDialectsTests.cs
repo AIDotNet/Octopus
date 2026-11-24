@@ -340,4 +340,31 @@ public class AcpDialectsTests
         Assert.Equal("Start dev server", cmd.Description);
         Assert.True(cmd.IsBackground);
     }
+
+    [Fact]
+    public void Codex_dialect_selects_api_key_auth_and_merges_codex_config_launch_preferences()
+    {
+        var codex = new AcpDialectRegistry().Resolve("codex-acp");
+        Assert.True(codex.ReconnectOnCustomModelSwitch);
+        Assert.Equal("fast-mode", codex.FastConfigId);
+
+        var methods = new List<AcpAuthMethod>
+        {
+            new() { Id = "api-key", Name = "API Key" },
+            new() { Id = "chat-gpt", Name = "ChatGPT" },
+        };
+        Assert.Null(codex.SelectAuthMethod(methods, new Dictionary<string, string>()));
+        Assert.Equal("api-key", codex.SelectAuthMethod(methods, new Dictionary<string, string> { ["OPENAI_API_KEY"] = "sk-1" }));
+        Assert.Equal("api-key", codex.SelectAuthMethod(methods, new Dictionary<string, string> { ["CODEX_API_KEY"] = "sk-2" }));
+
+        var env = new Dictionary<string, string>
+        {
+            ["CODEX_CONFIG"] = """{"model_provider":"magpie"}""",
+        };
+        codex.ApplyLaunchPreferences(env, "deepseek-v4-pro", "xhigh");
+        using var doc = JsonDocument.Parse(env["CODEX_CONFIG"]);
+        Assert.Equal("magpie", doc.RootElement.GetProperty("model_provider").GetString());
+        Assert.Equal("deepseek-v4-pro", doc.RootElement.GetProperty("model").GetString());
+        Assert.Equal("xhigh", doc.RootElement.GetProperty("model_reasoning_effort").GetString());
+    }
 }

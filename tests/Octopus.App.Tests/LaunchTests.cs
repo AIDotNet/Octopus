@@ -329,6 +329,45 @@ public class LaunchTests
         }
     }
 
+    [AvaloniaFact]
+    public void Codex_launcher_panel_displays_discovered_third_party_models_ahead_of_static_defaults()
+    {
+        var discovery = AppHost.Get<FakeModelDiscovery>();
+        discovery.ModelsByAgent["codex"] =
+        [
+            new AgentOption { Id = "deepseek-v4-pro", Label = "DeepSeek-V4-Pro · DeepSeek" },
+            new AgentOption { Id = "gemini-4-argon", Label = "Gemini 4 Argon · 4sapi" },
+        ];
+        var profile = new AgentProfile
+        {
+            Env = { ["OPENAI_BASE_URL"] = "http://127.0.0.1:3425/backend-api/codex" },
+        };
+        var panel = new AgentLaunchViewModel(
+            AppHost.Get<IAgentCatalog>().Find("codex")!,
+            profile,
+            PermissionModes.Default,
+            AppHost.Get<IAgentCommandCompiler>(),
+            discovery,
+            "/usr/local/bin/codex",
+            _ => { });
+        try
+        {
+            Assert.True(Frames.Until(() => panel.Models.Any(m => m.Id == "deepseek-v4-pro")));
+            // Models[0] is AgentDefault (null); discovered third-party models come immediately after it!
+            Assert.Null(panel.Models[0].Id);
+            Assert.Equal("deepseek-v4-pro", panel.Models[1].Id);
+            Assert.Equal("DeepSeek-V4-Pro · DeepSeek", panel.Models[1].Label);
+            Assert.Equal("gemini-4-argon", panel.Models[2].Id);
+            Assert.Contains(discovery.Calls, c => c.AgentId == "codex"
+                && c.Env is not null
+                && c.Env.GetValueOrDefault("OPENAI_BASE_URL") == "http://127.0.0.1:3425/backend-api/codex");
+        }
+        finally
+        {
+            panel.Dispose();
+        }
+    }
+
     private static string AppLangResourceText(Octopus.App.Localization.AppLangResourceKind kind) =>
         Octopus.App.Localization.AppLangResources.Get(kind);
 }

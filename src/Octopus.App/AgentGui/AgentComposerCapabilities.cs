@@ -94,10 +94,15 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
     private string? _modelConfigId;
     private string? _effortConfigId;
     private string? _fastConfigId;
+    private bool _fastConfigIsBoolean = true;
     private string? _thinkingConfigId;
     private bool _sessionInitialized;
     private bool _hasLiveEffort;
+    private bool _hasSessionModels;
     private bool _syncing;
+    private List<(string Id, string Label, string? Description, string? Meta)> _sessionModelItems = [];
+    private List<(string Id, string Label, string? Description, string? Meta)> _discoveredModelItems = [];
+    private readonly List<(string Id, string Label, string? Description, string? Meta)> _customModelItems = [];
 
     public AgentComposerCapabilities(
         AgentDefinition definition,
@@ -174,8 +179,22 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
     public ObservableCollection<string> CapabilityBadges { get; } = [];
 
     public bool LinksFileMentions => _dialect.LinksFileMentions;
-    public bool ShowModelSearch => ModelChoices.Count > 6;
+    public bool AllowCustomModel => _definition.Capabilities.Model?.AllowCustom == true;
+    public bool ShowModelSearch => ModelChoices.Count > 6 || AllowCustomModel;
     public bool HasFilteredModels => FilteredModelChoices.Count > 0;
+    public bool CanUseCustomModelQuery =>
+        AllowCustomModel
+        && ModelSearchQuery.Trim().Length > 0
+        && ModelChoices.All(c => !string.Equals(c.Id, ModelSearchQuery.Trim(), StringComparison.OrdinalIgnoreCase));
+    public string CustomModelOptionLabel =>
+        CanUseCustomModelQuery
+            ? AppLangResources.Format(AppLangResourceKind.UseCustomModel, ModelSearchQuery.Trim())
+            : "";
+    public bool ShowNoModelMatches => !HasFilteredModels && !CanUseCustomModelQuery;
+    public string? ModelConfigId => _modelConfigId;
+    public string? EffortConfigId => _effortConfigId;
+    public string? FastConfigId => _fastConfigId;
+    public bool FastConfigIsBoolean => _fastConfigIsBoolean;
 
     public string SelectedModeLabel =>
         ModeChoices.FirstOrDefault(c => c.Id == SelectedModeId)?.Label
@@ -202,6 +221,130 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
 
     [RelayCommand]
     private void ToggleThinking() => ThinkingEnabled = !ThinkingEnabled;
+
+    [RelayCommand]
+    private void UseCustomModelQuery()
+    {
+        var id = ModelSearchQuery.Trim();
+        if (id.Length == 0 || !AllowCustomModel) return;
+        SelectCustomModel(id);
+    }
+
+    /// <summary>Enter in the model search box: chooses an exact match, sole filtered match, or typed custom model id.</summary>
+    public bool CommitModelSearch()
+    {
+        var query = ModelSearchQuery.Trim();
+        if (query.Length == 0) return false;
+        var exact = FilteredModelChoices.FirstOrDefault(c => string.Equals(c.Id, query, StringComparison.OrdinalIgnoreCase))
+            ?? FilteredModelChoices.FirstOrDefault(c => string.Equals(c.Label, query, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null)
+        {
+            SelectModel(exact.Id);
+            return true;
+        }
+        if (FilteredModelChoices.Count == 1 && !CanUseCustomModelQuery)
+        {
+            SelectModel(FilteredModelChoices[0].Id);
+            return true;
+        }
+        if (CanUseCustomModelQuery)
+        {
+            SelectCustomModel(query);
+            return true;
+        }
+        if (FilteredModelChoices.Count > 0)
+        {
+            SelectModel(FilteredModelChoices[0].Id);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Updates <see cref="SelectedModelId"/> without firing the outbound model-change callback (e.g. rollback on RPC error).</summary>
+    public void SyncModelSelectionSilently(string? modelId)
+    {
+        _syncing = true;
+        try
+        {
+            SelectedModelId = modelId;
+            SyncAllSelectionStates();
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    /// <summary>
+    /// Merges models discovered from third-party gateways / local agent config alongside live ACP session models
+    /// so custom API models appear directly in the GUI model picker.
+    /// </summary>
+    public void MergeSupplementalModels(IReadOnlyList<AgentOption> discovered)
+    {
+        if (discovered.Count == 0) return;
+        _syncing = true;
+        try
+        {
+            var lang = AgentLanguage.Current;
+            _discoveredModelItems = discovered
+                .Where(o => !string.IsNullOrWhiteSpace(o.Id))
+                .Select(o => (o.Id, o.LabelFor(lang), (string?)null, o.NoteFor(lang)))
+                .ToList();
+            if (_sessionInitialized)
+            {
+                RebuildEffectiveSessionModels();
+                SyncAllSelectionStates();
+                RebuildCapabilityBadges();
+            }
+            else if (ModelChoices.Count == 0 || _definition.Capabilities.Model is not null)
+            {
+                var combined = new List<(string Id, string Label, string? Description, string? Meta)>();
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var item in _discoveredModelItems)
+                {
+                    if (seen.Add(item.Id)) combined.Add(item);
+                }
+                foreach (var c in ModelChoices)
+                {
+                    if (seen.Add(c.Id)) combined.Add((c.Id, c.Label, c.Description, c.Meta));
+                }
+                ModelOptions = [.. combined.Select(m => new SelectOption(m.Id, m.Label))];
+                ShowModelSelector = ModelOptions.Count > 0;
+                RebuildModelChoices(combined);
+                SyncAllSelectionStates();
+                RebuildCapabilityBadges();
+            }
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    private void SelectCustomModel(string id)
+    {
+        if (_customModelItems.All(c => !string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase))
+            && _sessionModelItems.All(c => !string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase))
+            && _discoveredModelItems.All(c => !string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase)))
+        {
+            _customModelItems.Insert(0, (id, id, null, null));
+        }
+        if (_sessionInitialized)
+        {
+            _syncing = true;
+            try { RebuildEffectiveSessionModels(); }
+            finally { _syncing = false; }
+        }
+        else if (ModelChoices.All(c => !string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase)))
+        {
+            ModelChoices.Insert(0, new ComposerChoiceItem(id, id, SelectModel));
+            ModelOptions = [.. ModelChoices.Select(c => new SelectOption(c.Id, c.Label))];
+            ShowModelSelector = true;
+        }
+        ModelSearchQuery = "";
+        SelectedModelId = id;
+        IsModelPickerOpen = false;
+    }
 
     /// <summary>Seeds composer controls from static catalog metadata before the ACP handshake completes.</summary>
     private void InitializeFromCatalog()
@@ -409,25 +552,23 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
             if (modelOpt is { Options.Count: > 0 })
             {
                 _modelConfigId = modelOpt.Id;
-                ModelOptions = [.. modelOpt.Options.Select(o => new SelectOption(o.Value, o.Name))];
+                _hasSessionModels = true;
+                _sessionModelItems = modelOpt.Options.Select(o => (o.Value, o.Name, o.Description, o.GroupName)).ToList();
                 SelectedModelId = modelOpt.CurrentValue ?? modelOpt.Options[0].Value;
-                ShowModelSelector = true;
-                RebuildModelChoices(modelOpt.Options.Select(o => (o.Value, o.Name, o.Description, o.GroupName)));
+                RebuildEffectiveSessionModels();
             }
             else if (models is { AvailableModels.Count: > 0 })
             {
-                ModelOptions = [.. models.AvailableModels.Select(m => new SelectOption(m.ModelId, m.Name))];
+                _hasSessionModels = true;
+                _sessionModelItems = models.AvailableModels.Select(m => (m.ModelId, m.Name, m.Description, (string?)null)).ToList();
                 SelectedModelId = string.IsNullOrEmpty(models.CurrentModelId) ? models.AvailableModels[0].ModelId : models.CurrentModelId;
-                ShowModelSelector = true;
-                RebuildModelChoices(models.AvailableModels.Select(m => (m.ModelId, m.Name, m.Description, (string?)null)));
+                RebuildEffectiveSessionModels();
             }
             else if (initialized is not null)
             {
-                // Connected ACP server did not expose live model selection -> hide dead selector.
-                ModelOptions = [];
-                ModelChoices.Clear();
-                FilteredModelChoices.Clear();
-                ShowModelSelector = false;
+                _hasSessionModels = false;
+                _sessionModelItems = [];
+                RebuildEffectiveSessionModels();
             }
 
             if (effortOpt is { Options.Count: > 0 })
@@ -456,7 +597,10 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
             if (fastOpt is not null)
             {
                 _fastConfigId = fastOpt.Id;
-                FastMode = fastOpt.CurrentBoolValue ?? string.Equals(fastOpt.CurrentValue, "true", StringComparison.OrdinalIgnoreCase);
+                _fastConfigIsBoolean = string.Equals(fastOpt.Type, "boolean", StringComparison.OrdinalIgnoreCase);
+                FastMode = fastOpt.CurrentBoolValue
+                    ?? (string.Equals(fastOpt.CurrentValue, "true", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(fastOpt.CurrentValue, "on", StringComparison.OrdinalIgnoreCase));
                 ShowFastToggle = true;
             }
             else if (initialized is not null)
@@ -522,6 +666,65 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
         OnPropertyChanged(nameof(IsPermissionDanger));
     }
 
+    private void RebuildEffectiveSessionModels()
+    {
+        if (!_hasSessionModels && _discoveredModelItems.Count == 0 && _customModelItems.Count == 0
+            && !(_dialect.ReconnectOnCustomModelSwitch && AllowCustomModel))
+        {
+            // Connected ACP server did not expose live model selection and no third-party models were discovered -> hide dead selector.
+            ModelOptions = [];
+            ModelChoices.Clear();
+            FilteredModelChoices.Clear();
+            ShowModelSelector = false;
+            OnPropertyChanged(nameof(ShowModelSearch));
+            OnPropertyChanged(nameof(HasFilteredModels));
+            OnPropertyChanged(nameof(CanUseCustomModelQuery));
+            OnPropertyChanged(nameof(CustomModelOptionLabel));
+            OnPropertyChanged(nameof(ShowNoModelMatches));
+            return;
+        }
+
+        var combined = new List<(string Id, string Label, string? Description, string? Meta)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var sessionIds = _sessionModelItems.Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
+        var staticIds = (_definition.Capabilities.Model?.Options ?? []).Select(o => o.Id).ToHashSet(StringComparer.Ordinal);
+
+        // Put third-party discovered models that the ACP server did not already enumerate first so gateway models
+        // (e.g. DeepSeek/Gemini/custom OpenAI-compatible endpoints) are immediately visible at the top of the picker.
+        foreach (var item in _discoveredModelItems)
+        {
+            if (!sessionIds.Contains(item.Id) && !staticIds.Contains(item.Id) && seen.Add(item.Id))
+            {
+                combined.Add(item);
+            }
+        }
+        foreach (var item in _customModelItems)
+        {
+            if (!sessionIds.Contains(item.Id) && seen.Add(item.Id))
+            {
+                combined.Add(item);
+            }
+        }
+        foreach (var item in _sessionModelItems)
+        {
+            if (seen.Add(item.Id))
+            {
+                combined.Add(item);
+            }
+        }
+        foreach (var item in _discoveredModelItems)
+        {
+            if (seen.Add(item.Id))
+            {
+                combined.Add(item);
+            }
+        }
+
+        ModelOptions = [.. combined.Select(m => new SelectOption(m.Id, m.Label))];
+        ShowModelSelector = combined.Count > 0 || (_dialect.ReconnectOnCustomModelSwitch && AllowCustomModel);
+        RebuildModelChoices(combined);
+    }
+
     private void RebuildModelChoices(IEnumerable<(string Id, string Label, string? Description, string? Meta)> items)
     {
         ModelChoices.Clear();
@@ -561,6 +764,9 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
             }
         }
         OnPropertyChanged(nameof(HasFilteredModels));
+        OnPropertyChanged(nameof(CanUseCustomModelQuery));
+        OnPropertyChanged(nameof(CustomModelOptionLabel));
+        OnPropertyChanged(nameof(ShowNoModelMatches));
     }
 
     private void SyncAllSelectionStates()
@@ -723,9 +929,14 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
     partial void OnFastModeChanged(bool value)
     {
         if (_syncing) return;
-        if (_fastConfigId is not null && _onConfigBoolChanged is not null)
+        if (_fastConfigId is null) return;
+        if (_fastConfigIsBoolean && _onConfigBoolChanged is not null)
         {
             _ = _onConfigBoolChanged(_fastConfigId, value);
+        }
+        else if (!_fastConfigIsBoolean && _onConfigSelectChanged is not null)
+        {
+            _ = _onConfigSelectChanged(_fastConfigId, value ? "on" : "off");
         }
     }
 

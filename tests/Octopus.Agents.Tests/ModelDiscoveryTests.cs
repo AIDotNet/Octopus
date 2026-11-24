@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text;
 using Octopus.Platform;
 
 namespace Octopus.Agents.Tests;
@@ -70,8 +72,166 @@ public class ModelDiscoveryTests
         Assert.Equal("http://127.0.0.1:7890", seenEnv!["HTTPS_PROXY"]);
     }
 
+    [Fact]
+    public async Task Codex_discovers_third_party_gateway_and_cache_models_and_config_model()
+    {
+        using var tmp = new TempDir();
+        var codexHome = Path.Combine(tmp.Path, "codex");
+        Directory.CreateDirectory(codexHome);
+        File.WriteAllText(Path.Combine(codexHome, "config.toml"), """
+            model = "custom-pinned-model"
+            openai_base_url = "http://127.0.0.1:3425/backend-api/codex"
+            """);
+
+        var seenUrls = new List<string>();
+        var handler = new StubHttpHandler(req =>
+        {
+            seenUrls.Add(req.RequestUri!.ToString());
+            const string magpieJson = """
+                {
+                  "models": [
+                    { "slug": "hidden-internal", "display_name": "Hidden", "visibility": "hide", "priority": 0 },
+                    { "slug": "gpt-6.2-astra-laai0", "display_name": "GPT-6.2 Astra · laai0", "description": "via magpie", "visibility": "list", "priority": 2 },
+                    { "slug": "deepseek-v4-pro", "display_name": "DeepSeek-V4-Pro · DeepSeek", "description": "DeepSeek-V4-Pro via magpie", "visibility": "list", "priority": 1 }
+                  ]
+                }
+                """;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(magpieJson, Encoding.UTF8, "application/json"),
+            };
+        });
+        using var http = new HttpClient(handler);
+        var discovery = new ModelDiscovery(new FakeRunner((_, _, _) => new ProcessResult(1, "", "", false)), new FakeLoginEnvironment(), httpClient: http);
+
+        var options = await discovery.DiscoverAsync(
+            Builtins.Get("codex"),
+            "codex",
+            environmentOverrides: new Dictionary<string, string> { ["CODEX_HOME"] = codexHome, ["OPENAI_API_KEY"] = "sk-magpie" });
+
+        Assert.Single(seenUrls);
+        Assert.Contains("/backend-api/codex/models", seenUrls[0]);
+        Assert.Equal(["custom-pinned-model", "deepseek-v4-pro", "gpt-6.2-astra-laai0"], options.Select(o => o.Id));
+        Assert.Equal("DeepSeek-V4-Pro · DeepSeek", options[1].Label);
+        Assert.Equal("GPT-6.2 Astra · laai0", options[2].Label);
+    }
+
+    [Fact]
+    public async Task Codex_discovers_openai_compatible_provider_models_and_falls_back_to_models_cache()
+    {
+        using var tmp = new TempDir();
+        var codexHome = Path.Combine(tmp.Path, "codex");
+        Directory.CreateDirectory(codexHome);
+        File.WriteAllText(Path.Combine(codexHome, "config.toml"), """
+            model_provider = "deepseek"
+
+            [model_providers.deepseek]
+            name = "DeepSeek"
+            base_url = "https://api.deepseek.example/v1"
+            env_key = "DEEPSEEK_API_KEY"
+            """);
+
+        string? authHeader = null;
+        var handler = new StubHttpHandler(req =>
+        {
+            authHeader = req.Headers.Authorization?.ToString();
+            const string openaiJson = """
+                {
+                  "data": [
+                    { "id": "deepseek-chat", "owned_by": "deepseek" },
+                    { "id": "deepseek-reasoner", "owned_by": "deepseek" }
+                  ]
+                }
+                """;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(openaiJson, Encoding.UTF8, "application/json"),
+            };
+        });
+        using var http = new HttpClient(handler);
+        var discovery = new ModelDiscovery(new FakeRunner((_, _, _) => new ProcessResult(1, "", "", false)), new FakeLoginEnvironment(), httpClient: http);
+
+        var options = await discovery.DiscoverAsync(
+            Builtins.Get("codex"),
+            "codex",
+            environmentOverrides: new Dictionary<string, string>
+            {
+                ["CODEX_HOME"] = codexHome,
+                ["DEEPSEEK_API_KEY"] = "sk-ds-test",
+            });
+
+        Assert.Equal("Bearer sk-ds-test", authHeader);
+        Assert.Equal(["deepseek-chat", "deepseek-reasoner"], options.Select(o => o.Id));
+        Assert.Equal("deepseek", options[0].Note);
+
+        // When gateway returns 404, models_cache.json is used as fallback.
+        File.WriteAllText(Path.Combine(codexHome, "models_cache.json"), """
+            {
+              "models": [
+                { "slug": "cached-third-party", "display_name": "Cached Third Party", "visibility": "list", "priority": 1 }
+              ]
+            }
+            """);
+        using var failingHttp = new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)));
+        var fallbackDiscovery = new ModelDiscovery(new FakeRunner((_, _, _) => new ProcessResult(1, "", "", false)), new FakeLoginEnvironment(), httpClient: failingHttp);
+        var cached = await fallbackDiscovery.DiscoverAsync(
+            Builtins.Get("codex"),
+            "codex",
+            environmentOverrides: new Dictionary<string, string> { ["CODEX_HOME"] = codexHome });
+
+        Assert.Equal(["cached-third-party"], cached.Select(o => o.Id));
+        Assert.Equal("Cached Third Party", cached[0].Label);
+    }
+
+    [Fact]
+    public async Task Claude_discovers_third_party_anthropic_gateway_models_from_env_or_settings()
+    {
+        using var tmp = new TempDir();
+        var claudeDir = Path.Combine(tmp.Path, "claude");
+        Directory.CreateDirectory(claudeDir);
+        File.WriteAllText(Path.Combine(claudeDir, "settings.json"), """
+            {
+              "env": {
+                "ANTHROPIC_BASE_URL": "http://127.0.0.1:3425/anthropic",
+                "ANTHROPIC_AUTH_TOKEN": "tok-123",
+                "ANTHROPIC_MODEL": "deepseek-v4-pro"
+              }
+            }
+            """);
+
+        string? seenUrl = null;
+        string? seenAuth = null;
+        var handler = new StubHttpHandler(req =>
+        {
+            seenUrl = req.RequestUri!.ToString();
+            seenAuth = req.Headers.Authorization?.ToString();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"data":[{"id":"glm-5","display_name":"GLM 5"},{"id":"qwen-coder"}]}""", Encoding.UTF8, "application/json"),
+            };
+        });
+        using var http = new HttpClient(handler);
+        var discovery = new ModelDiscovery(new FakeRunner((_, _, _) => new ProcessResult(1, "", "", false)), new FakeLoginEnvironment(), httpClient: http);
+
+        var options = await discovery.DiscoverAsync(
+            Builtins.Get("claude"),
+            "claude",
+            environmentOverrides: new Dictionary<string, string> { ["CLAUDE_CONFIG_DIR"] = claudeDir });
+
+        Assert.Equal("http://127.0.0.1:3425/anthropic/v1/models", seenUrl);
+        Assert.Equal("Bearer tok-123", seenAuth);
+        Assert.Equal(["deepseek-v4-pro", "glm-5", "qwen-coder"], options.Select(o => o.Id));
+        Assert.Equal("GLM 5", options[1].Label);
+    }
+
     private sealed class FixedProxy(Uri? uri) : ISystemProxy
     {
         public Uri? Resolve() => uri;
+    }
+
+    private sealed class StubHttpHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(respond(request));
     }
 }

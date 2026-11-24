@@ -274,16 +274,28 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
 
     private async Task DiscoverModelsAsync()
     {
-        if (_discoveryStarted || ModelField is null || Definition.Capabilities.Model?.Discover is null || Installation is null)
+        var discover = Definition.Capabilities.Model?.Discover;
+        if (_discoveryStarted || ModelField is null || discover is null)
+        {
+            return;
+        }
+        var isCommand = string.Equals(discover.Kind, "command", StringComparison.OrdinalIgnoreCase);
+        if (isCommand && Installation is null)
         {
             return;
         }
         _discoveryStarted = true;
         _discoveryCts = new CancellationTokenSource();
+        var envOverrides = BuildDiscoveryEnvironmentOverrides();
         try
         {
             var found = await Task.Run(
-                () => _services.Discovery.DiscoverAsync(Definition, Installation.Path, false, _discoveryCts.Token),
+                () => _services.Discovery.DiscoverAsync(
+                    Definition,
+                    Installation?.Path ?? "",
+                    false,
+                    _discoveryCts.Token,
+                    envOverrides),
                 _discoveryCts.Token);
             if (found.Count == 0)
             {
@@ -296,6 +308,39 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         {
             // Discovery is a convenience: when it fails the suggested models and the custom field are still there.
         }
+    }
+
+    private Dictionary<string, string> BuildDiscoveryEnvironmentOverrides()
+    {
+        var env = new Dictionary<string, string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var profile = Profile;
+        foreach (var feature in Definition.Capabilities.Features)
+        {
+            if (string.IsNullOrEmpty(feature.Env)) continue;
+            if (!profile.Features.TryGetValue(feature.Id, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+            if (feature.Type == "bool")
+            {
+                if (string.Equals(raw.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    env[feature.Env] = string.IsNullOrEmpty(feature.EnvValue) ? "true" : feature.EnvValue;
+                }
+            }
+            else if (feature.Type == "list")
+            {
+                var items = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (items.Length > 0) env[feature.Env] = string.Join(',', items);
+            }
+            else
+            {
+                env[feature.Env] = raw;
+            }
+        }
+        foreach (var (k, v) in profile.Env)
+        {
+            env[k] = v;
+        }
+        return env;
     }
 
     private void OnSettingsChanged(object? sender, EventArgs e) => UiContext.Run(OnSettingsChangedOnUi);

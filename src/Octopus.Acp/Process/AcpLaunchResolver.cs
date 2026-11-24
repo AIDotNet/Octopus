@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Octopus.Acp.Dialects;
 using Octopus.Agents;
 using Octopus.Core.Agents;
 using Octopus.Core.Settings;
@@ -26,9 +27,11 @@ public sealed class AcpLaunchResolver(
     ILoginEnvironment loginEnvironment,
     ISystemProxy? systemProxy = null,
     AcpAdapterInstaller? adapterInstaller = null,
-    IShellCommandBuilder? shellCommandBuilder = null)
+    IShellCommandBuilder? shellCommandBuilder = null,
+    AcpDialectRegistry? dialects = null)
 {
     private readonly IShellCommandBuilder _shell = shellCommandBuilder ?? new ShellCommandBuilder();
+    private readonly AcpDialectRegistry _dialects = dialects ?? new AcpDialectRegistry();
     public bool CanLaunchAcp(AgentDefinition? definition, AgentInstallation? installation, AgentSettings settings)
     {
         if (definition?.Acp is not { } acp) return false;
@@ -60,16 +63,19 @@ public sealed class AcpLaunchResolver(
         IReadOnlyDictionary<string, string>? accountEnv = null,
         IReadOnlyList<string>? unsetEnv = null,
         CancellationToken cancellationToken = default,
-        Action<string>? onProgress = null)
+        Action<string>? onProgress = null,
+        IReadOnlyDictionary<string, string>? launchEnv = null,
+        string? initialModelId = null,
+        string? initialEffortId = null)
     {
         if (definition.Acp is not { } acp)
         {
             throw new InvalidOperationException($"Agent '{definition.Id}' does not support ACP.");
         }
 
+        var envComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var loginEnv = await loginEnvironment.GetAsync(cancellationToken).ConfigureAwait(false);
-        var env = new Dictionary<string, string>(loginEnv,
-            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var env = new Dictionary<string, string>(loginEnv, envComparer);
         var searchPath = BuildSearchPath(env, definition.Detect.ExtraDirs, installation?.Path);
         if (!string.IsNullOrEmpty(searchPath))
         {
@@ -77,15 +83,55 @@ public sealed class AcpLaunchResolver(
         }
 
         var profile = settings.ProfileOf(definition.Id);
-        foreach (var (k, v) in definition.Capabilities.BaseEnv) env[k] = v;
-        foreach (var (k, v) in profile.Env) env[k] = v;
+        var protectedKeys = new HashSet<string>(envComparer);
+
+        // Apply BaseEnv and accountEnv first, then feature env, profile.Env, launchEnv, and acp.Env so explicit
+        // user overrides always win and are never stripped by account-isolation unsetEnv.
+        foreach (var (k, v) in definition.Capabilities.BaseEnv)
+        {
+            env[k] = v;
+            protectedKeys.Add(k);
+        }
         if (accountEnv is not null)
         {
-            foreach (var (k, v) in accountEnv) env[k] = v;
+            foreach (var (k, v) in accountEnv)
+            {
+                env[k] = v;
+                protectedKeys.Add(k);
+            }
         }
+        ApplyFeatureEnvironment(definition.Capabilities.Features, profile, env, protectedKeys);
+        foreach (var (k, v) in profile.Env)
+        {
+            env[k] = v;
+            protectedKeys.Add(k);
+        }
+        if (launchEnv is not null)
+        {
+            foreach (var (k, v) in launchEnv)
+            {
+                env[k] = v;
+                protectedKeys.Add(k);
+            }
+        }
+        foreach (var (k, v) in acp.Env)
+        {
+            env[k] = v;
+            protectedKeys.Add(k);
+        }
+
+        var effectiveUnsets = new List<string>();
         if (unsetEnv is not null)
         {
-            foreach (var k in unsetEnv) env.Remove(k);
+            foreach (var k in unsetEnv)
+            {
+                if (string.IsNullOrWhiteSpace(k) || protectedKeys.Contains(k)) continue;
+                env.Remove(k);
+                if (!effectiveUnsets.Contains(k, envComparer))
+                {
+                    effectiveUnsets.Add(k);
+                }
+            }
         }
         if (settings.UseSystemProxy && systemProxy?.Resolve() is { } proxy)
         {
@@ -94,7 +140,8 @@ public sealed class AcpLaunchResolver(
                 env[k] = v;
             }
         }
-        foreach (var (k, v) in acp.Env) env[k] = v;
+
+        _dialects.Resolve(acp.Dialect).ApplyLaunchPreferences(env, initialModelId, initialEffortId);
 
         string executable;
         var args = new List<string>();
@@ -122,7 +169,6 @@ public sealed class AcpLaunchResolver(
 
             // Point companion adapters at the configured command override (when set) or locally installed CLI binary
             // when declared (e.g. CLAUDE_CODE_EXECUTABLE). An explicit profile/ACP env var still wins.
-            var envComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
             var explicitNativeEnv = !string.IsNullOrWhiteSpace(adapter.NativeExecutableEnvVar)
                 && (profile.Env.Keys.Any(k => envComparer.Equals(k, adapter.NativeExecutableEnvVar))
                     || acp.Env.Keys.Any(k => envComparer.Equals(k, adapter.NativeExecutableEnvVar)));
@@ -161,8 +207,9 @@ public sealed class AcpLaunchResolver(
                 }
             }
 
-            // Node adapters spawn this path without a shell, which fails with EINVAL for an npm .cmd shim on Windows.
+            // Node adapters that spawn this path without a shell fail with EINVAL for an npm .cmd shim on Windows.
             if (OperatingSystem.IsWindows()
+                && adapter.ResolveWindowsBatchShim
                 && !string.IsNullOrWhiteSpace(adapter.NativeExecutableEnvVar)
                 && env.TryGetValue(adapter.NativeExecutableEnvVar, out var nativeValue)
                 && BatchShimResolver.IsBatchFile(nativeValue))
@@ -251,13 +298,45 @@ public sealed class AcpLaunchResolver(
             executable,
             args,
             env,
-            unsetEnv ?? [],
+            effectiveUnsets,
             workingDirectory,
             acp.Dialect,
             acp.PermissionStrategy,
             sourceLabel,
             installation?.Version,
             initTimeout);
+    }
+
+    private static void ApplyFeatureEnvironment(
+        IReadOnlyList<AgentFeature> features,
+        AgentProfile profile,
+        Dictionary<string, string> env,
+        HashSet<string> protectedKeys)
+    {
+        foreach (var feature in features)
+        {
+            if (string.IsNullOrEmpty(feature.Env)) continue;
+            if (!profile.Features.TryGetValue(feature.Id, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+
+            switch (feature.Type)
+            {
+                case "bool":
+                    if (!string.Equals(raw.Trim(), "true", StringComparison.OrdinalIgnoreCase)) continue;
+                    env[feature.Env] = string.IsNullOrEmpty(feature.EnvValue) ? "true" : feature.EnvValue;
+                    protectedKeys.Add(feature.Env);
+                    break;
+                case "list":
+                    var items = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (items.Length == 0) continue;
+                    env[feature.Env] = string.Join(',', items);
+                    protectedKeys.Add(feature.Env);
+                    break;
+                default:
+                    env[feature.Env] = raw;
+                    protectedKeys.Add(feature.Env);
+                    break;
+            }
+        }
     }
 
     private async Task<string?> TryInstallRegistryBinaryQuietlyAsync(

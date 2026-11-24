@@ -251,6 +251,66 @@ public class AcpLaunchResolverTests
         Assert.Equal(["--profile", "work", "agent", "stdio"], plan.Arguments);
     }
 
+    [Fact]
+    public async Task Codex_adapter_preserves_explicit_third_party_env_passes_codex_path_and_injects_initial_model()
+    {
+        using var paths = new TempAppPaths();
+        var registry = new AcpRegistryClient(paths);
+        var installer = new AcpAdapterInstaller(paths, registry);
+
+        var binDir = Path.Combine(installer.AdapterRoot("codex"), "npm", "node_modules", ".bin");
+        Directory.CreateDirectory(binDir);
+        var fakeAdapter = Path.Combine(binDir, OperatingSystem.IsWindows() ? "codex-acp.cmd" : "codex-acp");
+        await File.WriteAllTextAsync(fakeAdapter, "#!/bin/sh\n");
+
+        var codexDef = new Octopus.Agents.AgentCatalog(paths).Find("codex")!;
+        Assert.Equal("CODEX_PATH", codexDef.Acp!.Adapter!.NativeExecutableEnvVar);
+        Assert.False(codexDef.Acp.Adapter.ResolveWindowsBatchShim);
+        Assert.Contains(codexDef.Capabilities.Env!.Known, v => v.Name == "OPENAI_BASE_URL");
+
+        var resolver = new AcpLaunchResolver(
+            new FakeLocator(new()),
+            new FakeLoginEnvWithVar("OPENAI_API_KEY", "sk-shell-stale"),
+            adapterInstaller: installer);
+
+        var settings = new AgentSettings();
+        settings.Profiles["codex"] = new AgentProfile
+        {
+            Env = new Dictionary<string, string>
+            {
+                ["OPENAI_API_KEY"] = "sk-third-party",
+                ["OPENAI_BASE_URL"] = "http://127.0.0.1:3425/backend-api/codex",
+            },
+            Features = new Dictionary<string, string>
+            {
+                ["codexHome"] = "/tmp/custom-codex",
+            },
+        };
+        var install = new AgentInstallation { AgentId = "codex", Path = "/usr/local/bin/codex", Version = "0.171.0" };
+
+        // Even when account isolation passes unsetEnv for OPENAI_API_KEY and CODEX_HOME, explicit profile/feature env MUST win!
+        var plan = await resolver.ResolveAsync(
+            codexDef,
+            install,
+            settings,
+            "/tmp/repo",
+            PermissionModes.Default,
+            accountEnv: null,
+            unsetEnv: ["OPENAI_API_KEY", "CODEX_HOME"],
+            initialModelId: "deepseek-v4-pro",
+            initialEffortId: "high");
+
+        Assert.Equal(fakeAdapter, plan.Executable);
+        Assert.Equal("/usr/local/bin/codex", plan.Environment["CODEX_PATH"]);
+        Assert.Equal("sk-third-party", plan.Environment["OPENAI_API_KEY"]);
+        Assert.Equal("http://127.0.0.1:3425/backend-api/codex", plan.Environment["OPENAI_BASE_URL"]);
+        Assert.Equal("/tmp/custom-codex", plan.Environment["CODEX_HOME"]);
+        Assert.DoesNotContain("OPENAI_API_KEY", plan.UnsetEnvironment);
+        Assert.DoesNotContain("CODEX_HOME", plan.UnsetEnvironment);
+        Assert.Contains("\"model\":\"deepseek-v4-pro\"", plan.Environment["CODEX_CONFIG"]);
+        Assert.Contains("\"model_reasoning_effort\":\"high\"", plan.Environment["CODEX_CONFIG"]);
+    }
+
     private sealed class FakeLoginEnvWithVar(string key, string value) : ILoginEnvironment
     {
         public Task<IReadOnlyDictionary<string, string>> GetAsync(CancellationToken cancellationToken = default) =>

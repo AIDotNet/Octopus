@@ -195,9 +195,16 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private readonly IAgentAccountService? _accounts;
     private readonly Func<IWorkspaceCommands?>? _workspaceCommands;
     private readonly ISubagentService? _subagents;
+    private readonly IModelDiscovery? _modelDiscovery;
 
     private IAcpSession? _session;
     private AssistantTurnItem? _activeTurn;
+    private string? _desiredModelId;
+    private string? _desiredEffortId;
+    private bool? _desiredFast;
+    private string? _confirmedModelId;
+    private bool _reconnectingForModel;
+    private bool _hasSyncedInitialPreferences;
     private readonly Dictionary<string, SubagentRunViewModel> _subagentsById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SubagentRunViewModel> _agySubagentsByConvId = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<AgySubagentSpawn> _agyUnmatchedSpawns = new();
@@ -254,7 +261,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         IItemActivityService? activity = null,
         IAgentAccountService? accounts = null,
         Func<IWorkspaceCommands?>? workspaceCommands = null,
-        ISubagentService? subagents = null)
+        ISubagentService? subagents = null,
+        IModelDiscovery? modelDiscovery = null)
     {
         _project = project;
         _item = item;
@@ -272,19 +280,24 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _accounts = accounts;
         _workspaceCommands = workspaceCommands;
         _subagents = subagents;
+        _modelDiscovery = modelDiscovery;
 
         var profile = settings.Current.Agents.ProfileOf(definition.Id);
         var effectivePerm = compiler.ResolvePermission(definition, profile, settings.Current.Agents.DefaultPermission)
             ?? PermissionModes.Default;
         var dialect = dialects.Resolve(definition.Acp?.Dialect);
 
+        _desiredModelId = NormalizeLaunchOption(item.Launch?.Model is not null ? item.Launch.Model : profile.Model);
+        _desiredEffortId = NormalizeLaunchOption(item.Launch?.Effort is not null ? item.Launch.Effort : profile.Effort);
+        _desiredFast = item.Launch?.Fast ?? profile.Fast;
+
         Composer = new AgentComposerCapabilities(
             definition,
             dialect,
             effectivePerm,
-            item.Launch?.Model ?? profile.Model,
-            item.Launch?.Effort ?? profile.Effort,
-            item.Launch?.Fast ?? profile.Fast,
+            _desiredModelId,
+            _desiredEffortId,
+            _desiredFast,
             onModeChanged: ApplyModeAsync,
             onPermissionChanged: ApplyPermissionAsync,
             onModelChanged: ApplyModelAsync,
@@ -682,7 +695,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 accountEnv,
                 unsetEnv,
                 ct,
-                progress => SetUi(() => StatusDetail = progress)).ConfigureAwait(false);
+                progress => SetUi(() => StatusDetail = progress),
+                launchEnv: _item.Launch?.Env,
+                initialModelId: _desiredModelId,
+                initialEffortId: _desiredEffortId).ConfigureAwait(false);
 
             SetUi(() => StatusDetail = null);
 
@@ -723,7 +739,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
             var desiredPermission = Composer.SelectedPermissionId ?? PermissionModes.Default;
 
-            SetUi(() =>
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _projects.SetItemSessionId(_item.Id, started.SessionId, isAcp: true);
                 InitAgyTranscriptMonitor(started.SessionId);
@@ -741,9 +757,18 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     session.ConfigOptions.Count > 0 ? session.ConfigOptions : started.ConfigOptions,
                     session.AvailableCommands,
                     preserveConfiguredPermission: true);
+                _confirmedModelId = Composer.SelectedModelId;
                 State = AgentGuiState.Ready;
                 RefreshDiagnostics();
             });
+
+            // Discover third-party gateway/catalog models in the background so custom API models show up in the GUI picker.
+            if (_modelDiscovery is not null
+                && _definition.Capabilities.Model?.Discover is { } discover
+                && !string.Equals(discover.Kind, "command", StringComparison.OrdinalIgnoreCase))
+            {
+                _ = DiscoverSupplementalModelsAsync(installation?.Path ?? "", plan.Environment, ct);
+            }
 
             // Apply configured AgentMode permission (unless fullAccessArgs already granted full access at process launch).
             var launchedWithFullArgs = desiredPermission == PermissionModes.Full
@@ -753,6 +778,13 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 && !string.IsNullOrEmpty(desiredPermission))
             {
                 await ApplyPermissionAsync(desiredPermission).ConfigureAwait(false);
+            }
+
+            // Apply requested launch/profile model, effort, and fast mode when the session started on a different default.
+            if (!_hasSyncedInitialPreferences)
+            {
+                _hasSyncedInitialPreferences = true;
+                await ApplyInitialLaunchPreferencesAsync(session, ct).ConfigureAwait(false);
             }
 
             if (!_initialPromptSent && !string.IsNullOrWhiteSpace(_item.Launch?.Prompt))
@@ -1832,6 +1864,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                             _session.ConfigOptions,
                             _session.AvailableCommands,
                             preserveConfiguredPermission: preservePerm);
+                        _confirmedModelId = Composer.SelectedModelId;
                     }
                     break;
 
@@ -2911,23 +2944,214 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    private async Task ApplyModelAsync(string modelId)
-    {
-        if (_session is null) return;
-        try { await _session.SetModelAsync(modelId); } catch { }
-    }
+    private async Task ApplyModelAsync(string modelId) =>
+        await SwitchModelAsync(modelId, configId: null);
 
     private async Task ApplyConfigSelectAsync(string configId, string value)
     {
         if (_session is null) return;
-        try { await _session.SetConfigOptionAsync(configId, value); } catch { }
+        if (string.Equals(configId, Composer.ModelConfigId, StringComparison.OrdinalIgnoreCase))
+        {
+            await SwitchModelAsync(value, configId);
+            return;
+        }
+        try
+        {
+            await _session.SetConfigOptionAsync(configId, value);
+            if (string.Equals(configId, Composer.EffortConfigId, StringComparison.OrdinalIgnoreCase))
+            {
+                _desiredEffortId = value;
+                _item.Launch ??= new AgentLaunchOptions();
+                _item.Launch.Effort = value;
+            }
+        }
+        catch (Exception ex)
+        {
+            SetUi(() =>
+            {
+                ErrorBanner = ex.Message;
+                OnPropertyChanged(nameof(HasErrorBanner));
+                OnPropertyChanged(nameof(ShowEmptyState));
+            });
+        }
+    }
+
+    private async Task SwitchModelAsync(string modelId, string? configId)
+    {
+        if (_session is null || string.IsNullOrWhiteSpace(modelId)) return;
+        var session = _session;
+        var previousModel = _confirmedModelId;
+        try
+        {
+            if (configId is not null)
+            {
+                await session.SetConfigOptionAsync(configId, modelId);
+            }
+            else
+            {
+                await session.SetModelAsync(modelId);
+            }
+            _confirmedModelId = modelId;
+            _desiredModelId = modelId;
+            _item.Launch ??= new AgentLaunchOptions();
+            _item.Launch.Model = modelId;
+            SetUi(() =>
+            {
+                if (!string.IsNullOrEmpty(ErrorBanner))
+                {
+                    ErrorBanner = null;
+                    OnPropertyChanged(nameof(HasErrorBanner));
+                    OnPropertyChanged(nameof(ShowEmptyState));
+                }
+            });
+        }
+        catch (AcpRpcException) when (session.Dialect.ReconnectOnCustomModelSwitch && !IsTurnActive && !_reconnectingForModel)
+        {
+            // Adapters like codex-acp reject session/set_config_option for third-party model ids outside their
+            // built-in catalog, but honor custom models via launch config (CODEX_CONFIG) on start/resume.
+            _reconnectingForModel = true;
+            _desiredModelId = modelId;
+            _item.Launch ??= new AgentLaunchOptions();
+            _item.Launch.Model = modelId;
+            try
+            {
+                await ConnectAsync();
+            }
+            finally
+            {
+                _reconnectingForModel = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            SetUi(() =>
+            {
+                if (!string.Equals(Composer.SelectedModelId, previousModel, StringComparison.Ordinal))
+                {
+                    Composer.SyncModelSelectionSilently(previousModel);
+                }
+                ErrorBanner = ex.Message;
+                OnPropertyChanged(nameof(HasErrorBanner));
+                OnPropertyChanged(nameof(ShowEmptyState));
+            });
+        }
     }
 
     private async Task ApplyConfigBoolAsync(string configId, bool value)
     {
         if (_session is null) return;
-        try { await _session.SetBooleanConfigOptionAsync(configId, value); } catch { }
+        try
+        {
+            await _session.SetBooleanConfigOptionAsync(configId, value);
+            if (string.Equals(configId, Composer.FastConfigId, StringComparison.OrdinalIgnoreCase))
+            {
+                _desiredFast = value;
+                _item.Launch ??= new AgentLaunchOptions();
+                _item.Launch.Fast = value;
+            }
+        }
+        catch { }
     }
+
+    private async Task ApplyInitialLaunchPreferencesAsync(IAcpSession session, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(_desiredModelId)
+            && !string.Equals(Composer.SelectedModelId, _desiredModelId, StringComparison.OrdinalIgnoreCase)
+            && (Composer.ShowModelSelector || Composer.ModelConfigId is not null || session.Models is not null))
+        {
+            try
+            {
+                if (Composer.ModelConfigId is { } modelCfgId)
+                {
+                    await session.SetConfigOptionAsync(modelCfgId, _desiredModelId, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await session.SetModelAsync(_desiredModelId, ct).ConfigureAwait(false);
+                }
+                SetUi(() =>
+                {
+                    Composer.SyncModelSelectionSilently(_desiredModelId);
+                    _confirmedModelId = _desiredModelId;
+                });
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                // Keep the session's active model if the server rejects the pre-selected model.
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(_desiredEffortId)
+            && Composer.ShowEffortSelector
+            && Composer.EffortConfigId is { } effortCfgId
+            && !string.Equals(Composer.SelectedEffortId, _desiredEffortId, StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await session.SetConfigOptionAsync(effortCfgId, _desiredEffortId, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch { }
+        }
+
+        if (_desiredFast is { } wantFast
+            && Composer.ShowFastToggle
+            && Composer.FastConfigId is { } fastCfgId
+            && Composer.FastMode != wantFast)
+        {
+            try
+            {
+                if (Composer.FastConfigIsBoolean)
+                {
+                    await session.SetBooleanConfigOptionAsync(fastCfgId, wantFast, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await session.SetConfigOptionAsync(fastCfgId, wantFast ? "on" : "off", ct).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch { }
+        }
+    }
+
+    private async Task DiscoverSupplementalModelsAsync(
+        string executable,
+        IReadOnlyDictionary<string, string> environment,
+        CancellationToken ct)
+    {
+        if (_modelDiscovery is null) return;
+        try
+        {
+            var found = await _modelDiscovery.DiscoverAsync(
+                _definition,
+                executable,
+                refresh: false,
+                cancellationToken: ct,
+                environmentOverrides: environment).ConfigureAwait(false);
+            if (found.Count > 0 && !_disposed && !ct.IsCancellationRequested)
+            {
+                SetUi(() => Composer.MergeSupplementalModels(found));
+            }
+        }
+        catch
+        {
+            // Supplemental third-party model discovery is best-effort.
+        }
+    }
+
+    private static string? NormalizeLaunchOption(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private void EnsureWorkspaceFilesIndexed()
     {

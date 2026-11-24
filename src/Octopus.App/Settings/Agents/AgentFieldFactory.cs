@@ -96,7 +96,7 @@ public static class AgentFieldFactory
     public static IEnumerable<(string Id, string Label)> ModelItems(IEnumerable<AgentOption> options, IEnumerable<AgentOption> discovered)
     {
         var seen = new HashSet<string>();
-        foreach (var option in options.Concat(discovered))
+        foreach (var option in discovered.Concat(options))
         {
             if (seen.Add(option.Id))
             {

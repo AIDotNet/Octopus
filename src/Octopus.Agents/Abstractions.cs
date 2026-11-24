@@ -98,13 +98,14 @@ public interface IAgentCommandCompiler
     IReadOnlyList<AgentOption> EffortOptionsFor(AgentDefinition definition, string? model);
 }
 
-/// <summary>Asks an agent CLI for its models, for the agents that declare <c>model.discover</c>.</summary>
+/// <summary>Asks an agent CLI or configured third-party gateway for its models, for agents that declare <c>model.discover</c>.</summary>
 public interface IModelDiscovery
 {
-    /// <summary>The discovered models; empty when the agent has no discovery or the command fails. Cached per agent.</summary>
+    /// <summary>The discovered models; empty when the agent has no discovery or it fails. Cached per agent and environment.</summary>
     Task<IReadOnlyList<AgentOption>> DiscoverAsync(
         AgentDefinition definition,
         string executable,
         bool refresh = false,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string>? environmentOverrides = null);
 }

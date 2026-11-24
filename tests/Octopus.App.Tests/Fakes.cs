@@ -292,3 +292,22 @@ public sealed class FakeAgentSessionService : IAgentSessionService
     public Dictionary<string, string>? AccountEnvironment(AgentDefinition agent, string accountDirectory, IReadOnlyDictionary<string, string>? inherited) =>
         accountDirectory == Team ? null : new() { ["CLAUDE_CONFIG_DIR"] = accountDirectory };
 }
+
+/// <summary>Deterministic in-memory model discovery: tests never read the host's ~/.codex, ~/.claude, or network.</summary>
+public sealed class FakeModelDiscovery : IModelDiscovery
+{
+    public Dictionary<string, IReadOnlyList<AgentOption>> ModelsByAgent { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<(string AgentId, string Executable, IReadOnlyDictionary<string, string>? Env)> Calls { get; } = [];
+
+    public Task<IReadOnlyList<AgentOption>> DiscoverAsync(
+        AgentDefinition definition,
+        string executable,
+        bool refresh = false,
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string>? environmentOverrides = null)
+    {
+        Calls.Add((definition.Id, executable, environmentOverrides));
+        return Task.FromResult<IReadOnlyList<AgentOption>>(
+            ModelsByAgent.TryGetValue(definition.Id, out var list) ? list : []);
+    }
+}

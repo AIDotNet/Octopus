@@ -24,7 +24,8 @@
         { "id": "opus", "label": "Claude Opus 5.5", "note": "claude-opus-5-5" },
         { "id": "sonnet", "label": "Claude Sonnet 5.5", "note": "claude-sonnet-5-5" },
         { "id": "haiku", "label": "Claude Haiku 5.5", "note": "claude-haiku-5-5" }
-      ]
+      ],
+      "discover": { "kind": "anthropic" }
     },
     "effort": {
       "label": "Effort",

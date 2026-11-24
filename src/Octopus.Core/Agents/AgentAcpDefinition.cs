@@ -95,6 +95,13 @@ public sealed class AgentAcpAdapterSpec
     /// <summary>Environment variable populated with the locally installed native CLI path when launching the adapter.</summary>
     public string? NativeExecutableEnvVar { get; set; }
 
+    /// <summary>
+    /// On Windows, resolves npm <c>.cmd</c>/<c>.bat</c> shims in <see cref="NativeExecutableEnvVar"/> to their underlying
+    /// target (needed when a Node adapter spawns the path without a shell, e.g. <c>CLAUDE_CODE_EXECUTABLE</c>).
+    /// Disable when the adapter uses <c>cross-spawn</c> to run batch shims directly (e.g. <c>CODEX_PATH</c>).
+    /// </summary>
+    public bool ResolveWindowsBatchShim { get; set; } = true;
+
     /// <summary>Python package invoked via <c>uvx</c> when no local adapter binary is found.</summary>
     public string? UvxPackage { get; set; }
 

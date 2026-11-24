@@ -959,5 +959,55 @@ public sealed class CodexAdapterDialect : IAcpDialect
 {
     public string Id => "codex-acp";
     public bool AdvertiseFormElicitation => true;
+    public string FastConfigId => "fast-mode";
+    public bool ReconnectOnCustomModelSwitch => true;
     public IReadOnlyCollection<string> WithheldCommands { get; } = ["clear", "logout", "exit"];
+
+    public string? SelectAuthMethod(IReadOnlyList<AcpAuthMethod> advertised, IReadOnlyDictionary<string, string> env)
+    {
+        var hasApiKey = (env.TryGetValue("CODEX_API_KEY", out var codexKey) && !string.IsNullOrWhiteSpace(codexKey))
+            || (env.TryGetValue("OPENAI_API_KEY", out var openAiKey) && !string.IsNullOrWhiteSpace(openAiKey));
+        if (hasApiKey && advertised.Any(m => m.Id == "api-key"))
+        {
+            return "api-key";
+        }
+        return null;
+    }
+
+    public void ApplyLaunchPreferences(IDictionary<string, string> env, string? modelId, string? effortId)
+    {
+        var model = string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim();
+        var effort = string.IsNullOrWhiteSpace(effortId) ? null : effortId.Trim();
+        if (model is null && effort is null)
+        {
+            return;
+        }
+
+        JsonObject config;
+        if (env.TryGetValue("CODEX_CONFIG", out var existing) && !string.IsNullOrWhiteSpace(existing))
+        {
+            try
+            {
+                config = JsonNode.Parse(existing) as JsonObject ?? new JsonObject();
+            }
+            catch (JsonException)
+            {
+                config = new JsonObject();
+            }
+        }
+        else
+        {
+            config = new JsonObject();
+        }
+
+        if (model is not null)
+        {
+            config["model"] = model;
+        }
+        if (effort is not null)
+        {
+            config["model_reasoning_effort"] = effort;
+        }
+        env["CODEX_CONFIG"] = config.ToJsonString();
+    }
 }

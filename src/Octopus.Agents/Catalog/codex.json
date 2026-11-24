@@ -28,7 +28,8 @@
         { "id": "gpt-6-luna", "label": "GPT-6 Luna" },
         { "id": "gpt-5.6-terra", "label": "GPT-5.6 Terra" },
         { "id": "gpt-5.6-luna", "label": "GPT-5.6 Luna" }
-      ]
+      ],
+      "discover": { "kind": "codex", "args": ["app-server"] }
     },
     "effort": {
       "label": "Reasoning effort",
@@ -59,6 +60,7 @@
     "env": {
       "known": [
         { "name": "CODEX_HOME", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } },
+        { "name": "OPENAI_BASE_URL", "label": "API base URL", "localized": { "zh-CN": { "label": "API 地址" } } },
         { "name": "OPENAI_API_KEY", "label": "API key", "secret": true, "localized": { "zh-CN": { "label": "API 密钥" } } }
       ],
       "allowCustom": true
@@ -123,7 +125,9 @@
       "executables": [
         "codex-acp"
       ],
-      "npxPackage": "@agentclientprotocol/codex-acp"
+      "npxPackage": "@agentclientprotocol/codex-acp",
+      "nativeExecutableEnvVar": "CODEX_PATH",
+      "resolveWindowsBatchShim": false
     }
   }
 }

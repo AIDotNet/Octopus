@@ -294,6 +294,24 @@ public sealed class AgentAccountServiceTests : IDisposable
         Assert.Null(await _secrets.GetAsync("Octopus/accounts/agy", acc1.Id, ct));
     }
 
+    [Fact]
+    public void Single_default_account_preserves_shell_api_keys_and_config_dir_for_third_party_apis()
+    {
+        var codex = Builtins.Get("codex");
+        var claude = Builtins.Get("claude");
+
+        // No additional managed/imported accounts exist: Resolve must NOT strip OPENAI_API_KEY / CODEX_HOME / ANTHROPIC_API_KEY.
+        var codexResolved = _service.Resolve(codex, new AgentProfile());
+        Assert.Equal(AgentAccountRecord.DefaultId, codexResolved.Account!.Id);
+        Assert.Null(codexResolved.Environment);
+        Assert.Null(codexResolved.UnsetEnvironment);
+
+        var claudeResolved = _service.Resolve(claude, new AgentProfile());
+        Assert.Equal(AgentAccountRecord.DefaultId, claudeResolved.Account!.Id);
+        Assert.Null(claudeResolved.Environment);
+        Assert.Null(claudeResolved.UnsetEnvironment);
+    }
+
     private static string Base64Url(string json) =>
         Convert.ToBase64String(Encoding.UTF8.GetBytes(json)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }

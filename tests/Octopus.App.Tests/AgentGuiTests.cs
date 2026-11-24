@@ -42,6 +42,8 @@ public sealed class FakeAcpSession : IAcpSession
 
     public Func<FakeAcpSession, string, IReadOnlyList<AcpPromptAttachment>?, CancellationToken, Task<AcpPromptResult>>? PromptHandler { get; set; }
     public Func<FakeAcpSession, Task>? CancelHandler { get; set; }
+    public Func<FakeAcpSession, string, CancellationToken, Task>? SetModelHandler { get; set; }
+    public Func<FakeAcpSession, string, string, CancellationToken, Task>? SetConfigOptionHandler { get; set; }
 
     public event Action<AcpRuntimeEvent>? EventReceived;
 
@@ -114,13 +116,13 @@ public sealed class FakeAcpSession : IAcpSession
     public Task SetModelAsync(string modelId, CancellationToken cancellationToken = default)
     {
         SetModels.Add(modelId);
-        return Task.CompletedTask;
+        return SetModelHandler is not null ? SetModelHandler(this, modelId, cancellationToken) : Task.CompletedTask;
     }
 
     public Task SetConfigOptionAsync(string configId, string value, CancellationToken cancellationToken = default)
     {
         SetConfigs.Add((configId, value));
-        return Task.CompletedTask;
+        return SetConfigOptionHandler is not null ? SetConfigOptionHandler(this, configId, value, cancellationToken) : Task.CompletedTask;
     }
 
     public Task SetBooleanConfigOptionAsync(string configId, bool value, CancellationToken cancellationToken = default)
@@ -2042,6 +2044,213 @@ public class AgentGuiTests
             vm.ToggleActivityTrayCommand.Execute(null);
             Assert.False(vm.IsActivityTrayExpanded);
             Assert.False(vm.ShowCollapsedSingleShellStop);
+        }
+        finally
+        {
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Codex_gui_shows_discovered_and_custom_third_party_models_applies_launch_model_and_switches_via_reconnect()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-codex-3p-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var discovery = AppHost.Get<FakeModelDiscovery>();
+        var settings = AppHost.Get<ISettingsStore>();
+        var installer = AppHost.Get<AcpAdapterInstaller>();
+
+        // Seed a cached fake codex-acp executable so AcpLaunchResolver resolves offline without npm/npx.
+        var binDir = Path.Combine(installer.AdapterRoot("codex"), "npm", "node_modules", ".bin");
+        Directory.CreateDirectory(binDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(binDir, OperatingSystem.IsWindows() ? "codex-acp.cmd" : "codex-acp"),
+            "#!/bin/sh\n");
+
+        settings.Update(s =>
+        {
+            s.Agents.DefaultSurface = AgentSurface.Gui;
+            s.Agents.Profiles["codex"] = new AgentProfile
+            {
+                Env = new Dictionary<string, string>
+                {
+                    ["OPENAI_BASE_URL"] = "http://127.0.0.1:3425/backend-api/codex",
+                    ["OPENAI_API_KEY"] = "sk-magpie-test",
+                },
+            };
+        });
+
+        discovery.ModelsByAgent["codex"] =
+        [
+            new AgentOption { Id = "deepseek-v4-pro", Label = "DeepSeek-V4-Pro · DeepSeek" },
+            new AgentOption { Id = "gemini-4-argon", Label = "Gemini 4 Argon · 4sapi" },
+        ];
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "codex-third-party");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            // Mirror real codex-acp behavior: honors CODEX_CONFIG["model"] on start/resume,
+            // and throws -32602 Invalid params when set_config_option requests a model outside its built-in catalog.
+            string activeModel = "gpt-6.2-sol";
+            if (session.Plan.Environment.TryGetValue("CODEX_CONFIG", out var cfgJson))
+            {
+                using var doc = JsonDocument.Parse(cfgJson);
+                if (doc.RootElement.TryGetProperty("model", out var mEl) && mEl.GetString() is { Length: > 0 } m)
+                {
+                    activeModel = m;
+                }
+            }
+            var options = new List<AcpConfigSelectOption>
+            {
+                new() { Value = "gpt-6.2-sol", Name = "GPT-6.2 Sol" },
+                new() { Value = "gpt-6.2-astra", Name = "GPT-6.2 Astra" },
+            };
+            if (options.All(o => o.Value != activeModel))
+            {
+                options.Insert(0, new AcpConfigSelectOption { Value = activeModel, Name = activeModel });
+            }
+            session.SessionId = "codex-thread-1";
+            session.MutableConfigOptions =
+            [
+                new AcpSessionConfigOption
+                {
+                    Id = "model",
+                    Category = "model",
+                    Name = "Model",
+                    Type = "select",
+                    CurrentValue = activeModel,
+                    Options = options,
+                },
+                new AcpSessionConfigOption
+                {
+                    Id = "reasoning_effort",
+                    Category = "thought_level",
+                    Name = "Reasoning effort",
+                    Type = "select",
+                    CurrentValue = "medium",
+                    Options =
+                    [
+                        new AcpConfigSelectOption { Value = "medium", Name = "Medium" },
+                        new AcpConfigSelectOption { Value = "high", Name = "High" },
+                    ],
+                },
+            ];
+            session.SetConfigOptionHandler = (_, cfgId, value, _) =>
+            {
+                if (cfgId == "model" && value is not ("gpt-6.2-sol" or "gpt-6.2-astra") && value != activeModel)
+                {
+                    throw new Octopus.Acp.Transport.AcpRpcException(-32602, "Invalid params");
+                }
+                return Task.CompletedTask;
+            };
+        };
+
+        var item = opener.OpenAgent("codex", new AgentLaunchOptions
+        {
+            Model = "deepseek-v4-pro",
+            Effort = "high",
+            Surface = AgentSurface.Gui,
+        })!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 1100, Height = 760, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            // 1. Initial launch passed third-party env + CODEX_CONFIG with chosen model & effort!
+            var firstSession = Assert.Single(fakeFactory.Created);
+            Assert.Equal("http://127.0.0.1:3425/backend-api/codex", firstSession.Plan.Environment["OPENAI_BASE_URL"]);
+            Assert.Equal("sk-magpie-test", firstSession.Plan.Environment["OPENAI_API_KEY"]);
+            Assert.Contains("\"model\":\"deepseek-v4-pro\"", firstSession.Plan.Environment["CODEX_CONFIG"]);
+            Assert.Equal("deepseek-v4-pro", vm.Composer.SelectedModelId);
+            Assert.Contains(("reasoning_effort", "high"), firstSession.SetConfigs);
+
+            // 2. Discovered third-party models appear in the GUI model picker (even alongside codex-acp's built-ins)!
+            await WaitUntilAsync(() => vm.Composer.ModelChoices.Any(m => m.Id == "gemini-4-argon"));
+            Assert.True(vm.Composer.ShowModelSearch);
+            Assert.Equal("gemini-4-argon", vm.Composer.ModelChoices[0].Id);
+
+            // 3. Switching to a custom third-party model typed in the GUI picker triggers seamless reconnect with new CODEX_CONFIG!
+            vm.Composer.ModelSearchQuery = "my-custom-3p-model";
+            Assert.True(vm.Composer.CanUseCustomModelQuery);
+            Assert.False(vm.Composer.ShowNoModelMatches);
+            Assert.True(vm.Composer.CommitModelSearch());
+
+            await WaitUntilAsync(() => fakeFactory.Created.Count == 2 && vm.State == AgentGuiState.Ready);
+            var secondSession = fakeFactory.Created[1];
+            Assert.Contains("\"model\":\"my-custom-3p-model\"", secondSession.Plan.Environment["CODEX_CONFIG"]);
+            Assert.Equal("my-custom-3p-model", vm.Composer.SelectedModelId);
+            Assert.Equal("my-custom-3p-model", item.Launch!.Model);
+            Assert.False(vm.HasErrorBanner);
+        }
+        finally
+        {
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Failed_model_switch_reverts_composer_selection_and_surfaces_error()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-model-err-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "model-err");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.Models = new AcpSessionModelState
+            {
+                CurrentModelId = "claude-sonnet-4",
+                AvailableModels =
+                [
+                    new AcpModelInfo { ModelId = "claude-sonnet-4", Name = "Claude Sonnet 4" },
+                    new AcpModelInfo { ModelId = "broken-model", Name = "Broken Model" },
+                ],
+            };
+            session.SetModelHandler = (_, id, _) =>
+            {
+                if (id == "broken-model")
+                {
+                    throw new Octopus.Acp.Transport.AcpRpcException(-32602, "Unknown model broken-model");
+                }
+                return Task.CompletedTask;
+            };
+        };
+
+        var item = opener.OpenAgent("opencode", new AgentLaunchOptions { Surface = AgentSurface.Gui })!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 1100, Height = 760, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            Assert.Equal("claude-sonnet-4", vm.Composer.SelectedModelId);
+
+            vm.Composer.FilteredModelChoices[1].SelectCommand.Execute(null);
+            await WaitUntilAsync(() => vm.HasErrorBanner);
+
+            Assert.Equal("claude-sonnet-4", vm.Composer.SelectedModelId);
+            Assert.Contains("Unknown model broken-model", vm.ErrorBanner);
         }
         finally
         {

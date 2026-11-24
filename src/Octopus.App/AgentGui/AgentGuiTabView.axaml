@@ -2636,7 +2636,7 @@
                                                 <TextBlock Classes="hint"
                                                            Margin="10,12"
                                                            HorizontalAlignment="Center"
-                                                           IsVisible="{Binding !Composer.HasFilteredModels}"
+                                                           IsVisible="{Binding Composer.ShowNoModelMatches}"
                                                            Text="{l:AppLangResource ExplorerNoMatches}" />
                                                 <ItemsControl ItemsSource="{Binding Composer.FilteredModelChoices}">
                                                     <ItemsControl.ItemsPanel>
@@ -2672,6 +2672,23 @@
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
+                                                <Button x:Name="UseCustomModelButton"
+                                                        Classes="row" Padding="8,5"
+                                                        IsVisible="{Binding Composer.CanUseCustomModelQuery}"
+                                                        Command="{Binding Composer.UseCustomModelQueryCommand}"
+                                                        AutomationProperties.Name="{Binding Composer.CustomModelOptionLabel}">
+                                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                                                        <lucide:LucideIcon Kind="Plus" Size="12"
+                                                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                                           VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1" Classes="body"
+                                                                   FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                                   Text="{Binding Composer.CustomModelOptionLabel}"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center" />
+                                                    </Grid>
+                                                </Button>
                                             </StackPanel>
                                         </arc:ScrollArea>
                                     </StackPanel>

@@ -88,4 +88,16 @@ public interface IAcpDialect
 
     /// <summary>Extracts a clean user-facing error detail from a prompt error when available.</summary>
     string? FormatPromptError(AcpRpcException error) => null;
+
+    /// <summary>
+    /// True when switching to a custom model id not listed by the ACP server requires reconnecting/resuming the
+    /// session with updated launch environment preferences (e.g. <c>codex-acp</c>'s <c>CODEX_CONFIG</c>).
+    /// </summary>
+    bool ReconnectOnCustomModelSwitch => false;
+
+    /// <summary>
+    /// Applies initial launch preferences (such as a custom third-party model id or reasoning effort) to the
+    /// ACP child process environment before startup.
+    /// </summary>
+    void ApplyLaunchPreferences(IDictionary<string, string> env, string? modelId, string? effortId) { }
 }
