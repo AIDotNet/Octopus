@@ -256,7 +256,7 @@ public sealed class UpdateInstallerTests : IDisposable
         if (OperatingSystem.IsWindows()) return; // Unix paths
         Assert.Equal("/Applications/Octopus.app", MacUpdateInstaller.BundleOf("/Applications/Octopus.app/Contents/MacOS"));
         Assert.Equal("/Applications/Octopus.app", MacUpdateInstaller.BundleOf("/Applications/Octopus.app/Contents/MacOS/"));
-        Assert.Null(MacUpdateInstaller.BundleOf("/Users/me/code/Octopus/bin/Debug/net11.0"));
+        Assert.Null(MacUpdateInstaller.BundleOf("/Users/me/code/Octopus/bin/Debug/net10.0"));
         Assert.Null(MacUpdateInstaller.BundleOf("/Applications/Octopus/Contents/MacOS"));
     }
 

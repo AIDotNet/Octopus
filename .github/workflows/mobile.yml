@@ -77,7 +77,7 @@ jobs:
 
   ios:
     name: ios
-    # .NET 11's ios workload (27.2) requires Xcode 27.2; macos-latest (macOS 26) stops at Xcode 26.6. The xcode-27 image
+    # .NET 10's ios workload (27.2) requires Xcode 27.2; macos-latest (macOS 26) stops at Xcode 26.6. The xcode-27 image
     # (a preview, actions/runner-images#14404) has it. Move to macos-latest once that image carries Xcode 27.
     runs-on: xcode-27
     env:

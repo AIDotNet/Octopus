@@ -43,6 +43,9 @@ public sealed partial class OctopusJsonContext : JsonSerializerContext
     /// <summary>The context's options with the computed <c>DisplayTitle</c> property removed from the contract.</summary>
     public static JsonSerializerOptions FileOptions => _fileOptions ??= CreateOptions();
 
+    /// <summary>Typed metadata for a file model. .NET 11 added the generic GetTypeInfo&lt;T&gt;() shortcut; net10.0 needs the cast.</summary>
+    public static JsonTypeInfo<T> FileTypeInfo<T>() => (JsonTypeInfo<T>)FileOptions.GetTypeInfo(typeof(T));
+
     private static JsonSerializerOptions? _fileOptions;
 
     private static JsonSerializerOptions CreateOptions()
