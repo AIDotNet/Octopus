@@ -30,16 +30,107 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder)
             .UseOctopusMobile()
+            .With(new Avalonia.Media.FontManagerOptions
+            {
+                // Avalonia 12.2's SystemFontCollection misses Normal-weight lookup for unnamed Android CJK families
+                // (such as Android 15's variable NotoSansCJK-Regular.ttc); map CJK ranges through the system matcher.
+                FontFallbacks =
+                [
+                    new Avalonia.Media.FontFallback
+                    {
+                        FontFamily = new Avalonia.Media.FontFamily("fonts:AndroidCjk#AndroidCjk"),
+                        UnicodeRange = Avalonia.Media.UnicodeRange.Parse("U+2E80-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF"),
+                    },
+                ],
+            })
+            .ConfigureFonts(fm =>
+            {
+                var cjk = new AndroidCjkFontCollection();
+                cjk.Seed(fm);
+                fm.AddFontCollection(cjk);
+            })
             .AfterSetup(_ =>
             {
-                if (Avalonia.Application.Current is not { } app) return;
-                // Test using Android's system default font family instead of Inter.
-                app.Resources["BodyFontFamily"] = Avalonia.Media.FontFamily.Default;
-                app.Resources["DisplayFontFamily"] = Avalonia.Media.FontFamily.Default;
-                var s = new Avalonia.Styling.Style(x => Avalonia.Styling.Selectors.OfType<Avalonia.Controls.TextBlock>(x));
-                s.Setters.Add(new Avalonia.Styling.Setter(Avalonia.Controls.TextBlock.FontFamilyProperty, Avalonia.Media.FontFamily.Default));
-                app.Styles.Add(s);
+                Avalonia.Threading.Dispatcher.UIThread.Post(HookAndroidKeyboardInset, Avalonia.Threading.DispatcherPriority.Loaded);
             });
+
+    /// <summary>
+    /// Avalonia.Android's <see cref="Avalonia.Controls.Platform.IInputPane"/> subtracts the navigation bar inset from
+    /// <c>EndRect.Height</c> while positioning <c>EndRect.Y</c> above both the keyboard and the navigation bar. On
+    /// edge-to-edge Android 15+ this leaves <c>Arc.Mobile.Page.AvoidKeyboard</c> short by the gesture bar's height.
+    /// Feed the true bottom occlusion (<c>ClientSize.Height - EndRect.Y</c>) through <c>Page.KeyboardInsetSource</c>.
+    /// </summary>
+    private static void HookAndroidKeyboardInset()
+    {
+        if (Avalonia.Application.Current?.ApplicationLifetime is not Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime { MainView: { } view })
+        {
+            return;
+        }
+        if (Avalonia.Controls.TopLevel.GetTopLevel(view) is not null)
+        {
+            AttachAndroidKeyboardInset(view);
+            return;
+        }
+        view.AttachedToVisualTree += OnAttached;
+        void OnAttached(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
+        {
+            view.AttachedToVisualTree -= OnAttached;
+            AttachAndroidKeyboardInset(view);
+        }
+    }
+
+    private static void AttachAndroidKeyboardInset(Avalonia.Controls.Control view)
+    {
+        var topLevel = Avalonia.Controls.TopLevel.GetTopLevel(view);
+        var pane = topLevel?.InputPane;
+        if (topLevel is null || pane is null) return;
+
+        var source = new TKCode.Arc.Mobile.KeyboardInsetSource();
+        TKCode.Arc.Mobile.Page.SetKeyboardInsetSource(view, source);
+
+        double TrueInset(Avalonia.Controls.Platform.InputPaneState state, Avalonia.Rect rect)
+        {
+            if (state != Avalonia.Controls.Platform.InputPaneState.Open || rect.Height <= 0) return 0;
+            var safeBottom = topLevel.InsetsManager?.SafeAreaPadding.Bottom ?? 0;
+            var fromBottom = topLevel.ClientSize.Height - rect.Y;
+            return Math.Max(rect.Height + safeBottom, fromBottom > 0 ? fromBottom : rect.Height);
+        }
+
+        source.Set(TrueInset(pane.State, pane.OccludedRect), TimeSpan.Zero);
+        pane.StateChanged += (_, e) => source.Set(TrueInset(e.NewState, e.EndRect), e.AnimationDuration);
+    }
+
+    private sealed class AndroidCjkFontCollection : Avalonia.Media.Fonts.FontCollectionBase
+    {
+        private const string Family = "AndroidCjk";
+        public override Uri Key { get; } = new("fonts:AndroidCjk", UriKind.Absolute);
+
+        public void Seed(Avalonia.Media.FontManager fm)
+        {
+            var culture = System.Globalization.CultureInfo.CurrentUICulture;
+            var addedAny = false;
+            // Asking for Medium/SemiBold/Bold populates SystemFonts via BuildTypefaceWithSynthesis and yields Android's
+            // exact system CJK GlyphTypeface (e.g. Noto Sans CJK SC on Android 15); map it for Normal as well.
+            foreach (var weight in new[] { Avalonia.Media.FontWeight.Medium, Avalonia.Media.FontWeight.SemiBold, Avalonia.Media.FontWeight.Bold })
+            {
+                if (!fm.TryMatchCharacter('中', Avalonia.Media.FontStyle.Normal, weight, Avalonia.Media.FontStretch.Normal, null, culture, out var matched)
+                    || !fm.TryGetGlyphTypeface(matched, out var glyph))
+                {
+                    continue;
+                }
+                if (!addedAny)
+                {
+                    TryAddGlyphTypeface(Family, new Avalonia.Media.Fonts.FontCollectionKey(Avalonia.Media.FontStyle.Normal, Avalonia.Media.FontWeight.Normal, Avalonia.Media.FontStretch.Normal), glyph);
+                }
+                TryAddGlyphTypeface(Family, new Avalonia.Media.Fonts.FontCollectionKey(Avalonia.Media.FontStyle.Normal, weight, Avalonia.Media.FontStretch.Normal), glyph);
+                addedAny = true;
+            }
+            if (addedAny) AddFontFamily(new Avalonia.Media.FontFamily(null, $"{Key.AbsoluteUri}#{Family}"));
+        }
+
+        public override bool TryGetGlyphTypeface(string familyName, Avalonia.Media.FontStyle style, Avalonia.Media.FontWeight weight, Avalonia.Media.FontStretch stretch, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Avalonia.Media.GlyphTypeface? glyphTypeface) =>
+            TryGetGlyphTypeface(Family, new Avalonia.Media.Fonts.FontCollectionKey(style, weight, stretch), allowNearestMatch: true, out glyphTypeface);
+    }
 
     private static void UseRealHosts(Context context)
     {
