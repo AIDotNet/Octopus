@@ -8,13 +8,24 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        Services.CrashLog.Install();
         // On Windows & Linux, clicking octopus://auth-done in the browser spawns a new process; forward to the live window.
         if (Services.ProtocolActivation.TryParseProtocolUri(args) is { } uri
             && Services.ProtocolActivation.TryForwardToRunningInstance(uri))
         {
             return;
         }
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        try
+        {
+            BuildAvaloniaApp()
+                .AfterSetup(_ => Services.CrashLog.AttachDispatcher())
+                .StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception ex)
+        {
+            Services.CrashLog.WriteCrash("Main", ex, isTerminating: true);
+            throw;
+        }
     }
 
     // Also used by the XAML previewer of your IDE. UseArcApp() (AppSetup.cs) sets up the fonts, Arc and the theme.
