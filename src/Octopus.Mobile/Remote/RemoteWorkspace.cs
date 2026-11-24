@@ -355,6 +355,8 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         _connections.ItemChanged -= OnItemChanged;
         _session.Changed -= OnAccountChanged;
         _settings.LocalOnlyChanged -= OnModeChanged;
+        // GUI conversations (RemoteWorkspace.Conversations.cs).
+        DisposeConversations();
     }
 
     // The same pairing as the desktop's "add a host": to an address the person typed (then both sides show a number),

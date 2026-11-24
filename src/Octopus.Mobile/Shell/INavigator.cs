@@ -11,8 +11,10 @@ namespace Octopus.Mobile.Shell;
 public interface INavigator
 {
     void ShowHost(RemoteHost host);
-    /// <summary>A session's terminal; a session that runs as a GUI conversation on the host opens its details instead.</summary>
+    /// <summary>A session's terminal, or its GUI conversation when the host supports it (its details otherwise).</summary>
     void ShowSession(RemoteSession session);
+    /// <summary>A session's GUI conversation.</summary>
+    void ShowConversation(RemoteSession session);
     /// <summary>Everything about a session and what can be done to it.</summary>
     void ShowSessionDetails(RemoteSession session);
     /// <summary>Picks a folder of a host and makes it a project there; <paramref name="created"/> runs after the page left.</summary>

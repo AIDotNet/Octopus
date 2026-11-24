@@ -33,8 +33,8 @@
             </StackPanel>
         </Grid>
 
-        <!-- A GUI conversation has no terminal here yet. -->
-        <Border Name="GuiNotice" Classes="alertCard" Margin="16,0" IsVisible="{Binding IsGui}">
+        <!-- Shown only when the computer's Octopus is too old for GUI conversations. -->
+        <Border Name="GuiNotice" Classes="alertCard" Margin="16,0" IsVisible="{Binding ShowGuiNotice}">
             <TextBlock Text="{l:MobileLangResource GuiNotice}" TextWrapping="Wrap" />
         </Border>
 
@@ -63,6 +63,11 @@
         </arcm:ListGroup>
 
         <arcm:ListGroup Name="Commands">
+            <arcm:ListItem Name="OpenConversationRow"
+                           Content="{l:MobileLangResource ConversationOpen}"
+                           ShowChevron="True"
+                           IsVisible="{Binding CanOpenConversation}"
+                           Command="{Binding OpenConversationCommand}" />
             <arcm:ListItem Name="OpenTerminalRow"
                            Content="{l:MobileLangResource SessionOpenTerminal}"
                            ShowChevron="True"

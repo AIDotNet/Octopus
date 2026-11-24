@@ -5,6 +5,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.VisualTree;
 using Octopus.Mobile.Common;
+using Octopus.Mobile.Conversations;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Sessions;
 using Octopus.Mobile.Terminals;
@@ -135,9 +136,45 @@ public class SessionPagesTests
     }
 
     [AvaloniaFact]
-    public void A_gui_session_opens_its_details_not_a_terminal()
+    public void A_gui_session_opens_its_conversation_when_supported_and_details_show_open_conversation()
     {
         using var phone = new Phone();
+        var station = phone.Workspace.Hosts.Single(host => host.Id == "station");
+        var gui = station.Projects[0].Sessions.Single(session => session.IsGui);
+        phone.Shell.ShowHost(station);
+        phone.Shell.ShowSession(gui);
+        Phone.Pump();
+
+        var conversation = phone.Top<ConversationPage>();
+        var vm = (ConversationViewModel)conversation.DataContext!;
+        Assert.Same(gui, vm.Session);
+        Assert.True(vm.IsLoaded);
+
+        // Session details are still reachable from the menu, and offer "打开对话" without the outdated-host notice.
+        vm.Actions.ShowDetailsCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is SessionDetailPage));
+        var page = phone.Top<SessionDetailPage>();
+        var details = (SessionDetailViewModel)page.DataContext!;
+        Assert.True(details.IsGui);
+        Assert.True(details.CanOpenConversation);
+        Assert.False(details.ShowGuiNotice);
+        Assert.False(details.CanOpenTerminal);
+        Assert.Equal("GUI 对话", details.SurfaceText);
+        Assert.True(page.FindControl<Control>("OpenConversationRow")!.IsVisible);
+        Assert.False(page.FindControl<Control>("GuiNotice")!.IsVisible);
+        Assert.False(page.FindControl<Control>("OpenTerminalRow")!.IsVisible);
+        Assert.False(details.Actions.CanRestart);
+        Assert.False(page.FindControl<Control>("RestartRow")!.IsVisible);
+
+        details.OpenConversationCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is ConversationPage));
+    }
+
+    [AvaloniaFact]
+    public void A_gui_session_on_an_older_host_opens_its_details_with_a_notice()
+    {
+        using var phone = new Phone();
+        phone.Workspace.ConversationsSupported = false;
         var station = phone.Workspace.Hosts.Single(host => host.Id == "station");
         var gui = station.Projects[0].Sessions.Single(session => session.IsGui);
         phone.Shell.ShowHost(station);
@@ -147,9 +184,12 @@ public class SessionPagesTests
         var page = phone.Top<SessionDetailPage>();
         var details = (SessionDetailViewModel)page.DataContext!;
         Assert.True(details.IsGui);
+        Assert.False(details.CanOpenConversation);
+        Assert.True(details.ShowGuiNotice);
         Assert.False(details.CanOpenTerminal);
         Assert.Equal("GUI 对话", details.SurfaceText);
         Assert.True(page.FindControl<Control>("GuiNotice")!.IsVisible);
+        Assert.False(page.FindControl<Control>("OpenConversationRow")!.IsVisible);
         Assert.False(page.FindControl<Control>("OpenTerminalRow")!.IsVisible);
         // No terminal, so no restart.
         Assert.False(details.Actions.CanRestart);

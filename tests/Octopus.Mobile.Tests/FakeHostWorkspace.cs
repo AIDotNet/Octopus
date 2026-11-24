@@ -315,4 +315,358 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     public Task<string> GitAsync(string method, string arguments) =>
         GitHandler is { } handler ? Task.FromResult(handler(method, arguments)) : throw NotHere();
 
+    private readonly Dictionary<string, FakeConversation> _conversations = new(StringComparer.Ordinal);
+
+    /// <summary>The ACP GUI conversation of an item, created on first access.</summary>
+    public FakeConversation ConversationOf(string itemId)
+    {
+        lock (_gate)
+        {
+            if (!_conversations.TryGetValue(itemId, out var conv)) _conversations[itemId] = conv = new FakeConversation(itemId);
+            return conv;
+        }
+    }
+
+    public Task<IAcpAttachment> AttachConversationAsync(string itemId, Action<AcpUpdateMessage> updated)
+    {
+        lock (_gate)
+        {
+            var item = _items.FirstOrDefault(known => known.Id == itemId)
+                ?? throw new RemoteException(RemoteMethods.NotFound, "No such item.");
+            if (item.Surface != ItemSurfaces.Gui) throw new RemoteException(RemoteMethods.NotAllowed, "Not a GUI conversation.");
+        }
+        return Task.FromResult<IAcpAttachment>(ConversationOf(itemId).Attach(updated));
+    }
+
+    public Task PromptAsync(AcpPromptMessage prompt)
+    {
+        ConversationOf(prompt.ItemId).Prompt(prompt);
+        return Task.CompletedTask;
+    }
+
+    public Task CancelTurnAsync(string itemId)
+    {
+        ConversationOf(itemId).Cancel();
+        return Task.CompletedTask;
+    }
+
+    public Task RespondAsync(AcpRespondMessage answer)
+    {
+        ConversationOf(answer.ItemId).Respond(answer);
+        return Task.CompletedTask;
+    }
+
+    public Task SetConversationOptionAsync(AcpSetOptionMessage option)
+    {
+        ConversationOf(option.ItemId).SetOption(option);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>In-memory ACP conversation on <see cref="FakeHostWorkspace"/> for protocol-level mobile tests.</summary>
+internal sealed class FakeConversation(string itemId)
+{
+    private readonly object _gate = new();
+    private readonly List<Action<AcpUpdateMessage>> _listeners = [];
+    private readonly List<AcpEntryMessage> _entries =
+    [
+        new() { Id = "u1", Kind = AcpEntryKinds.User, Text = "检查 API 文档" },
+        new()
+        {
+            Id = "a1",
+            Kind = AcpEntryKinds.Assistant,
+            Thought = "读取现有接口定义",
+            Text = "已核对 3 个接口，准备运行测试。",
+        },
+        new()
+        {
+            Id = "p1",
+            Kind = AcpEntryKinds.Permission,
+            Permission = new AcpPermissionMessage
+            {
+                Title = "运行测试",
+                Detail = "dotnet test",
+                Options =
+                [
+                    new() { Id = "allow_once", Label = "允许一次", Detail = "allow_once" },
+                    new() { Id = "reject_once", Label = "拒绝", Detail = "reject_once" },
+                ],
+            },
+        },
+    ];
+    private string _state = AcpStates.Waiting;
+    private string? _statusDetail = "等待确认";
+    private string _selectedModel = "opus-5";
+    private int _nextId = 2;
+
+    public ConcurrentQueue<AcpPromptMessage> Prompts { get; } = new();
+    public ConcurrentQueue<AcpRespondMessage> Responses { get; } = new();
+    public ConcurrentQueue<AcpSetOptionMessage> OptionChanges { get; } = new();
+    public int CancelCount { get; private set; }
+    public int Viewers { get { lock (_gate) return _listeners.Count; } }
+
+    public IAcpAttachment Attach(Action<AcpUpdateMessage> updated)
+    {
+        lock (_gate)
+        {
+            _listeners.Add(updated);
+            var snapshot = new AcpSnapshotMessage
+            {
+                ItemId = itemId,
+                AgentName = "Claude",
+                State = _state,
+                StatusDetail = _statusDetail,
+                Entries = [.. _entries],
+                Composer = BuildComposer(),
+            };
+            return new Attachment(this, updated, snapshot);
+        }
+    }
+
+    public void Prompt(AcpPromptMessage prompt)
+    {
+        Prompts.Enqueue(prompt);
+        AcpEntryMessage userEntry, assistantEntry;
+        Action<AcpUpdateMessage>[] listeners;
+        lock (_gate)
+        {
+            var id = Interlocked.Increment(ref _nextId);
+            userEntry = new AcpEntryMessage { Id = "u" + id, Kind = AcpEntryKinds.User, Text = prompt.Text };
+            assistantEntry = new AcpEntryMessage { Id = "a" + id, Kind = AcpEntryKinds.Assistant, Text = "收到：" + prompt.Text, IsStreaming = true };
+            _entries.Add(userEntry);
+            _entries.Add(assistantEntry);
+            _state = AcpStates.Working;
+            _statusDetail = "回复中";
+            listeners = [.. _listeners];
+        }
+        var update = new AcpUpdateMessage
+        {
+            ItemId = itemId,
+            State = AcpStates.Working,
+            StatusDetail = "回复中",
+            Upserts = [userEntry, assistantEntry],
+        };
+        foreach (var l in listeners) l(update);
+    }
+
+    public void Cancel()
+    {
+        Action<AcpUpdateMessage>[] listeners;
+        lock (_gate)
+        {
+            CancelCount++;
+            _state = AcpStates.Ready;
+            _statusDetail = "";
+            listeners = [.. _listeners];
+        }
+        var update = new AcpUpdateMessage { ItemId = itemId, State = AcpStates.Ready, StatusDetail = "" };
+        foreach (var l in listeners) l(update);
+    }
+
+    public void Respond(AcpRespondMessage answer)
+    {
+        Responses.Enqueue(answer);
+        AcpEntryMessage? updatedCard = null;
+        Action<AcpUpdateMessage>[] listeners;
+        lock (_gate)
+        {
+            var index = _entries.FindIndex(e => e.Id == answer.EntryId);
+            if (index >= 0 && _entries[index].Permission is { } perm)
+            {
+                var current = _entries[index];
+                var label = perm.Options.FirstOrDefault(o => o.Id == answer.OptionId)?.Label ?? answer.OptionId;
+                updatedCard = new AcpEntryMessage
+                {
+                    Id = current.Id,
+                    Kind = current.Kind,
+                    Permission = new AcpPermissionMessage
+                    {
+                        Title = perm.Title,
+                        Detail = perm.Detail,
+                        Options = perm.Options,
+                        IsResolved = true,
+                        ResolvedSummary = label,
+                    },
+                };
+                _entries[index] = updatedCard;
+            }
+            _state = AcpStates.Ready;
+            _statusDetail = "";
+            listeners = [.. _listeners];
+        }
+        var update = new AcpUpdateMessage
+        {
+            ItemId = itemId,
+            State = AcpStates.Ready,
+            StatusDetail = "",
+            Upserts = updatedCard is null ? [] : [updatedCard],
+        };
+        foreach (var l in listeners) l(update);
+    }
+
+    public void SetOption(AcpSetOptionMessage option)
+    {
+        OptionChanges.Enqueue(option);
+        AcpComposerMessage composer;
+        Action<AcpUpdateMessage>[] listeners;
+        lock (_gate)
+        {
+            if (option.Kind == AcpOptionKinds.Model) _selectedModel = option.Value;
+            composer = BuildComposer();
+            listeners = [.. _listeners];
+        }
+        var update = new AcpUpdateMessage { ItemId = itemId, Composer = composer };
+        foreach (var l in listeners) l(update);
+    }
+
+    private AcpComposerMessage BuildComposer() => new()
+    {
+        Models = [new() { Id = "opus-5", Label = "Opus 5.5" }, new() { Id = "sonnet-5", Label = "Sonnet 5.5" }],
+        Model = _selectedModel,
+    };
+
+    private sealed class Attachment(FakeConversation owner, Action<AcpUpdateMessage> listener, AcpSnapshotMessage snapshot) : IAcpAttachment
+    {
+        public AcpSnapshotMessage Snapshot { get; } = snapshot;
+        public void Dispose()
+        {
+            lock (owner._gate) owner._listeners.Remove(listener);
+        }
+    }
+}
+
+/// <summary>A terminal of the test host: what it shows, what was typed into it, its size and which view decides that.</summary>
+internal sealed class FakeTerminal(string screen)
+{
+    private readonly object _gate = new();
+    private readonly List<View> _views = [];
+    private readonly StringBuilder _screen = new(screen);
+    private readonly StringBuilder _typed = new();
+    private ulong _position;
+    private View? _owner;
+
+    public int Columns { get; private set; } = FakeHostWorkspace.OwnColumns;
+    public int Rows { get; private set; } = FakeHostWorkspace.OwnRows;
+
+    /// <summary>Everything devices typed, in order.</summary>
+    public string Typed
+    {
+        get { lock (_gate) return _typed.ToString(); }
+    }
+
+    /// <summary>True while a device's view decides the size; false while it is this computer's own window.</summary>
+    public bool IsOwnedByDevice
+    {
+        get { lock (_gate) return _owner is not null; }
+    }
+
+    public int Viewers
+    {
+        get { lock (_gate) return _views.Count; }
+    }
+
+    /// <summary>The program prints something.</summary>
+    public void Print(string text)
+    {
+        lock (_gate) Output(Encoding.UTF8.GetBytes(text));
+    }
+
+    public ISessionAttachment Attach(ISessionSink sink, int columns, int rows, bool claim)
+    {
+        lock (_gate)
+        {
+            var view = new View(this, sink, (columns, rows));
+            if (claim) Claim(view, columns, rows);
+            view.Begin(Encoding.UTF8.GetBytes(_screen.ToString()), _position, Columns, Rows);
+            _views.Add(view);
+            return view;
+        }
+    }
+
+    // Under the gate.
+    private void Output(byte[] bytes)
+    {
+        _screen.Append(Encoding.UTF8.GetString(bytes));
+        foreach (var view in _views) view.Sink.Output(_position, bytes);
+        _position += (ulong)bytes.Length;
+    }
+
+    private void Claim(View view, int columns, int rows)
+    {
+        _owner = view;
+        SetSize(columns, rows);
+    }
+
+    private void SetSize(int columns, int rows)
+    {
+        if ((columns, rows) == (Columns, Rows)) return;
+        (Columns, Rows) = (columns, rows);
+        foreach (var view in _views) view.Sink.Resized(_position, columns, rows);
+        _position++;
+    }
+
+    private sealed class View(FakeTerminal terminal, ISessionSink sink, (int Columns, int Rows) wanted) : ISessionAttachment
+    {
+        private byte[]? _snapshot = [];
+        public ISessionSink Sink { get; } = sink;
+        public ulong Position { get; private set; }
+        public bool IsNative => false;
+        public int SnapshotLength { get; private set; }
+        public byte[] TakeSnapshot() => Interlocked.Exchange(ref _snapshot, null) ?? [];
+        public int Columns { get; private set; }
+        public int Rows { get; private set; }
+        public string? Title => null;
+        public bool IsRunning => true;
+        public int? ExitCode => null;
+        public bool OwnsSize => ReferenceEquals(terminal._owner, this);
+
+        public void Begin(byte[] snapshot, ulong position, int columns, int rows) => (_snapshot, SnapshotLength, Position, Columns, Rows) = (snapshot, snapshot.Length, position, columns, rows);
+
+        public void Input(ReadOnlySpan<byte> bytes)
+        {
+            var copy = bytes.ToArray();
+            lock (terminal._gate)
+            {
+                terminal._typed.Append(Encoding.UTF8.GetString(copy));
+                // Echoed, as a line editor would.
+                terminal.Output(copy);
+            }
+        }
+
+        public (bool Applied, int Columns, int Rows) Resize(int columns, int rows, bool claim)
+        {
+            lock (terminal._gate)
+            {
+                wanted = (columns, rows);
+                if (claim) terminal.Claim(this, columns, rows);
+                else if (OwnsSize) terminal.SetSize(columns, rows);
+                return (OwnsSize, terminal.Columns, terminal.Rows);
+            }
+        }
+
+        public (int Columns, int Rows) ReleaseSize()
+        {
+            lock (terminal._gate)
+            {
+                if (OwnsSize)
+                {
+                    // Back to this computer's own window and its size.
+                    terminal._owner = null;
+                    terminal.SetSize(FakeHostWorkspace.OwnColumns, FakeHostWorkspace.OwnRows);
+                }
+                return (terminal.Columns, terminal.Rows);
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (terminal._gate)
+            {
+                terminal._views.Remove(this);
+                if (!OwnsSize) return;
+                terminal._owner = null;
+                terminal.SetSize(FakeHostWorkspace.OwnColumns, FakeHostWorkspace.OwnRows);
+            }
+        }
+    }
 }

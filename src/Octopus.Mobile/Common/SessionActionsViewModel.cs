@@ -50,6 +50,9 @@ public sealed partial class SessionActionsViewModel : ObservableObject
     /// <summary>A short message for the person (done, or why not).</summary>
     public event Action<string>? Notice;
 
+    /// <summary>Shows a short message on the page's shared toast.</summary>
+    public void ShowNotice(string text) => Notice?.Invoke(text);
+
     /// <summary>
     /// Opens the menu of <paramref name="session"/>: <paramref name="leading"/> first (what only this page offers),
     /// then open (when <paramref name="includeOpen"/>), rename, restart, another like it, details and close.

@@ -1,8 +1,10 @@
 using Avalonia.Headless.XUnit;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Conversations;
 using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Terminals;
+using Octopus.Mobile.Workspace;
 using TKCode.Arc;
 using Xunit;
 
@@ -104,14 +106,46 @@ public class Screenshots
             Phone.Settle();
 
 
-            // A GUI conversation on the other computer: its details, with the note.
+            // A GUI conversation on the other computer: first on an older host (details + notice), then the live conversation page.
             var station = phone.Workspace.Hosts.Single(h => h.Id == "station");
+            var gui = station.Projects[0].Sessions.Single(session => session.IsGui);
             phone.Shell.ShowHost(station);
             Phone.Settle();
             phone.Save("2f-host-gui-row" + suffix);
-            phone.Shell.ShowSession(station.Projects[0].Sessions.Single(session => session.IsGui));
+
+            phone.Workspace.ConversationsSupported = false;
+            phone.Shell.ShowSession(gui);
             Phone.Settle();
             phone.Save("2g-gui-details" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+            phone.Workspace.ConversationsSupported = true;
+            phone.Shell.ShowSession(gui);
+            Phone.Settle(400);
+            var convPage = phone.Top<ConversationPage>();
+            var convVm = (ConversationViewModel)convPage.DataContext!;
+            // Expand the latest edit tool so its diff is visible in the screenshot.
+            var lastAssistant = convVm.Entries.OfType<ConversationAssistantEntry>().Last();
+            lastAssistant.Tools[0].IsExpanded = true;
+            Phone.Settle(300);
+            phone.Save("17-conversation" + suffix);
+
+            // Question card with a selected choice.
+            phone.Workspace.Conversations[gui.Id].Ask();
+            Phone.Settle(300);
+            var question = convVm.Entries.OfType<ConversationQuestionEntry>().Last();
+            question.Fields[0].Choices[0].IsSelected = true;
+            question.Fields[1].Choices[0].IsSelected = true;
+            Phone.Settle(300);
+            phone.Save("17b-conversation-question" + suffix);
+
+            // Conversation with keyboard up: the composer stays directly above the keyboard.
+            keyboard.Set(300, TimeSpan.Zero);
+            Phone.Settle(400);
+            phone.Save("17c-conversation-keyboard" + suffix);
+            keyboard.Set(0, TimeSpan.Zero);
+            Phone.Settle(300);
 
             // Files, file viewer, changes and diff (Route 2: Files/).
             var octopus = mac.Projects[0];

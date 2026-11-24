@@ -40,6 +40,8 @@ public sealed partial class SessionDetailViewModel : ObservableObject, IDisposab
     public bool IsTerminal => !IsAgent;
     public bool IsGui => Session.IsGui;
     public bool CanOpenTerminal => !Session.IsGui;
+    public bool CanOpenConversation => Session.IsGui && _workspace.SupportsConversations(Session.Project.Host);
+    public bool ShowGuiNotice => Session.IsGui && !CanOpenConversation;
     public bool CanBrowseFiles => _workspace.SupportsFiles(Session.Project.Host);
     public bool CanViewChanges => _workspace.SupportsGit(Session.Project.Host);
     public string Initial { get; }
@@ -69,6 +71,12 @@ public sealed partial class SessionDetailViewModel : ObservableObject, IDisposab
     private void OpenTerminal()
     {
         if (!Session.IsGui) _navigator.ShowSession(Session);
+    }
+
+    [RelayCommand]
+    private void OpenConversation()
+    {
+        if (CanOpenConversation) _navigator.ShowConversation(Session);
     }
 
     [RelayCommand]

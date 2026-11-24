@@ -51,6 +51,7 @@ public sealed class MobileRemote : IDisposable
     {
         AppVersion = typeof(MobileRemote).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "",
         Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityBrowse,
+            RemoteMethods.CapabilityAcpGui,
             // Looking at the projects' files and their uncommitted changes (Files/).
             RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,

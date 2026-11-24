@@ -179,7 +179,7 @@
     <unit id="DetailStatus"><segment><source>Status</source><target state="translated">状态</target></segment></unit>
     <unit id="SurfaceGui"><segment><source>GUI conversation</source><target state="translated">GUI 对话</target></segment></unit>
     <unit id="GuiBadge"><segment><source>GUI</source><target state="translated">GUI</target></segment></unit>
-    <unit id="GuiNotice"><segment><source>This agent runs as a GUI conversation on the computer. The phone cannot show the conversation yet; you can rename or close it here.</source><target state="translated">这个智能体在电脑上以 GUI 对话方式运行，手机上暂时还不能显示对话，可以在这里重命名或关闭它。</target></segment></unit>
+    <unit id="GuiNotice"><segment><source>This agent runs as a GUI conversation on the computer. The Octopus there is too old to show it on the phone: update it there. You can still rename or close it here.</source><target state="translated">这个智能体在电脑上以 GUI 对话方式运行。电脑上的 Octopus 版本太旧，手机上打不开这个对话，请先在电脑上更新。仍然可以在这里重命名或关闭它。</target></segment></unit>
     <unit id="NewProject"><segment><source>New project</source><target state="translated">新建项目</target></segment></unit>
     <unit id="NewSessionAction"><segment><source>New session</source><target state="translated">新建会话</target></segment></unit>
     <unit id="HostEmptyAction"><segment><source>Make a folder of this computer a project to start sessions in it.</source><target state="translated">把这台电脑上的一个文件夹设为项目，就能在里面开会话。</target></segment></unit>
@@ -193,6 +193,27 @@
     <unit id="FolderCreate"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
     <unit id="FolderUnsupportedHost"><segment><source>Update Octopus on the computer to browse its folders.</source><target state="translated">请更新电脑上的 Octopus，才能浏览它的文件夹。</target></segment></unit>
     <unit id="FolderHome"><segment><source>Home</source><target state="translated">主目录</target></segment></unit>
+    <unit id="ConversationOpen"><segment><source>Open conversation</source><target state="translated">打开对话</target></segment></unit>
+    <unit id="ConversationConnecting"><segment><source>Connecting to the conversation…</source><target state="translated">正在连接对话…</target></segment></unit>
+    <unit id="ConversationWorking"><segment><source>Working</source><target state="translated">工作中</target></segment></unit>
+    <unit id="ConversationWaiting"><segment><source>Waiting for you</source><target state="translated">等你确认</target></segment></unit>
+    <unit id="ConversationFailed"><segment><source>Failed</source><target state="translated">出错了</target></segment></unit>
+    <unit id="ConversationEarlier"><segment><source>Earlier messages are on the computer.</source><target state="translated">更早的消息在电脑上。</target></segment></unit>
+    <unit id="ConversationEmpty"><segment><source>No messages yet. Send one to start.</source><target state="translated">还没有消息，发一条开始吧。</target></segment></unit>
+    <unit id="ConversationThought"><segment><source>Thought</source><target state="translated">思考过程</target></segment></unit>
+    <unit id="ConversationPlan"><segment><source>Plan {0}/{1}</source><target state="translated">计划 {0}/{1}</target></segment></unit>
+    <unit id="ConversationExitCode"><segment><source>exit {0}</source><target state="translated">退出码 {0}</target></segment></unit>
+    <unit id="ConversationResolved"><segment><source>Answered</source><target state="translated">已处理</target></segment></unit>
+    <unit id="ConversationPlaceholder"><segment><source>Message, or queue the next one…</source><target state="translated">补充说明，或排队下一条…</target></segment></unit>
+    <unit id="ConversationStop"><segment><source>Stop</source><target state="translated">停止</target></segment></unit>
+    <unit id="ConversationQueued"><segment><source>{0} queued</source><target state="translated">{0} 条排队中</target></segment></unit>
+    <unit id="ConversationModel"><segment><source>Model</source><target state="translated">模型</target></segment></unit>
+    <unit id="ConversationMode"><segment><source>Permissions</source><target state="translated">权限模式</target></segment></unit>
+    <unit id="ConversationEffort"><segment><source>Effort</source><target state="translated">思考强度</target></segment></unit>
+    <unit id="ConversationSubmit"><segment><source>Submit</source><target state="translated">提交</target></segment></unit>
+    <unit id="ConversationFreeText"><segment><source>Your answer</source><target state="translated">你的回答</target></segment></unit>
+    <unit id="ConversationUnsupportedHost"><segment><source>Update Octopus on the computer to open its GUI conversations on the phone.</source><target state="translated">请更新电脑上的 Octopus，才能在手机上打开 GUI 对话。</target></segment></unit>
+    <unit id="ConversationReconnect"><segment><source>Reload conversation</source><target state="translated">重新载入对话</target></segment></unit>
     <unit id="FilesBrowse"><segment><source>Browse files</source><target state="translated">浏览文件</target></segment></unit>
     <unit id="ChangesView"><segment><source>View changes</source><target state="translated">查看改动</target></segment></unit>
     <unit id="FilesEmpty"><segment><source>This folder is empty</source><target state="translated">这个文件夹是空的</target></segment></unit>

@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Conversations;
 using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Sessions;
@@ -54,10 +55,17 @@ public sealed class MobileShell : ContentControl, INavigator
 
     public void ShowSession(RemoteSession session)
     {
-        // A GUI conversation has no terminal here (design/ui/移动端功能扩展方案.html, G-0).
-        if (session.IsGui) ShowSessionDetails(session);
-        else Push(new TerminalPage(new TerminalViewModel(session, _workspace, this)));
+        // A GUI session opens its conversation when the host speaks acp.gui (G-A), or its details with an update note (G-0).
+        if (session.IsGui)
+        {
+            if (_workspace.SupportsConversations(session.Project.Host)) ShowConversation(session);
+            else ShowSessionDetails(session);
+            return;
+        }
+        Push(new TerminalPage(new TerminalViewModel(session, _workspace, this)));
     }
+
+    public void ShowConversation(RemoteSession session) => Push(new ConversationPage(new ConversationViewModel(session, _workspace, this)));
 
     public void ShowSessionDetails(RemoteSession session) => Push(new SessionDetailPage(new SessionDetailViewModel(session, _workspace, this)));
 
