@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Octopus.App.Settings.About;
 using Octopus.App.Settings.Agents;
 using Octopus.App.Settings.Appearance;
 using Octopus.App.Settings.General;
@@ -25,5 +26,6 @@ internal static class SettingsModule
         services.AddTransient<Remote.RemoteHostsSettingsViewModel>();
         services.AddTransient<AppearanceSettingsViewModel>();
         services.AddTransient<ShortcutsViewModel>();
+        services.AddTransient<AboutSettingsViewModel>();
     }
 }

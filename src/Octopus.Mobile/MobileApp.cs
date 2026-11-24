@@ -23,6 +23,16 @@ public static class MobileHost
     public static IAccountSession Account { get; set; } = new DemoAccount();
     /// <summary>Opens the sign-in page in the system browser; the head knows how.</summary>
     public static Action<Uri> OpenBrowser { get; set; } = _ => { };
+
+    /// <summary>Handles an incoming <c>octopus://</c> deep link (e.g. <c>octopus://auth-done</c> after browser approval).</summary>
+    public static void HandleDeepLink(Uri uri)
+    {
+        if (!string.Equals(uri.Scheme, "octopus", StringComparison.OrdinalIgnoreCase)) return;
+        if (string.Equals(uri.Host, "auth-done", StringComparison.OrdinalIgnoreCase) && Account.IsSignedIn)
+        {
+            _ = Workspace.RefreshAsync();
+        }
+    }
 }
 
 /// <summary>
@@ -56,6 +66,13 @@ public class MobileApp : Application
                     Content = CreateShell(),
                 };
                 break;
+        }
+        if (TryGetFeature(typeof(IActivatableLifetime)) is IActivatableLifetime activatable)
+        {
+            activatable.Activated += (_, e) =>
+            {
+                if (e is ProtocolActivatedEventArgs { Uri: { } uri }) MobileHost.HandleDeepLink(uri);
+            };
         }
         base.OnFrameworkInitializationCompleted();
     }

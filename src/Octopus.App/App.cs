@@ -45,6 +45,14 @@ public class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow();
+            var protocolServer = ProtocolActivation.StartServer(uri => HandleProtocolUri(desktop, uri));
+            if (TryGetFeature(typeof(IActivatableLifetime)) is IActivatableLifetime activatable)
+            {
+                activatable.Activated += (_, e) =>
+                {
+                    if (e is ProtocolActivatedEventArgs { Uri: { } uri }) HandleProtocolUri(desktop, uri);
+                };
+            }
             AppHost.Get<Shell.TrayService>().Start(this);
             AppHost.Get<Activity.AgentAttentionNotifier>().Start();
             // Projects on other computers: kept in line with their hosts from now on; the host of the one on screen is
@@ -66,6 +74,7 @@ public class App : Application
             // services hold (file watchers, timers).
             desktop.Exit += (_, _) =>
             {
+                protocolServer.Dispose();
                 // No ssh process of a tunnel outlives the app (an installer that starts now may replace the files they run from).
                 AppHost.Get<Octopus.App.Services.ITunnelService>().StopAll();
                 // Settings are written a moment after each change: the last one goes to disk before an installer starts.
@@ -75,6 +84,27 @@ public class App : Application
             };
         }
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void HandleProtocolUri(IClassicDesktopStyleApplicationLifetime desktop, Uri uri)
+    {
+        if (!string.Equals(uri.Scheme, "octopus", StringComparison.OrdinalIgnoreCase)) return;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (desktop.MainWindow is not { } window) return;
+            if (window.WindowState == Avalonia.Controls.WindowState.Minimized)
+            {
+                window.WindowState = Avalonia.Controls.WindowState.Normal;
+            }
+            window.Show();
+            window.Activate();
+            if (!OperatingSystem.IsMacOS())
+            {
+                var wasTopmost = window.Topmost;
+                window.Topmost = true;
+                window.Topmost = wasTopmost;
+            }
+        });
     }
 
     private static readonly TimeSpan ScanDelayWithCache = TimeSpan.FromSeconds(4);

@@ -130,4 +130,134 @@ public class AcpLaunchResolverTests
         Assert.Equal("/opt/claude/bin/claude", plan.Environment["CLAUDE_CODE_EXECUTABLE"]);
         Assert.Equal(TimeSpan.FromSeconds(60), plan.InitializeTimeout);
     }
+
+    [Fact]
+    public async Task Adapter_uses_profile_command_override_for_native_executable_env_var()
+    {
+        using var paths = new TempAppPaths();
+        var registry = new AcpRegistryClient(paths);
+        var installer = new AcpAdapterInstaller(paths, registry);
+
+        var binDir = Path.Combine(installer.AdapterRoot("claude"), "npm", "node_modules", ".bin");
+        Directory.CreateDirectory(binDir);
+        var fakeAdapter = Path.Combine(binDir, OperatingSystem.IsWindows() ? "claude-agent-acp.cmd" : "claude-agent-acp");
+        await File.WriteAllTextAsync(fakeAdapter, "#!/bin/sh\n");
+
+        var claudeDef = new Octopus.Agents.AgentCatalog(paths).Find("claude")!;
+        var resolver = new AcpLaunchResolver(
+            new FakeLocator(new() { ["rec"] = "/Users/token/.local/bin/rec" }),
+            new FakeLoginEnvWithVar("CLAUDE_CODE_EXECUTABLE", "/stale/shell/claude"),
+            adapterInstaller: installer);
+
+        var settings = new AgentSettings();
+        settings.Profiles["claude"] = new AgentProfile { Command = "rec" };
+        var install = new AgentInstallation { AgentId = "claude", Path = "/opt/claude/bin/claude", Version = "2.1.0" };
+
+        var plan = await resolver.ResolveAsync(claudeDef, install, settings, "/tmp/repo", PermissionModes.Default);
+
+        Assert.Equal(fakeAdapter, plan.Executable);
+        Assert.Equal("/Users/token/.local/bin/rec", plan.Environment["CLAUDE_CODE_EXECUTABLE"]);
+        Assert.EndsWith("→ rec", plan.SourceLabel);
+    }
+
+    [Fact]
+    public async Task Adapter_respects_explicit_profile_env_over_profile_command()
+    {
+        using var paths = new TempAppPaths();
+        var registry = new AcpRegistryClient(paths);
+        var installer = new AcpAdapterInstaller(paths, registry);
+
+        var binDir = Path.Combine(installer.AdapterRoot("claude"), "npm", "node_modules", ".bin");
+        Directory.CreateDirectory(binDir);
+        var fakeAdapter = Path.Combine(binDir, OperatingSystem.IsWindows() ? "claude-agent-acp.cmd" : "claude-agent-acp");
+        await File.WriteAllTextAsync(fakeAdapter, "#!/bin/sh\n");
+
+        var claudeDef = new Octopus.Agents.AgentCatalog(paths).Find("claude")!;
+        var resolver = new AcpLaunchResolver(
+            new FakeLocator(new() { ["rec"] = "/Users/token/.local/bin/rec" }),
+            new FakeLoginEnv(),
+            adapterInstaller: installer);
+
+        var settings = new AgentSettings();
+        settings.Profiles["claude"] = new AgentProfile
+        {
+            Command = "rec",
+            Env = new Dictionary<string, string> { ["CLAUDE_CODE_EXECUTABLE"] = "/explicit/bin/claude" },
+        };
+        var install = new AgentInstallation { AgentId = "claude", Path = "/opt/claude/bin/claude", Version = "2.1.0" };
+
+        var plan = await resolver.ResolveAsync(claudeDef, install, settings, "/tmp/repo", PermissionModes.Default);
+
+        Assert.Equal("/explicit/bin/claude", plan.Environment["CLAUDE_CODE_EXECUTABLE"]);
+        Assert.DoesNotContain("→ rec", plan.SourceLabel);
+    }
+
+    [Fact]
+    public async Task Adapter_wraps_profile_command_with_prefix_arguments_on_unix()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        using var paths = new TempAppPaths();
+        var registry = new AcpRegistryClient(paths);
+        var installer = new AcpAdapterInstaller(paths, registry);
+
+        var binDir = Path.Combine(installer.AdapterRoot("claude"), "npm", "node_modules", ".bin");
+        Directory.CreateDirectory(binDir);
+        var fakeAdapter = Path.Combine(binDir, "claude-agent-acp");
+        await File.WriteAllTextAsync(fakeAdapter, "#!/bin/sh\n");
+
+        var claudeDef = new Octopus.Agents.AgentCatalog(paths).Find("claude")!;
+        var resolver = new AcpLaunchResolver(
+            new FakeLocator(new() { ["rec"] = "/Users/token/.local/bin/rec" }),
+            new FakeLoginEnv(),
+            adapterInstaller: installer);
+
+        var settings = new AgentSettings();
+        settings.Profiles["claude"] = new AgentProfile { Command = "rec cli --profile work" };
+        var install = new AgentInstallation { AgentId = "claude", Path = "/opt/claude/bin/claude", Version = "2.1.0" };
+
+        var plan = await resolver.ResolveAsync(claudeDef, install, settings, "/tmp/repo", PermissionModes.Default);
+
+        var wrapper = plan.Environment["CLAUDE_CODE_EXECUTABLE"];
+        Assert.NotEqual("/Users/token/.local/bin/rec", wrapper);
+        Assert.True(File.Exists(wrapper));
+        var content = await File.ReadAllTextAsync(wrapper);
+        Assert.Contains("exec /Users/token/.local/bin/rec cli --profile work \"$@\"", content);
+    }
+
+    [Fact]
+    public async Task Native_acp_resolves_profile_command_from_path_with_prefix_args()
+    {
+        var locator = new FakeLocator(new() { ["my-grok"] = "/Users/token/.local/bin/my-grok" });
+        var resolver = new AcpLaunchResolver(locator, new FakeLoginEnv());
+        var def = new AgentDefinition
+        {
+            Id = "grok",
+            Name = "Grok",
+            Detect = new() { Executables = ["grok"] },
+            Acp = new()
+            {
+                Mode = "native",
+                Args = ["agent", "stdio"],
+                Dialect = "grok",
+            },
+        };
+        var settings = new AgentSettings();
+        settings.Profiles["grok"] = new AgentProfile { Command = "my-grok --profile work" };
+
+        var plan = await resolver.ResolveAsync(def, null, settings, "/tmp/repo", PermissionModes.Default);
+
+        Assert.Equal("/Users/token/.local/bin/my-grok", plan.Executable);
+        Assert.Equal(["--profile", "work", "agent", "stdio"], plan.Arguments);
+    }
+
+    private sealed class FakeLoginEnvWithVar(string key, string value) : ILoginEnvironment
+    {
+        public Task<IReadOnlyDictionary<string, string>> GetAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>
+            {
+                ["PATH"] = "/usr/local/bin:/usr/bin",
+                [key] = value,
+            });
+    }
 }

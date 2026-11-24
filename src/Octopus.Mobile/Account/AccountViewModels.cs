@@ -18,6 +18,7 @@ public sealed partial class SignInFlow : ObservableObject, IDisposable
     private readonly Action<Uri> _openBrowser;
     private SignInChallenge? _challenge;
     private CancellationTokenSource? _starting;
+    private CancellationTokenSource? _copiedCts;
     private bool _disposed;
 
     public SignInFlow(IAccountSession account, Action<Uri> openBrowser)
@@ -30,29 +31,65 @@ public sealed partial class SignInFlow : ObservableObject, IDisposable
 
     /// <summary>The code to confirm in the browser; null until the service gave one.</summary>
     [ObservableProperty] public partial string? UserCode { get; private set; }
+    /// <summary>The host name of the service this challenge belongs to (e.g. "octoterm.si").</summary>
+    [ObservableProperty] public partial string? ServerHost { get; private set; }
+    /// <summary>True briefly right after the user copied the code.</summary>
+    [ObservableProperty] public partial bool CodeCopied { get; private set; }
     /// <summary>The service is being asked for a code.</summary>
     [ObservableProperty] public partial bool IsStarting { get; private set; }
     [ObservableProperty] public partial string? ErrorText { get; private set; }
 
     public bool HasCode => UserCode is not null;
+    public bool HasServerHost => !string.IsNullOrEmpty(ServerHost);
     /// <summary>Nothing is under way: a sign-in can be started.</summary>
     public bool IsIdle => !IsStarting && !HasCode;
     public bool HasError => !string.IsNullOrEmpty(ErrorText);
 
     partial void OnUserCodeChanged(string? value)
     {
+        if (value is null) CodeCopied = false;
         OnPropertyChanged(nameof(HasCode));
         OnPropertyChanged(nameof(IsIdle));
     }
 
+    partial void OnServerHostChanged(string? value) => OnPropertyChanged(nameof(HasServerHost));
     partial void OnIsStartingChanged(bool value) => OnPropertyChanged(nameof(IsIdle));
     partial void OnErrorTextChanged(string? value) => OnPropertyChanged(nameof(HasError));
+
+    /// <summary>Briefly flips the copy button label to "Copied".</summary>
+    public void MarkCodeCopied()
+    {
+        _copiedCts?.Cancel();
+        _copiedCts?.Dispose();
+        var cts = _copiedCts = new CancellationTokenSource();
+        CodeCopied = true;
+        _ = ResetCopiedAsync(cts);
+    }
+
+    private async Task ResetCopiedAsync(CancellationTokenSource cts)
+    {
+        try
+        {
+            await Task.Delay(2000, cts.Token);
+            if (!_disposed && ReferenceEquals(_copiedCts, cts))
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!_disposed && ReferenceEquals(_copiedCts, cts)) CodeCopied = false;
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
 
     /// <summary>Asks the service at <paramref name="server"/> for a code, shows it and opens the service's page in the browser.</summary>
     public async Task StartAsync(string server)
     {
         if (!IsIdle || _disposed) return;
         ErrorText = null;
+        CodeCopied = false;
         IsStarting = true;
         var starting = _starting = new CancellationTokenSource();
         try
@@ -64,6 +101,7 @@ public sealed partial class SignInFlow : ObservableObject, IDisposable
                 return;
             }
             _challenge = challenge;
+            ServerHost = challenge.VerificationUri.Host;
             UserCode = challenge.UserCode;
             _openBrowser(challenge.VerificationUri);
             _ = WaitAsync(challenge);
@@ -94,8 +132,10 @@ public sealed partial class SignInFlow : ObservableObject, IDisposable
     {
         try { _starting?.Cancel(); }
         catch (ObjectDisposedException) { }
+        _copiedCts?.Cancel();
         _challenge?.Cancel();
         _challenge = null;
+        ServerHost = null;
         UserCode = null;
     }
 
@@ -104,6 +144,8 @@ public sealed partial class SignInFlow : ObservableObject, IDisposable
         _disposed = true;
         try { _starting?.Cancel(); }
         catch (ObjectDisposedException) { }
+        _copiedCts?.Cancel();
+        _copiedCts?.Dispose();
         _challenge?.Cancel();
     }
 
@@ -150,6 +192,7 @@ public sealed partial class WelcomeViewModel : ObservableObject, IDisposable
         SignIn.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is not (nameof(SignInFlow.IsIdle) or nameof(SignInFlow.HasCode))) return;
+            IsCodeSheetOpen = SignIn.HasCode;
             OnPropertyChanged(nameof(IsChoosing));
             SignInCommand.NotifyCanExecuteChanged();
         };
@@ -157,8 +200,19 @@ public sealed partial class WelcomeViewModel : ObservableObject, IDisposable
 
     public SignInFlow SignIn { get; }
     public bool IsOnTop { get; }
+    /// <summary>Bottom sheet holding the 8-char verification code; dismissing it cancels sign-in.</summary>
+    [ObservableProperty] public partial bool IsCodeSheetOpen { get; set; }
     /// <summary>This build knows the official service: "Sign in" goes there. Otherwise it asks for an address.</summary>
     public bool HasOfficialServer => _account.OfficialServer is not null;
+    /// <summary>Short display host of the official service (e.g. "octoterm.si").</summary>
+    public string? OfficialHost => FormatHost(_account.OfficialServer);
+    public string SignInButtonText => OfficialHost is { Length: > 0 } host
+        ? MobileLangResources.Format(MobileLangResourceKind.SignInWithOfficial, host)
+        : MobileLangResources.Get(MobileLangResourceKind.SignInStart);
+    public string RelayFeatureText => OfficialHost is { Length: > 0 } host
+        ? MobileLangResources.Format(MobileLangResourceKind.WelcomeFeatureRelay, host)
+        : MobileLangResources.Get(MobileLangResourceKind.WelcomeFeatureRelayGeneric);
+    public bool ShowsHighlights => !IsOnTop;
     /// <summary>"Local network": not where the person already uses the app that way.</summary>
     public bool ShowsLocal => !IsOnTop;
     /// <summary>"Custom service" as a row of its own: only when "Sign in" does not lead there anyway.</summary>
@@ -166,6 +220,19 @@ public sealed partial class WelcomeViewModel : ObservableObject, IDisposable
     public bool ShowsOtherWays => ShowsLocal || ShowsCustom;
     /// <summary>The buttons are showing rather than the code.</summary>
     public bool IsChoosing => !SignIn.HasCode;
+
+    partial void OnIsCodeSheetOpenChanged(bool value)
+    {
+        if (!value && SignIn.HasCode) SignIn.Cancel();
+    }
+
+    internal static string? FormatHost(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        return Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host)
+            ? uri.Host
+            : url.Trim();
+    }
 
     private bool CanSignIn => SignIn.IsIdle;
 

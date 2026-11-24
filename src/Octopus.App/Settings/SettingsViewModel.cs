@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using Octopus.App.Localization;
+using Octopus.App.Settings.About;
 using Octopus.App.Settings.Agents;
 using Octopus.App.Settings.Appearance;
 using Octopus.App.Settings.General;
@@ -38,6 +39,10 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             new("shortcuts", LucideIconKind.Keyboard, AppLangResourceKind.SettingsNavShortcuts, () => ActivatorUtilities.CreateInstance<ShortcutsViewModel>(services)),
             new("plugins", LucideIconKind.Puzzle, () => Plugins.PluginText.Get("插件", "Plugins"), () => ActivatorUtilities.CreateInstance<Plugins.Settings.PluginsSettingsViewModel>(services)),
         ];
+        About =
+        [
+            new("about", LucideIconKind.Info, AppLangResourceKind.SettingsNavAbout, () => ActivatorUtilities.CreateInstance<AboutSettingsViewModel>(services)),
+        ];
         foreach (var section in All)
         {
             section.SelectCommand = SelectCommand;
@@ -53,7 +58,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<SettingsSectionViewModel> Interface { get; }
 
-    public IEnumerable<SettingsSectionViewModel> All => Ai.Concat(General).Concat(Interface);
+    public IReadOnlyList<SettingsSectionViewModel> About { get; }
+
+    public IEnumerable<SettingsSectionViewModel> All => Ai.Concat(General).Concat(Interface).Concat(About);
 
     /// <summary>The navigation groups in order with their headings: the sections of the settings sidebar.</summary>
     public IReadOnlyList<(AppLangResourceKind Heading, IReadOnlyList<SettingsSectionViewModel> Sections)> Groups =>
@@ -61,6 +68,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         (AppLangResourceKind.SettingsGroupAi, Ai),
         (AppLangResourceKind.SettingsGroupGeneral, General),
         (AppLangResourceKind.SettingsGroupInterface, Interface),
+        (AppLangResourceKind.SettingsGroupAbout, About),
     ];
 
     /// <summary>The open section's key, for the sidebar's selection; setting it opens that section.</summary>

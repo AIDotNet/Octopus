@@ -38,6 +38,7 @@ public sealed partial class ShellViewModel : ObservableObject
         IProjectService projects,
         SettingsNavigator navigator,
         DeviceSwitcherViewModel deviceSwitcher,
+        Account.AccountViewModel account,
         ProjectRailViewModel rail,
         ProjectPanelViewModel panel,
         WorkspaceViewModel workspace,
@@ -68,6 +69,7 @@ public sealed partial class ShellViewModel : ObservableObject
         RightPanelWidth = Math.Clamp(settings.Current.RightPanel.Width, MinRightPanelWidth, MaxRightPanelWidth);
         navigator.Requested += (_, section) => SettingsRequested?.Invoke(this, section);
         DeviceSwitcher = deviceSwitcher;
+        Account = account;
         Rail = rail;
         Panel = panel;
         Workspace = workspace;
@@ -80,6 +82,8 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     public DeviceSwitcherViewModel DeviceSwitcher { get; }
+    /// <summary>Top-bar account capsule, centered sign-in dialog, and account menu (Scheme B).</summary>
+    public Account.AccountViewModel Account { get; }
     public ProjectRailViewModel Rail { get; }
     public ProjectPanelViewModel Panel { get; }
     public WorkspaceViewModel Workspace { get; }

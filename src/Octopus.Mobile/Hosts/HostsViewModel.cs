@@ -1,8 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Octopus.Mobile.Account;
+using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Workspace;
@@ -10,29 +13,60 @@ using Octopus.Mobile.Workspace;
 namespace Octopus.Mobile.Hosts;
 
 /// <summary>
-/// The first page: the account's computers and the ones this phone paired with itself (only those, without an account),
-/// online ones first, each with what needs the person there.
+/// Scheme A root dashboard: three bottom tabs (Activity inbox, Computers, Me / Account center).
+/// Aggregates cross-host waiting/working sessions into the Activity tab while keeping full host grouping and account management.
 /// </summary>
-public sealed partial class HostsViewModel : ObservableObject
+public sealed partial class HostsViewModel : ObservableObject, IDisposable
 {
+    public const int TabActivity = 0;
+    public const int TabHosts = 1;
+    public const int TabAccount = 2;
+
     private readonly IRemoteWorkspace _workspace;
     private readonly IAccountSession _account;
     private readonly INavigator _navigator;
+    private readonly Action<Uri> _openBrowser;
+    private readonly List<RemoteHost> _watchedHosts = [];
+    private readonly List<RemoteProject> _watchedProjects = [];
+    private readonly List<RemoteSession> _watchedSessions = [];
 
-    public HostsViewModel(IRemoteWorkspace workspace, IAccountSession account, INavigator navigator)
+    public HostsViewModel(IRemoteWorkspace workspace, IAccountSession account, INavigator navigator, Action<Uri>? openBrowser = null)
     {
         _workspace = workspace;
         _account = account;
         _navigator = navigator;
-        workspace.Hosts.CollectionChanged += OnHostsChanged;
-        foreach (var host in workspace.Hosts) host.PropertyChanged += OnHostChanged;
-        Rebuild();
+        _openBrowser = openBrowser ?? (_ => { });
+        IsSignedIn = account.IsSignedIn;
+        workspace.Hosts.CollectionChanged += OnStructureChanged;
+        RebuildAll();
     }
 
+    /// <summary>Active bottom tab: 0 = Activity, 1 = Computers, 2 = Me.</summary>
+    [ObservableProperty] public partial int SelectedTab { get; set; } = TabActivity;
+
+    public bool IsActivityTab => SelectedTab == TabActivity;
+    public bool IsHostsTab => SelectedTab == TabHosts;
+    public bool IsAccountTab => SelectedTab == TabAccount;
+
+    public string CurrentTabTitle => SelectedTab switch
+    {
+        TabHosts => MobileLangResources.Get(MobileLangResourceKind.TabHosts),
+        TabAccount => MobileLangResources.Get(MobileLangResourceKind.TabMe),
+        _ => MobileLangResources.Get(MobileLangResourceKind.TabActivity),
+    };
+
+    public string ActivityTabLabel => AttentionSessions.Count > 0
+        ? MobileLangResources.Format(MobileLangResourceKind.TabActivityBadge, AttentionSessions.Count)
+        : MobileLangResources.Get(MobileLangResourceKind.TabActivity);
+
+    public ObservableCollection<ActivitySessionRowViewModel> AttentionSessions { get; } = [];
+    public ObservableCollection<ActivitySessionRowViewModel> WorkingSessions { get; } = [];
     public ObservableCollection<HostRowViewModel> Online { get; } = [];
     public ObservableCollection<HostRowViewModel> Offline { get; } = [];
     public ObservableCollection<HostRowViewModel> Unpaired { get; } = [];
 
+    [ObservableProperty] public partial bool HasAttention { get; private set; }
+    [ObservableProperty] public partial bool HasWorking { get; private set; }
     [ObservableProperty] public partial bool HasOnline { get; private set; }
     [ObservableProperty] public partial bool HasOffline { get; private set; }
     [ObservableProperty] public partial bool HasUnpaired { get; private set; }
@@ -42,17 +76,74 @@ public sealed partial class HostsViewModel : ObservableObject
     /// <summary>The sheet of a phone used without an account ("Sign in", "Leave local network mode") is showing.</summary>
     [ObservableProperty] public partial bool IsLocalOpen { get; set; }
 
+    public bool IsActivityAllClear => HasHosts && !HasAttention && !HasWorking;
+    public bool HasHosts => !IsEmpty;
+    public int AttentionCount => AttentionSessions.Count;
+
     /// <summary>Fixed for the page's life: signing in or out replaces the page.</summary>
-    public bool IsSignedIn => _account.IsSignedIn;
-    public bool IsSignedOut => !_account.IsSignedIn;
-    public string AccountName => _account.IsSignedIn
+    public bool IsSignedIn { get; }
+    public bool IsSignedOut => !IsSignedIn;
+    public string AccountName => IsSignedIn
         ? _account.Name ?? MobileLangResources.Get(MobileLangResourceKind.Account)
         : MobileLangResources.Get(MobileLangResourceKind.NotSignedIn);
-    /// <summary>What an empty list says: nothing of the account has remote access on, or nothing was added yet.</summary>
-    public string EmptyText => MobileLangResources.Get(_account.IsSignedIn ? MobileLangResourceKind.HostsEmpty : MobileLangResourceKind.HostsEmptyLocal);
-    public bool HasHosts => !IsEmpty;
+    public string AccountInitial
+    {
+        get
+        {
+            var name = _account.Name?.Trim();
+            return string.IsNullOrEmpty(name) ? "O" : char.ToUpperInvariant(name[0]).ToString();
+        }
+    }
 
-    partial void OnIsEmptyChanged(bool value) => OnPropertyChanged(nameof(HasHosts));
+    public string? ActiveServerUrl => !string.IsNullOrWhiteSpace(_account.Server) ? _account.Server : _account.OfficialServer;
+    public string ServerHostDisplay => WelcomeViewModel.FormatHost(ActiveServerUrl) ?? "octoterm.si";
+    public string AccountHostSummary => MobileLangResources.Format(MobileLangResourceKind.MeHostSummary, ServerHostDisplay, Online.Count);
+    public string AccountStatusBadge => MobileLangResources.Get(IsSignedIn ? MobileLangResourceKind.MeStatusOnline : MobileLangResourceKind.MeStatusLocal);
+    public string UpgradeBannerHint => WelcomeViewModel.FormatHost(_account.OfficialServer) is { Length: > 0 } host
+        ? MobileLangResources.Format(MobileLangResourceKind.UpgradeBannerHint, host)
+        : MobileLangResources.Get(MobileLangResourceKind.UpgradeBannerHintGeneric);
+    public string SignInButtonText => WelcomeViewModel.FormatHost(_account.OfficialServer) is { Length: > 0 } host
+        ? MobileLangResources.Format(MobileLangResourceKind.SignInWithOfficial, host)
+        : MobileLangResources.Get(MobileLangResourceKind.SignInStart);
+
+    public Uri? AccountWebUri
+    {
+        get
+        {
+            if (!IsSignedIn || string.IsNullOrWhiteSpace(ActiveServerUrl)) return null;
+            var raw = ActiveServerUrl.Trim();
+            if (!raw.Contains("://", StringComparison.Ordinal)) raw = "https://" + raw;
+            return Uri.TryCreate(raw.TrimEnd('/') + "/account", UriKind.Absolute, out var uri) ? uri : null;
+        }
+    }
+
+    public bool HasAccountWeb => AccountWebUri is not null;
+
+    /// <summary>What an empty list says: nothing of the account has remote access on, or nothing was added yet.</summary>
+    public string EmptyText => MobileLangResources.Get(IsSignedIn ? MobileLangResourceKind.HostsEmpty : MobileLangResourceKind.HostsEmptyLocal);
+
+    partial void OnSelectedTabChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsActivityTab));
+        OnPropertyChanged(nameof(IsHostsTab));
+        OnPropertyChanged(nameof(IsAccountTab));
+        OnPropertyChanged(nameof(CurrentTabTitle));
+    }
+
+    partial void OnIsEmptyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(HasHosts));
+        OnPropertyChanged(nameof(IsActivityAllClear));
+    }
+
+    partial void OnHasAttentionChanged(bool value) => OnPropertyChanged(nameof(IsActivityAllClear));
+    partial void OnHasWorkingChanged(bool value) => OnPropertyChanged(nameof(IsActivityAllClear));
+
+    [RelayCommand]
+    private void SelectTab(int tab) => SelectedTab = tab;
+
+    [RelayCommand]
+    private void SelectAccountTab() => SelectedTab = TabAccount;
 
     [RelayCommand]
     private void OpenAccount()
@@ -70,6 +161,15 @@ public sealed partial class HostsViewModel : ObservableObject
     {
         IsLocalOpen = false;
         _navigator.ShowSignIn();
+    }
+
+    [RelayCommand]
+    private void OpenCustomServer() => _navigator.ShowCustomServer();
+
+    [RelayCommand]
+    private void OpenAccountWeb()
+    {
+        if (AccountWebUri is { } uri) _openBrowser(uri);
     }
 
     /// <summary>Back to the welcome page. The computers stay paired.</summary>
@@ -90,20 +190,68 @@ public sealed partial class HostsViewModel : ObservableObject
         _account.SignOut();
     }
 
-    private void OnHostsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    public void Dispose()
     {
-        if (e.OldItems is not null) foreach (RemoteHost host in e.OldItems) host.PropertyChanged -= OnHostChanged;
-        if (e.NewItems is not null) foreach (RemoteHost host in e.NewItems) host.PropertyChanged += OnHostChanged;
-        Rebuild();
+        _workspace.Hosts.CollectionChanged -= OnStructureChanged;
+        UnwatchAll();
+        ClearRows();
     }
 
-    // Going online, offline or paired moves the host to another group.
+    private void OnStructureChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildAll();
+
     private void OnHostChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(RemoteHost.Link) or nameof(RemoteHost.IsPaired)) Rebuild();
+        if (e.PropertyName is nameof(RemoteHost.Link) or nameof(RemoteHost.IsPaired)) RebuildAll();
     }
 
-    private void Rebuild()
+    private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(RemoteSession.Activity)) RebuildActivity();
+    }
+
+    private void RebuildAll()
+    {
+        UnwatchAll();
+        WatchAll();
+        RebuildHosts();
+        RebuildActivity();
+    }
+
+    private void WatchAll()
+    {
+        foreach (var host in _workspace.Hosts)
+        {
+            host.PropertyChanged += OnHostChanged;
+            host.Projects.CollectionChanged += OnStructureChanged;
+            _watchedHosts.Add(host);
+            foreach (var project in host.Projects)
+            {
+                project.Sessions.CollectionChanged += OnStructureChanged;
+                _watchedProjects.Add(project);
+                foreach (var session in project.Sessions)
+                {
+                    session.PropertyChanged += OnSessionChanged;
+                    _watchedSessions.Add(session);
+                }
+            }
+        }
+    }
+
+    private void UnwatchAll()
+    {
+        foreach (var host in _watchedHosts)
+        {
+            host.PropertyChanged -= OnHostChanged;
+            host.Projects.CollectionChanged -= OnStructureChanged;
+        }
+        foreach (var project in _watchedProjects) project.Sessions.CollectionChanged -= OnStructureChanged;
+        foreach (var session in _watchedSessions) session.PropertyChanged -= OnSessionChanged;
+        _watchedHosts.Clear();
+        _watchedProjects.Clear();
+        _watchedSessions.Clear();
+    }
+
+    private void RebuildHosts()
     {
         foreach (var row in Online.Concat(Offline).Concat(Unpaired)) row.Dispose();
         Online.Clear();
@@ -119,7 +267,92 @@ public sealed partial class HostsViewModel : ObservableObject
         HasOffline = Offline.Count > 0;
         HasUnpaired = Unpaired.Count > 0;
         IsEmpty = _workspace.Hosts.Count == 0;
+        OnPropertyChanged(nameof(AccountHostSummary));
     }
+
+    private void RebuildActivity()
+    {
+        foreach (var row in AttentionSessions.Concat(WorkingSessions)) row.Dispose();
+        AttentionSessions.Clear();
+        WorkingSessions.Clear();
+        foreach (var host in _workspace.Hosts)
+        {
+            if (!host.IsPaired || !host.IsOnline) continue;
+            foreach (var project in host.Projects)
+            {
+                foreach (var session in project.Sessions)
+                {
+                    if (session.Activity is SessionActivity.Waiting or SessionActivity.Error)
+                    {
+                        AttentionSessions.Add(new ActivitySessionRowViewModel(session, _navigator.ShowSession));
+                    }
+                    else if (session.Activity == SessionActivity.Working)
+                    {
+                        WorkingSessions.Add(new ActivitySessionRowViewModel(session, _navigator.ShowSession));
+                    }
+                }
+            }
+        }
+        HasAttention = AttentionSessions.Count > 0;
+        HasWorking = WorkingSessions.Count > 0;
+        OnPropertyChanged(nameof(AttentionCount));
+        OnPropertyChanged(nameof(ActivityTabLabel));
+        OnPropertyChanged(nameof(IsActivityAllClear));
+    }
+
+    private void ClearRows()
+    {
+        foreach (var row in Online.Concat(Offline).Concat(Unpaired)) row.Dispose();
+        foreach (var row in AttentionSessions.Concat(WorkingSessions)) row.Dispose();
+        Online.Clear();
+        Offline.Clear();
+        Unpaired.Clear();
+        AttentionSessions.Clear();
+        WorkingSessions.Clear();
+    }
+}
+
+/// <summary>One cross-host session row in the Scheme A Activity inbox: names the host, project/branch, preview and status.</summary>
+public sealed partial class ActivitySessionRowViewModel : ObservableObject, IDisposable
+{
+    private readonly Action<RemoteSession> _open;
+
+    public ActivitySessionRowViewModel(RemoteSession session, Action<RemoteSession> open)
+    {
+        Session = session;
+        _open = open;
+        var agent = session.AgentId is null ? null : session.Project.Host.Agents.FirstOrDefault(a => a.Id == session.AgentId);
+        IsAgent = session.Kind == SessionKind.Agent;
+        Initial = agent?.Initial ?? (IsAgent ? "A" : "");
+        Tint = agent is not null && Color.TryParse(agent.Color, out var color) ? new SolidColorBrush(color) : null;
+        session.PropertyChanged += OnSessionChanged;
+    }
+
+    public RemoteSession Session { get; }
+    public bool IsAgent { get; }
+    public bool IsTerminal => !IsAgent;
+    public string Initial { get; }
+    public IBrush? Tint { get; }
+    public string Title => Session.Title;
+    public string ContextLine => Session.WorkspaceBranch is { Length: > 0 } branch
+        ? $"{Session.Project.Host.Name} · {Session.Project.Name} ({branch})"
+        : $"{Session.Project.Host.Name} · {Session.Project.Name}";
+    public string? Preview => Session.Preview;
+    public bool HasPreview => !string.IsNullOrEmpty(Session.Preview);
+    public string? WorkspaceTaskKey => Session.WorkspaceTaskKey;
+    public bool HasWorkspaceTask => !string.IsNullOrEmpty(Session.WorkspaceTaskKey);
+    public bool IsWaiting => Session.Activity == SessionActivity.Waiting;
+    public bool IsWorking => Session.Activity == SessionActivity.Working;
+    public bool IsError => Session.Activity == SessionActivity.Error;
+    public bool HasStatus => Session.Activity != SessionActivity.Idle;
+    public string StatusText => SessionRowViewModel.StatusOf(Session.Activity);
+
+    [RelayCommand]
+    private void Open() => _open(Session);
+
+    public void Dispose() => Session.PropertyChanged -= OnSessionChanged;
+
+    private void OnSessionChanged(object? sender, PropertyChangedEventArgs e) => OnPropertyChanged(string.Empty);
 }
 
 /// <summary>One computer in the list: how it is reached, and how many of its sessions wait, failed or work.</summary>
@@ -142,6 +375,8 @@ public sealed partial class HostRowViewModel : ObservableObject, IDisposable
     public string Name => Host.Name;
     public bool IsOnline => Host.IsOnline;
     public bool IsPaired => Host.IsPaired;
+    public bool IsLan => Host.Link == HostLink.Lan;
+    public string LinkLabel => MobileLangResources.Get(Host.Link == HostLink.Lan ? MobileLangResourceKind.LinkLan : MobileLangResourceKind.LinkRelay);
     /// <summary>A paired, online host opens; an unpaired one starts pairing; an offline one does nothing.</summary>
     public bool CanOpen => Host.IsOnline;
     public bool ShowChevron => Host.IsOnline && Host.IsPaired;
@@ -156,7 +391,7 @@ public sealed partial class HostRowViewModel : ObservableObject, IDisposable
                     ? string.Format(MobileLangResources.Get(MobileLangResourceKind.LastSeen), seen.LocalDateTime.ToString("MM-dd HH:mm"))
                     : MobileLangResources.Get(MobileLangResourceKind.LinkOffline);
             }
-            var link = MobileLangResources.Get(Host.Link == HostLink.Lan ? MobileLangResourceKind.LinkLan : MobileLangResourceKind.LinkRelay);
+            var link = LinkLabel;
             return Host.IsPaired
                 ? link + " · " + string.Format(MobileLangResources.Get(MobileLangResourceKind.ProjectCount), Host.Projects.Count)
                 : link;

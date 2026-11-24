@@ -108,5 +108,34 @@
     <unit id="WorkspaceTaskInjectPrompt"><segment><source>Include task context in initial prompt</source></segment></unit>
     <unit id="WorkspaceBranchNameRequired"><segment><source>Enter or select a branch name.</source></segment></unit>
     <unit id="WorkspaceUnsupportedHost"><segment><source>Update Octopus on the host to create branch workspaces.</source></segment></unit>
+    <unit id="TabActivity"><segment><source>Activity</source></segment></unit>
+    <unit id="TabActivityBadge"><segment><source>Activity ({0})</source></segment></unit>
+    <unit id="TabHosts"><segment><source>Computers</source></segment></unit>
+    <unit id="TabMe"><segment><source>Me</source></segment></unit>
+    <unit id="SignInWithOfficial"><segment><source>Sign in with {0}</source></segment></unit>
+    <unit id="SignInSheetTitle"><segment><source>Confirm in browser</source></segment></unit>
+    <unit id="SignInCopyCode"><segment><source>Copy code</source></segment></unit>
+    <unit id="SignInCodeCopied"><segment><source>Copied</source></segment></unit>
+    <unit id="WelcomeFeatureAttention"><segment><source>Instant attention inbox when an agent waits for you</source></segment></unit>
+    <unit id="WelcomeFeatureRelay"><segment><source>Encrypted remote relay via {0} out of the box</source></segment></unit>
+    <unit id="WelcomeFeatureRelayGeneric"><segment><source>Encrypted relay to reach your computers from anywhere</source></segment></unit>
+    <unit id="WelcomeFeatureLocal"><segment><source>Direct local network access, works without an account</source></segment></unit>
+    <unit id="ActivityWaitingHeader"><segment><source>Needs attention</source></segment></unit>
+    <unit id="ActivityWorkingHeader"><segment><source>Working</source></segment></unit>
+    <unit id="ActivityQuickHostsHeader"><segment><source>Online computers</source></segment></unit>
+    <unit id="ActivityAllClearTitle"><segment><source>All caught up</source></segment></unit>
+    <unit id="ActivityAllClearHint"><segment><source>No agents are waiting or running right now.</source></segment></unit>
+    <unit id="UpgradeBannerTitle"><segment><source>Local network only</source></segment></unit>
+    <unit id="UpgradeBannerHint"><segment><source>Sign in to {0} to reach your computers away from home.</source></segment></unit>
+    <unit id="UpgradeBannerHintGeneric"><segment><source>Sign in to reach your computers over a relay.</source></segment></unit>
+    <unit id="MeStatusOnline"><segment><source>Relay online</source></segment></unit>
+    <unit id="MeStatusLocal"><segment><source>Local only</source></segment></unit>
+    <unit id="MeHostSummary"><segment><source>{0} · {1} online</source></segment></unit>
+    <unit id="MeSectionAccount"><segment><source>Account &amp; connection</source></segment></unit>
+    <unit id="MeManageWeb"><segment><source>Manage account &amp; devices</source></segment></unit>
+    <unit id="MeSwitchCustom"><segment><source>Switch to custom server</source></segment></unit>
+    <unit id="MeSwitchCustomHint"><segment><source>Connect to a self-hosted Octopus Server</source></segment></unit>
+    <unit id="MeSignInCardTitle"><segment><source>Sign in to Octopus</source></segment></unit>
+    <unit id="MeSignInCardHint"><segment><source>Discover your computers automatically and reach them through an encrypted relay.</source></segment></unit>
   </file>
 </xliff>

@@ -32,8 +32,15 @@ public class NavigationTests
         Assert.False(hosts.Offline[0].OpenCommand.CanExecute(null));
         Assert.Equal("配对", hosts.Unpaired[0].PillText);
 
-        // Every host is a row on screen, and after them the way to add one by hand.
-        Assert.Equal(5, phone.Shell.GetVisualDescendants().OfType<ListItem>().Count());
+        // Scheme A: 3 bottom tabs — Activity inbox starts active (1 waiting + 1 error), Computers tab shows every host row + add row.
+        Assert.Equal(HostsViewModel.TabActivity, hosts.SelectedTab);
+        Assert.Equal(2, hosts.AttentionSessions.Count);
+        Assert.Equal("动态 (2)", hosts.ActivityTabLabel);
+
+        hosts.SelectedTab = HostsViewModel.TabHosts;
+        Phone.Pump();
+        var hostsTab = phone.Top<HostsPage>().FindControl<Control>("HostsTabContent")!;
+        Assert.Equal(5, hostsTab.GetVisualDescendants().OfType<ListItem>().Count());
         Assert.False(hosts.IsEmpty);
         Assert.Equal("Demo", hosts.AccountName);
         hosts.OpenAccountCommand.Execute(null);
@@ -337,6 +344,9 @@ public class NavigationTests
 
         Assert.True(hosts.IsEmpty);
         Assert.Equal("还没有添加电脑。", hosts.EmptyText);
+        Assert.True(page.FindControl<Control>("ActivityAddHostButton")!.IsEffectivelyVisible);
+        hosts.SelectedTab = HostsViewModel.TabHosts;
+        Phone.Pump();
         Assert.True(page.FindControl<Control>("AddHostButton")!.IsEffectivelyVisible);
         // One way to add, not two: the row under the list is for a list that has something in it.
         Assert.False(page.FindControl<Control>("AddGroup")!.IsVisible);
@@ -347,6 +357,9 @@ public class NavigationTests
         Phone.Pump();
         var account = (HostsViewModel)signedIn.Top<HostsPage>().DataContext!;
         Assert.Equal("这个账号下还没有开启远程访问的电脑。", account.EmptyText);
+        Assert.True(signedIn.Top<HostsPage>().FindControl<Control>("ActivityAddHostButton")!.IsEffectivelyVisible);
+        account.SelectedTab = HostsViewModel.TabHosts;
+        Phone.Pump();
         Assert.True(signedIn.Top<HostsPage>().FindControl<Control>("AddHostButton")!.IsEffectivelyVisible);
     }
 
@@ -367,5 +380,68 @@ public class NavigationTests
         phone.Top<WelcomePage>();
         Assert.Equal(1, phone.Shell.Stack!.Depth);
         Assert.True(Phone.Until(() => connection.Exited.IsCompleted));
+    }
+
+    [AvaloniaFact]
+    public void SchemeA_activity_inbox_jumps_to_terminal_and_account_tab_manages_web_and_custom_server()
+    {
+        using var phone = new Phone();
+        var page = phone.Top<HostsPage>();
+        var hosts = (HostsViewModel)page.DataContext!;
+
+        // Tab 0 (Activity): waiting + error sessions surface at top and jump straight to TerminalPage.
+        Assert.Equal(HostsViewModel.TabActivity, hosts.SelectedTab);
+        Assert.Equal("动态", hosts.CurrentTabTitle);
+        Assert.Equal(2, hosts.AttentionSessions.Count);
+        var attention = hosts.AttentionSessions[0];
+        Assert.Equal("远程协议握手实现", attention.Title);
+        Assert.Contains("MacBook Pro", attention.ContextLine);
+
+        attention.OpenCommand.Execute(null);
+        Phone.Settle();
+        var terminal = (TerminalViewModel)phone.Top<TerminalPage>().DataContext!;
+        Assert.Same(attention.Session, terminal.Session);
+        terminal.BackCommand.Execute(null);
+        Phone.Settle();
+        phone.Top<HostsPage>();
+
+        // Tab 2 (Me): displays signed-in profile, opens web /account and custom server page.
+        hosts.SelectAccountTabCommand.Execute(null);
+        Phone.Pump();
+        Assert.True(hosts.IsAccountTab);
+        Assert.Equal("我的", hosts.CurrentTabTitle);
+        Assert.Equal("D", hosts.AccountInitial);
+        Assert.Equal("octopus.example", hosts.ServerHostDisplay);
+        Assert.True(hosts.HasAccountWeb);
+        hosts.OpenAccountWebCommand.Execute(null);
+        Assert.Equal("https://octopus.example/account", phone.Opened?.ToString());
+
+        hosts.OpenCustomServerCommand.Execute(null);
+        Phone.Settle();
+        phone.Top<CustomServerPage>();
+    }
+
+    [AvaloniaFact]
+    public void SchemeA_welcome_code_sheet_opens_for_challenge_and_dismissing_cancels_sign_in()
+    {
+        using var phone = new Phone(signedIn: false, signInDelay: TimeSpan.FromMinutes(1));
+        var welcome = (WelcomeViewModel)phone.Top<WelcomePage>().DataContext!;
+
+        Assert.Equal("使用 octopus.example 登录", welcome.SignInButtonText);
+        Assert.False(welcome.IsCodeSheetOpen);
+
+        welcome.SignInCommand.Execute(null);
+        Assert.True(Phone.Until(() => welcome.SignIn.HasCode));
+        Assert.True(welcome.IsCodeSheetOpen);
+        Assert.Equal("octopus.example", welcome.SignIn.ServerHost);
+
+        welcome.SignIn.MarkCodeCopied();
+        Assert.True(welcome.SignIn.CodeCopied);
+
+        // Dismissing the bottom sheet cancels the pending device-code sign-in.
+        welcome.IsCodeSheetOpen = false;
+        Assert.False(welcome.SignIn.HasCode);
+        Assert.True(welcome.IsChoosing);
+        Assert.True(welcome.SignInCommand.CanExecute(null));
     }
 }

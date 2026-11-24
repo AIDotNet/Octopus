@@ -67,6 +67,12 @@ public class MainWindow : ArcWindow
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && _shell.Account.IsSignInDialogOpen)
+        {
+            _shell.Account.CloseSignInDialogCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
         if (_keymap.Match(e) is { } command)
         {
             e.Handled = true;

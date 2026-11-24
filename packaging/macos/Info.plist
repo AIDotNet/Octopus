@@ -28,5 +28,16 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>si.octoterm.octopus</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>octopus</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

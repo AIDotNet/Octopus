@@ -22,6 +22,17 @@
   <dict>
     <key>NSAllowsLocalNetworking</key><true/>
   </dict>
+  <!-- Custom URL scheme (octopus://auth-done) so the browser returns straight to the app after sign-in. -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>si.octoterm.octopus</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>octopus</string>
+      </array>
+    </dict>
+  </array>
   <!-- Asked the first time the app connects to a computer on the same network. -->
   <key>NSLocalNetworkUsageDescription</key>
   <string>Octopus connects to your computers on this network to show their terminals and agents.</string>

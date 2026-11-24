@@ -50,6 +50,7 @@ public class SettingsScreenshots
                 Shot("terminal", theme, "terminal", null);
                 Shot("appearance", theme, "appearance", null);
                 Shot("shortcuts", theme, "shortcuts", null);
+                Shot("about", theme, "about", null);
                 Shot("agents-override", theme, "agents", rows =>
                 {
                     Expand(rows, "claude");

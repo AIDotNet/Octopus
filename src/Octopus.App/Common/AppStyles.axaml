@@ -63,6 +63,50 @@
         </Setter>
     </Style>
 
+    <!-- Top-bar account capsule (Scheme B): compact pill showing Sign in, waiting device code, or signed-in avatar + relay dot. -->
+    <Style Selector="Button.account-capsule">
+        <Setter Property="Height" Value="26" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="7,0,9,0" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_Pill"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="999"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalContentAlignment="Center"
+                                      VerticalContentAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#PART_Pill">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        </Style>
+        <Style Selector="^.cta">
+            <Setter Property="Padding" Value="9,0,10,0" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+        </Style>
+        <Style Selector="^.signing">
+            <Setter Property="Padding" Value="9,0,10,0" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+        </Style>
+        <Style Selector="^.ended">
+            <Setter Property="Padding" Value="9,0,10,0" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Danger}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+    </Style>
+
     <!-- A small square icon button (the sidebar toggle, the "+" of the toolbar). -->
     <Style Selector="arc|Button.icon">
         <Setter Property="Width" Value="{DynamicResource OctopusIconButtonSize}" />

@@ -8,6 +8,7 @@
              xmlns:sidebar="using:Octopus.App.Sidebar"
              xmlns:workspace="using:Octopus.App.Workspace"
              xmlns:chrome="using:Octopus.App.Shell.Chrome"
+             xmlns:account="using:Octopus.App.Account"
              xmlns:plugins="using:Octopus.App.Plugins"
              xmlns:updates="using:Octopus.App.Updates"
              xmlns:vm="using:Octopus.App.Shell"
@@ -99,9 +100,43 @@
             </Border>
         </Grid>
 
-        <!-- Top right corner, always: the right panel switch (and the caption buttons where the platform needs them). -->
-        <StackPanel x:Name="TopRight" Orientation="Horizontal" Height="{DynamicResource OctopusTopRowHeight}" Spacing="2" Margin="0,0,6,0"
+        <!-- Top right corner, always: the account capsule (Scheme B), the right panel switch, and caption buttons. -->
+        <StackPanel x:Name="TopRight" Orientation="Horizontal" Height="{DynamicResource OctopusTopRowHeight}" Spacing="4" Margin="0,0,6,0"
                     HorizontalAlignment="Right" VerticalAlignment="Top">
+            <Button x:Name="AccountCapsuleButton"
+                    Classes="account-capsule"
+                    Classes.cta="{Binding Account.ShowSignedOutCapsule}"
+                    Classes.signing="{Binding Account.IsSigningIn}"
+                    Classes.ended="{Binding Account.ShowEndedCapsule}"
+                    VerticalAlignment="Center"
+                    Command="{Binding Account.ActivateCapsuleCommand}"
+                    AutomationProperties.Name="{Binding Account.CapsuleLabel}"
+                    arc:Tooltip.Tip="{Binding Account.CapsuleTooltip}" arc:Tooltip.Side="Bottom">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <!-- Signed out: user icon -->
+                    <lucide:LucideIcon Kind="User" Size="12" IsVisible="{Binding Account.ShowSignedOutCapsule}" VerticalAlignment="Center" />
+                    <!-- Session ended: alert icon -->
+                    <lucide:LucideIcon Kind="TriangleAlert" Size="12" IsVisible="{Binding Account.ShowEndedCapsule}" VerticalAlignment="Center" />
+                    <!-- Signing in: spinner -->
+                    <arc:ArcSpinner Width="11" Height="11" IsVisible="{Binding Account.IsSigningIn}" VerticalAlignment="Center" />
+                    <!-- Signed in: mini initial circle -->
+                    <Border Width="17" Height="17" CornerRadius="9"
+                            Background="{arc:ArcDesignTokenResource Accent}"
+                            IsVisible="{Binding Account.IsSignedIn}" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Account.AccountInitial}" Foreground="White" FontSize="9.5" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock x:Name="AccountCapsuleLabel" Text="{Binding Account.CapsuleLabel}"
+                               FontSize="12" FontWeight="Medium" TextTrimming="CharacterEllipsis" MaxWidth="112"
+                               VerticalAlignment="Center" />
+                    <!-- Signed-in relay live dot -->
+                    <Panel Width="7" Height="7" IsVisible="{Binding Account.IsSignedIn}" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Account.IsRelayOnline}" Fill="{arc:ArcDesignTokenResource Success}" />
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Account.IsRelayConnecting}" Fill="{arc:ArcDesignTokenResource Warning}" />
+                        <Ellipse Width="7" Height="7" IsVisible="{Binding Account.IsRelayOff}" Fill="{arc:ArcDesignTokenResource TextMuted}" Opacity="0.6" />
+                    </Panel>
+                </StackPanel>
+            </Button>
             <arc:Button Classes="icon" Variant="Ghost" VerticalAlignment="Center"
                         Command="{Binding ToggleRightPanelCommand}"
                         AutomationProperties.Name="{l:AppLangResource ToggleRightPanel}"
@@ -118,6 +153,15 @@
         <arc:Popover x:Name="DevicePopover" Placement="Right" Alignment="Start">
             <sidebar:DeviceSwitcherView x:Name="DeviceSwitcherMenuView" DataContext="{Binding DeviceSwitcher}" />
         </arc:Popover>
+
+        <arc:Popover x:Name="AccountPopover" Placement="Bottom" Alignment="End">
+            <account:AccountMenuView x:Name="AccountMenuView" DataContext="{Binding Account}" />
+        </arc:Popover>
+
+        <!-- Centered account sign-in dialog (Scheme B). -->
+        <account:AccountSignInOverlay x:Name="AccountSignInModal"
+                                      DataContext="{Binding Account}"
+                                      IsVisible="{Binding IsSignInDialogOpen}" />
 
         <!-- The settings page covers the whole window. -->
         <Grid x:Name="Overlay" />

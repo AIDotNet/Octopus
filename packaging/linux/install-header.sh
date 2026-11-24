@@ -70,13 +70,15 @@ if [ "$DESKTOP" -eq 1 ]; then
 Type=Application
 Name=Octopus
 Comment=Terminal and project manager
-Exec="$PREFIX/Octopus"
+Exec="$PREFIX/Octopus" %u
 Icon=$PREFIX/octopus.png
 Terminal=false
 Categories=Development;
+MimeType=x-scheme-handler/octopus;
 StartupWMClass=Octopus
 DESKTOP_ENTRY
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
+  command -v xdg-mime >/dev/null 2>&1 && xdg-mime default octopus.desktop x-scheme-handler/octopus >/dev/null 2>&1 || true
 fi
 
 # What uninstall.sh removes besides the directory itself.

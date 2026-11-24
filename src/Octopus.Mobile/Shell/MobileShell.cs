@@ -77,7 +77,7 @@ public sealed class MobileShell : ContentControl, INavigator
     {
         CloseAll();
         Control first = ShowsHosts
-            ? new HostsPage(new HostsViewModel(_workspace, _account, this))
+            ? new HostsPage(new HostsViewModel(_workspace, _account, this, _openBrowser))
             : new WelcomePage(new WelcomeViewModel(_account, _workspace, this, _openBrowser));
         _stack = new NavigationStack { Root = first };
         _stack.Navigated += OnNavigated;

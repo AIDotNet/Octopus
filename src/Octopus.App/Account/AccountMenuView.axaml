@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Account"
+             x:Class="Octopus.App.Account.AccountMenuView"
+             x:DataType="vm:AccountViewModel"
+             Width="300">
+    <StackPanel Spacing="10">
+        <!-- Signed-in account identity & relay status -->
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+            <Border Width="36" Height="36" CornerRadius="18"
+                    Background="{arc:ArcDesignTokenResource Accent}"
+                    VerticalAlignment="Center">
+                <TextBlock Text="{Binding AccountInitial}"
+                           Foreground="White" FontWeight="Bold" FontSize="15"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock x:Name="MenuAccountName" Classes="body" FontWeight="SemiBold"
+                               Text="{Binding AccountName}" TextTrimming="CharacterEllipsis" MaxWidth="150" VerticalAlignment="Center" />
+                    <arc:Badge Size="Small" Tone="Success" Content="{Binding RelayBadgeText}" IsVisible="{Binding IsRelayOnline}" VerticalAlignment="Center" />
+                    <arc:Badge Size="Small" Tone="Warning" Content="{Binding RelayBadgeText}" IsVisible="{Binding IsRelayConnecting}" VerticalAlignment="Center" />
+                    <arc:Badge Size="Small" Tone="Neutral" Content="{Binding RelayBadgeText}" IsVisible="{Binding IsRelayOff}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Classes="hint" Text="{Binding AccountMeta}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Grid>
+
+        <!-- One-click relay host toggle -->
+        <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Padding="10,8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                <StackPanel Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Classes="body" FontWeight="Medium" Text="{l:AppLangResource AccountRelayToggleTitle}" />
+                    <TextBlock Classes="hint" Text="{Binding RelaySwitchSubtitle}" TextWrapping="Wrap" />
+                </StackPanel>
+                <arc:Switch x:Name="MenuRelaySwitch" Grid.Column="1" VerticalAlignment="Center"
+                            IsChecked="{Binding RelayHostEnabled, Mode=TwoWay}" />
+            </Grid>
+        </Border>
+
+        <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+
+        <!-- Account actions -->
+        <StackPanel Spacing="2">
+            <Button x:Name="MenuOpenWebButton" Classes="row" Padding="8,7"
+                    Command="{Binding OpenAccountWebCommand}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <lucide:LucideIcon Kind="ExternalLink" Size="14" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource AccountOpenWebManage}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="hint" Text="{Binding ServerHost}" VerticalAlignment="Center" />
+                </Grid>
+            </Button>
+            <Button x:Name="MenuRemoteSettingsButton" Classes="row" Padding="8,7"
+                    Command="{Binding OpenRemoteSettingsCommand}">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <lucide:LucideIcon Kind="SlidersHorizontal" Size="14" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource AccountOpenRemoteSettings}" VerticalAlignment="Center" />
+                </Grid>
+            </Button>
+            <Button x:Name="MenuSignOutButton" Classes="row" Padding="8,7"
+                    Command="{Binding SignOutCommand}">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <lucide:LucideIcon Kind="LogOut" Size="14" Foreground="{arc:ArcDesignTokenResource Danger}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Foreground="{arc:ArcDesignTokenResource Danger}"
+                               Text="{l:AppLangResource AccountSignOut}" VerticalAlignment="Center" />
+                </Grid>
+            </Button>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

@@ -188,7 +188,7 @@
     <unit id="SettingsEnvSecretNote"><segment><source>Saved as plain text in settings.json</source><target state="translated">以明文保存在 settings.json</target></segment></unit>
     <unit id="SettingsBrowse"><segment><source>Browse…</source><target state="translated">浏览…</target></segment></unit>
     <unit id="SettingsGeneralTitle"><segment><source>General</source><target state="translated">通用</target></segment></unit>
-    <unit id="SettingsGeneralSubtitle"><segment><source>Language, system tray, and updates.</source><target state="translated">语言、系统托盘和更新。</target></segment></unit>
+    <unit id="SettingsGeneralSubtitle"><segment><source>Language and system tray.</source><target state="translated">语言和系统托盘。</target></segment></unit>
     <unit id="SettingsLanguageHint"><segment><source>The language of the whole app</source><target state="translated">整个应用使用的语言</target></segment></unit>
     <unit id="SettingsTerminalTitle"><segment><source>Terminal</source><target state="translated">终端</target></segment></unit>
     <unit id="SettingsTerminalSubtitle"><segment><source>The shell, the font and how much history a terminal keeps. Changes apply to open terminals at once.</source><target state="translated">终端使用的 shell、字体和保留的历史行数。修改会立即应用到已打开的终端。</target></segment></unit>
@@ -1195,5 +1195,62 @@
     <unit id="AgentGuiBashScriptModalTitle"><segment><source>Full Script ({0} lines)</source><target state="translated">完整执行脚本（{0} 行）</target></segment></unit>
     <unit id="AgentGuiTaskBlockedBy"><segment><source>Waiting on {0}</source><target state="translated">等待 {0}</target></segment></unit>
     <unit id="AgentGuiTaskDagTitle"><segment><source>Workflow Tasks</source><target state="translated">工作流任务清单</target></segment></unit>
+    <unit id="AccountSignIn"><segment><source>Sign in</source><target state="translated">登录</target></segment></unit>
+    <unit id="AccountSignInAgain"><segment><source>Sign in again</source><target state="translated">重新登录</target></segment></unit>
+    <unit id="AccountWaitingCode"><segment><source>Waiting {0}</source><target state="translated">等待确认 {0}</target></segment></unit>
+    <unit id="AccountDialogTitle"><segment><source>Sign in to Octopus</source><target state="translated">登录 Octopus 账号</target></segment></unit>
+    <unit id="AccountDialogTitleEnded"><segment><source>Sign in to Octopus again</source><target state="translated">重新登录 Octopus</target></segment></unit>
+    <unit id="AccountDialogSubtitle"><segment><source>Reach your computers and phones across networks via {0}. Terminal traffic is end-to-end encrypted.</source><target state="translated">通过 {0} 跨网连接你的电脑与手机，终端内容全程端到端加密。</target></segment></unit>
+    <unit id="AccountAutoEnableRelay"><segment><source>Allow reaching this computer through the relay after signing in</source><target state="translated">登录成功后自动开启「允许经中转访问本机」</target></segment></unit>
+    <unit id="AccountPrimarySignInOfficial"><segment><source>Continue with {0}</source><target state="translated">使用官方服务登录（{0}）</target></segment></unit>
+    <unit id="AccountPrimarySignInCustom"><segment><source>Sign in to {0}</source><target state="translated">登录到 {0}</target></segment></unit>
+    <unit id="AccountUseCustomServer"><segment><source>Use self-hosted server…</source><target state="translated">使用自建服务…</target></segment></unit>
+    <unit id="AccountHideCustomServer"><segment><source>Hide self-hosted server</source><target state="translated">收起自定义服务</target></segment></unit>
+    <unit id="AccountCustomServerLabel"><segment><source>Custom Octopus Server address</source><target state="translated">自定义 Octopus Server 地址</target></segment></unit>
+    <unit id="AccountCustomServerHint"><segment><source>Leave blank to use the official server ({0}).</source><target state="translated">留空则使用官方默认服务 {0}。</target></segment></unit>
+    <unit id="AccountLanNoSignInHint"><segment><source>Local network direct connections need no account</source><target state="translated">本地局域网直连无需登录</target></segment></unit>
+    <unit id="AccountCodeConfirmTitle"><segment><source>Confirm this code in your browser</source><target state="translated">核对网页上显示的设备码</target></segment></unit>
+    <unit id="AccountCodeConfirmHint"><segment><source>The sign-in page has been opened at {0}. Verify the code matches, then approve there.</source><target state="translated">已在浏览器打开 {0}，确认代码一致后点确认登录。</target></segment></unit>
+    <unit id="AccountCodeCopy"><segment><source>Copy code</source><target state="translated">复制设备码</target></segment></unit>
+    <unit id="AccountCodeCopied"><segment><source>Copied</source><target state="translated">已复制</target></segment></unit>
+    <unit id="AccountStatusOnline"><segment><source>Relay online</source><target state="translated">中转在线</target></segment></unit>
+    <unit id="AccountStatusConnecting"><segment><source>Connecting…</source><target state="translated">连接中…</target></segment></unit>
+    <unit id="AccountStatusRelayOff"><segment><source>Relay off</source><target state="translated">未开中转</target></segment></unit>
+    <unit id="AccountRelayToggleTitle"><segment><source>Reach this computer via relay</source><target state="translated">允许经中转访问本机</target></segment></unit>
+    <unit id="AccountRelayToggleOnHint"><segment><source>Paired devices can reach this computer from any network</source><target state="translated">手机和其他电脑可跨网连接到这台电脑</target></segment></unit>
+    <unit id="AccountRelayToggleOffHint"><segment><source>Turn on so paired devices can connect across networks</source><target state="translated">开启后已配对设备可在任意网络连到本机</target></segment></unit>
+    <unit id="AccountOpenWebManage"><segment><source>Manage account &amp; devices in browser</source><target state="translated">打开网页管理账号与设备</target></segment></unit>
+    <unit id="AccountOpenRemoteSettings"><segment><source>Remote access &amp; custom server settings</source><target state="translated">远程访问与自建服务设置</target></segment></unit>
+    <unit id="AccountSignOut"><segment><source>Sign out</source><target state="translated">退出登录</target></segment></unit>
+    <unit id="AccountCapsuleTooltipSignedOut"><segment><source>Sign in to Octopus ({0})</source><target state="translated">登录 Octopus 账号（{0}）</target></segment></unit>
+    <unit id="AccountCapsuleTooltipSignedIn"><segment><source>{0} · {1} ({2})</source><target state="translated">{0} · {1}（{2}）</target></segment></unit>
+    <unit id="AccountCapsuleTooltipEnded"><segment><source>Sign-in expired. Click to sign in again.</source><target state="translated">登录已失效，点击重新登录。</target></segment></unit>
+    <unit id="SettingsGroupAbout"><segment><source>About</source><target state="translated">关于</target></segment></unit>
+    <unit id="SettingsNavAbout"><segment><source>About</source><target state="translated">关于</target></segment></unit>
+    <unit id="SettingsAboutTitle"><segment><source>About</source><target state="translated">关于</target></segment></unit>
+    <unit id="SettingsAboutSlogan"><segment><source>A cross-platform terminal and coding agent workspace organized by project.</source><target state="translated">按项目组织的跨平台终端与编码智能体工作台。</target></segment></unit>
+    <unit id="SettingsAboutIntro"><segment><source>Organize local and remote repositories into project workspaces running native terminals and 40+ CLI coding agents side by side — with multi-account isolation, session resume, SSH tunnels, encrypted remote access, and plugins.</source><target state="translated">将本机与远端代码目录组织为项目工作区，在同一窗口中并排运行原生终端与 40+ 命令行编码智能体，内置多订阅账户隔离、历史会话恢复、SSH 隧道、跨设备加密远程访问与插件扩展。</target></segment></unit>
+    <unit id="SettingsAboutOverview"><segment><source>About Octopus</source><target state="translated">关于 Octopus</target></segment></unit>
+    <unit id="SettingsAboutLinksAndData"><segment><source>Links &amp; Local Data</source><target state="translated">链接与本地数据</target></segment></unit>
+    <unit id="SettingsAboutFeatureWorkspaceTitle"><segment><source>Native Terminals &amp; Workspaces</source><target state="translated">原生终端与项目工作区</target></segment></unit>
+    <unit id="SettingsAboutFeatureWorkspaceDesc"><segment><source>Multi-tab split terminals, scrollback, OSC 8 links, project groups, file explorer, and read-only Git.</source><target state="translated">多标签与分屏终端、历史滚动、OSC 8 超链接，搭配项目组、文件树与只读 Git 视图。</target></segment></unit>
+    <unit id="SettingsAboutFeatureAgentsTitle"><segment><source>40+ Agents &amp; Multi-Account</source><target state="translated">40+ 智能体与多账户</target></segment></unit>
+    <unit id="SettingsAboutFeatureAgentsDesc"><segment><source>Auto-scan CLI coding agents with capability-driven settings, isolated accounts, alerts, and session migration.</source><target state="translated">自动扫描主流 CLI 智能体并按能力动态配置，支持多订阅账户隔离、等待提醒与会话迁移。</target></segment></unit>
+    <unit id="SettingsAboutFeatureRemoteTitle"><segment><source>SSH Tunnels &amp; Remote Access</source><target state="translated">SSH 隧道与跨设备远程</target></segment></unit>
+    <unit id="SettingsAboutFeatureRemoteDesc"><segment><source>Manage ~/.ssh/config, SSH/Mosh/Telnet, port forwarding, and encrypted LAN or relay remote devices.</source><target state="translated">管理 ~/.ssh/config、SSH/Mosh/Telnet 与端口转发，支持局域网及加密中转远程协作。</target></segment></unit>
+    <unit id="SettingsAboutFeaturePluginsTitle"><segment><source>Plugins &amp; Native Performance</source><target state="translated">插件生态与原生轻量</target></segment></unit>
+    <unit id="SettingsAboutFeaturePluginsDesc"><segment><source>Built-in Jaunt JS runtime and usage tracking; compiled with .NET NativeAOT for fast startup.</source><target state="translated">内置 Jaunt JS 插件运行时与用量统计插件；.NET NativeAOT 编译，启动迅速、低内存占用。</target></segment></unit>
+    <unit id="SettingsAboutWebsite"><segment><source>Website</source><target state="translated">官方网站</target></segment></unit>
+    <unit id="SettingsAboutChangelog"><segment><source>Changelog</source><target state="translated">更新日志</target></segment></unit>
+    <unit id="SettingsAboutFeedback"><segment><source>Feedback</source><target state="translated">问题反馈</target></segment></unit>
+    <unit id="SettingsAboutDataDir"><segment><source>Data directory</source><target state="translated">数据目录</target></segment></unit>
+    <unit id="SettingsAboutCacheDir"><segment><source>Cache directory</source><target state="translated">缓存目录</target></segment></unit>
+    <unit id="SettingsAboutOpenDir"><segment><source>Open</source><target state="translated">打开</target></segment></unit>
+    <unit id="SettingsAboutCopyDiagnostics"><segment><source>Copy diagnostics</source><target state="translated">复制诊断信息</target></segment></unit>
+    <unit id="SettingsAboutCopied"><segment><source>Copied</source><target state="translated">已复制</target></segment></unit>
+    <unit id="SettingsAboutChannelStable"><segment><source>Stable</source><target state="translated">稳定版</target></segment></unit>
+    <unit id="SettingsAboutChannelPreview"><segment><source>Preview</source><target state="translated">预览版</target></segment></unit>
+    <unit id="SettingsAboutChannelDev"><segment><source>Development</source><target state="translated">开发版</target></segment></unit>
+    <unit id="SettingsAboutBuiltWith"><segment><source>Built with {0}</source><target state="translated">基于 {0} 构建</target></segment></unit>
   </file>
 </xliff>

@@ -1,28 +1,23 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Octopus.App.Localization;
-using Octopus.App.Updates;
 using Octopus.Storage;
 using TKCode.Arc;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Settings.General;
 
-/// <summary>The general page: the language, system tray, and updates.</summary>
+/// <summary>The general page: language and system tray.</summary>
 public sealed partial class GeneralSettingsViewModel : ObservableObject
 {
     private readonly ISettingsStore _settings;
 
-    public GeneralSettingsViewModel(ISettingsStore settings, UpdateSettingsViewModel updates)
+    public GeneralSettingsViewModel(ISettingsStore settings)
     {
         _settings = settings;
-        Updates = updates;
         Languages = [.. AppLanguages.All.Select(l => new SelectOption(l.Tag.ToString(), l.Name))];
     }
 
     public IReadOnlyList<SelectOption> Languages { get; }
-
-    /// <summary>The "Updates" group: version, automatic updates, channel.</summary>
-    public UpdateSettingsViewModel Updates { get; }
 
     /// <summary>The tag of the current language, for example <c>zh-CN</c>.</summary>
     public string Language

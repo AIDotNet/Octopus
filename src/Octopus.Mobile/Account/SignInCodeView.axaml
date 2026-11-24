@@ -6,26 +6,47 @@
              xmlns:vm="using:Octopus.Mobile.Account"
              x:Class="Octopus.Mobile.Account.SignInCodeView"
              x:DataType="vm:SignInFlow">
-    <!-- The code, to be confirmed in the browser. -->
-    <StackPanel Spacing="18">
+    <!-- The code, to be confirmed in the browser: monospace code card, copy, open browser & live polling state. -->
+    <StackPanel Spacing="14">
         <TextBlock Classes="secondary"
                    Text="{l:MobileLangResource SignInHint}"
                    TextWrapping="Wrap"
                    TextTrimming="None"
                    TextAlignment="Center" />
-        <Border Background="{arc:ArcDesignTokenResource Surface}"
-                BorderBrush="{arc:ArcDesignTokenResource Border}"
-                BorderThickness="1"
-                CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
-                Padding="16,14">
-            <TextBlock Name="UserCode" Classes="code" Text="{Binding UserCode}" FontSize="{arc:ArcDesignTokenResource Type2XL}" />
+        <Border Classes="codeCard">
+            <StackPanel Spacing="6" HorizontalAlignment="Center">
+                <TextBlock Name="UserCode"
+                           Classes="code"
+                           Text="{Binding UserCode}"
+                           FontSize="{arc:ArcDesignTokenResource Type2XL}" />
+                <TextBlock Classes="muted"
+                           Text="{Binding ServerHost}"
+                           HorizontalAlignment="Center"
+                           IsVisible="{Binding HasServerHost}" />
+            </StackPanel>
         </Border>
-        <arcm:Button Name="BrowseButton"
-                     Variant="Filled"
-                     HorizontalAlignment="Stretch"
-                     HorizontalContentAlignment="Center"
-                     Content="{l:MobileLangResource SignInOpenBrowser}"
-                     Command="{Binding BrowseCommand}" />
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+            <arcm:Button Name="CopyButton"
+                         Grid.Column="0"
+                         Variant="Tinted"
+                         HorizontalAlignment="Stretch"
+                         HorizontalContentAlignment="Center"
+                         Click="OnCopyCode">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Copy}" Size="14" IsVisible="{Binding !CodeCopied}" VerticalAlignment="Center" />
+                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Check}" Size="14" IsVisible="{Binding CodeCopied}" VerticalAlignment="Center" />
+                    <TextBlock Text="{l:MobileLangResource SignInCopyCode}" IsVisible="{Binding !CodeCopied}" VerticalAlignment="Center" />
+                    <TextBlock Text="{l:MobileLangResource SignInCodeCopied}" IsVisible="{Binding CodeCopied}" VerticalAlignment="Center" />
+                </StackPanel>
+            </arcm:Button>
+            <arcm:Button Name="BrowseButton"
+                         Grid.Column="1"
+                         Variant="Filled"
+                         HorizontalAlignment="Stretch"
+                         HorizontalContentAlignment="Center"
+                         Content="{l:MobileLangResource SignInOpenBrowser}"
+                         Command="{Binding BrowseCommand}" />
+        </Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
             <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
             <TextBlock Classes="muted" Text="{l:MobileLangResource SignInWaiting}" />

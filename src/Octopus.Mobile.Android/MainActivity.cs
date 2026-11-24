@@ -63,8 +63,18 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
 }
 
 [Activity(Label = "Octopus", MainLauncher = true, Icon = "@mipmap/octopus", Theme = "@style/Theme.AppCompat.DayNight.NoActionBar",
+    LaunchMode = LaunchMode.SingleTask,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize,
     WindowSoftInputMode = global::Android.Views.SoftInput.AdjustResize)]
+[IntentFilter([Intent.ActionView], Categories = [Intent.CategoryDefault, Intent.CategoryBrowsable], DataScheme = "octopus")]
 public sealed class MainActivity : AvaloniaMainActivity
 {
+    protected override void OnNewIntent(Intent? intent)
+    {
+        base.OnNewIntent(intent);
+        if (intent?.DataString is { Length: > 0 } raw && Uri.TryCreate(raw, UriKind.Absolute, out var uri))
+        {
+            MobileHost.HandleDeepLink(uri);
+        }
+    }
 }

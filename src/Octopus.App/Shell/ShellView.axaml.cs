@@ -48,6 +48,8 @@ public partial class ShellView : UserControl
             _model.SettingsRequested -= OnSettingsRequested;
             _model.Launcher.CloseRequested -= OnLauncherCloseRequested;
             _model.DeviceSwitcher.CloseRequested -= OnDeviceSwitcherCloseRequested;
+            _model.Account.MenuRequested -= OnAccountMenuRequested;
+            _model.Account.MenuCloseRequested -= OnAccountMenuCloseRequested;
             _model.PropertyChanged -= OnModelPropertyChanged;
         }
         _model = DataContext as ShellViewModel;
@@ -56,6 +58,8 @@ public partial class ShellView : UserControl
             _model.SettingsRequested += OnSettingsRequested;
             _model.Launcher.CloseRequested += OnLauncherCloseRequested;
             _model.DeviceSwitcher.CloseRequested += OnDeviceSwitcherCloseRequested;
+            _model.Account.MenuRequested += OnAccountMenuRequested;
+            _model.Account.MenuCloseRequested += OnAccountMenuCloseRequested;
             _model.PropertyChanged += OnModelPropertyChanged;
             // The saved state is shown as it is, without a slide.
             _leftCollapsed = _model.IsSidebarCollapsed;
@@ -339,6 +343,10 @@ public partial class ShellView : UserControl
     }
 
     private void OnDeviceSwitcherCloseRequested(object? sender, EventArgs e) => DevicePopover.Close();
+
+    private void OnAccountMenuRequested(object? sender, EventArgs e) => AccountPopover.ShowAt(AccountCapsuleButton);
+
+    private void OnAccountMenuCloseRequested(object? sender, EventArgs e) => AccountPopover.Close();
 
     private void OnSplitterDragCompleted(object? sender, Avalonia.Input.VectorEventArgs e)
     {

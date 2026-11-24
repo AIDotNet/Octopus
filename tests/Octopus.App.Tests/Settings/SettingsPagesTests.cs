@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Octopus.App.Composition;
 using Octopus.App.Settings;
+using Octopus.App.Settings.About;
 using Octopus.App.Settings.Agents;
 using Octopus.App.Settings.Appearance;
 using Octopus.App.Settings.General;
@@ -29,6 +30,7 @@ public class SettingsPagesTests
     [InlineData("terminal")]
     [InlineData("appearance")]
     [InlineData("shortcuts")]
+    [InlineData("about")]
     public void The_view_opens_on_the_requested_section(string section)
     {
         var view = new SettingsView { InitialSection = section };
@@ -203,6 +205,56 @@ public class SettingsPagesTests
         Assert.All(other, e => Assert.All(e.Combos, c => Assert.DoesNotContain("⌘", c)));
         Assert.Contains(other, e => e.Combos.Any(c => c.SequenceEqual(["Ctrl", "Shift", "T"])));
         Assert.Contains(mac, e => e.Combos.Any(c => c.SequenceEqual(["⌘", "⌥", "T"])));
+    }
+
+    [AvaloniaFact]
+    public void About_page_exposes_links_paths_and_diagnostics()
+    {
+        var opener = new FakeOpener();
+        var paths = AppHost.Get<IAppPaths>();
+        var updates = AppHost.Get<Octopus.App.Updates.UpdateSettingsViewModel>();
+        var updateService = AppHost.Get<Octopus.Updates.IUpdateService>();
+        using var about = new AboutSettingsViewModel(updates, updateService, paths, opener);
+
+        Assert.Equal(Octopus.Updates.UpdateEndpoints.ServiceUrl, about.WebsiteUrl);
+        Assert.Equal(Octopus.Updates.UpdateEndpoints.RepositoryUrl, about.RepositoryUrl);
+        Assert.Equal(paths.DataDirectory, about.DataDirectory);
+        Assert.Equal(paths.CacheDirectory, about.CacheDirectory);
+        Assert.Contains("Avalonia", about.TechStackSummary);
+
+        about.OpenWebsiteCommand.Execute(null);
+        about.OpenRepositoryCommand.Execute(null);
+        about.OpenChangelogCommand.Execute(null);
+        about.OpenIssuesCommand.Execute(null);
+        about.OpenDataDirectoryCommand.Execute(null);
+        about.OpenCacheDirectoryCommand.Execute(null);
+
+        Assert.Equal(
+        [
+            Octopus.Updates.UpdateEndpoints.ServiceUrl,
+            Octopus.Updates.UpdateEndpoints.RepositoryUrl,
+            $"{Octopus.Updates.UpdateEndpoints.RepositoryUrl}/releases",
+            $"{Octopus.Updates.UpdateEndpoints.RepositoryUrl}/issues",
+        ], opener.Urls);
+        Assert.Equal([paths.DataDirectory, paths.CacheDirectory], opener.Revealed);
+
+        var diag = about.BuildDiagnosticsText();
+        Assert.Contains("Octopus", diag);
+        Assert.Contains(paths.DataDirectory, diag);
+        Assert.Contains(Octopus.Updates.UpdateEndpoints.ServiceUrl, diag);
+
+        Assert.False(about.DiagnosticsCopied);
+        about.MarkDiagnosticsCopied();
+        Assert.True(about.DiagnosticsCopied);
+    }
+
+    private sealed class FakeOpener : IFileOpener
+    {
+        public List<string> Urls { get; } = [];
+        public List<string> Revealed { get; } = [];
+        public void Open(string path) { }
+        public void Reveal(string path) => Revealed.Add(path);
+        public bool OpenUrl(string url) { Urls.Add(url); return true; }
     }
 
     private static AgentsSettingsViewModel NewAgentsPage(Octopus.Agents.IAgentScanner scanner) => new(

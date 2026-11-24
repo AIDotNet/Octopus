@@ -359,10 +359,12 @@ public class AgentFieldTests
         Assert.True(row.IsCommandOverridden);
         Assert.Equal("claude", row.DefaultCommandName);
         Assert.StartsWith("rec", row.CommandPreview);
+        Assert.Contains("CLAUDE_CODE_EXECUTABLE=rec", row.AcpCommandPreview);
 
         row.Field<CommandFieldViewModel>("command").Text = "";
         row.FlushPending();
         Assert.False(row.IsCommandOverridden);
+        Assert.DoesNotContain("CLAUDE_CODE_EXECUTABLE=", row.AcpCommandPreview);
     }
 
     private static string AppLabel(string id) => Octopus.App.Settings.PermissionNames.Of(id);

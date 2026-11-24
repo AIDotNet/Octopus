@@ -108,5 +108,34 @@
     <unit id="WorkspaceTaskInjectPrompt"><segment><source>Include task context in initial prompt</source><target state="translated">将任务信息写入首条提示词</target></segment></unit>
     <unit id="WorkspaceBranchNameRequired"><segment><source>Enter or select a branch name.</source><target state="translated">请填写或选择一个分支名称。</target></segment></unit>
     <unit id="WorkspaceUnsupportedHost"><segment><source>Update Octopus on the host to create branch workspaces.</source><target state="translated">请更新主机上的 Octopus 以创建分支工作区。</target></segment></unit>
+    <unit id="TabActivity"><segment><source>Activity</source><target state="translated">动态</target></segment></unit>
+    <unit id="TabActivityBadge"><segment><source>Activity ({0})</source><target state="translated">动态 ({0})</target></segment></unit>
+    <unit id="TabHosts"><segment><source>Computers</source><target state="translated">电脑</target></segment></unit>
+    <unit id="TabMe"><segment><source>Me</source><target state="translated">我的</target></segment></unit>
+    <unit id="SignInWithOfficial"><segment><source>Sign in with {0}</source><target state="translated">使用 {0} 登录</target></segment></unit>
+    <unit id="SignInSheetTitle"><segment><source>Confirm in browser</source><target state="translated">浏览器确认登录</target></segment></unit>
+    <unit id="SignInCopyCode"><segment><source>Copy code</source><target state="translated">复制验证码</target></segment></unit>
+    <unit id="SignInCodeCopied"><segment><source>Copied</source><target state="translated">已复制</target></segment></unit>
+    <unit id="WelcomeFeatureAttention"><segment><source>Instant attention inbox when an agent waits for you</source><target state="translated">智能体等待确认时实时置顶提醒</target></segment></unit>
+    <unit id="WelcomeFeatureRelay"><segment><source>Encrypted remote relay via {0} out of the box</source><target state="translated">默认通过 {0} 加密中继跨网访问</target></segment></unit>
+    <unit id="WelcomeFeatureRelayGeneric"><segment><source>Encrypted relay to reach your computers from anywhere</source><target state="translated">端到端加密中继，离开局域网也能继续工作</target></segment></unit>
+    <unit id="WelcomeFeatureLocal"><segment><source>Direct local network access, works without an account</source><target state="translated">同局域网自动直连，不登录也能直接使用</target></segment></unit>
+    <unit id="ActivityWaitingHeader"><segment><source>Needs attention</source><target state="translated">等你确认</target></segment></unit>
+    <unit id="ActivityWorkingHeader"><segment><source>Working</source><target state="translated">运行中</target></segment></unit>
+    <unit id="ActivityQuickHostsHeader"><segment><source>Online computers</source><target state="translated">在线电脑</target></segment></unit>
+    <unit id="ActivityAllClearTitle"><segment><source>All caught up</source><target state="translated">全部就绪</target></segment></unit>
+    <unit id="ActivityAllClearHint"><segment><source>No agents are waiting or running right now.</source><target state="translated">当前没有等待确认或运行中的智能体。</target></segment></unit>
+    <unit id="UpgradeBannerTitle"><segment><source>Local network only</source><target state="translated">仅局域网模式</target></segment></unit>
+    <unit id="UpgradeBannerHint"><segment><source>Sign in to {0} to reach your computers away from home.</source><target state="translated">登录 {0} 后，离开 Wi-Fi 也能远程访问电脑。</target></segment></unit>
+    <unit id="UpgradeBannerHintGeneric"><segment><source>Sign in to reach your computers over a relay.</source><target state="translated">登录后可通过中继跨网访问你的电脑。</target></segment></unit>
+    <unit id="MeStatusOnline"><segment><source>Relay online</source><target state="translated">中继在线</target></segment></unit>
+    <unit id="MeStatusLocal"><segment><source>Local only</source><target state="translated">仅局域网</target></segment></unit>
+    <unit id="MeHostSummary"><segment><source>{0} · {1} online</source><target state="translated">{0} · {1} 台在线</target></segment></unit>
+    <unit id="MeSectionAccount"><segment><source>Account &amp; connection</source><target state="translated">账号与连接服务</target></segment></unit>
+    <unit id="MeManageWeb"><segment><source>Manage account &amp; devices</source><target state="translated">管理账号与已授权设备</target></segment></unit>
+    <unit id="MeSwitchCustom"><segment><source>Switch to custom server</source><target state="translated">切换自建中继服务器</target></segment></unit>
+    <unit id="MeSwitchCustomHint"><segment><source>Connect to a self-hosted Octopus Server</source><target state="translated">连接你自己部署的 Octopus Server</target></segment></unit>
+    <unit id="MeSignInCardTitle"><segment><source>Sign in to Octopus</source><target state="translated">登录 Octopus 账号</target></segment></unit>
+    <unit id="MeSignInCardHint"><segment><source>Discover your computers automatically and reach them through an encrypted relay.</source><target state="translated">登录后自动发现账号下电脑并通过加密中继跨网访问。</target></segment></unit>
   </file>
 </xliff>

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Octopus.Agents;
 using Octopus.Core.Agents;
 using Octopus.Core.Settings;
@@ -23,8 +25,10 @@ public sealed class AcpLaunchResolver(
     IExecutableLocator locator,
     ILoginEnvironment loginEnvironment,
     ISystemProxy? systemProxy = null,
-    AcpAdapterInstaller? adapterInstaller = null)
+    AcpAdapterInstaller? adapterInstaller = null,
+    IShellCommandBuilder? shellCommandBuilder = null)
 {
+    private readonly IShellCommandBuilder _shell = shellCommandBuilder ?? new ShellCommandBuilder();
     public bool CanLaunchAcp(AgentDefinition? definition, AgentInstallation? installation, AgentSettings settings)
     {
         if (definition?.Acp is not { } acp) return false;
@@ -100,7 +104,7 @@ public sealed class AcpLaunchResolver(
         if (string.Equals(acp.Mode, "native", StringComparison.OrdinalIgnoreCase))
         {
             var (cmdExe, cmdPrefix) = SplitOverrideOrDefault(profile.Command, installation?.Path ?? definition.Detect.Executables.FirstOrDefault() ?? definition.Id);
-            executable = cmdExe;
+            executable = ResolveExecutablePath(cmdExe, searchPath);
             args.AddRange(cmdPrefix);
             args.AddRange(acp.Args);
             if (effectivePermissionMode == PermissionModes.Full && acp.FullAccessArgs.Count > 0)
@@ -116,12 +120,45 @@ public sealed class AcpLaunchResolver(
         {
             var adapter = acp.Adapter ?? throw new InvalidOperationException($"ACP adapter spec missing for '{definition.Id}'.");
 
-            // Point companion adapters at the locally installed CLI binary when declared (e.g. CLAUDE_CODE_EXECUTABLE).
-            if (!string.IsNullOrWhiteSpace(adapter.NativeExecutableEnvVar)
-                && !string.IsNullOrWhiteSpace(installation?.Path)
-                && !env.ContainsKey(adapter.NativeExecutableEnvVar))
+            // Point companion adapters at the configured command override (when set) or locally installed CLI binary
+            // when declared (e.g. CLAUDE_CODE_EXECUTABLE). An explicit profile/ACP env var still wins.
+            var envComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            var explicitNativeEnv = !string.IsNullOrWhiteSpace(adapter.NativeExecutableEnvVar)
+                && (profile.Env.Keys.Any(k => envComparer.Equals(k, adapter.NativeExecutableEnvVar))
+                    || acp.Env.Keys.Any(k => envComparer.Equals(k, adapter.NativeExecutableEnvVar)));
+
+            string? nativeExecutable = null;
+            string? overriddenNativeLabel = null;
+            var hasCommandOverride = false;
+            if (!string.IsNullOrWhiteSpace(profile.Command))
             {
-                env[adapter.NativeExecutableEnvVar] = installation.Path;
+                var (cmdExe, cmdPrefix) = SplitOverrideOrDefault(profile.Command, "");
+                if (!string.IsNullOrWhiteSpace(cmdExe))
+                {
+                    hasCommandOverride = true;
+                    var resolvedNative = ResolveExecutablePath(cmdExe, searchPath);
+                    overriddenNativeLabel = Path.GetFileName(resolvedNative);
+                    EnsureDirectoryOnPath(env, Path.GetDirectoryName(resolvedNative));
+                    nativeExecutable = cmdPrefix.Count > 0
+                        ? EnsureNativeCommandWrapper(definition.Id, resolvedNative, cmdPrefix)
+                        : resolvedNative;
+                }
+            }
+            nativeExecutable ??= !string.IsNullOrWhiteSpace(installation?.Path) ? installation.Path : null;
+
+            var appliedCommandOverride = false;
+            if (!string.IsNullOrWhiteSpace(adapter.NativeExecutableEnvVar)
+                && !string.IsNullOrWhiteSpace(nativeExecutable))
+            {
+                if (hasCommandOverride && !explicitNativeEnv)
+                {
+                    env[adapter.NativeExecutableEnvVar] = nativeExecutable;
+                    appliedCommandOverride = true;
+                }
+                else if (!env.ContainsKey(adapter.NativeExecutableEnvVar))
+                {
+                    env[adapter.NativeExecutableEnvVar] = nativeExecutable;
+                }
             }
 
             if (FindAnyExecutable(adapter.Executables, searchPath) is { } localAdapter)
@@ -151,7 +188,9 @@ public sealed class AcpLaunchResolver(
             {
                 // Atomic managed install into Octopus cache: skips redundant 364MB optional CLI binaries when local CLI exists
                 // and avoids poisoning global ~/.npm/_npx if cancelled.
-                var omitOptional = adapter.NpxOmitOptionalWhenInstalled && !string.IsNullOrWhiteSpace(installation?.Path);
+                var hasLocalNative = !string.IsNullOrWhiteSpace(nativeExecutable)
+                    || (!string.IsNullOrWhiteSpace(adapter.NativeExecutableEnvVar) && env.ContainsKey(adapter.NativeExecutableEnvVar));
+                var omitOptional = adapter.NpxOmitOptionalWhenInstalled && hasLocalNative;
                 executable = await adapterInstaller.EnsureNpmAdapterAsync(
                     definition.Id,
                     adapter,
@@ -189,18 +228,15 @@ public sealed class AcpLaunchResolver(
                 throw new InvalidOperationException(
                     $"No ACP adapter found for '{definition.Name}'. Install {adapter.Executables.FirstOrDefault() ?? adapter.NpxPackage ?? definition.Id} or enable local npm/npx runners in Settings.");
             }
+
+            if (appliedCommandOverride && !string.IsNullOrWhiteSpace(overriddenNativeLabel))
+            {
+                sourceLabel = $"{sourceLabel} → {overriddenNativeLabel}";
+            }
         }
 
         // Ensure the directory of the resolved binary is on PATH (nvm/fnm/volta scripts using #!/usr/bin/env node).
-        var exeDir = Path.GetDirectoryName(executable);
-        if (!string.IsNullOrEmpty(exeDir) && Directory.Exists(exeDir))
-        {
-            var curPath = env.GetValueOrDefault("PATH") ?? "";
-            if (!curPath.Split(Path.PathSeparator).Contains(exeDir, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
-            {
-                env["PATH"] = string.IsNullOrEmpty(curPath) ? exeDir : $"{exeDir}{Path.PathSeparator}{curPath}";
-            }
-        }
+        EnsureDirectoryOnPath(env, Path.GetDirectoryName(executable));
 
         return new AcpLaunchPlan(
             executable,
@@ -286,13 +322,84 @@ public sealed class AcpLaunchResolver(
         return added.Count == 0 ? path : string.Join(Path.PathSeparator, new[] { path ?? "" }.Concat(added).Where(s => s.Length > 0));
     }
 
-    private static (string Exe, List<string> Prefix) SplitOverrideOrDefault(string? commandOverride, string fallbackExe)
+    private (string Exe, List<string> Prefix) SplitOverrideOrDefault(string? commandOverride, string fallbackExe)
     {
         if (string.IsNullOrWhiteSpace(commandOverride))
         {
             return (fallbackExe, []);
         }
-        var parts = commandOverride.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length == 0 ? (fallbackExe, []) : (parts[0], parts.Skip(1).ToList());
+        var parts = _shell.Split(commandOverride);
+        return parts.Count == 0 ? (fallbackExe, []) : (parts[0], parts.Skip(1).ToList());
+    }
+
+    private string ResolveExecutablePath(string exe, string searchPath)
+    {
+        if (string.IsNullOrWhiteSpace(exe))
+        {
+            return exe;
+        }
+        var expanded = ExpandHome(exe);
+        var found = locator.FindAll(expanded, searchPath);
+        return found.Count > 0 ? found[0] : expanded;
+    }
+
+    private static string ExpandHome(string path)
+    {
+        var trimmed = path.Trim();
+        if (trimmed.StartsWith("~/", StringComparison.Ordinal) || trimmed.StartsWith("~\\", StringComparison.Ordinal))
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(home))
+            {
+                return AgentSearchPaths.Expand(trimmed, home, Environment.GetEnvironmentVariable);
+            }
+        }
+        return trimmed;
+    }
+
+    private static void EnsureDirectoryOnPath(Dictionary<string, string> env, string? directory)
+    {
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+        {
+            return;
+        }
+        var curPath = env.GetValueOrDefault("PATH") ?? "";
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        if (!curPath.Split(Path.PathSeparator).Contains(directory, comparer))
+        {
+            env["PATH"] = string.IsNullOrEmpty(curPath) ? directory : $"{directory}{Path.PathSeparator}{curPath}";
+        }
+    }
+
+    private string EnsureNativeCommandWrapper(string agentId, string resolvedExecutable, IReadOnlyList<string> prefixArgs)
+    {
+        if (OperatingSystem.IsWindows() || adapterInstaller is null || prefixArgs.Count == 0)
+        {
+            return resolvedExecutable;
+        }
+        try
+        {
+            var execLine = _shell.Build(resolvedExecutable, prefixArgs, ShellKind.Posix);
+            var script = $"#!/bin/sh\nexec {execLine} \"$@\"\n";
+            var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(script)))[..16];
+            var dir = Path.Combine(adapterInstaller.AdapterRoot(agentId), "wrappers");
+            Directory.CreateDirectory(dir);
+            var wrapperPath = Path.Combine(dir, $"cmd-{hash}.sh");
+            if (!File.Exists(wrapperPath))
+            {
+                var tempPath = Path.Combine(dir, $"cmd-{hash}.{Guid.NewGuid():N}.tmp");
+                File.WriteAllText(tempPath, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.SetUnixFileMode(tempPath,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                    | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+                    | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+                File.Move(tempPath, wrapperPath, overwrite: true);
+            }
+            return wrapperPath;
+        }
+        catch
+        {
+            return resolvedExecutable;
+        }
     }
 }

@@ -8,7 +8,7 @@
            x:DataType="vm:HostsViewModel"
            IsScrollable="True">
     <arcm:Page.Resources>
-        <!-- One computer: how it is reached, and a pill with what needs the person there. -->
+        <!-- One computer row: how it is reached, and a pill with what needs the person there. -->
         <DataTemplate x:Key="HostRow" x:DataType="vm:HostRowViewModel">
             <arcm:ListItem Icon="{x:Static arc:ArcIcons.Monitor}"
                            Content="{Binding Name}"
@@ -33,65 +33,307 @@
                 </arcm:ListItem.Trailing>
             </arcm:ListItem>
         </DataTemplate>
+
+        <!-- Cross-host session row in the Activity inbox: direct jump to TerminalPage. -->
+        <DataTemplate x:Key="ActivitySessionRow" x:DataType="vm:ActivitySessionRowViewModel">
+            <arcm:ListItem ShowChevron="True" Command="{Binding OpenCommand}">
+                <arcm:ListItem.Trailing>
+                    <Border Classes="pill"
+                            Classes.waiting="{Binding IsWaiting}"
+                            Classes.working="{Binding IsWorking}"
+                            Classes.error="{Binding IsError}"
+                            IsVisible="{Binding HasStatus}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <arc:ArcSpinner IsVisible="{Binding IsWorking}" />
+                            <TextBlock Text="{Binding StatusText}" />
+                        </StackPanel>
+                    </Border>
+                </arcm:ListItem.Trailing>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="0,4">
+                    <Panel Grid.Column="0">
+                        <Border Classes="badge" Background="{Binding Tint}" IsVisible="{Binding IsAgent}">
+                            <TextBlock Text="{Binding Initial}" />
+                        </Border>
+                        <Border Classes="badge" IsVisible="{Binding IsTerminal}">
+                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Terminal}" Size="16"
+                                          Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Panel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                            <Border Classes="wsPill" IsVisible="{Binding HasWorkspaceTask}">
+                                <TextBlock Text="{Binding WorkspaceTaskKey}" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Classes="secondary" Text="{Binding ContextLine}" />
+                        <TextBlock Classes="preview" Text="{Binding Preview}" IsVisible="{Binding HasPreview}" />
+                    </StackPanel>
+                </Grid>
+            </arcm:ListItem>
+        </DataTemplate>
     </arcm:Page.Resources>
 
     <arcm:Page.Header>
-        <arcm:Navbar Title="{l:MobileLangResource Hosts}" LargeTitle="True">
+        <arcm:Navbar Title="{Binding CurrentTabTitle}" LargeTitle="True">
             <arcm:Navbar.Trailing>
-                <Panel>
-                    <arcm:IconButton Name="AccountButton"
-                                     Icon="{x:Static arc:ArcIcons.User}"
-                                     Command="{Binding OpenAccountCommand}"
-                                     AutomationProperties.Name="{l:MobileLangResource Account}"
-                                     IsVisible="{Binding IsSignedIn}" />
-                    <!-- Without an account the entry says so: what it opens offers to sign in. -->
-                    <arcm:Button Name="SignedOutButton"
-                                 Variant="Plain"
-                                 Content="{l:MobileLangResource NotSignedIn}"
-                                 Command="{Binding OpenAccountCommand}"
-                                 IsVisible="{Binding IsSignedOut}" />
-                </Panel>
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <!-- Quick add computer on Computers tab -->
+                    <arcm:IconButton Name="NavAddHostButton"
+                                     Icon="{x:Static arc:ArcIcons.Plus}"
+                                     Command="{Binding AddHostCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource AddHost}"
+                                     IsVisible="{Binding IsHostsTab}" />
+                    <!-- Account entry on Activity & Computers tabs -->
+                    <Panel IsVisible="{Binding !IsAccountTab}">
+                        <arcm:IconButton Name="AccountButton"
+                                         Icon="{x:Static arc:ArcIcons.User}"
+                                         Command="{Binding SelectAccountTabCommand}"
+                                         AutomationProperties.Name="{l:MobileLangResource Account}"
+                                         IsVisible="{Binding IsSignedIn}" />
+                        <arcm:Button Name="SignedOutButton"
+                                     Variant="Plain"
+                                     Content="{l:MobileLangResource NotSignedIn}"
+                                     Command="{Binding SelectAccountTabCommand}"
+                                     IsVisible="{Binding IsSignedOut}" />
+                    </Panel>
+                    <!-- Connection badge on Me tab -->
+                    <Border Classes="pill"
+                            Classes.success="{Binding IsSignedIn}"
+                            IsVisible="{Binding IsAccountTab}"
+                            Margin="0,0,4,0">
+                        <TextBlock Text="{Binding AccountStatusBadge}" />
+                    </Border>
+                </StackPanel>
             </arcm:Navbar.Trailing>
         </arcm:Navbar>
     </arcm:Page.Header>
 
-    <StackPanel Margin="0,4,0,24" Spacing="18">
-        <arcm:ListGroup Name="OnlineGroup"
-                        Header="{l:MobileLangResource HostsOnline}"
-                        ItemsSource="{Binding Online}"
-                        ItemTemplate="{StaticResource HostRow}"
-                        IsVisible="{Binding HasOnline}" />
-        <arcm:ListGroup Name="OfflineGroup"
-                        Header="{l:MobileLangResource HostsOffline}"
-                        ItemsSource="{Binding Offline}"
-                        ItemTemplate="{StaticResource HostRow}"
-                        IsVisible="{Binding HasOffline}" />
-        <arcm:ListGroup Name="UnpairedGroup"
-                        Header="{l:MobileLangResource HostsNotPaired}"
-                        ItemsSource="{Binding Unpaired}"
-                        ItemTemplate="{StaticResource HostRow}"
-                        IsVisible="{Binding HasUnpaired}" />
-        <!-- A computer the account does not know (or any computer, without an account): by its address or pairing link. -->
-        <arcm:ListGroup Name="AddGroup" IsVisible="{Binding HasHosts}">
-            <arcm:ListItem Name="AddHostRow"
-                           Icon="{x:Static arc:ArcIcons.Plus}"
-                           Content="{l:MobileLangResource AddHost}"
-                           ShowChevron="True"
-                           Command="{Binding AddHostCommand}" />
-        </arcm:ListGroup>
-        <StackPanel Name="Empty" Margin="32,48,32,0" Spacing="18" IsVisible="{Binding IsEmpty}">
-            <TextBlock Name="EmptyText"
-                       Classes="muted"
-                       Text="{Binding EmptyText}"
-                       TextWrapping="Wrap"
-                       TextAlignment="Center" />
-            <arcm:Button Name="AddHostButton"
-                         Variant="Tinted"
-                         HorizontalAlignment="Center"
-                         Content="{l:MobileLangResource AddHost}"
-                         Command="{Binding AddHostCommand}" />
+    <Panel Margin="0,4,0,24">
+        <!-- ==================== Tab 0: Activity (动态收件箱) ==================== -->
+        <StackPanel Name="ActivityTabContent" Spacing="18" IsVisible="{Binding IsActivityTab}">
+            <!-- Cloud relay upgrade banner when in local-only mode -->
+            <Border Name="LocalUpgradeBanner"
+                    Classes="alertCard"
+                    Margin="16,4,16,0"
+                    IsVisible="{Binding IsSignedOut}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="{l:MobileLangResource UpgradeBannerTitle}"
+                                   FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{arc:ArcDesignTokenResource Accent}" />
+                        <TextBlock Classes="secondary"
+                                   Text="{Binding UpgradeBannerHint}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <arcm:Button Name="UpgradeSignInButton"
+                                 Grid.Column="1"
+                                 Variant="Filled"
+                                 VerticalAlignment="Center"
+                                 Content="{l:MobileLangResource SignInStart}"
+                                 Command="{Binding SignInCommand}" />
+                </Grid>
+            </Border>
+
+            <!-- Cross-host sessions waiting for approval or failed -->
+            <arcm:ListGroup Name="AttentionGroup"
+                            Header="{l:MobileLangResource ActivityWaitingHeader}"
+                            ItemsSource="{Binding AttentionSessions}"
+                            ItemTemplate="{StaticResource ActivitySessionRow}"
+                            IsVisible="{Binding HasAttention}" />
+
+            <!-- Cross-host actively working sessions -->
+            <arcm:ListGroup Name="WorkingGroup"
+                            Header="{l:MobileLangResource ActivityWorkingHeader}"
+                            ItemsSource="{Binding WorkingSessions}"
+                            ItemTemplate="{StaticResource ActivitySessionRow}"
+                            IsVisible="{Binding HasWorking}" />
+
+            <!-- Calm all-clear card when hosts exist but nothing needs attention -->
+            <Border Name="AllClearCard"
+                    Classes="surfaceCard"
+                    Margin="16,0"
+                    IsVisible="{Binding IsActivityAllClear}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{l:MobileLangResource ActivityAllClearTitle}"
+                               FontSize="{arc:ArcDesignTokenResource TypeLG}"
+                               FontWeight="SemiBold" />
+                    <TextBlock Classes="secondary"
+                               Text="{l:MobileLangResource ActivityAllClearHint}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- Quick access to online computers right below the inbox -->
+            <arcm:ListGroup Name="QuickHostsGroup"
+                            Header="{l:MobileLangResource ActivityQuickHostsHeader}"
+                            ItemsSource="{Binding Online}"
+                            ItemTemplate="{StaticResource HostRow}"
+                            IsVisible="{Binding HasOnline}" />
+
+            <!-- Empty state when no hosts exist yet -->
+            <StackPanel Name="ActivityEmpty" Margin="32,44,32,0" Spacing="16" IsVisible="{Binding IsEmpty}">
+                <TextBlock Classes="muted"
+                           Text="{Binding EmptyText}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center" />
+                <arcm:Button Name="ActivityAddHostButton"
+                             Variant="Tinted"
+                             HorizontalAlignment="Center"
+                             Content="{l:MobileLangResource AddHost}"
+                             Command="{Binding AddHostCommand}" />
+            </StackPanel>
         </StackPanel>
-    </StackPanel>
+
+        <!-- ==================== Tab 1: Computers (电脑分组) ==================== -->
+        <StackPanel Name="HostsTabContent" Spacing="18" IsVisible="{Binding IsHostsTab}">
+            <arcm:ListGroup Name="OnlineGroup"
+                            Header="{l:MobileLangResource HostsOnline}"
+                            ItemsSource="{Binding Online}"
+                            ItemTemplate="{StaticResource HostRow}"
+                            IsVisible="{Binding HasOnline}" />
+            <arcm:ListGroup Name="UnpairedGroup"
+                            Header="{l:MobileLangResource HostsNotPaired}"
+                            ItemsSource="{Binding Unpaired}"
+                            ItemTemplate="{StaticResource HostRow}"
+                            IsVisible="{Binding HasUnpaired}" />
+            <arcm:ListGroup Name="OfflineGroup"
+                            Header="{l:MobileLangResource HostsOffline}"
+                            ItemsSource="{Binding Offline}"
+                            ItemTemplate="{StaticResource HostRow}"
+                            IsVisible="{Binding HasOffline}" />
+            <arcm:ListGroup Name="AddGroup" IsVisible="{Binding HasHosts}">
+                <arcm:ListItem Name="AddHostRow"
+                               Icon="{x:Static arc:ArcIcons.Plus}"
+                               Content="{l:MobileLangResource AddHost}"
+                               ShowChevron="True"
+                               Command="{Binding AddHostCommand}" />
+            </arcm:ListGroup>
+            <StackPanel Name="Empty" Margin="32,48,32,0" Spacing="18" IsVisible="{Binding IsEmpty}">
+                <TextBlock Name="EmptyText"
+                           Classes="muted"
+                           Text="{Binding EmptyText}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center" />
+                <arcm:Button Name="AddHostButton"
+                             Variant="Tinted"
+                             HorizontalAlignment="Center"
+                             Content="{l:MobileLangResource AddHost}"
+                             Command="{Binding AddHostCommand}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ==================== Tab 2: Me (我的 / 账号中心) ==================== -->
+        <StackPanel Name="AccountTabContent" Spacing="18" IsVisible="{Binding IsAccountTab}">
+            <!-- Signed-in identity card -->
+            <Border Name="ProfileCard"
+                    Classes="surfaceCard"
+                    Margin="16,4,16,0"
+                    IsVisible="{Binding IsSignedIn}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                    <Border Classes="avatarCircle">
+                        <TextBlock Text="{Binding AccountInitial}" FontSize="18" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Name="ProfileAccountName"
+                                   Text="{Binding AccountName}"
+                                   FontSize="{arc:ArcDesignTokenResource TypeLG}"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Classes="secondary"
+                                   Text="{Binding AccountHostSummary}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Border Grid.Column="2" Classes="pill success">
+                        <TextBlock Text="{l:MobileLangResource MeStatusOnline}" />
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Signed-out / local-only sign-in invitation card -->
+            <Border Name="MeSignInCard"
+                    Classes="surfaceCard"
+                    Margin="16,4,16,0"
+                    IsVisible="{Binding IsSignedOut}">
+                <StackPanel Spacing="12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{l:MobileLangResource MeSignInCardTitle}"
+                                   FontSize="{arc:ArcDesignTokenResource TypeLG}"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Classes="secondary"
+                                   Text="{l:MobileLangResource MeSignInCardHint}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <arcm:Button Name="MeSignInButton"
+                                 Variant="Filled"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{Binding SignInButtonText}"
+                                 Command="{Binding SignInCommand}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Account & connection actions -->
+            <arcm:ListGroup Name="MeConnectionGroup" Header="{l:MobileLangResource MeSectionAccount}">
+                <arcm:ListItem Name="MeManageWebRow"
+                               Icon="{x:Static arc:ArcIcons.ExternalLink}"
+                               Content="{l:MobileLangResource MeManageWeb}"
+                               Subtitle="{Binding ServerHostDisplay}"
+                               ShowChevron="True"
+                               Command="{Binding OpenAccountWebCommand}"
+                               IsVisible="{Binding HasAccountWeb}" />
+                <arcm:ListItem Name="MeCustomServerRow"
+                               Icon="{x:Static arc:ArcIcons.Server}"
+                               Content="{l:MobileLangResource MeSwitchCustom}"
+                               Subtitle="{l:MobileLangResource MeSwitchCustomHint}"
+                               ShowChevron="True"
+                               Command="{Binding OpenCustomServerCommand}" />
+                <arcm:ListItem Name="MeAddHostRow"
+                               Icon="{x:Static arc:ArcIcons.Plus}"
+                               Content="{l:MobileLangResource AddHost}"
+                               Subtitle="{l:MobileLangResource UseLocalHint}"
+                               ShowChevron="True"
+                               Command="{Binding AddHostCommand}" />
+            </arcm:ListGroup>
+
+            <!-- Sign out / Leave local-only mode -->
+            <Panel Margin="16,0">
+                <arcm:Button Name="MeSignOutButton"
+                             Variant="Tinted"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             Foreground="{arc:ArcDesignTokenResource Danger}"
+                             Content="{l:MobileLangResource SignOut}"
+                             Command="{Binding SignOutCommand}"
+                             IsVisible="{Binding IsSignedIn}" />
+                <arcm:Button Name="MeLeaveLocalButton"
+                             Variant="Tinted"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             Foreground="{arc:ArcDesignTokenResource Danger}"
+                             Content="{l:MobileLangResource LeaveLocal}"
+                             Command="{Binding LeaveLocalCommand}"
+                             IsVisible="{Binding IsSignedOut}" />
+            </Panel>
+        </StackPanel>
+    </Panel>
+
+    <!-- Scheme A bottom 3-tab navigation bar -->
+    <arcm:Page.Footer>
+        <arcm:Tabbar Name="MainTabbar" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}">
+            <arcm:TabbarItem Name="ActivityTab"
+                             Icon="{x:Static arc:ArcIcons.Sparkles}"
+                             Content="{Binding ActivityTabLabel}" />
+            <arcm:TabbarItem Name="HostsTab"
+                             Icon="{x:Static arc:ArcIcons.Monitor}"
+                             Content="{l:MobileLangResource TabHosts}" />
+            <arcm:TabbarItem Name="AccountTab"
+                             Icon="{x:Static arc:ArcIcons.User}"
+                             Content="{l:MobileLangResource TabMe}" />
+        </arcm:Tabbar>
+    </arcm:Page.Footer>
 
     <arcm:Page.Overlay>
         <Panel>
@@ -103,7 +345,6 @@
                                       IsDestructive="True"
                                       Command="{Binding SignOutCommand}" />
             </arcm:ActionSheet>
-            <!-- Without an account: sign in (the relay then reaches computers elsewhere), or go back to choosing. -->
             <arcm:ActionSheet Name="LocalSheet"
                               IsOpen="{Binding IsLocalOpen, Mode=TwoWay}"
                               Title="{Binding AccountName}"

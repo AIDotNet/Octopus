@@ -5,16 +5,18 @@
            xmlns:l="using:Octopus.Mobile.Localization"
            xmlns:vm="using:Octopus.Mobile.Account"
            x:Class="Octopus.Mobile.Account.WelcomePage"
-           x:DataType="vm:WelcomeViewModel">
-    <StackPanel VerticalAlignment="Center" Margin="0,0,0,24" Spacing="28">
-        <StackPanel Margin="32,0" Spacing="10">
+           x:DataType="vm:WelcomeViewModel"
+           IsScrollable="True">
+    <StackPanel VerticalAlignment="Center" Margin="0,24,0,28" Spacing="20">
+        <!-- Hero brand header -->
+        <StackPanel Margin="24,0" Spacing="10">
             <Image Source="avares://Octopus.Mobile/Assets/logo.png"
                    Width="72" Height="72"
                    HorizontalAlignment="Center"
                    RenderOptions.BitmapInterpolationMode="HighQuality" />
             <TextBlock Text="Octopus"
                        FontSize="{arc:ArcDesignTokenResource Type2XL}"
-                       FontWeight="{arc:ArcDesignTokenResource WeightMedium}"
+                       FontWeight="Bold"
                        HorizontalAlignment="Center" />
             <TextBlock Classes="secondary"
                        Text="{l:MobileLangResource WelcomeTagline}"
@@ -23,14 +25,66 @@
                        TextAlignment="Center" />
         </StackPanel>
 
-        <!-- First: "Sign in" (the official service, nothing to type), and the other ways to connect. -->
-        <StackPanel Spacing="24" IsVisible="{Binding IsChoosing}">
-            <StackPanel Margin="32,0" Spacing="12">
+        <!-- Error / session-ended banner -->
+        <Border Name="ErrorCard"
+                Classes="alertCard danger"
+                Margin="16,0"
+                IsVisible="{Binding SignIn.HasError}">
+            <TextBlock Name="Error"
+                       Text="{Binding SignIn.ErrorText}"
+                       Foreground="{arc:ArcDesignTokenResource Danger}"
+                       FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center" />
+        </Border>
+
+        <!-- Value highlights card on initial onboarding -->
+        <Border Name="HighlightsCard"
+                Classes="surfaceCard"
+                Margin="16,0"
+                IsVisible="{Binding ShowsHighlights}">
+            <StackPanel Spacing="12">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <Border Classes="featureIcon">
+                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Sparkles}" Size="15"
+                                      Foreground="{arc:ArcDesignTokenResource Accent}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Grid.Column="1" Classes="secondary"
+                               Text="{l:MobileLangResource WelcomeFeatureAttention}"
+                               TextWrapping="Wrap" VerticalAlignment="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <Border Classes="featureIcon success">
+                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Cloud}" Size="15"
+                                      Foreground="{arc:ArcDesignTokenResource Success}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Grid.Column="1" Classes="secondary"
+                               Text="{Binding RelayFeatureText}"
+                               TextWrapping="Wrap" VerticalAlignment="Center" />
+                </Grid>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <Border Classes="featureIcon muted">
+                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Monitor}" Size="15"
+                                      Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Grid.Column="1" Classes="secondary"
+                               Text="{l:MobileLangResource WelcomeFeatureLocal}"
+                               TextWrapping="Wrap" VerticalAlignment="Center" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Primary sign-in action + other ways to connect -->
+        <StackPanel Spacing="18">
+            <StackPanel Margin="16,0" Spacing="10">
                 <arcm:Button Name="SignInButton"
                              Variant="Filled"
                              HorizontalAlignment="Stretch"
                              HorizontalContentAlignment="Center"
-                             Content="{l:MobileLangResource SignInStart}"
+                             Content="{Binding SignInButtonText}"
                              Command="{Binding SignInCommand}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" IsVisible="{Binding SignIn.IsStarting}">
                     <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
@@ -49,7 +103,7 @@
                                Command="{Binding UseLocalCommand}"
                                IsVisible="{Binding ShowsLocal}" />
                 <arcm:ListItem Name="CustomRow"
-                               Icon="{x:Static arc:ArcIcons.Cloud}"
+                               Icon="{x:Static arc:ArcIcons.Server}"
                                Content="{l:MobileLangResource UseCustom}"
                                Subtitle="{l:MobileLangResource UseCustomHint}"
                                ShowChevron="True"
@@ -57,18 +111,17 @@
                                IsVisible="{Binding ShowsCustom}" />
             </arcm:ListGroup>
         </StackPanel>
-
-        <!-- Then: the code, to be confirmed in the browser. -->
-        <Panel Margin="32,0" IsVisible="{Binding SignIn.HasCode}">
-            <vm:SignInCodeView Name="CodeView" DataContext="{Binding SignIn}" />
-        </Panel>
-
-        <TextBlock Name="Error"
-                   Margin="32,0"
-                   Text="{Binding SignIn.ErrorText}"
-                   Foreground="{arc:ArcDesignTokenResource Danger}"
-                   TextWrapping="Wrap"
-                   TextAlignment="Center"
-                   IsVisible="{Binding SignIn.HasError}" />
     </StackPanel>
+
+    <!-- Scheme A bottom sheet for the 8-character device verification code -->
+    <arcm:Page.Overlay>
+        <arcm:Sheet Name="SignInSheet"
+                    IsOpen="{Binding IsCodeSheetOpen, Mode=TwoWay}"
+                    Title="{l:MobileLangResource SignInSheetTitle}"
+                    MaxHeightFraction="0.68">
+            <Panel Margin="16,4,16,20">
+                <vm:SignInCodeView Name="CodeView" DataContext="{Binding SignIn}" />
+            </Panel>
+        </arcm:Sheet>
+    </arcm:Page.Overlay>
 </arcm:Page>

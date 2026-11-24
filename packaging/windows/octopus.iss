@@ -48,6 +48,13 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Name: "{autoprograms}\Octopus"; Filename: "{app}\Octopus.exe"
 Name: "{autodesktop}\Octopus"; Filename: "{app}\Octopus.exe"; Tasks: desktopicon
 
+[Registry]
+; Register the octopus:// custom URL protocol (e.g. octopus://auth-done after browser sign-in).
+Root: HKA; Subkey: "Software\Classes\octopus"; ValueType: string; ValueName: ""; ValueData: "URL:Octopus Protocol"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\octopus"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\octopus\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\Octopus.exe"",0"
+Root: HKA; Subkey: "Software\Classes\octopus\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Octopus.exe"" ""%1"""
+
 [Run]
 Filename: "{app}\Octopus.exe"; Description: "{cm:LaunchProgram,Octopus}"; Flags: nowait postinstall skipifsilent
 ; Automatic updates run setup silently; /RELAUNCH=1 ("restart and update") starts the new version afterwards.

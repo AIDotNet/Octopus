@@ -92,13 +92,17 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         get
         {
             if (Definition.Acp is not { } acp) return "";
+            var command = string.IsNullOrWhiteSpace(Profile.Command) ? DefaultCommandName : Profile.Command.Trim();
             if (string.Equals(acp.Mode, "adapter", StringComparison.OrdinalIgnoreCase) && acp.Adapter is { } adapter)
             {
                 var bin = adapter.Executables.FirstOrDefault() ?? adapter.NpxPackage ?? adapter.UvxPackage ?? adapter.RegistryId ?? Definition.Id;
                 var fallback = !string.IsNullOrWhiteSpace(adapter.NpxPackage) ? $" / npx {adapter.NpxPackage}" : "";
-                return $"{bin}{fallback} (dialect: {acp.Dialect})";
+                var nativeHint = !string.IsNullOrWhiteSpace(adapter.NativeExecutableEnvVar) && !string.IsNullOrWhiteSpace(Profile.Command)
+                    ? $" ({adapter.NativeExecutableEnvVar}={Profile.Command.Trim()})"
+                    : "";
+                return $"{bin}{fallback}{nativeHint} (dialect: {acp.Dialect})";
             }
-            return $"{DefaultCommandName} {string.Join(' ', acp.Args)} (dialect: {acp.Dialect})".Trim();
+            return $"{command} {string.Join(' ', acp.Args)} (dialect: {acp.Dialect})".Trim();
         }
     }
 

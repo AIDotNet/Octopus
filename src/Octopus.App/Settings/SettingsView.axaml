@@ -12,6 +12,7 @@
              xmlns:appearance="using:Octopus.App.Settings.Appearance"
              xmlns:shortcuts="using:Octopus.App.Settings.Shortcuts"
              xmlns:workspaces="using:Octopus.App.Settings.Workspaces"
+             xmlns:about="using:Octopus.App.Settings.About"
              xmlns:pluginSettings="using:Octopus.App.Plugins.Settings"
              x:Class="Octopus.App.Settings.SettingsView"
              x:DataType="local:SettingsViewModel"
@@ -84,6 +85,9 @@
         </DataTemplate>
         <DataTemplate DataType="shortcuts:ShortcutsViewModel">
             <shortcuts:ShortcutsPageView />
+        </DataTemplate>
+        <DataTemplate DataType="about:AboutSettingsViewModel">
+            <about:AboutPageView />
         </DataTemplate>
     </UserControl.DataTemplates>
 

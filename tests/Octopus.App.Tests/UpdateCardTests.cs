@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Octopus.App.Composition;
 using Octopus.App.Settings;
-using Octopus.App.Settings.General;
+using Octopus.App.Settings.About;
 using Octopus.App.Shell;
 using Octopus.App.Updates;
 using Octopus.Core.Updates;
@@ -279,8 +279,8 @@ public class UpdateCardTests
     {
         var fake = UseFake();
         var settings = AppHost.Get<ISettingsStore>();
-        var general = AppHost.Get<GeneralSettingsViewModel>();
-        var updates = general.Updates;
+        var about = AppHost.Get<AboutSettingsViewModel>();
+        var updates = about.Updates;
         Assert.Equal("auto", updates.Mode);
         Assert.Equal("follow", updates.Channel);
         Assert.Equal("1.2.1112", updates.VersionText);
