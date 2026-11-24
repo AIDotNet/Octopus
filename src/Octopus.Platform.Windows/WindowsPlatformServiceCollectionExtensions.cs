@@ -7,7 +7,7 @@ public static class WindowsPlatformServiceCollectionExtensions
     /// <summary>Registers every platform service for Windows as a singleton.</summary>
     public static IServiceCollection AddWindowsPlatform(this IServiceCollection services)
     {
-        services.AddSingleton<IAppPaths, WindowsAppPaths>();
+        services.AddSingleton<IAppPaths>(_ => new WindowsAppPaths());
         services.AddSingleton<IProcessRunner, ProcessRunner>();
         services.AddSingleton<IShellCommandBuilder, ShellCommandBuilder>();
         services.AddSingleton<IExecutableLocator>(_ => new WindowsExecutableLocator());
