@@ -9,6 +9,7 @@ using Octopus.App.Services;
 using Octopus.App.Shell;
 using Octopus.Core.Projects;
 using Octopus.Storage;
+using TKCode.Arc;
 using Xunit;
 
 namespace Octopus.App.Tests;
@@ -185,18 +186,47 @@ public class RightPanelTests
         window.UpdateLayout();
 
         var expectedHeight = Octopus.App.Appearance.ThemeService.CurrentMetrics.TopRowHeight;
-        var topBar = panel.GetVisualDescendants().OfType<Grid>().First(g => g.Name == "TopBar");
+        var topBar = panel.GetVisualDescendants().OfType<Border>().First(g => g.Name == "TopBar");
         var corner = window.GetVisualDescendants().OfType<StackPanel>().First(g => g.Name == "TopRight");
         Assert.Equal(expectedHeight, topBar.Bounds.Height);
         // Windows' 1px window frame may push the content down by one pixel.
         Assert.InRange(topBar.TranslatePoint(default, window)!.Value.Y, 0, 1);
         // Same height as the corner switch's row, and the switch lies over the reserved end of the top row, not over its tabs.
         Assert.Equal(expectedHeight, corner.Bounds.Height);
-        var tabs = topBar.Children[0];
+        var tabs = panel.GetVisualDescendants().OfType<ToggleGroup>().First(g => g.Name == "Tabs");
+        Assert.InRange(tabs.TranslatePoint(default, topBar)!.Value.Y, 0, expectedHeight);
         var tabsRight = tabs.TranslatePoint(new Point(tabs.Bounds.Width, 0), window)!.Value.X;
         var cornerLeft = corner.TranslatePoint(default, window)!.Value.X;
         Assert.True(cornerLeft >= tabsRight, $"the corner switch ({cornerLeft}) overlaps the panel's tabs (end at {tabsRight})");
         Assert.True(panel.TrailingInset >= corner.Bounds.Width);
+    }
+
+    [AvaloniaFact]
+    public void Tabs_that_do_not_fit_beside_the_corner_take_a_row_of_their_own_under_the_top_row()
+    {
+        var (window, panel) = Open();
+        AppHost.Get<IProjectService>().AddProject(Folder("a.txt"));
+        AppHost.Get<ShellViewModel>().IsRightPanelOpen = true;
+        WaitForRight(window, AppHost.Get<ShellViewModel>().RightPanelWidth);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var topBar = panel.GetVisualDescendants().OfType<Border>().First(g => g.Name == "TopBar");
+        var tabs = panel.GetVisualDescendants().OfType<ToggleGroup>().First(g => g.Name == "Tabs");
+        double TabsTop() => tabs.TranslatePoint(default, topBar)!.Value.Y;
+        Assert.True(tabs.IsVisible);
+        Assert.True(TabsTop() < topBar.Bounds.Height);
+
+        // A corner as wide as the sign-in capsule beside Windows' caption buttons on a narrow panel.
+        panel.TrailingInset = panel.Bounds.Width - 40;
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(TabsTop() >= topBar.Bounds.Height, $"the tabs (top {TabsTop()}) stay under the corner");
+
+        panel.TrailingInset = 44;
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(TabsTop() < topBar.Bounds.Height);
     }
 
     [AvaloniaFact]

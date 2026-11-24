@@ -58,6 +58,9 @@ public partial class ExplorerPanelView : UserControl
         InitializeComponent();
         DataContext = Model;
         ApplyTrailingInset();
+        // The room changes with the panel's width, and the tabs' width with the chosen tab (its name shows) and the counts.
+        SizeChanged += (_, _) => ApplyTrailingInset();
+        Tabs.SizeChanged += (_, _) => ApplyTrailingInset();
         Model.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ExplorerPanelViewModel.IsGitRepository) or nameof(ExplorerPanelViewModel.IsSshProject) or nameof(ExplorerPanelViewModel.IsHostProject)) SyncOptions();
@@ -174,7 +177,21 @@ public partial class ExplorerPanelView : UserControl
     /// <summary>Raised with the changed file whose diff the user wants opened as a tab.</summary>
     public event EventHandler<Octopus.App.Files.DiffTabRequest>? DiffRequested;
 
-    private void ApplyTrailingInset() => TopBar.ColumnDefinitions[2].Width = new GridLength(TrailingInset);
+    /// <summary>
+    /// The tabs stay in the top row while they fit left of the trailing inset, with a small gap; otherwise they take a row
+    /// of their own under it, so the corner the window floats over the panel never covers one of them.
+    /// </summary>
+    private void ApplyTrailingInset()
+    {
+        var need = Tabs.Margin.Left + Tabs.DesiredSize.Width + TabsGap;
+        var fits = Bounds.Width <= 0 || need <= Bounds.Width - TrailingInset;
+        var row = fits ? 0 : 1;
+        if (Grid.GetRow(Tabs) == row) return;
+        Grid.SetRow(Tabs, row);
+        Tabs.Margin = fits ? new Thickness(8, 0, 0, 0) : new Thickness(8, 0, 0, 6);
+    }
+
+    private const double TabsGap = 6;
 
     /// <summary>
     /// Points the panel at a project (or its active worktree). The folder is read again only when the folder, host or
