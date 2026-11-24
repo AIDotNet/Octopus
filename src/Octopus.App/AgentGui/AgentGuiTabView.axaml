@@ -435,49 +435,44 @@
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
         </Style>
 
-        <!-- Scheme D floating HUD capsules & swimlane bars -->
-        <Style Selector="Button.hudCapsule">
-            <Setter Property="Height" Value="28" />
-            <Setter Property="Padding" Value="10,0" />
-            <Setter Property="CornerRadius" Value="14" />
+        <!-- Docked Live Activity Tray (Scheme A: unified SubAgents, Background Bash & Tasks above composer) -->
+        <Style Selector="Border.activityTray">
             <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FocusAdorner" Value="{x:Null}" />
-            <Setter Property="Template">
-                <ControlTemplate>
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{TemplateBinding CornerRadius}"
-                            Padding="{TemplateBinding Padding}"
-                            BoxShadow="0 4 14 0 #26000000">
-                        <ContentPresenter Content="{TemplateBinding Content}" VerticalContentAlignment="Center" />
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover">
-                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource AccentStrong}" />
-            </Style>
-            <Style Selector="^.active">
-                <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
-                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource AccentStrong}" />
-            </Style>
-            <Style Selector="^.error">
-                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Danger}" />
-            </Style>
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="ClipToBounds" Value="True" />
         </Style>
-
-        <Style Selector="Button.swimBar">
-            <Setter Property="Height" Value="24" />
-            <Setter Property="Padding" Value="8,0" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        <Style Selector="Border.activityRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.activityRow:pointerover">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        </Style>
+        <Style Selector="Button.activityChip">
+            <Setter Property="Height" Value="21" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="7,0" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.12" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Background="{TemplateBinding Background}"
@@ -486,26 +481,157 @@
                             CornerRadius="{TemplateBinding CornerRadius}"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter Content="{TemplateBinding Content}"
-                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalContentAlignment="Center" />
                     </Border>
                 </ControlTemplate>
             </Setter>
             <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            </Style>
+            <Style Selector="^.accent">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            </Style>
+            <Style Selector="^.accent:pointerover">
                 <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource AccentStrong}" />
             </Style>
-            <Style Selector="^.done">
-                <Setter Property="Background" Value="#1A22C55E" />
-                <Setter Property="BorderBrush" Value="#4422C55E" />
+            <Style Selector="^.danger">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="Foreground" Value="#F87171" />
             </Style>
-            <Style Selector="^.failed">
-                <Setter Property="Background" Value="#1AEF4444" />
+            <Style Selector="^.danger:pointerover">
+                <Setter Property="Background" Value="#22EF4444" />
                 <Setter Property="BorderBrush" Value="#55EF4444" />
             </Style>
-            <Style Selector="^.bash">
-                <Setter Property="Background" Value="#1A14B8A6" />
-                <Setter Property="BorderBrush" Value="#4414B8A6" />
-            </Style>
+        </Style>
+        <Style Selector="SelectableTextBlock.bgLogLine">
+            <Setter Property="Foreground" Value="#D8DCE6" />
+        </Style>
+        <Style Selector="SelectableTextBlock.bgLogLine.err">
+            <Setter Property="Foreground" Value="#F87171" />
+        </Style>
+        <Style Selector="SelectableTextBlock.bgLogLine.ok">
+            <Setter Property="Foreground" Value="#4ADE80" />
+        </Style>
+        <Style Selector="SelectableTextBlock.bgLogLine.info">
+            <Setter Property="Foreground" Value="#7DD3FC" />
+        </Style>
+
+        <!-- Refined Task List rows & progress bar -->
+        <Style Selector="Border.taskRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15" />
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.taskRow:pointerover">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        </Style>
+        <Style Selector="Border.taskRow.active">
+            <Setter Property="Background" Value="#148B8BF5" />
+            <Setter Property="BorderBrush" Value="#3D8B8BF5" />
+        </Style>
+        <Style Selector="Border.taskRow.failed">
+            <Setter Property="Background" Value="#16EF4444" />
+            <Setter Property="BorderBrush" Value="#44EF4444" />
+        </Style>
+        <Style Selector="Border.taskRail">
+            <Setter Property="Width" Value="2.5" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.taskRail.active">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+        </Style>
+        <Style Selector="Border.taskRail.done">
+            <Setter Property="Background" Value="#4422C55E" />
+        </Style>
+        <Style Selector="Border.taskRail.failed">
+            <Setter Property="Background" Value="#EF4444" />
+        </Style>
+        <Style Selector="TextBlock.taskIndex">
+            <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="Opacity" Value="0.72" />
+        </Style>
+        <Style Selector="TextBlock.taskIndex.active">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="TextBlock.taskIndex.done">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="TextBlock.taskTitle">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.taskTitle.active">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.taskTitle.done">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="Opacity" Value="0.78" />
+        </Style>
+        <Style Selector="TextBlock.taskTitle.failed">
+            <Setter Property="Foreground" Value="#FCA5A5" />
+            <Setter Property="FontWeight" Value="Medium" />
+        </Style>
+        <Style Selector="ProgressBar.taskProgress">
+            <Setter Property="Height" Value="4" />
+            <Setter Property="MinWidth" Value="48" />
+            <Setter Property="Width" Value="54" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="ProgressBar.taskProgress.done">
+            <Setter Property="Foreground" Value="#22C55E" />
+        </Style>
+        <Style Selector="ProgressBar.trayHairlineProgress">
+            <Setter Property="Height" Value="2" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="ProgressBar.trayHairlineProgress.done">
+            <Setter Property="Foreground" Value="#22C55E" />
+        </Style>
+        <Style Selector="Border.taskRatioBadge">
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.taskRatioBadge.done">
+            <Setter Property="Background" Value="#1F22C55E" />
+        </Style>
+        <Style Selector="Border.taskRatioBadge TextBlock">
+            <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+        </Style>
+        <Style Selector="Border.taskRatioBadge.done TextBlock">
+            <Setter Property="Foreground" Value="#22C55E" />
         </Style>
     </UserControl.Styles>
 
@@ -807,127 +933,6 @@
                             </DataTemplate>
                         </common:SmoothCollapse.ContentTemplate>
                     </common:SmoothCollapse>
-                </StackPanel>
-            </Border>
-        </DataTemplate>
-
-        <!-- Scheme D inline Live Workflow Swimlane card -->
-        <DataTemplate DataType="gui:WorkflowSwimlaneItem">
-            <Border Classes="cardEnter"
-                    Margin="0,2,0,6"
-                    Background="{arc:ArcDesignTokenResource Surface}"
-                    BorderBrush="{arc:ArcDesignTokenResource Border}"
-                    BorderThickness="1"
-                    CornerRadius="9"
-                    ClipToBounds="True">
-                <StackPanel>
-                    <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                            BorderThickness="0,0,0,1"
-                            Padding="10,6">
-                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="7">
-                            <lucide:LucideIcon Grid.Column="0" Kind="Waypoints" Size="13"
-                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1" Text="{l:AppLangResource AgentGuiSwimlaneTitle}"
-                                       FontSize="{arc:ArcDesignTokenResource TypeXS}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2" Classes="hint" Text="{Binding SummaryText}"
-                                       MaxLines="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                            <arc:Button Grid.Column="3" Size="Small" Variant="Ghost"
-                                        Command="{Binding OpenWorkflowHudCommand}">
-                                <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" Text="{Binding PhaseLabel}" />
-                            </arc:Button>
-                            <arc:Button Grid.Column="4" Size="Small" Variant="Ghost"
-                                        Command="{Binding OpenTopologyCommand}">
-                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                    <lucide:LucideIcon Kind="Maximize" Size="11" VerticalAlignment="Center" />
-                                    <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" Text="{l:AppLangResource AgentGuiViewTopology}" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </arc:Button>
-                        </Grid>
-                    </Border>
-                    <StackPanel Margin="10,8" Spacing="6">
-                        <!-- SubAgent Swimlane Rows -->
-                        <ItemsControl ItemsSource="{Binding Subagents}" IsVisible="{Binding HasSubagents}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Spacing="5" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="gui:SubagentRunViewModel">
-                                    <Grid ColumnDefinitions="180,*" ColumnSpacing="8">
-                                        <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="5" VerticalAlignment="Center">
-                                            <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
-                                                <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" />
-                                                <lucide:LucideIcon Kind="Check" Size="11" Foreground="#16A34A" IsVisible="{Binding IsDone}" />
-                                                <lucide:LucideIcon Kind="X" Size="11" Foreground="#DC2626" IsVisible="{Binding IsFailed}" />
-                                                <lucide:LucideIcon Kind="Minus" Size="11" Foreground="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsInterrupted}" />
-                                            </Panel>
-                                            <Border Grid.Column="1" Padding="4,0" CornerRadius="4" Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding AgentType}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                           FontSize="10" Foreground="{arc:ArcDesignTokenResource TextSecondary}" MaxLines="1" />
-                                            </Border>
-                                            <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" FontSize="11.5" MaxLines="1"
-                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                        </Grid>
-                                        <Button Grid.Column="1" Classes="swimBar"
-                                                Classes.done="{Binding IsDone}"
-                                                Classes.failed="{Binding IsFailed}"
-                                                Command="{Binding SelectCommand}">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                                <TextBlock Grid.Column="0" Text="{Binding BarLabel}"
-                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                           FontSize="11" MaxLines="1" TextTrimming="CharacterEllipsis"
-                                                           Foreground="{arc:ArcDesignTokenResource Foreground}" />
-                                                <TextBlock Grid.Column="1" Classes="hint" Text="{Binding ToolCountText}"
-                                                           VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <!-- Background Bash Swimlane Rows -->
-                        <ItemsControl ItemsSource="{Binding BackgroundShells}" IsVisible="{Binding HasBackgroundShells}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Spacing="5" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="gui:BackgroundBashViewModel">
-                                    <Grid ColumnDefinitions="180,*" ColumnSpacing="8">
-                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                                            <Ellipse Width="7" Height="7" Fill="#16A34A" IsVisible="{Binding IsRunning}" VerticalAlignment="Center" />
-                                            <Ellipse Width="7" Height="7" Fill="#DC2626" IsVisible="{Binding IsFailed}" VerticalAlignment="Center" />
-                                            <Ellipse Width="7" Height="7" Fill="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsCompleted}" VerticalAlignment="Center" />
-                                            <Border Padding="4,0" CornerRadius="4" Background="#1A14B8A6">
-                                                <TextBlock Text="Bg Bash" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                           FontSize="10" Foreground="#0D9488" />
-                                            </Border>
-                                            <TextBlock Text="{Binding DisplayCommand}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                       FontSize="11" MaxLines="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                        <Button Grid.Column="1" Classes="swimBar bash"
-                                                Classes.failed="{Binding IsFailed}"
-                                                Command="{Binding SelectCommand}">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                                <TextBlock Grid.Column="0" Text="{Binding BarLabel}"
-                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                           FontSize="11" MaxLines="1" TextTrimming="CharacterEllipsis"
-                                                           Foreground="{arc:ArcDesignTokenResource Foreground}" />
-                                                <TextBlock Grid.Column="1" FontSize="10.5" FontWeight="SemiBold"
-                                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}"
-                                                           Text="{l:AppLangResource AgentGuiBgBashViewLogs}" VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
                 </StackPanel>
             </Border>
         </DataTemplate>
@@ -1359,24 +1364,6 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                    <!-- Scheme D view switcher: Chat + Swimlane vs Full Orchestration Topology -->
-                    <Border IsVisible="{Binding ShowTopologySwitcher}"
-                            Padding="2" CornerRadius="7" Margin="0,0,4,0"
-                            Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                        <StackPanel Orientation="Horizontal" Spacing="2">
-                            <Button Classes="composerChip" Height="20" Padding="7,0"
-                                    Classes.active="{Binding !IsTopologyView}"
-                                    Command="{Binding SetChatViewCommand}">
-                                <TextBlock FontSize="11" Text="{l:AppLangResource AgentGuiViewChatSwimlane}" />
-                            </Button>
-                            <Button Classes="composerChip" Height="20" Padding="7,0"
-                                    Classes.active="{Binding IsTopologyView}"
-                                    Command="{Binding SetTopologyViewCommand}">
-                                <TextBlock FontSize="11" Text="{l:AppLangResource AgentGuiViewTopology}" />
-                            </Button>
-                        </StackPanel>
-                    </Border>
                     <Border IsVisible="{Binding HasContextUsage}"
                             Padding="6,1"
                             CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
@@ -1427,9 +1414,9 @@
             </Grid>
         </Border>
 
-        <!-- Centered Editorial Document Stream + Scheme D Topology / Floating HUD Capsules / Slide-Over Drawer -->
+        <!-- Centered Editorial Document Stream + SubAgent Slide-Over Drawer -->
         <Grid Grid.Row="1">
-            <Grid IsVisible="{Binding !IsTopologyView}" RowDefinitions="Auto,*">
+            <Grid RowDefinitions="Auto,*">
                 <!-- Status banners & collapsible diagnostics stay compact at top -->
                 <StackPanel Grid.Row="0" MaxWidth="860" HorizontalAlignment="Stretch" Margin="14,6,14,0" Spacing="6">
                     <!-- Auth required banner -->
@@ -1577,383 +1564,7 @@
                 </StackPanel>
             </arc:Button>
 
-            <!-- Scheme D: Full-Screen Orchestration Topology View (lazy-mounted only when open) -->
-            <ContentControl IsVisible="{Binding IsTopologyView}" Content="{Binding TopologyContent}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="gui:AgentGuiTabViewModel">
-                        <arc:ScrollArea Orientation="Vertical" FadeLength="0"
-                                        Background="{arc:ArcDesignTokenResource Background}">
-                            <StackPanel MaxWidth="980" HorizontalAlignment="Stretch" Margin="20,14,20,70" Spacing="12">
-                                <Border Background="{arc:ArcDesignTokenResource Surface}"
-                                        BorderBrush="{arc:ArcDesignTokenResource Border}"
-                                        BorderThickness="1" CornerRadius="10" Padding="12">
-                                    <StackPanel Spacing="8">
-                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                            <lucide:LucideIcon Kind="Waypoints" Size="14" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{l:AppLangResource AgentGuiSwimlaneTitle}" FontWeight="SemiBold" FontSize="{arc:ArcDesignTokenResource TypeSM}" VerticalAlignment="Center" />
-                                            <arc:Badge Grid.Column="2" Size="Small" Tone="Neutral" Content="{Binding CurrentPhaseLabel}" />
-                                        </Grid>
-                                        <ItemsControl ItemsSource="{Binding Subagents}" IsVisible="{Binding HasSubagents}">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate><StackPanel Spacing="6" /></ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="gui:SubagentRunViewModel">
-                                                    <Grid ColumnDefinitions="200,*" ColumnSpacing="10">
-                                                        <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6" VerticalAlignment="Center">
-                                                            <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
-                                                                <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" />
-                                                                <lucide:LucideIcon Kind="Check" Size="12" Foreground="#16A34A" IsVisible="{Binding IsDone}" />
-                                                                <lucide:LucideIcon Kind="X" Size="12" Foreground="#DC2626" IsVisible="{Binding IsFailed}" />
-                                                                <lucide:LucideIcon Kind="Minus" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsInterrupted}" />
-                                                            </Panel>
-                                                            <Border Grid.Column="1" Padding="5,0" CornerRadius="4" Background="{arc:ArcDesignTokenResource SurfaceMuted}" VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding AgentType}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10.5" />
-                                                            </Border>
-                                                            <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" FontSize="12" MaxLines="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                        </Grid>
-                                                        <Button Grid.Column="1" Classes="swimBar" Classes.done="{Binding IsDone}" Classes.failed="{Binding IsFailed}" Command="{Binding SelectCommand}">
-                                                            <TextBlock Text="{Binding BarLabel}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="11.5" MaxLines="1" TextTrimming="CharacterEllipsis" />
-                                                        </Button>
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
-                                </Border>
-
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                                    <!-- Left: Workflow Task DAG -->
-                                    <Border Grid.Column="0" Background="{arc:ArcDesignTokenResource Surface}"
-                                            BorderBrush="{arc:ArcDesignTokenResource Border}" BorderThickness="1" CornerRadius="10" Padding="12">
-                                        <StackPanel Spacing="8">
-                                            <TextBlock Text="{l:AppLangResource AgentGuiTaskDagTitle}" FontWeight="SemiBold" FontSize="{arc:ArcDesignTokenResource TypeSM}" />
-                                            <ItemsControl ItemsSource="{Binding WorkflowTasks}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate><StackPanel Spacing="5" /></ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="gui:WorkflowTaskViewModel">
-                                                        <Border Padding="8,6" CornerRadius="7" Background="{arc:ArcDesignTokenResource Background}"
-                                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                                                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
-                                                                <lucide:LucideIcon Kind="{Binding Icon}" Size="12" VerticalAlignment="Top" Margin="0,2,0,0"
-                                                                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
-                                                                <TextBlock Grid.Column="1" Text="{Binding DisplayId}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                           FontSize="11" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Top" />
-                                                                <StackPanel Grid.Column="2" Spacing="3">
-                                                                    <TextBlock Text="{Binding Title}" FontSize="12" TextWrapping="Wrap" />
-                                                                    <WrapPanel Orientation="Horizontal">
-                                                                        <Button Classes="composerChip" Height="18" Padding="5,0" Margin="0,0,4,0"
-                                                                                IsVisible="{Binding HasOwner}" Command="{Binding FocusOwnerCommand}">
-                                                                            <TextBlock FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10" Text="{Binding Owner}" />
-                                                                        </Button>
-                                                                        <Border IsVisible="{Binding HasBlockedBy}" Padding="5,0" CornerRadius="4" Background="#22E4B445">
-                                                                            <TextBlock FontSize="10" Foreground="{arc:ArcDesignTokenResource Warning}" Text="{Binding BlockedByText}" />
-                                                                        </Border>
-                                                                    </WrapPanel>
-                                                                </StackPanel>
-                                                            </Grid>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <!-- Right: Background Bash Live Output -->
-                                    <Border Grid.Column="1" Background="{arc:ArcDesignTokenResource Surface}"
-                                            BorderBrush="{arc:ArcDesignTokenResource Border}" BorderThickness="1" CornerRadius="10" Padding="12">
-                                        <StackPanel Spacing="8">
-                                            <TextBlock Text="{l:AppLangResource AgentGuiBgBashTitle}" FontWeight="SemiBold" FontSize="{arc:ArcDesignTokenResource TypeSM}" />
-                                            <TextBlock Classes="hint" IsVisible="{Binding !HasBackgroundShells}" Text="{l:AppLangResource AgentGuiBgBashEmpty}" />
-                                            <ItemsControl ItemsSource="{Binding BackgroundShells}" IsVisible="{Binding HasBackgroundShells}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="gui:BackgroundBashViewModel">
-                                                        <Button Classes="composerChip" Classes.active="{Binding IsSelected}" Margin="0,0,4,4" Command="{Binding SelectCommand}">
-                                                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                <Ellipse Width="6" Height="6" Fill="#16A34A" IsVisible="{Binding IsRunning}" />
-                                                                <Ellipse Width="6" Height="6" Fill="#DC2626" IsVisible="{Binding IsFailed}" />
-                                                                <TextBlock FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10.5"
-                                                                           Text="{Binding DisplayCommand}" MaxWidth="150" MaxLines="1" TextTrimming="CharacterEllipsis" />
-                                                            </StackPanel>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                            <Border IsVisible="{Binding HasSelectedBackgroundShell}" Background="#0E1015" CornerRadius="7" Padding="8">
-                                                <arc:ScrollArea MaxHeight="240" Orientation="Vertical" FadeLength="0">
-                                                    <SelectableTextBlock Text="{Binding SelectedBackgroundShell.CombinedLogText, FallbackValue=''}"
-                                                                         FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                         FontSize="11" Foreground="#D8DCE6" TextWrapping="Wrap" />
-                                                </arc:ScrollArea>
-                                            </Border>
-                                        </StackPanel>
-                                    </Border>
-                                </Grid>
-                            </StackPanel>
-                        </arc:ScrollArea>
-                    </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-
-            <!-- Scheme D: Floating HUD Capsule Cluster & Popovers (bottom-right, zero idle footprint) -->
-            <StackPanel x:Name="HudCapsuleCluster"
-                        IsVisible="{Binding HasAnyHudItem}"
-                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                        Margin="0,0,14,10" Spacing="7">
-                <!-- Popover Card when any capsule is active (lazy-mounted per active HUD tab) -->
-                <Border x:Name="HudPopoverCard"
-                        IsVisible="{Binding IsAnyHudOpen}"
-                        Width="440" MaxHeight="360"
-                        HorizontalAlignment="Right"
-                        Background="{arc:ArcDesignTokenResource Surface}"
-                        BorderBrush="{arc:ArcDesignTokenResource Border}"
-                        BorderThickness="1"
-                        CornerRadius="11"
-                        BoxShadow="0 12 34 0 #44000000"
-                        ClipToBounds="True">
-                    <Grid RowDefinitions="Auto,*">
-                        <!-- Workflow Popover Content -->
-                        <ContentControl Grid.RowSpan="2" IsVisible="{Binding IsWorkflowHudOpen}" Content="{Binding WorkflowHudContent}">
-                            <ContentControl.ContentTemplate>
-                                <DataTemplate x:DataType="gui:AgentGuiTabViewModel">
-                                    <Grid RowDefinitions="Auto,*">
-                                        <Border Grid.Row="0" Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="10,7">
-                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-                                                <lucide:LucideIcon Kind="Waypoints" Size="13" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{l:AppLangResource AgentGuiTaskDagTitle}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
-                                                <arc:Button Grid.Column="2" Classes="icon" Variant="Ghost" Command="{Binding CloseHudCommand}">
-                                                    <lucide:LucideIcon Kind="X" Size="12" />
-                                                </arc:Button>
-                                            </Grid>
-                                        </Border>
-                                        <arc:ScrollArea Grid.Row="1" MaxHeight="290" Orientation="Vertical" FadeLength="0" Padding="10,8">
-                                            <ItemsControl ItemsSource="{Binding WorkflowTasks}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate><StackPanel Spacing="5" /></ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="gui:WorkflowTaskViewModel">
-                                                        <Border Padding="8,6" CornerRadius="7" Background="{arc:ArcDesignTokenResource Background}"
-                                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                                                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
-                                                                <lucide:LucideIcon Kind="{Binding Icon}" Size="12" VerticalAlignment="Top" Margin="0,2,0,0"
-                                                                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
-                                                                <TextBlock Grid.Column="1" Text="{Binding DisplayId}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                           FontSize="11" Foreground="{arc:ArcDesignTokenResource TextMuted}" />
-                                                                <StackPanel Grid.Column="2" Spacing="2">
-                                                                    <TextBlock Text="{Binding Title}" FontSize="12" TextWrapping="Wrap" />
-                                                                    <TextBlock Classes="hint" IsVisible="{Binding HasActiveForm}" Text="{Binding ActiveForm}" TextWrapping="Wrap" />
-                                                                    <WrapPanel Orientation="Horizontal">
-                                                                        <Button Classes="composerChip" Height="18" Padding="5,0" Margin="0,0,4,0"
-                                                                                IsVisible="{Binding HasOwner}" Command="{Binding FocusOwnerCommand}">
-                                                                            <TextBlock FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10" Text="{Binding Owner}" />
-                                                                        </Button>
-                                                                        <Border IsVisible="{Binding HasBlockedBy}" Padding="5,0" CornerRadius="4" Background="#22E4B445">
-                                                                            <TextBlock FontSize="10" Foreground="{arc:ArcDesignTokenResource Warning}" Text="{Binding BlockedByText}" />
-                                                                        </Border>
-                                                                    </WrapPanel>
-                                                                </StackPanel>
-                                                            </Grid>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </arc:ScrollArea>
-                                    </Grid>
-                                </DataTemplate>
-                            </ContentControl.ContentTemplate>
-                        </ContentControl>
-
-                        <!-- SubAgents Popover Content -->
-                        <ContentControl Grid.RowSpan="2" IsVisible="{Binding IsSubagentsHudOpen}" Content="{Binding SubagentsHudContent}">
-                            <ContentControl.ContentTemplate>
-                                <DataTemplate x:DataType="gui:AgentGuiTabViewModel">
-                                    <Grid RowDefinitions="Auto,*">
-                                        <Border Grid.Row="0" Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="10,7">
-                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-                                                <lucide:LucideIcon Kind="Bot" Size="13" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding HudSubagentsText}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
-                                                <arc:Button Grid.Column="2" Classes="icon" Variant="Ghost" Command="{Binding CloseHudCommand}">
-                                                    <lucide:LucideIcon Kind="X" Size="12" />
-                                                </arc:Button>
-                                            </Grid>
-                                        </Border>
-                                        <arc:ScrollArea Grid.Row="1" MaxHeight="290" Orientation="Vertical" FadeLength="0" Padding="10,8">
-                                            <ItemsControl ItemsSource="{Binding Subagents}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate><StackPanel Spacing="5" /></ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="gui:SubagentRunViewModel">
-                                                        <Button Classes="row" Command="{Binding SelectCommand}">
-                                                            <Border Padding="8,6" CornerRadius="7" Background="{arc:ArcDesignTokenResource Background}"
-                                                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                                                                <StackPanel Spacing="2">
-                                                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6">
-                                                                        <Panel Width="12" Height="12" VerticalAlignment="Center">
-                                                                            <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" />
-                                                                            <lucide:LucideIcon Kind="Check" Size="12" Foreground="#16A34A" IsVisible="{Binding IsDone}" />
-                                                                            <lucide:LucideIcon Kind="X" Size="12" Foreground="#DC2626" IsVisible="{Binding IsFailed}" />
-                                                                            <lucide:LucideIcon Kind="Minus" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsInterrupted}" />
-                                                                        </Panel>
-                                                                        <Border Grid.Column="1" Padding="4,0" CornerRadius="4" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
-                                                                            <TextBlock Text="{Binding AgentType}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10" />
-                                                                        </Border>
-                                                                        <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" FontSize="12" MaxLines="1" TextTrimming="CharacterEllipsis" />
-                                                                        <TextBlock Grid.Column="3" Classes="hint" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Text="{Binding ElapsedText}" />
-                                                                    </Grid>
-                                                                    <Grid ColumnDefinitions="*,Auto" Margin="18,0,0,0" ColumnSpacing="6">
-                                                                        <TextBlock Classes="hint" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" Text="{Binding LastAction}" MaxLines="1" TextTrimming="CharacterEllipsis" />
-                                                                        <TextBlock Grid.Column="1" Classes="hint" Text="{Binding ToolCountText}" />
-                                                                    </Grid>
-                                                                </StackPanel>
-                                                            </Border>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </arc:ScrollArea>
-                                    </Grid>
-                                </DataTemplate>
-                            </ContentControl.ContentTemplate>
-                        </ContentControl>
-
-                        <!-- Background Bash Popover Content -->
-                        <ContentControl Grid.RowSpan="2" IsVisible="{Binding IsShellsHudOpen}" Content="{Binding ShellsHudContent}">
-                            <ContentControl.ContentTemplate>
-                                <DataTemplate x:DataType="gui:AgentGuiTabViewModel">
-                                    <Grid RowDefinitions="Auto,Auto,*">
-                                        <Border Grid.Row="0" Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="10,7">
-                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-                                                <lucide:LucideIcon Kind="SquareTerminal" Size="13" Foreground="#0D9488" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{l:AppLangResource AgentGuiBgBashTitle}" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
-                                                <arc:Button Grid.Column="2" Classes="icon" Variant="Ghost" Command="{Binding CloseHudCommand}">
-                                                    <lucide:LucideIcon Kind="X" Size="12" />
-                                                </arc:Button>
-                                            </Grid>
-                                        </Border>
-                                        <!-- Process selector chips -->
-                                        <Border Grid.Row="1" Padding="8,6" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,0,0,1">
-                                            <ItemsControl ItemsSource="{Binding BackgroundShells}">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="gui:BackgroundBashViewModel">
-                                                        <Button Classes="composerChip" Classes.active="{Binding IsSelected}" Margin="0,0,4,3" Command="{Binding SelectCommand}">
-                                                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                <Ellipse Width="6" Height="6" Fill="#16A34A" IsVisible="{Binding IsRunning}" />
-                                                                <Ellipse Width="6" Height="6" Fill="#DC2626" IsVisible="{Binding IsFailed}" />
-                                                                <Ellipse Width="6" Height="6" Fill="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsCompleted}" />
-                                                                <TextBlock FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10.5"
-                                                                           Text="{Binding DisplayCommand}" MaxWidth="150" MaxLines="1" TextTrimming="CharacterEllipsis" />
-                                                                <TextBlock IsVisible="{Binding HasPort}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                           FontSize="10" Foreground="{arc:ArcDesignTokenResource AccentStrong}" Text="{Binding DetectedPort}" />
-                                                                <TextBlock IsVisible="{Binding HasUnread}" FontSize="10" FontWeight="Bold" Foreground="#16A34A" Text="{Binding UnreadBadgeText}" />
-                                                            </StackPanel>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </Border>
-                                        <!-- Selected Background Bash live terminal log -->
-                                        <Grid Grid.Row="2" RowDefinitions="Auto,*" Background="#0E1015" IsVisible="{Binding HasSelectedBackgroundShell}">
-                                            <Border Grid.Row="0" Padding="9,5" BorderBrush="#22FFFFFF" BorderThickness="0,0,0,1">
-                                                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="5">
-                                                    <TextBlock Grid.Column="0" Text="{Binding SelectedBackgroundShell.DisplayCommand, FallbackValue=''}"
-                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="11"
-                                                               Foreground="#7DD3FC" MaxLines="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                    <arc:CopyButton Grid.Column="1" IsIconOnly="True"
-                                                                    Value="{Binding SelectedBackgroundShell.CombinedLogText, FallbackValue=''}" />
-                                                    <arc:Button Grid.Column="2" Size="Small" Variant="Ghost"
-                                                                Command="{Binding SelectedBackgroundShell.OpenInTerminalCommand, FallbackValue={x:Null}}">
-                                                        <StackPanel Orientation="Horizontal" Spacing="3">
-                                                            <lucide:LucideIcon Kind="ExternalLink" Size="11" />
-                                                            <TextBlock FontSize="10.5" Text="{l:AppLangResource AgentGuiBgBashOpenTerminal}" />
-                                                        </StackPanel>
-                                                    </arc:Button>
-                                                    <arc:Button Grid.Column="3" Size="Small" Variant="Ghost"
-                                                                IsVisible="{Binding SelectedBackgroundShell.IsRunning, FallbackValue=False}"
-                                                                Command="{Binding SelectedBackgroundShell.StopCommand, FallbackValue={x:Null}}">
-                                                        <StackPanel Orientation="Horizontal" Spacing="3">
-                                                            <lucide:LucideIcon Kind="Square" Size="10" Foreground="#F87171" />
-                                                            <TextBlock FontSize="10.5" Foreground="#FCA5A5" Text="{l:AppLangResource AgentGuiBgBashStop}" />
-                                                        </StackPanel>
-                                                    </arc:Button>
-                                                </Grid>
-                                            </Border>
-                                            <arc:ScrollArea Grid.Row="1" MaxHeight="200" Orientation="Vertical" FadeLength="0" Padding="9,6">
-                                                <ItemsControl ItemsSource="{Binding SelectedBackgroundShell.Logs, FallbackValue={x:Null}}">
-                                                    <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate><StackPanel Spacing="2" /></ItemsPanelTemplate>
-                                                    </ItemsControl.ItemsPanel>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="gui:BackgroundBashLogLine">
-                                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
-                                                                <TextBlock Text="{Binding Timestamp}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                           FontSize="10.5" Foreground="#6C7384" />
-                                                                <SelectableTextBlock Grid.Column="1" Text="{Binding Text}"
-                                                                                     FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                                     FontSize="11" TextWrapping="Wrap"
-                                                                                     Foreground="#D8DCE6" />
-                                                            </Grid>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </arc:ScrollArea>
-                                        </Grid>
-                                    </Grid>
-                                </DataTemplate>
-                            </ContentControl.ContentTemplate>
-                        </ContentControl>
-                    </Grid>
-                </Border>
-
-                <!-- Floating Capsule Pill Bar -->
-                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
-                    <Button x:Name="HudWorkflowCapsule" Classes="hudCapsule"
-                            Classes.active="{Binding IsWorkflowHudOpen}"
-                            IsVisible="{Binding HasWorkflowTasks}"
-                            Command="{Binding ToggleWorkflowHudCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <lucide:LucideIcon Kind="Waypoints" Size="12" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                            <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="{Binding HudWorkflowText}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="HudSubagentsCapsule" Classes="hudCapsule"
-                            Classes.active="{Binding IsSubagentsHudOpen}"
-                            IsVisible="{Binding HasSubagents}"
-                            Command="{Binding ToggleSubagentsHudCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding HasRunningSubagents}" VerticalAlignment="Center" />
-                            <lucide:LucideIcon Kind="Bot" Size="12" IsVisible="{Binding !HasRunningSubagents}"
-                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                            <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="{Binding HudSubagentsText}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="HudBgBashCapsule" Classes="hudCapsule"
-                            Classes.active="{Binding IsShellsHudOpen}"
-                            Classes.error="{Binding HasFailedBackgroundShell}"
-                            IsVisible="{Binding HasBackgroundShells}"
-                            Command="{Binding ToggleShellsHudCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Ellipse Width="7" Height="7" Fill="#DC2626" IsVisible="{Binding HasFailedBackgroundShell}" VerticalAlignment="Center" />
-                            <Ellipse Width="7" Height="7" Fill="#16A34A" IsVisible="{Binding !HasFailedBackgroundShell}" VerticalAlignment="Center" />
-                            <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="{Binding HudBgBashText}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </StackPanel>
-
-            <!-- Scheme D: Slide-Over SubAgent Detail Drawer (lazy-mounted only when a subagent is selected) -->
+            <!-- Slide-Over SubAgent Detail Drawer (lazy-mounted only when a subagent is selected) -->
             <Border x:Name="SubagentDetailDrawer"
                     IsVisible="{Binding HasSelectedSubagent}"
                     HorizontalAlignment="Right"
@@ -2073,7 +1684,479 @@
 
         <!-- Compact Floating Dynamic Agent-Driven Composer -->
         <Border Grid.Row="2" Padding="{DynamicResource OctopusAgentGuiComposerMargin}" Background="{arc:ArcDesignTokenResource Background}">
-            <StackPanel MaxWidth="860" HorizontalAlignment="Stretch" Spacing="4">
+            <StackPanel MaxWidth="860" HorizontalAlignment="Stretch" Spacing="5">
+                <!-- Scheme A: Docked Live Activity Tray above composer (SubAgents, Background Bash & Workflow Tasks) -->
+                <common:SmoothCollapse IsExpanded="{Binding HasActivityTray}">
+                    <Border x:Name="ActivityTray" Classes="activityTray">
+                        <StackPanel Spacing="0">
+                            <!-- Tray Header -->
+                            <Border Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                    Padding="8,5">
+                                <Panel>
+                                    <!-- Single Background Bash compact single-line header -->
+                                    <Grid IsVisible="{Binding IsSingleBackgroundShell}"
+                                          ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                        <Button Grid.Column="0" Classes="row" Padding="2,1"
+                                                Command="{Binding ToggleActivityTrayCommand}"
+                                                arc:Tooltip.Tip="{Binding SingleBackgroundShell.DisplayCommand, FallbackValue=''}">
+                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
+                                                <Panel Grid.Column="0" Width="10" Height="10" VerticalAlignment="Center">
+                                                    <Ellipse Width="7" Height="7" Fill="#16A34A"
+                                                             IsVisible="{Binding SingleBackgroundShell.IsRunning, FallbackValue=False}"
+                                                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    <Ellipse Width="7" Height="7" Fill="#DC2626"
+                                                             IsVisible="{Binding SingleBackgroundShell.IsFailed, FallbackValue=False}"
+                                                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    <Ellipse Width="7" Height="7" Fill="{arc:ArcDesignTokenResource TextMuted}"
+                                                             IsVisible="{Binding SingleBackgroundShell.IsCompleted, FallbackValue=False}"
+                                                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Panel>
+                                                <Border Grid.Column="1" Padding="5,1" CornerRadius="4" Background="#1A14B8A6" VerticalAlignment="Center">
+                                                    <TextBlock Text="{l:AppLangResource AgentGuiBgBashBadge}"
+                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                               FontSize="10" FontWeight="SemiBold" Foreground="#0D9488" />
+                                                </Border>
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding SingleBackgroundShell.CompactCommand, FallbackValue=''}"
+                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                           FontSize="11.5"
+                                                           Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                                           MaxLines="1" TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                                <Border Grid.Column="3"
+                                                        IsVisible="{Binding SingleBackgroundShell.HasPort, FallbackValue=False}"
+                                                        Padding="5,0" CornerRadius="4"
+                                                        Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding SingleBackgroundShell.DetectedPort, FallbackValue=''}"
+                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                               FontSize="10" FontWeight="SemiBold"
+                                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                                </Border>
+                                                <Border Grid.Column="4"
+                                                        IsVisible="{Binding SingleBackgroundShell.HasUnread, FallbackValue=False}"
+                                                        Padding="5,0" CornerRadius="4"
+                                                        Background="#1F16A34A"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding SingleBackgroundShell.UnreadBadgeText, FallbackValue=''}"
+                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                               FontSize="10" FontWeight="SemiBold" Foreground="#16A34A" />
+                                                </Border>
+                                                <TextBlock Grid.Column="5" Classes="hint"
+                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                           Text="{Binding SingleBackgroundShell.StatusElapsedText, FallbackValue=''}"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                            <Button Classes="activityChip accent"
+                                                    IsVisible="{Binding ShowCollapsedSingleShellActions}"
+                                                    Command="{Binding OpenSingleShellLogsCommand}">
+                                                <TextBlock FontSize="11" FontWeight="SemiBold"
+                                                           Text="{l:AppLangResource AgentGuiBgBashViewLogs}" />
+                                            </Button>
+                                            <Button Classes="activityChip danger"
+                                                    IsVisible="{Binding ShowCollapsedSingleShellStop}"
+                                                    Command="{Binding SingleBackgroundShell.StopCommand, FallbackValue={x:Null}}">
+                                                <TextBlock FontSize="11" FontWeight="SemiBold"
+                                                           Text="{l:AppLangResource AgentGuiBgBashStop}" />
+                                            </Button>
+                                            <Button Classes="composerChip" Width="22" Height="22" Padding="0"
+                                                    Command="{Binding ToggleActivityTrayCommand}"
+                                                    AutomationProperties.Name="{l:AppLangResource AgentGuiActivityTrayToggle}"
+                                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiActivityTrayToggle}">
+                                                <lucide:LucideIcon Classes="chevronPop" Classes.open="{Binding IsActivityTrayExpanded}"
+                                                                   Kind="ChevronDown" Size="12"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Multi-item (Task List / SubAgents / multiple Bash) header -->
+                                    <Grid IsVisible="{Binding IsMultiActivityTray}"
+                                          ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <Button Grid.Column="0" Classes="row" Padding="2,1"
+                                                Command="{Binding ToggleActivityTrayCommand}"
+                                                AutomationProperties.Name="{l:AppLangResource AgentGuiActivityTrayToggle}"
+                                                arc:Tooltip.Tip="{l:AppLangResource AgentGuiActivityTrayToggle}">
+                                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="7">
+                                                <Panel Grid.Column="0" Width="13" Height="13" VerticalAlignment="Center">
+                                                    <arc:ArcSpinner Width="11" Height="11"
+                                                                    Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                                    IsVisible="{Binding ShowSpinnerInActivityHeader}" />
+                                                    <Ellipse Width="7" Height="7" Fill="#22C55E"
+                                                             IsVisible="{Binding ShowRunningBashDotOnly}"
+                                                             HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    <lucide:LucideIcon Kind="CircleAlert" Size="12" Foreground="#EF4444"
+                                                                       IsVisible="{Binding HasFailedActivity}" />
+                                                    <lucide:LucideIcon Kind="CircleCheck" Size="12" Foreground="#22C55E"
+                                                                       IsVisible="{Binding HasCompletedActivity}" />
+                                                </Panel>
+                                                <TextBlock Grid.Column="1"
+                                                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                                           Text="{Binding ActivityTrayTitle}"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Classes="hint"
+                                                           IsVisible="{Binding ShowMultiHeaderSummary}"
+                                                           Text="{Binding ActivityTraySummary}"
+                                                           MaxLines="1" TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2"
+                                                           IsVisible="{Binding ShowCollapsedActiveTaskPreview}"
+                                                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                           Text="{Binding ActiveWorkflowTaskTitle}"
+                                                           MaxLines="1" TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <ProgressBar Classes="taskProgress"
+                                                         Classes.done="{Binding IsAllWorkflowTasksCompleted}"
+                                                         IsVisible="{Binding IsOnlyWorkflowTasks}"
+                                                         Minimum="0" Maximum="100"
+                                                         Value="{Binding WorkflowProgressPercent}" />
+                                            <Border Classes="taskRatioBadge"
+                                                    Classes.done="{Binding IsAllWorkflowTasksCompleted}"
+                                                    IsVisible="{Binding IsOnlyWorkflowTasks}">
+                                                <TextBlock Text="{Binding WorkflowProgressRatioText}" />
+                                            </Border>
+                                            <Button Classes="composerChip" Width="22" Height="22" Padding="0"
+                                                    Command="{Binding ToggleActivityTrayCommand}"
+                                                    AutomationProperties.Name="{l:AppLangResource AgentGuiActivityTrayToggle}"
+                                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiActivityTrayToggle}">
+                                                <lucide:LucideIcon Classes="chevronPop" Classes.open="{Binding IsActivityTrayExpanded}"
+                                                                   Kind="ChevronDown" Size="12"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Panel>
+                            </Border>
+                            <ProgressBar Classes="trayHairlineProgress"
+                                         Classes.done="{Binding IsAllWorkflowTasksCompleted}"
+                                         IsVisible="{Binding HasWorkflowTasks}"
+                                         Minimum="0" Maximum="100"
+                                         Value="{Binding WorkflowProgressPercent}" />
+
+                            <!-- Collapsible Scrollable Activity List -->
+                            <common:SmoothCollapse IsExpanded="{Binding IsActivityTrayExpanded}">
+                                <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                        BorderThickness="0,1,0,0">
+                                    <arc:ScrollArea MaxHeight="310" Orientation="Vertical" FadeLength="0">
+                                        <StackPanel Spacing="0">
+                                            <!-- SubAgents -->
+                                            <ItemsControl ItemsSource="{Binding Subagents}" IsVisible="{Binding HasSubagents}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><StackPanel Spacing="0" /></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="gui:SubagentRunViewModel">
+                                                        <Border Classes="activityRow" Padding="8,6">
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                <Button Grid.Column="0" Classes="row" Padding="0" Command="{Binding SelectCommand}">
+                                                                    <Grid ColumnDefinitions="14,Auto,*,Auto" ColumnSpacing="7">
+                                                                        <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
+                                                                            <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" />
+                                                                            <lucide:LucideIcon Kind="Check" Size="11" Foreground="#16A34A" IsVisible="{Binding IsDone}" />
+                                                                            <lucide:LucideIcon Kind="X" Size="11" Foreground="#DC2626" IsVisible="{Binding IsFailed}" />
+                                                                            <lucide:LucideIcon Kind="Minus" Size="11" Foreground="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsInterrupted}" />
+                                                                        </Panel>
+                                                                        <Border Grid.Column="1" Padding="5,1" CornerRadius="4"
+                                                                                Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                                                                                VerticalAlignment="Center">
+                                                                            <TextBlock Text="{Binding AgentType}"
+                                                                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                       FontSize="10" FontWeight="SemiBold"
+                                                                                       Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                                                        </Border>
+                                                                        <StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center">
+                                                                            <TextBlock Text="{Binding DisplayTitle}"
+                                                                                       FontSize="12" FontWeight="Medium"
+                                                                                       MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                                            <TextBlock Classes="hint"
+                                                                                       IsVisible="{Binding HasSubtitle}"
+                                                                                       Text="{Binding SubtitleText}"
+                                                                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                       FontSize="10.5"
+                                                                                       MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                                        </StackPanel>
+                                                                        <TextBlock Grid.Column="3" Classes="hint"
+                                                                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                   Text="{Binding MetaText}"
+                                                                                   VerticalAlignment="Center" />
+                                                                    </Grid>
+                                                                </Button>
+                                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                    <Button Classes="activityChip accent" Command="{Binding SelectCommand}">
+                                                                        <TextBlock FontSize="11" FontWeight="SemiBold" Text="{l:AppLangResource AgentGuiActivityTrayDetails}" />
+                                                                    </Button>
+                                                                    <Button Classes="activityChip danger"
+                                                                            IsVisible="{Binding IsRunning}"
+                                                                            Command="{Binding StopCommand}">
+                                                                        <TextBlock FontSize="11" FontWeight="SemiBold" Text="{l:AppLangResource AgentGuiSubagentStop}" />
+                                                                    </Button>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- Background Bash Shells (with inline expandable dark live terminal) -->
+                                            <ItemsControl ItemsSource="{Binding BackgroundShells}" IsVisible="{Binding HasBackgroundShells}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate><StackPanel Spacing="0" /></ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="gui:BackgroundBashViewModel">
+                                                        <Border Classes="activityRow">
+                                                            <StackPanel Spacing="0">
+                                                                <Grid Margin="8,6" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                    <Button Grid.Column="0" Classes="row" Padding="0"
+                                                                            Command="{Binding ToggleLogsCommand}"
+                                                                            arc:Tooltip.Tip="{Binding DisplayCommand}">
+                                                                        <Grid ColumnDefinitions="12,Auto,*,Auto" ColumnSpacing="7">
+                                                                            <Panel Grid.Column="0" Width="10" Height="10" VerticalAlignment="Center">
+                                                                                <Ellipse Width="7" Height="7" Fill="#16A34A" IsVisible="{Binding IsRunning}"
+                                                                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                <Ellipse Width="7" Height="7" Fill="#DC2626" IsVisible="{Binding IsFailed}"
+                                                                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                <Ellipse Width="7" Height="7" Fill="{arc:ArcDesignTokenResource TextMuted}" IsVisible="{Binding IsCompleted}"
+                                                                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                            </Panel>
+                                                                            <Border Grid.Column="1" Padding="5,1" CornerRadius="4"
+                                                                                    Background="#1A14B8A6" VerticalAlignment="Center">
+                                                                                <TextBlock Text="Bash"
+                                                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                           FontSize="10" FontWeight="SemiBold" Foreground="#0D9488" />
+                                                                            </Border>
+                                                                            <StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center">
+                                                                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5">
+                                                                                    <TextBlock Grid.Column="0"
+                                                                                               Text="{Binding CompactCommand}"
+                                                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                               FontSize="11.5"
+                                                                                               Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                                                                               MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                                                    <Border Grid.Column="1" IsVisible="{Binding HasPort}"
+                                                                                            Padding="4,0" CornerRadius="4"
+                                                                                            Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                                                                                            VerticalAlignment="Center">
+                                                                                        <TextBlock Text="{Binding DetectedPort}"
+                                                                                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                                   FontSize="10" FontWeight="SemiBold"
+                                                                                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                                                                    </Border>
+                                                                                    <Border Grid.Column="2" IsVisible="{Binding HasUnread}"
+                                                                                            Padding="4,0" CornerRadius="4"
+                                                                                            Background="#1F16A34A"
+                                                                                            VerticalAlignment="Center">
+                                                                                        <TextBlock Text="{Binding UnreadBadgeText}"
+                                                                                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                                   FontSize="10" FontWeight="SemiBold" Foreground="#16A34A" />
+                                                                                    </Border>
+                                                                                </Grid>
+                                                                                <TextBlock Classes="hint"
+                                                                                           IsVisible="{Binding HasLastLogLine}"
+                                                                                           Text="{Binding LastLogLine}"
+                                                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                           FontSize="10.5"
+                                                                                           MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                                            </StackPanel>
+                                                                            <TextBlock Grid.Column="3" Classes="hint"
+                                                                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                       Text="{Binding StatusElapsedText}"
+                                                                                       VerticalAlignment="Center" />
+                                                                        </Grid>
+                                                                    </Button>
+                                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                        <Button Classes="activityChip"
+                                                                                Classes.accent="{Binding IsLogsExpanded}"
+                                                                                Command="{Binding ToggleLogsCommand}">
+                                                                            <TextBlock FontSize="11" FontWeight="SemiBold" Text="{Binding LogsToggleLabel}" />
+                                                                        </Button>
+                                                                        <Button Classes="activityChip danger"
+                                                                                IsVisible="{Binding IsRunning}"
+                                                                                Command="{Binding StopCommand}">
+                                                                            <TextBlock FontSize="11" FontWeight="SemiBold" Text="{l:AppLangResource AgentGuiBgBashStop}" />
+                                                                        </Button>
+                                                                    </StackPanel>
+                                                                </Grid>
+
+                                                                <!-- Inline Live Terminal Output -->
+                                                                <common:SmoothCollapse IsExpanded="{Binding IsLogsExpanded}">
+                                                                    <Border Background="#0E1015"
+                                                                            BorderBrush="#22FFFFFF"
+                                                                            BorderThickness="0,1,0,0">
+                                                                        <Grid RowDefinitions="Auto,*">
+                                                                            <Border Grid.Row="0" Padding="9,5"
+                                                                                    BorderBrush="#1AFFFFFF" BorderThickness="0,0,0,1">
+                                                                                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="5">
+                                                                                    <TextBlock Grid.Column="0"
+                                                                                               Text="{Binding DisplayCommand}"
+                                                                                               arc:Tooltip.Tip="{Binding DisplayCommand}"
+                                                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                               FontSize="11" Foreground="#7DD3FC"
+                                                                                               MaxLines="1" TextTrimming="CharacterEllipsis"
+                                                                                               VerticalAlignment="Center" />
+                                                                                    <arc:CopyButton Grid.Column="1" IsIconOnly="True"
+                                                                                                    Value="{Binding CombinedLogText}" />
+                                                                                    <arc:Button Grid.Column="2" Size="Small" Variant="Ghost"
+                                                                                                Command="{Binding OpenInTerminalCommand}">
+                                                                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                                                                            <lucide:LucideIcon Kind="ExternalLink" Size="11" />
+                                                                                            <TextBlock FontSize="10.5" Text="{l:AppLangResource AgentGuiBgBashOpenTerminal}" />
+                                                                                        </StackPanel>
+                                                                                    </arc:Button>
+                                                                                    <arc:Button Grid.Column="3" Size="Small" Variant="Ghost"
+                                                                                                IsVisible="{Binding IsRunning}"
+                                                                                                Command="{Binding StopCommand}">
+                                                                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                                                                            <lucide:LucideIcon Kind="Square" Size="10" Foreground="#F87171" />
+                                                                                            <TextBlock FontSize="10.5" Foreground="#FCA5A5" Text="{l:AppLangResource AgentGuiBgBashStop}" />
+                                                                                        </StackPanel>
+                                                                                    </arc:Button>
+                                                                                </Grid>
+                                                                            </Border>
+                                                                            <arc:ScrollArea Grid.Row="1" MaxHeight="160" Orientation="Vertical" FadeLength="0" Padding="9,6">
+                                                                                <ItemsControl ItemsSource="{Binding Logs}">
+                                                                                    <ItemsControl.ItemsPanel>
+                                                                                        <ItemsPanelTemplate><StackPanel Spacing="2" /></ItemsPanelTemplate>
+                                                                                    </ItemsControl.ItemsPanel>
+                                                                                    <ItemsControl.ItemTemplate>
+                                                                                        <DataTemplate x:DataType="gui:BackgroundBashLogLine">
+                                                                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
+                                                                                                <TextBlock Text="{Binding Timestamp}"
+                                                                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                                           FontSize="10.5" Foreground="#6C7384" />
+                                                                                                <SelectableTextBlock Grid.Column="1"
+                                                                                                                     Classes="bgLogLine"
+                                                                                                                     Classes.err="{Binding IsError}"
+                                                                                                                     Classes.ok="{Binding IsSuccess}"
+                                                                                                                     Classes.info="{Binding IsInfo}"
+                                                                                                                     Text="{Binding Text}"
+                                                                                                                     FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                                                                     FontSize="11" TextWrapping="Wrap" />
+                                                                                            </Grid>
+                                                                                        </DataTemplate>
+                                                                                    </ItemsControl.ItemTemplate>
+                                                                                </ItemsControl>
+                                                                            </arc:ScrollArea>
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </common:SmoothCollapse>
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- Task List (refined cardless rows with live spinner, accent rail & progress) -->
+                                            <StackPanel IsVisible="{Binding HasWorkflowTasks}" Spacing="0">
+                                                <Button Classes="row" Padding="9,6"
+                                                        IsVisible="{Binding ShowWorkflowTasksSectionHeader}"
+                                                        Command="{Binding ToggleWorkflowTasksExpandedCommand}">
+                                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
+                                                        <lucide:LucideIcon Grid.Column="0" Kind="ListChecks" Size="12"
+                                                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1" FontSize="11.5" FontWeight="SemiBold"
+                                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                                   Text="{l:AppLangResource AgentGuiTaskDagTitle}" VerticalAlignment="Center" />
+                                                        <ProgressBar Grid.Column="3" Classes="taskProgress"
+                                                                     Classes.done="{Binding IsAllWorkflowTasksCompleted}"
+                                                                     Minimum="0" Maximum="100"
+                                                                     Value="{Binding WorkflowProgressPercent}" />
+                                                        <Border Grid.Column="4" Classes="taskRatioBadge"
+                                                                Classes.done="{Binding IsAllWorkflowTasksCompleted}">
+                                                            <TextBlock Text="{Binding WorkflowProgressRatioText}" />
+                                                        </Border>
+                                                        <lucide:LucideIcon Grid.Column="5" Classes="chevronPop" Classes.open="{Binding IsWorkflowTasksExpanded}"
+                                                                           Kind="ChevronDown" Size="11" VerticalAlignment="Center" />
+                                                    </Grid>
+                                                </Button>
+                                                <common:SmoothCollapse IsExpanded="{Binding IsWorkflowTasksListVisible}">
+                                                    <ItemsControl ItemsSource="{Binding WorkflowTasks}" Margin="6,5,6,6">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate><StackPanel Spacing="2" /></ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="gui:WorkflowTaskViewModel">
+                                                                <Border Classes="taskRow"
+                                                                        Classes.active="{Binding IsInProgress}"
+                                                                        Classes.done="{Binding IsCompleted}"
+                                                                        Classes.failed="{Binding IsFailed}">
+                                                                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="7">
+                                                                        <Border Grid.Column="0" Classes="taskRail"
+                                                                                Classes.active="{Binding IsInProgress}"
+                                                                                Classes.done="{Binding IsCompleted}"
+                                                                                Classes.failed="{Binding IsFailed}" />
+                                                                        <Panel Grid.Column="1" Width="14" Height="14" VerticalAlignment="Center">
+                                                                            <arc:ArcSpinner Width="12" Height="12"
+                                                                                            Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                                                            IsVisible="{Binding IsInProgress}" />
+                                                                            <lucide:LucideIcon Kind="CircleCheck" Size="13"
+                                                                                               Foreground="#22C55E"
+                                                                                               IsVisible="{Binding IsCompleted}" />
+                                                                            <lucide:LucideIcon Kind="CircleAlert" Size="13"
+                                                                                               Foreground="#EF4444"
+                                                                                               IsVisible="{Binding IsFailed}" />
+                                                                            <lucide:LucideIcon Kind="Circle" Size="12"
+                                                                                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                                                               Opacity="0.55"
+                                                                                               IsVisible="{Binding IsPending}" />
+                                                                        </Panel>
+                                                                        <TextBlock Grid.Column="2" Classes="taskIndex"
+                                                                                   Classes.active="{Binding IsInProgress}"
+                                                                                   Classes.done="{Binding IsCompleted}"
+                                                                                   Text="{Binding DisplayId}"
+                                                                                   VerticalAlignment="Center" />
+                                                                        <StackPanel Grid.Column="3" Spacing="1" VerticalAlignment="Center">
+                                                                            <TextBlock Classes="taskTitle"
+                                                                                       Classes.active="{Binding IsInProgress}"
+                                                                                       Classes.done="{Binding IsCompleted}"
+                                                                                       Classes.failed="{Binding IsFailed}"
+                                                                                       Text="{Binding Title}"
+                                                                                       MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="hint"
+                                                                                       IsVisible="{Binding HasActiveForm}"
+                                                                                       Text="{Binding ActiveForm}"
+                                                                                       FontSize="10.5"
+                                                                                       MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                                        </StackPanel>
+                                                                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                            <Border IsVisible="{Binding IsInProgress}"
+                                                                                    Padding="6,1" CornerRadius="999"
+                                                                                    Background="{arc:ArcDesignTokenResource AccentSubtle}">
+                                                                                <TextBlock FontSize="10" FontWeight="SemiBold"
+                                                                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                                                           Text="{l:AppLangResource AgentGuiTaskInProgress}" />
+                                                                            </Border>
+                                                                            <Button Classes="composerChip" Height="18" Padding="5,0"
+                                                                                    IsVisible="{Binding HasOwner}" Command="{Binding FocusOwnerCommand}">
+                                                                                <TextBlock FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10" Text="{Binding Owner}" />
+                                                                            </Button>
+                                                                            <Border IsVisible="{Binding HasBlockedBy}" Padding="5,0" CornerRadius="4" Background="#22E4B445">
+                                                                                <TextBlock FontSize="10" Foreground="{arc:ArcDesignTokenResource Warning}" Text="{Binding BlockedByText}" />
+                                                                            </Border>
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </common:SmoothCollapse>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </arc:ScrollArea>
+                                </Border>
+                            </common:SmoothCollapse>
+                        </StackPanel>
+                    </Border>
+                </common:SmoothCollapse>
+
                 <!-- Docked queued prompts tray above composer -->
                 <common:SmoothCollapse IsExpanded="{Binding HasQueuedPrompts}">
                     <Border x:Name="QueuedPromptsTray"

@@ -191,10 +191,10 @@ public partial class AgentGuiTabView : UserControl, ITabContent
                 _model.SelectedSubagent = null;
                 return;
             }
-            if (_model.IsAnyHudOpen)
+            if (_model.HasExpandedBackgroundShellLogs)
             {
                 e.Handled = true;
-                _model.ActiveHudPanel = HudPanelKind.None;
+                _model.CollapseExpandedShellLogs();
                 return;
             }
             if (pickerOpen)

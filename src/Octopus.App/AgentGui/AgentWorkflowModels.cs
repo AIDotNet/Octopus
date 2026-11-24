@@ -10,16 +10,7 @@ using TKCode.Arc.Icons.Lucide;
 
 namespace Octopus.App.AgentGui;
 
-/// <summary>Which floating HUD popover panel (Scheme D) is currently open.</summary>
-public enum HudPanelKind
-{
-    None,
-    Workflow,
-    Subagents,
-    BackgroundShells,
-}
-
-/// <summary>High-level Claude Code workflow lifecycle stage.</summary>
+/// <summary>High-level workflow lifecycle stage.</summary>
 public enum WorkflowPhase
 {
     Idle,
@@ -99,10 +90,13 @@ public sealed partial class WorkflowTaskViewModel : ObservableObject
     public bool IsCompleted => Status == "completed";
     public bool IsInProgress => Status == "in_progress";
     public bool IsFailed => Status == "failed";
+    public bool IsPending => !IsCompleted && !IsInProgress && !IsFailed;
     public bool HasOwner => !string.IsNullOrWhiteSpace(Owner);
     public bool HasLinkedSubagent => !string.IsNullOrWhiteSpace(LinkedSubagentId);
     public bool HasBlockedBy => !string.IsNullOrWhiteSpace(BlockedByText);
-    public bool HasActiveForm => IsInProgress && !string.IsNullOrWhiteSpace(ActiveForm);
+    public bool HasActiveForm => IsInProgress
+        && !string.IsNullOrWhiteSpace(ActiveForm)
+        && !string.Equals(ActiveForm.Trim(), Title.Trim(), StringComparison.Ordinal);
 
     public LucideIconKind Icon => Status switch
     {
@@ -137,6 +131,7 @@ public sealed partial class WorkflowTaskViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(IsInProgress));
         OnPropertyChanged(nameof(IsFailed));
+        OnPropertyChanged(nameof(IsPending));
         OnPropertyChanged(nameof(HasOwner));
         OnPropertyChanged(nameof(HasLinkedSubagent));
         OnPropertyChanged(nameof(HasBlockedBy));
@@ -268,6 +263,12 @@ public sealed partial class SubagentRunViewModel : ObservableObject
     public bool HasWorktree => !string.IsNullOrWhiteSpace(WorktreeIsolation);
     public bool HasLastAction => !string.IsNullOrWhiteSpace(LastAction);
     public bool HasSummary => !string.IsNullOrWhiteSpace(Summary);
+    public string SubtitleText => HasLastAction
+        ? LastAction
+        : HasSummary
+            ? ToolCallItemViewModel.ToSingleLine(Summary) ?? Summary!
+            : "";
+    public bool HasSubtitle => !string.IsNullOrWhiteSpace(SubtitleText);
     public bool IsRunning => Status == "running";
     public bool IsDone => Status == "done";
     public bool IsFailed => Status == "failed";
@@ -275,6 +276,7 @@ public sealed partial class SubagentRunViewModel : ObservableObject
     public int ToolCount => Steps.Count;
     public string StepsHeaderText => AppLangResources.Format(AppLangResourceKind.AgentGuiSubagentStepsHeader, Steps.Count);
     public string ToolCountText => Steps.Count > 0 ? AppLangResources.Format(AppLangResourceKind.SubagentToolCount, Steps.Count) : "";
+    public string MetaText => Steps.Count > 0 ? $"{ToolCountText} · {ElapsedText}" : ElapsedText;
     public string BarLabel => HasLastAction ? $"{LastAction} · {ElapsedText}" : $"{DisplayTitle} · {ElapsedText}";
 
     [RelayCommand]
@@ -414,6 +416,7 @@ public sealed partial class SubagentRunViewModel : ObservableObject
         if (ElapsedText != next)
         {
             ElapsedText = next;
+            OnPropertyChanged(nameof(MetaText));
             OnPropertyChanged(nameof(BarLabel));
         }
     }
@@ -446,6 +449,8 @@ public sealed partial class SubagentRunViewModel : ObservableObject
         OnPropertyChanged(nameof(HasWorktree));
         OnPropertyChanged(nameof(HasLastAction));
         OnPropertyChanged(nameof(HasSummary));
+        OnPropertyChanged(nameof(SubtitleText));
+        OnPropertyChanged(nameof(HasSubtitle));
         OnPropertyChanged(nameof(IsRunning));
         OnPropertyChanged(nameof(IsDone));
         OnPropertyChanged(nameof(IsFailed));
@@ -453,6 +458,7 @@ public sealed partial class SubagentRunViewModel : ObservableObject
         OnPropertyChanged(nameof(ToolCount));
         OnPropertyChanged(nameof(StepsHeaderText));
         OnPropertyChanged(nameof(ToolCountText));
+        OnPropertyChanged(nameof(MetaText));
         OnPropertyChanged(nameof(BarLabel));
     }
 }
@@ -503,10 +509,12 @@ public sealed partial class BackgroundBashViewModel : ObservableObject
     [ObservableProperty] public partial string ElapsedText { get; set; } = "0s";
     [ObservableProperty] public partial int UnreadCount { get; set; }
     [ObservableProperty] public partial bool IsSelected { get; set; }
+    [ObservableProperty] public partial bool IsLogsExpanded { get; set; }
 
     public ObservableCollection<BackgroundBashLogLine> Logs { get; } = [];
 
     public string DisplayCommand => ToolCallItemViewModel.ToSingleLine(Command) ?? Command;
+    public string CompactCommand => FormatCompactCommand(DisplayCommand);
     public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
     public bool HasPort => !string.IsNullOrWhiteSpace(DetectedPort);
     public bool IsRunning => Status == "running";
@@ -514,6 +522,11 @@ public sealed partial class BackgroundBashViewModel : ObservableObject
     public bool IsCompleted => Status is "completed" or "stopped";
     public bool HasUnread => UnreadCount > 0;
     public string UnreadBadgeText => UnreadCount > 0 ? $"+{UnreadCount}" : "";
+    public string LastLogLine => Logs.Count > 0 ? Logs[^1].Text : "";
+    public bool HasLastLogLine => Logs.Count > 0;
+
+    public string LogsToggleLabel => AppLangResources.Get(
+        IsLogsExpanded ? AppLangResourceKind.AgentGuiBgBashHideLogs : AppLangResourceKind.AgentGuiBgBashViewLogs);
 
     public string StatusText => Status switch
     {
@@ -521,6 +534,8 @@ public sealed partial class BackgroundBashViewModel : ObservableObject
         "failed" => AppLangResources.Format(AppLangResourceKind.AgentGuiBgBashFailed, ExitCode ?? 1),
         _ => AppLangResources.Format(AppLangResourceKind.AgentGuiBgBashExited, ExitCode ?? 0),
     };
+
+    public string StatusElapsedText => $"{StatusText} · {ElapsedText}";
 
     public string CombinedLogText =>
         Logs.Count == 0
@@ -532,8 +547,17 @@ public sealed partial class BackgroundBashViewModel : ObservableObject
             ? $"{DetectedPort} · {StatusText} · {ElapsedText}"
             : $"{StatusText} · {ElapsedText}";
 
+    partial void OnIsLogsExpandedChanged(bool value)
+    {
+        if (value) ClearUnread();
+        OnPropertyChanged(nameof(LogsToggleLabel));
+    }
+
     [RelayCommand]
     private void Select() => _onSelect?.Invoke(this);
+
+    [RelayCommand]
+    private void ToggleLogs() => _onSelect?.Invoke(this);
 
     [RelayCommand]
     private void Stop()
@@ -566,13 +590,15 @@ public sealed partial class BackgroundBashViewModel : ObservableObject
         }
         if (added > 0)
         {
-            if (markUnread && !IsSelected)
+            if (markUnread && !IsLogsExpanded)
             {
                 UnreadCount += added;
                 OnPropertyChanged(nameof(HasUnread));
                 OnPropertyChanged(nameof(UnreadBadgeText));
             }
             OnPropertyChanged(nameof(CombinedLogText));
+            OnPropertyChanged(nameof(LastLogLine));
+            OnPropertyChanged(nameof(HasLastLogLine));
             OnPropertyChanged(nameof(HasPort));
             OnPropertyChanged(nameof(BarLabel));
         }
@@ -604,8 +630,23 @@ public sealed partial class BackgroundBashViewModel : ObservableObject
         if (ElapsedText != next)
         {
             ElapsedText = next;
+            OnPropertyChanged(nameof(StatusElapsedText));
             OnPropertyChanged(nameof(BarLabel));
         }
+    }
+
+    public static string FormatCompactCommand(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command)) return "";
+        return LongPathRegex().Replace(command, m =>
+        {
+            var raw = m.Value;
+            var trimmed = raw.TrimEnd('/', '\\');
+            var sep = trimmed.LastIndexOfAny(['/', '\\']);
+            if (sep < 0 || sep >= trimmed.Length - 1) return raw;
+            var tail = trimmed[(sep + 1)..];
+            return $"…/{tail}";
+        });
     }
 
     private int AppendChunk(string ts, string text, bool isError)
@@ -648,11 +689,15 @@ public sealed partial class BackgroundBashViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFailed));
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(StatusElapsedText));
         OnPropertyChanged(nameof(BarLabel));
     }
 
     [GeneratedRegex(@"(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::\]|port\s+)[:\s]?(\d{2,5})\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PortRegex();
+
+    [GeneratedRegex(@"(?:(?<=\s)|^)(?:/[^\s""']+){3,}", RegexOptions.CultureInvariant)]
+    private static partial Regex LongPathRegex();
 }
 
 /// <summary>Interactive Claude Code Plan Approval Gate card (<c>ExitPlanMode</c>) in the timeline.</summary>
@@ -719,44 +764,5 @@ public sealed partial class PlanApprovalCardItem : AgentTimelineItem
         IsFeedbackOpen = false;
         ResolvedSummary = AppLangResources.Get(AppLangResourceKind.AgentGuiPermissionCancel);
         _resolve(null, null);
-    }
-}
-
-/// <summary>Scheme D inline Live Workflow Swimlane card visualizing parallel SubAgents & Background Bash processes.</summary>
-public sealed partial class WorkflowSwimlaneItem : AgentTimelineItem
-{
-    private readonly Action _openTopology;
-    private readonly Action _openWorkflowHud;
-
-    public WorkflowSwimlaneItem(
-        ObservableCollection<SubagentRunViewModel> subagents,
-        ObservableCollection<BackgroundBashViewModel> backgroundShells,
-        Action openTopology,
-        Action openWorkflowHud)
-    {
-        Subagents = subagents;
-        BackgroundShells = backgroundShells;
-        _openTopology = openTopology;
-        _openWorkflowHud = openWorkflowHud;
-    }
-
-    public ObservableCollection<SubagentRunViewModel> Subagents { get; }
-    public ObservableCollection<BackgroundBashViewModel> BackgroundShells { get; }
-
-    [ObservableProperty] public partial string PhaseLabel { get; set; } = "";
-    [ObservableProperty] public partial string SummaryText { get; set; } = "";
-
-    public bool HasSubagents => Subagents.Count > 0;
-    public bool HasBackgroundShells => BackgroundShells.Count > 0;
-
-    [RelayCommand] private void OpenTopology() => _openTopology();
-    [RelayCommand] private void OpenWorkflowHud() => _openWorkflowHud();
-
-    public void Refresh(string phaseLabel, string summary)
-    {
-        PhaseLabel = phaseLabel;
-        SummaryText = summary;
-        OnPropertyChanged(nameof(HasSubagents));
-        OnPropertyChanged(nameof(HasBackgroundShells));
     }
 }

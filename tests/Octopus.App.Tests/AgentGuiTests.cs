@@ -1097,14 +1097,17 @@ public class AgentGuiTests
             Assert.Equal("approve_auto", approvedPlanOption);
 
             // Workflow tasks & HUD capsule state
+            // Docked Activity Tray surfaces workflow tasks, SubAgents & Background Bash without polluting the timeline
             Assert.True(vm.HasWorkflowTasks);
             Assert.Equal(2, vm.WorkflowTasks.Count);
-            Assert.Contains("1/2", vm.HudWorkflowText);
-            Assert.True(vm.HasAnyHudItem);
-            vm.ToggleWorkflowHudCommand.Execute(null);
+            Assert.Contains("1/2", vm.ActivityTraySummary);
+            Assert.True(vm.HasActivityTray);
+            Assert.True(vm.IsMultiActivityTray);
+            Assert.False(vm.IsSingleBackgroundShell);
+            vm.ToggleActivityTrayCommand.Execute(null);
             window.UpdateLayout();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.IsWorkflowHudOpen);
+            Assert.True(vm.IsActivityTrayExpanded);
 
             // SubAgents + nested child steps + sidebar sync
             Assert.Equal(2, vm.Subagents.Count);
@@ -1113,23 +1116,23 @@ public class AgentGuiTests
             Assert.Equal("Edit", runningSub.Steps[0].ToolName);
             Assert.Equal(2, subagentService.Of(item.Id).Count);
 
-            // Swimlane card rendered in timeline; clicking a SubAgent opens Slide-Over Drawer
-            Assert.Contains(vm.Timeline, t => t is WorkflowSwimlaneItem);
+            // Clicking a SubAgent opens Slide-Over Drawer (no inline swimlane card in timeline)
             vm.SelectSubagentCommand.Execute(runningSub);
             window.UpdateLayout();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             Assert.True(vm.HasSelectedSubagent);
             Assert.Same(runningSub, vm.SelectedSubagent);
 
-            // Background Bash tracked across turn with detected port :5173 & live output
+            // Background Bash tracked across turn with detected port :5173 & inline expandable live output
             var bgShell = Assert.Single(vm.BackgroundShells);
             Assert.Equal(":5173", bgShell.DetectedPort);
             Assert.True(bgShell.IsRunning);
             Assert.True(await vm.HasRunningChildAsync());
-            vm.ToggleShellsHudCommand.Execute(null);
+            bgShell.ToggleLogsCommand.Execute(null);
             window.UpdateLayout();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.IsShellsHudOpen);
+            Assert.True(bgShell.IsLogsExpanded);
+            Assert.True(vm.HasExpandedBackgroundShellLogs);
             bgShell.StopCommand.Execute(null);
             Assert.False(bgShell.IsRunning);
 
@@ -1151,13 +1154,10 @@ public class AgentGuiTests
             vm.ScriptPreview.CloseCommand.Execute(null);
             Assert.False(vm.ScriptPreview.IsOpen);
 
-            // Topology view switches cleanly
-            vm.SetTopologyViewCommand.Execute(null);
-            window.UpdateLayout();
-            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            Assert.True(vm.IsTopologyView);
-            vm.SetChatViewCommand.Execute(null);
-            Assert.False(vm.IsTopologyView);
+            // Escape / collapse closes inline background shell logs cleanly
+            vm.CollapseExpandedShellLogs();
+            Assert.False(bgShell.IsLogsExpanded);
+            Assert.False(vm.HasExpandedBackgroundShellLogs);
         }
         finally
         {
@@ -1797,7 +1797,7 @@ public class AgentGuiTests
             Assert.Equal(2, vm.WorkflowTasks.Count);
             Assert.True(vm.WorkflowTasks[0].IsCompleted);
             Assert.True(vm.WorkflowTasks[1].IsInProgress);
-            Assert.Contains(vm.Timeline, t => t is WorkflowSwimlaneItem);
+            Assert.True(vm.HasActivityTray);
             Assert.True(vm.HasSubagents);
             Assert.True(vm.HasRunningSubagents);
             Assert.All(vm.Subagents, s => Assert.True(s.IsRunning));
@@ -1969,6 +1969,87 @@ public class AgentGuiTests
         {
             window.Close();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Single_background_bash_uses_compact_docked_tray_without_empty_subagent_counts()
+    {
+        const string longCmd = "dotnet run --project /Users/token/.gemini/antigravity-cli/brain/42664567-1010-4c5f-b316-e8701486150f/scratch/TestRunner/TestRunner.csproj";
+        Assert.Equal("dotnet run --project …/TestRunner.csproj", BackgroundBashViewModel.FormatCompactCommand(longCmd));
+
+        var tempDir = Directory.CreateTempSubdirectory("octopus-single-bg-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "single-bg-tray");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.PromptHandler = (s, _, _, _) =>
+            {
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "bg-only-1",
+                    Kind = "execute",
+                    Title = longCmd,
+                    Command = longCmd,
+                    IsBackground = true,
+                    BackgroundTaskId = "task-only-1",
+                    Status = "in_progress",
+                    Stdout = "Build succeeded. Watching emulator...",
+                }));
+                return Task.FromResult(new AcpPromptResult { StopReason = "end_turn" });
+            };
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 1100, Height = 760, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            vm.InputText = "Run watcher";
+            await vm.SendPromptAsync();
+            await WaitUntilAsync(() => vm.HasBackgroundShells);
+
+            Assert.True(vm.HasActivityTray);
+            Assert.True(vm.IsSingleBackgroundShell);
+            Assert.False(vm.IsMultiActivityTray);
+            Assert.False(vm.IsActivityTrayExpanded);
+            Assert.True(vm.ShowCollapsedSingleShellActions);
+            Assert.True(vm.ShowCollapsedSingleShellStop);
+            Assert.DoesNotContain("0/0", vm.ActivityTraySummary);
+
+            var shell = Assert.Single(vm.BackgroundShells);
+            Assert.Equal("dotnet run --project …/TestRunner.csproj", shell.CompactCommand);
+            Assert.Equal("Build succeeded. Watching emulator...", shell.LastLogLine);
+
+            vm.OpenSingleShellLogsCommand.Execute(null);
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.True(vm.IsActivityTrayExpanded);
+            Assert.True(shell.IsLogsExpanded);
+            Assert.False(vm.ShowCollapsedSingleShellActions);
+
+            shell.StopCommand.Execute(null);
+            vm.ToggleActivityTrayCommand.Execute(null);
+            Assert.False(vm.IsActivityTrayExpanded);
+            Assert.False(vm.ShowCollapsedSingleShellStop);
+        }
+        finally
+        {
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
         }
     }
 

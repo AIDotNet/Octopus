@@ -198,7 +198,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     private IAcpSession? _session;
     private AssistantTurnItem? _activeTurn;
-    private WorkflowSwimlaneItem? _activeSwimlane;
     private readonly Dictionary<string, SubagentRunViewModel> _subagentsById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SubagentRunViewModel> _agySubagentsByConvId = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<AgySubagentSpawn> _agyUnmatchedSpawns = new();
@@ -322,9 +321,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public ObservableCollection<SlashCommandSuggestion> FilteredCommands { get; } = [];
     public ObservableCollection<FileMentionSuggestion> FilteredFiles { get; } = [];
     public ObservableCollection<QueuedPrompt> QueuedPrompts { get; } = [];
-    /// <summary>Claude Code workflow / TodoWrite / Task DAG entries (Scheme D HUD & Topology).</summary>
+    /// <summary>Claude Code / Antigravity workflow task entries rendered in the Docked Activity Tray.</summary>
     public ObservableCollection<WorkflowTaskViewModel> WorkflowTasks { get; } = [];
-    /// <summary>SubAgents dispatched during this session (Scheme D Swimlane, HUD, Slide-Over Drawer & Sidebar).</summary>
+    /// <summary>SubAgents dispatched during this session (Docked Activity Tray, Slide-Over Drawer & Sidebar).</summary>
     public ObservableCollection<SubagentRunViewModel> Subagents { get; } = [];
     /// <summary>Persistent background Bash shells running or recently exited across turns.</summary>
     public ObservableCollection<BackgroundBashViewModel> BackgroundShells { get; } = [];
@@ -347,8 +346,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     [ObservableProperty] public partial bool ShowDiagnostics { get; set; }
     [ObservableProperty] public partial string DiagnosticsText { get; private set; } = "";
     [ObservableProperty] public partial bool IsPinnedToBottom { get; set; } = true;
-    [ObservableProperty] public partial HudPanelKind ActiveHudPanel { get; set; } = HudPanelKind.None;
-    [ObservableProperty] public partial bool IsTopologyView { get; set; }
+    [ObservableProperty] public partial bool IsActivityTrayExpanded { get; set; }
+    [ObservableProperty] public partial bool IsWorkflowTasksExpanded { get; set; } = true;
     [ObservableProperty] public partial SubagentRunViewModel? SelectedSubagent { get; set; }
     [ObservableProperty] public partial BackgroundBashViewModel? SelectedBackgroundShell { get; set; }
     [ObservableProperty] public partial WorkflowPhase CurrentPhase { get; private set; } = WorkflowPhase.Idle;
@@ -371,39 +370,101 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    public bool IsWorkflowHudOpen => ActiveHudPanel == HudPanelKind.Workflow;
-    public bool IsSubagentsHudOpen => ActiveHudPanel == HudPanelKind.Subagents;
-    public bool IsShellsHudOpen => ActiveHudPanel == HudPanelKind.BackgroundShells;
-    public bool IsAnyHudOpen => ActiveHudPanel != HudPanelKind.None;
-    public AgentGuiTabViewModel? TopologyContent => IsTopologyView ? this : null;
-    public AgentGuiTabViewModel? WorkflowHudContent => IsWorkflowHudOpen ? this : null;
-    public AgentGuiTabViewModel? SubagentsHudContent => IsSubagentsHudOpen ? this : null;
-    public AgentGuiTabViewModel? ShellsHudContent => IsShellsHudOpen ? this : null;
     public ScriptPreviewViewModel? ActiveScriptPreview => ScriptPreview.IsOpen ? ScriptPreview : null;
     public bool HasWorkflowTasks => WorkflowTasks.Count > 0;
     public bool HasSubagents => Subagents.Count > 0;
     public bool HasBackgroundShells => BackgroundShells.Count > 0;
-    public bool HasAnyHudItem => HasWorkflowTasks || HasSubagents || HasBackgroundShells;
-    public bool ShowTopologySwitcher => HasSubagents || HasBackgroundShells || HasWorkflowTasks;
+    public bool HasActivityTray => HasWorkflowTasks || HasSubagents || HasBackgroundShells;
+    public bool IsSingleBackgroundShell => !HasSubagents && !HasWorkflowTasks && BackgroundShells.Count == 1;
+    public bool IsMultiActivityTray => HasActivityTray && !IsSingleBackgroundShell;
+    public BackgroundBashViewModel? SingleBackgroundShell => IsSingleBackgroundShell ? BackgroundShells[0] : null;
+    public bool ShowCollapsedSingleShellActions => IsSingleBackgroundShell && !IsActivityTrayExpanded;
+    public bool ShowCollapsedSingleShellStop => ShowCollapsedSingleShellActions && (SingleBackgroundShell?.IsRunning ?? false);
     public bool HasSelectedSubagent => SelectedSubagent is not null;
     public bool HasSelectedBackgroundShell => SelectedBackgroundShell is not null;
     public bool HasRunningSubagents => Subagents.Any(s => s.IsRunning);
     public bool HasRunningBackgroundShells => BackgroundShells.Any(s => s.IsRunning);
+    public bool HasRunningWorkflowTasks => WorkflowTasks.Any(t => t.IsInProgress);
+    public bool HasFailedWorkflowTasks => WorkflowTasks.Any(t => t.IsFailed);
+    public bool ShowSpinnerInActivityHeader => HasRunningSubagents || HasRunningWorkflowTasks;
+    public bool ShowRunningBashDotOnly => HasRunningBackgroundShells && !ShowSpinnerInActivityHeader;
     public bool HasFailedBackgroundShell => BackgroundShells.Any(s => s.IsFailed);
+    public bool HasRunningActivity => HasRunningSubagents || HasRunningBackgroundShells || HasRunningWorkflowTasks;
+    public bool HasFailedActivity => !HasRunningActivity && (HasFailedBackgroundShell || Subagents.Any(s => s.IsFailed) || HasFailedWorkflowTasks);
+    public bool HasCompletedActivity => HasActivityTray && !HasRunningActivity && !HasFailedActivity;
+    public bool HasExpandedBackgroundShellLogs => BackgroundShells.Any(s => s.IsLogsExpanded);
+    public bool IsOnlyWorkflowTasks => HasWorkflowTasks && !HasSubagents && !HasBackgroundShells;
+    public bool ShowWorkflowTasksSectionHeader => HasWorkflowTasks && (HasSubagents || HasBackgroundShells);
+    public bool IsWorkflowTasksListVisible => !ShowWorkflowTasksSectionHeader || IsWorkflowTasksExpanded;
+    public double WorkflowProgressPercent => WorkflowTasks.Count == 0
+        ? 0d
+        : WorkflowTasks.Count(t => t.IsCompleted) * 100d / WorkflowTasks.Count;
+    public bool IsAllWorkflowTasksCompleted => WorkflowTasks.Count > 0 && WorkflowTasks.All(t => t.IsCompleted);
+    public string WorkflowProgressRatioText => $"{WorkflowTasks.Count(t => t.IsCompleted)}/{WorkflowTasks.Count}";
+    public string? ActiveWorkflowTaskTitle
+    {
+        get
+        {
+            var active = WorkflowTasks.FirstOrDefault(t => t.IsInProgress);
+            if (active is null) return null;
+            return !string.IsNullOrWhiteSpace(active.ActiveForm) ? active.ActiveForm : active.Title;
+        }
+    }
+    public bool ShowCollapsedActiveTaskPreview => IsOnlyWorkflowTasks && !IsActivityTrayExpanded && !string.IsNullOrWhiteSpace(ActiveWorkflowTaskTitle);
+    public bool ShowMultiHeaderSummary => !IsOnlyWorkflowTasks;
 
-    public string HudWorkflowText => AppLangResources.Format(
-        AppLangResourceKind.AgentGuiHudWorkflow,
+    public string ActivityTrayTitle
+    {
+        get
+        {
+            if (HasSubagents && (HasBackgroundShells || HasWorkflowTasks))
+                return AppLangResources.Get(AppLangResourceKind.AgentGuiActivityTrayTitleMixed);
+            if (HasSubagents)
+                return AppLangResources.Get(AppLangResourceKind.AgentGuiActivityTrayTitleSubagents);
+            if (HasBackgroundShells && HasWorkflowTasks)
+                return AppLangResources.Get(AppLangResourceKind.AgentGuiActivityTrayTitleMixed);
+            if (HasBackgroundShells)
+                return AppLangResources.Get(AppLangResourceKind.AgentGuiActivityTrayTitleShells);
+            if (HasWorkflowTasks)
+                return AppLangResources.Get(AppLangResourceKind.AgentGuiActivityTrayTitleTasks);
+            return "";
+        }
+    }
+
+    public string ActivityTraySummary
+    {
+        get
+        {
+            var parts = new List<string>(3);
+            if (Subagents.Count > 0)
+            {
+                parts.Add(AppLangResources.Format(
+                    AppLangResourceKind.AgentGuiActivityTraySubagentsSummary,
+                    Subagents.Count(s => s.IsDone),
+                    Subagents.Count));
+            }
+            if (BackgroundShells.Count > 0)
+            {
+                var running = BackgroundShells.Count(s => s.IsRunning);
+                parts.Add(running > 0
+                    ? AppLangResources.Format(AppLangResourceKind.AgentGuiActivityTrayShellsRunningSummary, running)
+                    : AppLangResources.Format(AppLangResourceKind.AgentGuiActivityTrayShellsCountSummary, BackgroundShells.Count));
+            }
+            if (WorkflowTasks.Count > 0)
+            {
+                parts.Add(AppLangResources.Format(
+                    AppLangResourceKind.AgentGuiActivityTrayTasksSummary,
+                    WorkflowTasks.Count(t => t.IsCompleted),
+                    WorkflowTasks.Count));
+            }
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public string WorkflowTasksSummaryText => AppLangResources.Format(
+        AppLangResourceKind.AgentGuiActivityTrayTasksSummary,
         WorkflowTasks.Count(t => t.IsCompleted),
         WorkflowTasks.Count);
-
-    public string HudSubagentsText => AppLangResources.Format(
-        AppLangResourceKind.AgentGuiHudSubagents,
-        Subagents.Count(s => s.IsRunning),
-        Subagents.Count);
-
-    public string HudBgBashText => AppLangResources.Format(
-        AppLangResourceKind.AgentGuiHudBgBash,
-        BackgroundShells.Count(s => s.IsRunning));
 
     public string CurrentPhaseLabel => CurrentPhase switch
     {
@@ -419,18 +480,17 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public bool IsPhaseExecuting => CurrentPhase == WorkflowPhase.Executing;
     public bool IsPhaseCompleted => CurrentPhase == WorkflowPhase.Completed;
 
-    partial void OnActiveHudPanelChanged(HudPanelKind value)
+    partial void OnIsActivityTrayExpandedChanged(bool value)
     {
-        OnPropertyChanged(nameof(IsWorkflowHudOpen));
-        OnPropertyChanged(nameof(IsSubagentsHudOpen));
-        OnPropertyChanged(nameof(IsShellsHudOpen));
-        OnPropertyChanged(nameof(IsAnyHudOpen));
-        OnPropertyChanged(nameof(WorkflowHudContent));
-        OnPropertyChanged(nameof(SubagentsHudContent));
-        OnPropertyChanged(nameof(ShellsHudContent));
+        OnPropertyChanged(nameof(ShowCollapsedSingleShellActions));
+        OnPropertyChanged(nameof(ShowCollapsedSingleShellStop));
+        OnPropertyChanged(nameof(ShowCollapsedActiveTaskPreview));
     }
 
-    partial void OnIsTopologyViewChanged(bool value) => OnPropertyChanged(nameof(TopologyContent));
+    partial void OnIsWorkflowTasksExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsWorkflowTasksListVisible));
+    }
 
     private void OnScriptPreviewPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -458,7 +518,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         OnPropertyChanged(nameof(IsPhasePlanGate));
         OnPropertyChanged(nameof(IsPhaseExecuting));
         OnPropertyChanged(nameof(IsPhaseCompleted));
-        RefreshSwimlane();
     }
 
     public bool IsConnecting => State == AgentGuiState.Connecting;
@@ -996,7 +1055,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         var userTurn = new UserTurnItem(text, attached, ReusePrompt);
         var assistantTurn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript);
         _activeTurn = assistantTurn;
-        _activeSwimlane = null;
         PruneFinishedForegroundSubagents();
         Timeline.Add(userTurn);
         Timeline.Add(assistantTurn);
@@ -1424,32 +1482,21 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     }
 
     [RelayCommand]
-    private void ToggleWorkflowHud() => ActiveHudPanel = ActiveHudPanel == HudPanelKind.Workflow ? HudPanelKind.None : HudPanelKind.Workflow;
+    private void ToggleActivityTray() => IsActivityTrayExpanded = !IsActivityTrayExpanded;
 
     [RelayCommand]
-    private void ToggleSubagentsHud() => ActiveHudPanel = ActiveHudPanel == HudPanelKind.Subagents ? HudPanelKind.None : HudPanelKind.Subagents;
+    private void ToggleWorkflowTasksExpanded() => IsWorkflowTasksExpanded = !IsWorkflowTasksExpanded;
 
     [RelayCommand]
-    private void ToggleShellsHud()
+    private void OpenSingleShellLogs()
     {
-        if (ActiveHudPanel == HudPanelKind.BackgroundShells)
-        {
-            ActiveHudPanel = HudPanelKind.None;
-            return;
-        }
-        SelectedBackgroundShell ??= BackgroundShells.FirstOrDefault(s => s.IsRunning) ?? BackgroundShells.FirstOrDefault();
-        SelectedBackgroundShell?.ClearUnread();
-        ActiveHudPanel = HudPanelKind.BackgroundShells;
+        var shell = SingleBackgroundShell;
+        if (shell is null) return;
+        IsActivityTrayExpanded = true;
+        SelectedBackgroundShell = shell;
+        shell.IsLogsExpanded = true;
+        OnPropertyChanged(nameof(HasExpandedBackgroundShellLogs));
     }
-
-    [RelayCommand]
-    private void CloseHud() => ActiveHudPanel = HudPanelKind.None;
-
-    [RelayCommand]
-    private void SetChatView() => IsTopologyView = false;
-
-    [RelayCommand]
-    private void SetTopologyView() => IsTopologyView = true;
 
     [RelayCommand]
     private void CloseSubagentDrawer() => SelectedSubagent = null;
@@ -1465,8 +1512,27 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private void SelectBackgroundShell(BackgroundBashViewModel? shell)
     {
         if (shell is null) return;
+        var nextExpanded = !shell.IsLogsExpanded;
+        foreach (var other in BackgroundShells)
+        {
+            if (!ReferenceEquals(other, shell)) other.IsLogsExpanded = false;
+        }
+        shell.IsLogsExpanded = nextExpanded;
         SelectedBackgroundShell = shell;
-        ActiveHudPanel = HudPanelKind.BackgroundShells;
+        if (nextExpanded)
+        {
+            IsActivityTrayExpanded = true;
+        }
+        OnPropertyChanged(nameof(HasExpandedBackgroundShellLogs));
+    }
+
+    public void CollapseExpandedShellLogs()
+    {
+        foreach (var sh in BackgroundShells)
+        {
+            sh.IsLogsExpanded = false;
+        }
+        OnPropertyChanged(nameof(HasExpandedBackgroundShellLogs));
     }
 
     /// <summary>Opens the file's live Git working-tree diff inside Octopus's native DiffTabView.</summary>
@@ -2045,7 +2111,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     onStop: StopSubagent);
                 _subagentsById[id] = sub;
                 Subagents.Add(sub);
-                EnsureSwimlaneInTimeline();
                 if (CurrentPhase is WorkflowPhase.Idle or WorkflowPhase.Research)
                 {
                     CurrentPhase = WorkflowPhase.Executing;
@@ -2191,17 +2256,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 update.Command ?? update.Title ?? "bash",
                 update.Description,
                 now,
-                onSelect: sh =>
-                {
-                    SelectedBackgroundShell = sh;
-                    ActiveHudPanel = HudPanelKind.BackgroundShells;
-                },
+                onSelect: SelectBackgroundShell,
                 onStop: StopBackgroundShell,
                 onOpenTerminal: OpenBackgroundShellInTerminal);
             _shellsById[id] = shell;
             BackgroundShells.Add(shell);
             SelectedBackgroundShell ??= shell;
-            EnsureSwimlaneInTimeline();
         }
         if (!string.IsNullOrWhiteSpace(update.BackgroundTaskId))
         {
@@ -2288,28 +2348,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    private void EnsureSwimlaneInTimeline()
-    {
-        if (_activeSwimlane is not null && Timeline.Contains(_activeSwimlane)) return;
-        _activeSwimlane = new WorkflowSwimlaneItem(
-            Subagents,
-            BackgroundShells,
-            openTopology: () => IsTopologyView = true,
-            openWorkflowHud: () => ActiveHudPanel = HudPanelKind.Workflow);
-        Timeline.Add(_activeSwimlane);
-        OnPropertyChanged(nameof(ShowEmptyState));
-        OnPropertyChanged(nameof(HasTimeline));
-        RefreshSwimlane();
-    }
-
-    private void RefreshSwimlane()
-    {
-        if (_activeSwimlane is null) return;
-        var summary = $"{Subagents.Count(s => s.IsDone)}/{Subagents.Count} SubAgents"
-            + (BackgroundShells.Count > 0 ? $" · {BackgroundShells.Count(s => s.IsRunning)} Bg Bash" : "");
-        _activeSwimlane.Refresh(CurrentPhaseLabel, summary);
-    }
-
     private void StopSubagent(SubagentRunViewModel sub)
     {
         sub.MarkInterrupted(DateTimeOffset.Now);
@@ -2370,11 +2408,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         BackgroundShells.Clear();
         _shellsById.Clear();
         _shellsByTaskId.Clear();
-        _activeSwimlane = null;
         SelectedSubagent = null;
         SelectedBackgroundShell = null;
-        ActiveHudPanel = HudPanelKind.None;
-        IsTopologyView = false;
+        IsActivityTrayExpanded = false;
+        IsWorkflowTasksExpanded = true;
         CurrentPhase = WorkflowPhase.Idle;
         ScriptPreview.Close();
         _subagents?.ReportExternal(_item.Id, []);
@@ -2386,15 +2423,35 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         OnPropertyChanged(nameof(HasWorkflowTasks));
         OnPropertyChanged(nameof(HasSubagents));
         OnPropertyChanged(nameof(HasBackgroundShells));
-        OnPropertyChanged(nameof(HasAnyHudItem));
-        OnPropertyChanged(nameof(ShowTopologySwitcher));
+        OnPropertyChanged(nameof(HasActivityTray));
+        OnPropertyChanged(nameof(IsSingleBackgroundShell));
+        OnPropertyChanged(nameof(IsMultiActivityTray));
+        OnPropertyChanged(nameof(SingleBackgroundShell));
+        OnPropertyChanged(nameof(ShowCollapsedSingleShellActions));
+        OnPropertyChanged(nameof(ShowCollapsedSingleShellStop));
         OnPropertyChanged(nameof(HasRunningSubagents));
         OnPropertyChanged(nameof(HasRunningBackgroundShells));
+        OnPropertyChanged(nameof(HasRunningWorkflowTasks));
+        OnPropertyChanged(nameof(HasFailedWorkflowTasks));
+        OnPropertyChanged(nameof(ShowSpinnerInActivityHeader));
+        OnPropertyChanged(nameof(ShowRunningBashDotOnly));
         OnPropertyChanged(nameof(HasFailedBackgroundShell));
-        OnPropertyChanged(nameof(HudWorkflowText));
-        OnPropertyChanged(nameof(HudSubagentsText));
-        OnPropertyChanged(nameof(HudBgBashText));
-        RefreshSwimlane();
+        OnPropertyChanged(nameof(HasRunningActivity));
+        OnPropertyChanged(nameof(HasFailedActivity));
+        OnPropertyChanged(nameof(HasCompletedActivity));
+        OnPropertyChanged(nameof(HasExpandedBackgroundShellLogs));
+        OnPropertyChanged(nameof(IsOnlyWorkflowTasks));
+        OnPropertyChanged(nameof(ShowWorkflowTasksSectionHeader));
+        OnPropertyChanged(nameof(IsWorkflowTasksListVisible));
+        OnPropertyChanged(nameof(WorkflowProgressPercent));
+        OnPropertyChanged(nameof(IsAllWorkflowTasksCompleted));
+        OnPropertyChanged(nameof(WorkflowProgressRatioText));
+        OnPropertyChanged(nameof(ActiveWorkflowTaskTitle));
+        OnPropertyChanged(nameof(ShowCollapsedActiveTaskPreview));
+        OnPropertyChanged(nameof(ShowMultiHeaderSummary));
+        OnPropertyChanged(nameof(ActivityTrayTitle));
+        OnPropertyChanged(nameof(ActivityTraySummary));
+        OnPropertyChanged(nameof(WorkflowTasksSummaryText));
     }
 
     private void EnsureLiveTickTimer()
