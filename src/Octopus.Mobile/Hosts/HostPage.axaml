@@ -38,7 +38,12 @@
                         </Border>
                     </Panel>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                            <Border Classes="guiTag" IsVisible="{Binding IsGui}">
+                                <TextBlock Text="{l:MobileLangResource GuiBadge}" />
+                            </Border>
+                        </StackPanel>
                         <TextBlock Classes="secondary" Text="{Binding Detail}" />
                         <TextBlock Classes="preview" Text="{Binding Preview}" IsVisible="{Binding HasPreview}" />
                     </StackPanel>
@@ -55,7 +60,7 @@
             <arcm:Navbar.Trailing>
                 <arcm:IconButton Name="NewButton"
                                  Icon="{x:Static arc:ArcIcons.Plus}"
-                                 Command="{Binding OpenNewSessionCommand}"
+                                 Command="{Binding OpenAddMenuCommand}"
                                  AutomationProperties.Name="{l:MobileLangResource NewSession}" />
             </arcm:Navbar.Trailing>
         </arcm:Navbar>
@@ -138,16 +143,37 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <TextBlock Classes="muted"
-                   Text="{l:MobileLangResource HostEmpty}"
-                   TextWrapping="Wrap"
-                   TextAlignment="Center"
-                   Margin="16,48"
-                   IsVisible="{Binding IsEmpty}" />
+        <StackPanel Margin="24,48" Spacing="12" IsVisible="{Binding IsEmpty}">
+            <TextBlock Classes="muted"
+                       Text="{l:MobileLangResource HostEmpty}"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center" />
+            <TextBlock Classes="muted"
+                       Text="{l:MobileLangResource HostEmptyAction}"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center" />
+            <arcm:Button Name="EmptyNewProjectButton"
+                         Variant="Filled"
+                         HorizontalAlignment="Center"
+                         Content="{l:MobileLangResource NewProject}"
+                         Command="{Binding NewProjectCommand}" />
+        </StackPanel>
     </Panel>
 
     <arcm:Page.Overlay>
         <Panel>
+            <!-- "+": a session in a project, or a new project. -->
+            <arcm:ActionSheet Name="AddMenu"
+                              IsOpen="{Binding IsAddMenuOpen, Mode=TwoWay}"
+                              CancelText="{l:MobileLangResource Cancel}">
+                <arcm:ActionSheet.Actions>
+                    <arcm:ActionSheetItem Name="AddSessionAction" Content="{l:MobileLangResource NewSessionAction}" Command="{Binding OpenNewSessionCommand}" />
+                    <arcm:ActionSheetItem Name="AddProjectAction" Content="{l:MobileLangResource NewProject}" Command="{Binding NewProjectCommand}" />
+                </arcm:ActionSheet.Actions>
+            </arcm:ActionSheet>
+
+            <common:SessionActionOverlays Name="SessionOverlays" DataContext="{Binding Actions}" />
+
             <!-- New: project, optional branch workspace (existing or new), what to run, and agent options. -->
             <arcm:Sheet Name="NewSheet"
                         DataContext="{Binding NewSession}"

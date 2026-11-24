@@ -40,6 +40,7 @@ public sealed class RemoteHostClient : IAsyncDisposable
             client._connection.On(RemoteMethods.WorkspaceChanged, json.Nothing, _ => client.WorkspaceChanged?.Invoke());
             client._connection.On(RemoteMethods.ItemChanged, json.ItemMessage, item => client.ItemChanged?.Invoke(item));
             client._connection.On(RemoteMethods.FsChanged, json.PathMessage, changed => client.FolderChanged?.Invoke(changed.Path));
+            client._connection.On(RemoteMethods.AcpUpdate, json.AcpUpdateMessage, update => client.AcpUpdated?.Invoke(update));
             client._connection.On(RemoteMethods.SessionExited, json.ExitedMessage, exited =>
             {
                 if (client._terminals.TryGetValue(exited.Channel, out var terminal)) terminal.OnExited(exited.ExitCode);
@@ -88,6 +89,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public bool SupportsBrowse =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityBrowse);
 
+    /// <summary>The host shows its GUI conversations (<see cref="RemoteMethods.CapabilityAcpGui"/>).</summary>
+    public bool SupportsAcpGui =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityAcpGui);
+
     /// <summary>The host supports branch workspaces (<see cref="RemoteMethods.WorkspaceOptions"/> and <see cref="RemoteMethods.WorkspaceCreate"/>).</summary>
     public bool SupportsWorkspaces =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityWorkspaces);
@@ -115,6 +120,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public Task RemoveItemAsync(string itemId, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.ItemRemove, new ItemRefMessage { ItemId = itemId }, RemoteJsonContext.Default.ItemRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
+    /// <summary>Starts an item's program again on the host; a view attached to it sees its terminal cleared.</summary>
+    public Task RestartItemAsync(string itemId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.SessionRestart, new ItemRefMessage { ItemId = itemId }, RemoteJsonContext.Default.ItemRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
     public Task RenameItemAsync(string itemId, string? title, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.ItemRename, new RenameItemMessage { ItemId = itemId, Title = title }, RemoteJsonContext.Default.RenameItemMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
@@ -126,6 +135,32 @@ public sealed class RemoteHostClient : IAsyncDisposable
 
     public async Task<IReadOnlyList<AgentMessage>> ListAgentsAsync(CancellationToken cancellationToken = default) =>
         (await CallAsync(RemoteMethods.AgentCatalog, new Nothing(), RemoteJsonContext.Default.Nothing, RemoteJsonContext.Default.AgentListMessage, cancellationToken).ConfigureAwait(false)).Agents;
+
+    // ---- GUI conversations (AcpMessages.cs) ----
+
+    /// <summary>An attached GUI conversation changed. Raised on the receiving thread.</summary>
+    public event Action<AcpUpdateMessage>? AcpUpdated;
+
+    /// <summary>Starts receiving <see cref="AcpUpdated"/> for a GUI conversation; returns how it is now.</summary>
+    public Task<AcpSnapshotMessage> AttachConversationAsync(string itemId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.AcpAttach, new AcpRefMessage { ItemId = itemId }, RemoteJsonContext.Default.AcpRefMessage, RemoteJsonContext.Default.AcpSnapshotMessage, cancellationToken);
+
+    public Task DetachConversationAsync(string itemId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.AcpDetach, new AcpRefMessage { ItemId = itemId }, RemoteJsonContext.Default.AcpRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task SendPromptAsync(string itemId, string text, IReadOnlyList<string>? attachments = null, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.AcpPrompt, new AcpPromptMessage { ItemId = itemId, Text = text, Attachments = attachments is { Count: > 0 } ? [.. attachments] : null },
+            RemoteJsonContext.Default.AcpPromptMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task CancelTurnAsync(string itemId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.AcpCancel, new AcpRefMessage { ItemId = itemId }, RemoteJsonContext.Default.AcpRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task RespondAsync(AcpRespondMessage answer, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.AcpRespond, answer, RemoteJsonContext.Default.AcpRespondMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task SetConversationOptionAsync(string itemId, string kind, string value, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.AcpSetOption, new AcpSetOptionMessage { ItemId = itemId, Kind = kind, Value = value },
+            RemoteJsonContext.Default.AcpSetOptionMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
     // ---- files of the host's projects ----
 

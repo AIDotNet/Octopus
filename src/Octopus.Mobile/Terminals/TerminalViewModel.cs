@@ -3,6 +3,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Core.Terminals;
+using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Workspace;
@@ -71,10 +72,20 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
             Cap("↑", TerminalKey.ArrowUp), Cap("↓", TerminalKey.ArrowDown), Cap("←", TerminalKey.ArrowLeft), Cap("→", TerminalKey.ArrowRight),
             Cap("/", null, "/"), Cap("~", null, "~"), Cap("|", null, "|"), Cap("-", null, "-"),
         ];
+        // Closed from its own menu: the page leaves (the program on the host has ended).
+        Actions = new SessionActionsViewModel(workspace, navigator, session, _ => navigator.Back());
+        FontSize = DefaultFontSize;
         session.PropertyChanged += OnSessionChanged;
     }
 
+    /// <summary>The terminal's text size on a phone, and the range "A−" and "A+" move it in.</summary>
+    public const double DefaultFontSize = 12, MinFontSize = 8, MaxFontSize = 20;
+
     public RemoteSession Session { get; }
+    /// <summary>The "⋯" menu and what it opens (design/ui/移动端功能扩展方案.html, ②).</summary>
+    public SessionActionsViewModel Actions { get; }
+    /// <summary>A smaller size fits more columns; while fitted the session follows the new grid.</summary>
+    [ObservableProperty] public partial double FontSize { get; set; }
     public string Title => Session.Title;
     /// <summary>Project (with branch when in a worktree), host and how the host is reached, under the title.</summary>
     public string Location => string.Join(" · ",
@@ -115,6 +126,30 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void Back() => _navigator.Back();
+
+    /// <summary>
+    /// The "⋯" menu: fit or give the size back and the text size first, then what can be done to any session
+    /// (rename, restart, another like it, details, close).
+    /// </summary>
+    [RelayCommand]
+    private void OpenMenu()
+    {
+        var leading = new List<SessionMenuEntry>
+        {
+            IsFitted
+                ? new(MobileLangResources.Get(MobileLangResourceKind.ReturnSize), ReleaseCommand)
+                : new(MobileLangResources.Get(MobileLangResourceKind.FitToPhone), FitCommand),
+        };
+        if (FontSize < MaxFontSize) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.FontLarger), LargerTextCommand));
+        if (FontSize > MinFontSize) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.FontSmaller), SmallerTextCommand));
+        Actions.ShowMenu(Session, leading);
+    }
+
+    [RelayCommand]
+    private void LargerText() => FontSize = Math.Min(MaxFontSize, FontSize + 1);
+
+    [RelayCommand]
+    private void SmallerText() => FontSize = Math.Max(MinFontSize, FontSize - 1);
 
     /// <summary>Takes the size for this phone and opens the input that fits the session: the composer for an agent, the keyboard for a terminal.</summary>
     [RelayCommand]

@@ -11,7 +11,12 @@ namespace Octopus.Mobile.Shell;
 public interface INavigator
 {
     void ShowHost(RemoteHost host);
+    /// <summary>A session's terminal; a session that runs as a GUI conversation on the host opens its details instead.</summary>
     void ShowSession(RemoteSession session);
+    /// <summary>Everything about a session and what can be done to it.</summary>
+    void ShowSessionDetails(RemoteSession session);
+    /// <summary>Picks a folder of a host and makes it a project there; <paramref name="created"/> runs after the page left.</summary>
+    void ShowFolderPicker(RemoteHost host, Action<RemoteProject>? created = null);
     void ShowPairing(RemoteHost host);
     /// <summary>The number of a pairing that is already under way: a computer the person named by its address.</summary>
     void ShowPairing(string hostName, PairingAttempt attempt);

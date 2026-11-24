@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+             xmlns:l="using:Octopus.Mobile.Localization"
+             xmlns:vm="using:Octopus.Mobile.Common"
+             x:Class="Octopus.Mobile.Common.SessionActionOverlays"
+             x:DataType="vm:SessionActionsViewModel">
+    <!-- Goes into a page's Overlay: the session menu, renaming, the close confirmation and the notices. -->
+    <Panel>
+        <!-- Rows come from SessionActionsViewModel.ShowMenu; filled in the code-behind. -->
+        <arcm:ActionSheet Name="Menu" CancelText="{l:MobileLangResource Cancel}" />
+
+        <arcm:Sheet Name="RenameSheet"
+                    IsOpen="{Binding IsRenameOpen, Mode=TwoWay}"
+                    Title="{l:MobileLangResource SessionRename}">
+            <StackPanel Margin="16,4,16,16" Spacing="10">
+                <arcm:TextField Name="RenameField"
+                                Text="{Binding RenameText, Mode=TwoWay}"
+                                PlaceholderText="{l:MobileLangResource SessionRenamePlaceholder}" />
+                <TextBlock Classes="muted" Text="{l:MobileLangResource SessionRenameHint}" TextWrapping="Wrap" Margin="4,0" />
+                <arcm:Button Name="RenameSaveButton"
+                             Variant="Filled"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             Content="{l:MobileLangResource Save}"
+                             Command="{Binding ConfirmRenameCommand}" />
+            </StackPanel>
+        </arcm:Sheet>
+
+        <arcm:Dialog Name="CloseDialog"
+                     IsOpen="{Binding IsCloseOpen, Mode=TwoWay}"
+                     IsDismissible="True"
+                     Title="{Binding CloseTitle}"
+                     Message="{l:MobileLangResource SessionCloseMessage}">
+            <arcm:Button Content="{l:MobileLangResource Cancel}" Variant="Plain" />
+            <arcm:Button Name="CloseConfirmButton"
+                         Content="{l:MobileLangResource SessionClose}"
+                         Variant="Filled"
+                         arcm:Dialog.IsDestructive="True"
+                         Command="{Binding ConfirmCloseCommand}" />
+        </arcm:Dialog>
+
+        <arcm:Toast Name="Notices" />
+    </Panel>
+</UserControl>

@@ -1,4 +1,6 @@
 using System.Collections.Specialized;
+using Avalonia;
+using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using TKCode.Arc.Mobile;
@@ -20,6 +22,8 @@ public partial class HostPage : Page, IClosablePage
         viewModel.NewSession.BaseBranches.CollectionChanged += OnBaseBranchesChanged;
         viewModel.NewSession.AvailableExistingBranches.CollectionChanged += OnExistingBranchesChanged;
         viewModel.NewSession.CurrentTaskOptions.CollectionChanged += OnTaskOptionsChanged;
+        // Holding a session row opens its menu (design/ui/移动端功能扩展方案.html, M-C ①).
+        _ = new LongPress(this, OnLongPress);
         FillModels();
         FillBaseBranches();
         FillExistingBranches();
@@ -33,6 +37,18 @@ public partial class HostPage : Page, IClosablePage
         _viewModel.NewSession.AvailableExistingBranches.CollectionChanged -= OnExistingBranchesChanged;
         _viewModel.NewSession.CurrentTaskOptions.CollectionChanged -= OnTaskOptionsChanged;
         _viewModel.Dispose();
+    }
+
+    private bool OnLongPress(StyledElement pressed)
+    {
+        for (var element = pressed; element is not null; element = element.Parent)
+        {
+            if (element.DataContext is not SessionRowViewModel row) continue;
+            row.Held();
+            _viewModel.ShowMenu(row.Session);
+            return true;
+        }
+        return false;
     }
 
     private void OnModelsChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillModels();

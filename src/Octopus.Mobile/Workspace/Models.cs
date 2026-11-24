@@ -140,6 +140,15 @@ public sealed partial class RemoteSession : ObservableObject
     public string? AgentId { get; init; }
     /// <summary>The second line of its row: model and effort for an agent, the shell for a terminal.</summary>
     public string? Detail { get; init; }
+    /// <summary>The model it was started with, as the host labels it; null for a terminal or the agent's default.</summary>
+    public string? Model { get; init; }
+    /// <summary>The effort it was started with, as the host labels it; null when none was chosen.</summary>
+    public string? Effort { get; init; }
+    /// <summary>
+    /// An agent that runs as an ACP conversation in a GUI tab on the host: there is no terminal to show, so the phone
+    /// opens its details instead (design/ui/移动端功能扩展方案.html, G-0).
+    /// </summary>
+    public bool IsGui { get; init; }
     /// <summary>Null when running in the project's default folder; otherwise the branch workspace id.</summary>
     [ObservableProperty] public partial string? WorkspaceId { get; set; }
     /// <summary>Branch name of the workspace this session runs in; null for default folder.</summary>
@@ -169,3 +178,15 @@ public sealed record NewSessionRequest(
     string? Prompt,
     string? WorkspaceId = null,
     bool InjectTaskPrompt = false);
+
+/// <summary>One entry while browsing the host's folders for a new project.</summary>
+/// <param name="Kind"><c>folder</c>, <c>drive</c> or <c>home</c>.</param>
+/// <param name="IsProject">The folder is already one of the host's projects.</param>
+public sealed record RemoteFolderEntry(string Name, string Path, string Kind, bool IsProject);
+
+/// <summary>One folder of the host as the folder picker shows it.</summary>
+/// <param name="Path">The folder; empty for the list of drives (Windows).</param>
+/// <param name="Parent">The folder above; empty for the list of drives, null at the top.</param>
+/// <param name="Roots">Home and the drives or <c>/</c>: the shortcuts above the list.</param>
+/// <param name="Folders">The folders in it.</param>
+public sealed record RemoteFolderListing(string Path, string? Parent, string Separator, string Home, IReadOnlyList<RemoteFolderEntry> Roots, IReadOnlyList<RemoteFolderEntry> Folders);

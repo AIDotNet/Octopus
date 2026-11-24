@@ -59,6 +59,58 @@ public class Screenshots
             shell.Keys.Single(key => key.IsControl).PressCommand.Execute(null);
             Phone.Settle();
             phone.Save("6-terminal-keys" + suffix);
+
+            // The same with the keyboard up: the key row sits on it, the terminal keeps what is left.
+            var keyboard = new TKCode.Arc.Mobile.KeyboardInsetSource();
+            TKCode.Arc.Mobile.Page.SetKeyboardInsetSource(phone.Shell, keyboard);
+            keyboard.Set(300, TimeSpan.Zero);
+            Phone.Settle(600);
+            phone.Save("6b-terminal-keyboard" + suffix);
+            keyboard.Set(0, TimeSpan.Zero);
+            Phone.Settle(400);
+
+            // The "⋯" menu.
+            shell.OpenMenuCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("6c-terminal-menu" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+            var hostPage = phone.Top<HostPage>();
+            var hostModel = (HostViewModel)hostPage.DataContext!;
+            // "+" (its menu closes as a row is chosen) and the folder picker.
+            hostModel.OpenAddMenuCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("2d-host-add-menu" + suffix);
+            hostModel.IsAddMenuOpen = false;
+            hostModel.NewProjectCommand.Execute(null);
+            Phone.Settle();
+            var picker = (FolderPickerViewModel)phone.Top<FolderPickerPage>().DataContext!;
+            picker.Folders.Single(folder => folder.Name == "code").OpenCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("2e-folder-picker" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+            // A held row's menu, then the session's details.
+            hostModel.ShowMenu(mac.Projects[0].Sessions[1]);
+            Phone.Settle();
+            phone.Save("2b-host-row-menu" + suffix);
+            hostModel.Actions.ShowDetailsCommand.Execute(null);
+            Phone.Settle();
+            phone.Save("2c-session-details" + suffix);
+            phone.Shell.Back();
+            Phone.Settle();
+
+
+            // A GUI conversation on the other computer: its details, with the note.
+            var station = phone.Workspace.Hosts.Single(h => h.Id == "station");
+            phone.Shell.ShowHost(station);
+            Phone.Settle();
+            phone.Save("2f-host-gui-row" + suffix);
+            phone.Shell.ShowSession(station.Projects[0].Sessions.Single(session => session.IsGui));
+            Phone.Settle();
+            phone.Save("2g-gui-details" + suffix);
         }
 
         using (var phone = new Phone())

@@ -83,12 +83,12 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
         lock (_gate) _workspaceOptions[project.Id] = options;
     }
 
-    public ItemMessage AddItem(ProjectMessage project, string title, string? agentId = null, string activity = ItemActivities.Idle, string? model = null, string? effort = null, WorkspaceMessage? workspace = null)
+    public ItemMessage AddItem(ProjectMessage project, string title, string? agentId = null, string activity = ItemActivities.Idle, string? model = null, string? effort = null, WorkspaceMessage? workspace = null, string? surface = null)
     {
         var item = new ItemMessage
         {
             Id = "i" + Interlocked.Increment(ref _nextId), ProjectId = project.Id, Title = title, AgentId = agentId, Model = model, Effort = effort,
-            WorkspaceId = workspace?.Id, WorkspaceBranch = workspace?.Branch,
+            WorkspaceId = workspace?.Id, WorkspaceBranch = workspace?.Branch, Surface = surface,
             Kind = agentId is null ? ItemKinds.Terminal : ItemKinds.Agent, Activity = activity, IsRunning = true,
         };
         lock (_gate) _items.Add(item);
@@ -190,7 +190,23 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
         return Task.CompletedTask;
     }
 
-    public Task RenameItemAsync(string itemId, string? title) => Task.CompletedTask;
+    /// <summary>What the device renamed, in order: the item and the title it asked for.</summary>
+    public ConcurrentQueue<(string ItemId, string? Title)> Renamed { get; } = new();
+    /// <summary>The items the device asked to restart, in order.</summary>
+    public ConcurrentQueue<string> Restarted { get; } = new();
+
+    public Task RenameItemAsync(string itemId, string? title)
+    {
+        Renamed.Enqueue((itemId, title));
+        ItemMessage? item;
+        lock (_gate) item = _items.FirstOrDefault(known => known.Id == itemId);
+        if (item is not null && title is not null)
+        {
+            item.Title = title;
+            ItemChanged?.Invoke(item);
+        }
+        return Task.CompletedTask;
+    }
 
     public Task<IReadOnlyList<AgentMessage>> ListAgentsAsync() => Task.FromResult<IReadOnlyList<AgentMessage>>(Agents);
 
@@ -203,7 +219,15 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
         return Task.FromResult<ISessionAttachment>(TerminalOf(itemId).Attach(sink, columns, rows, claimSize));
     }
 
-    public Task RestartAsync(string itemId) => Task.CompletedTask;
+    public Task RestartAsync(string itemId)
+    {
+        lock (_gate)
+        {
+            if (_items.FirstOrDefault(item => item.Id == itemId) is { Surface: ItemSurfaces.Gui }) throw new RemoteException(RemoteMethods.NotAllowed, "A GUI conversation.");
+        }
+        Restarted.Enqueue(itemId);
+        return Task.CompletedTask;
+    }
 
     // Files and git are not what these tests are about.
     private static RemoteException NotHere() => new(RemoteMethods.NotAllowed, "Not available in this test host.");
@@ -217,7 +241,23 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     public Task RenameAsync(string path, string newPath) => throw NotHere();
     public Task DeleteAsync(string path, bool isDirectory) => throw NotHere();
     public Task<IDisposable> WatchAsync(string folder, Action changed) => throw NotHere();
-    public Task<BrowseFolderResultMessage> BrowseFolderAsync(BrowseFolderMessage request) => throw NotHere();
+    /// <summary>A home with two folders in it; any other folder is empty.</summary>
+    public Task<BrowseFolderResultMessage> BrowseFolderAsync(BrowseFolderMessage request)
+    {
+        var path = string.IsNullOrEmpty(request.Path) ? Info.Home : request.Path;
+        List<BrowseEntryMessage> entries = path == Info.Home
+            ? [new() { Name = "code", Path = Info.Home + "/code" }, new() { Name = "notes", Path = Info.Home + "/notes" }]
+            : [];
+        return Task.FromResult(new BrowseFolderResultMessage
+        {
+            Path = path,
+            Parent = path == "/" ? null : Path.GetDirectoryName(path),
+            Separator = "/",
+            Home = Info.Home,
+            Roots = [new() { Name = "ada", Path = Info.Home, Kind = "home" }, new() { Name = "/", Path = "/", Kind = "drive" }],
+            Entries = entries,
+        });
+    }
     public Task<string> BrowseCreateDirectoryAsync(CreateBrowseFolderMessage request) => throw NotHere();
     public Task<string> GitAsync(string method, string arguments) => throw NotHere();
 }

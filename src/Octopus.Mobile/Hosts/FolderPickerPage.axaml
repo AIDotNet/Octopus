@@ -1,0 +1,111 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Hosts"
+           x:Class="Octopus.Mobile.Hosts.FolderPickerPage"
+           x:DataType="vm:FolderPickerViewModel"
+           IsScrollable="True">
+    <arcm:Page.Resources>
+        <StreamGeometry x:Key="FolderPlusGlyph">M12 10v6 M9 13h6 M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z</StreamGeometry>
+    </arcm:Page.Resources>
+
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource FolderTitle}"
+                     ShowBack="True"
+                     BackCommand="{Binding BackCommand}">
+            <arcm:Navbar.Trailing>
+                <arcm:IconButton Name="NewFolderButton"
+                                 Icon="{StaticResource FolderPlusGlyph}"
+                                 IsEnabled="{Binding CanChoose}"
+                                 Command="{Binding BeginNewFolderCommand}"
+                                 AutomationProperties.Name="{l:MobileLangResource FolderNew}" />
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
+    </arcm:Page.Header>
+
+    <StackPanel Margin="0,4,0,24" Spacing="12">
+        <!-- Where it is: each part of the path opens that folder. -->
+        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="12,0">
+            <ItemsControl Name="Crumbs" ItemsSource="{Binding Crumbs}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FolderRowViewModel">
+                        <arcm:Button Variant="Plain" Content="{Binding Name}" Command="{Binding OpenCommand}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Home and the drives. -->
+        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="16,0">
+            <ItemsControl Name="Roots" ItemsSource="{Binding Roots}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FolderRowViewModel">
+                        <arcm:Button Variant="Tinted" Content="{Binding Name}" Command="{Binding OpenCommand}" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <arc:ArcSpinner HorizontalAlignment="Center" Margin="0,24" IsVisible="{Binding IsLoading}" />
+
+        <Border Classes="alertCard danger" Margin="16,0" IsVisible="{Binding HasError}">
+            <TextBlock Name="ErrorText" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+        </Border>
+
+        <arcm:ListGroup Name="Folders" ItemsSource="{Binding Folders}" IsVisible="{Binding !IsLoading}">
+            <arcm:ListGroup.ItemTemplate>
+                <DataTemplate x:DataType="vm:FolderRowViewModel">
+                    <arcm:ListItem Content="{Binding Name}"
+                                   Subtitle="{Binding Subtitle}"
+                                   Icon="{x:Static arc:ArcIcons.Folder}"
+                                   ShowChevron="True"
+                                   Command="{Binding OpenCommand}" />
+                </DataTemplate>
+            </arcm:ListGroup.ItemTemplate>
+        </arcm:ListGroup>
+
+        <TextBlock Classes="muted" Text="{l:MobileLangResource FolderEmpty}" HorizontalAlignment="Center" Margin="0,24"
+                   IsVisible="{Binding IsEmpty}" />
+    </StackPanel>
+
+    <arcm:Page.Footer>
+        <Border Classes="bar">
+            <StackPanel Spacing="6">
+                <TextBlock Name="PathText" Classes="secondary" Text="{Binding Path}" Margin="4,0" />
+                <arcm:Button Name="ChooseButton"
+                             Variant="Filled"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             IsEnabled="{Binding CanChoose}"
+                             Content="{Binding ChooseText}"
+                             Command="{Binding ChooseCommand}" />
+            </StackPanel>
+        </Border>
+    </arcm:Page.Footer>
+
+    <arcm:Page.Overlay>
+        <arcm:Sheet Name="NewFolderSheet"
+                    IsOpen="{Binding IsNewFolderOpen, Mode=TwoWay}"
+                    Title="{l:MobileLangResource FolderNew}">
+            <StackPanel Margin="16,4,16,16" Spacing="10">
+                <arcm:TextField Name="NewFolderField"
+                                Text="{Binding NewFolderName, Mode=TwoWay}"
+                                PlaceholderText="{l:MobileLangResource FolderNewPlaceholder}" />
+                <arcm:Button Name="CreateFolderButton"
+                             Variant="Filled"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             Content="{l:MobileLangResource FolderCreate}"
+                             Command="{Binding CreateFolderCommand}" />
+            </StackPanel>
+        </arcm:Sheet>
+    </arcm:Page.Overlay>
+</arcm:Page>

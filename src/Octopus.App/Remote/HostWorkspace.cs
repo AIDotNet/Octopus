@@ -353,6 +353,8 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     public Task<ISessionAttachment> AttachAsync(string itemId, int columns, int rows, bool nativeSnapshot, bool claimSize, ISessionSink sink) => OnUi<ISessionAttachment>(() =>
     {
         var (project, item) = FindItem(itemId);
+        // Planning it as a terminal would start a second copy of the agent beside the GUI tab's own.
+        if (IsGui(item)) throw NoTerminal();
         var size = new TerminalSize(columns, rows, 0, 0);
         TerminalSession session;
         try
@@ -379,7 +381,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     {
         var session = await OnUi(() =>
         {
-            FindItem(itemId);
+            if (IsGui(FindItem(itemId).Item)) throw NoTerminal();
             return _sessions.Find(itemId) ?? throw new RemoteException(RemoteMethods.NotFound, "The item has no terminal yet.");
         }).ConfigureAwait(false);
         await OnUiAsync(session.RestartAsync).ConfigureAwait(false);
@@ -601,6 +603,12 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
 
     private static bool IsSession(ProjectItem item) => item.Kind is ProjectItemKind.Terminal or ProjectItemKind.Agent;
 
+    /// <summary>An agent that runs as an ACP conversation in a GUI tab: it has no terminal a device could attach to.</summary>
+    private static bool IsGui(ProjectItem item) => item.Kind == ProjectItemKind.Agent && item.Surface == Octopus.Core.Agents.AgentSurface.Gui;
+
+    private static RemoteException NoTerminal() =>
+        new(RemoteMethods.NotAllowed, "This agent runs as a GUI conversation on the host; it has no terminal to show.");
+
     private Project FindProject(string projectId) =>
         _projects.Projects.FirstOrDefault(p => p.Id == projectId && ProjectLocation.IsOnThisComputer(p))
         ?? throw new RemoteException(RemoteMethods.NotFound, "The project does not exist on the host.");
@@ -713,6 +721,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             _ => ItemActivities.Idle,
         },
         IsRunning = _sessions.Find(item.Id)?.IsRunning == true,
+        Surface = IsGui(item) ? ItemSurfaces.Gui : item.Kind == ProjectItemKind.Agent ? ItemSurfaces.Terminal : null,
     };
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

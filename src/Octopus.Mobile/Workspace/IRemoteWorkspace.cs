@@ -30,6 +30,33 @@ public interface IRemoteWorkspace
     Task<RemoteBranchWorkspace> CreateWorkspaceAsync(RemoteProject project, CreateBranchWorkspaceRequest request, CancellationToken cancellationToken = default) =>
         throw new IOException("Branch workspaces are not supported.");
 
+    /// <summary>Gives a session another title on the host; null or empty goes back to the one it had by default.</summary>
+    Task RenameSessionAsync(RemoteSession session, string? title, CancellationToken cancellationToken = default) =>
+        throw new IOException("Renaming is not supported.");
+
+    /// <summary>Ends a session on the host (its program stops) and takes it out of its project.</summary>
+    Task CloseSessionAsync(RemoteSession session, CancellationToken cancellationToken = default) =>
+        throw new IOException("Closing is not supported.");
+
+    /// <summary>Starts a session's program again on the host; an open terminal page sees its screen cleared.</summary>
+    Task RestartSessionAsync(RemoteSession session, CancellationToken cancellationToken = default) =>
+        throw new IOException("Restarting is not supported.");
+
+    /// <summary>
+    /// Lists the folders of a host for picking a new project. Null starts at the host's home; empty is the list of
+    /// drives on Windows. Throws <see cref="IOException"/> (with words for the person) when the host cannot.
+    /// </summary>
+    Task<RemoteFolderListing> BrowseFolderAsync(RemoteHost host, string? path, CancellationToken cancellationToken = default) =>
+        throw new IOException("Browsing is not supported.");
+
+    /// <summary>Makes an empty folder while browsing; returns its full path on the host.</summary>
+    Task<string> CreateFolderAsync(RemoteHost host, string parentPath, string name, CancellationToken cancellationToken = default) =>
+        throw new IOException("Browsing is not supported.");
+
+    /// <summary>Makes a folder of the host a project there; it joins <see cref="RemoteHost.Projects"/>.</summary>
+    Task<RemoteProject> CreateProjectAsync(RemoteHost host, string path, CancellationToken cancellationToken = default) =>
+        throw new IOException("Creating projects is not supported.");
+
     /// <summary>
     /// What the terminal page starts its control with: a factory whose connection is the session on the host (its
     /// output, this phone's input). The launch spec given to it is ignored, the host already runs the program.

@@ -229,6 +229,72 @@ public class RemoteTests
     }
 
     [AvaloniaFact]
+    public async Task Sessions_are_managed_and_projects_made_from_the_phone()
+    {
+        await using var relay = new FakeRelay();
+        await using var studio = await Computer.StartAsync(relay);
+        var octopus = studio.Workspace.AddProject("Octopus", "~/code/Octopus");
+        var watch = studio.Workspace.AddItem(octopus, "dotnet watch");
+        var gui = studio.Workspace.AddItem(octopus, "接口文档", "claude", surface: ItemSurfaces.Gui);
+        using var phone = new RealPhone(relay);
+        phone.SignIn(relay);
+        phone.Pair(studio);
+        var row = phone.Model<HostsViewModel>().Online.Single();
+        row.OpenCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostPage));
+        var host = phone.Model<HostViewModel>();
+        Assert.True(Phone.Until(() => host.Host.Projects.Count == 1 && host.Host.Projects[0].Sessions.Count == 2));
+        var sessions = host.Host.Projects[0].Sessions;
+        var shell = sessions.Single(session => session.Id == watch.Id);
+        // How the computer runs it decides how it opens: a GUI conversation has no terminal here.
+        Assert.False(shell.IsGui);
+        Assert.True(sessions.Single(session => session.Id == gui.Id).IsGui);
+
+        // Rename and restart go to the computer by the item's id.
+        var actions = host.Actions;
+        actions.ShowMenu(shell, includeOpen: true);
+        actions.BeginRenameCommand.Execute(null);
+        Assert.Equal("dotnet watch", actions.RenameText);
+        actions.RenameText = "  watch 前端  ";
+        await actions.ConfirmRenameCommand.ExecuteAsync(null);
+        Assert.True(studio.Workspace.Renamed.TryDequeue(out var renamed));
+        Assert.Equal((watch.Id, "watch 前端"), renamed);
+        Assert.Equal("watch 前端", shell.Title);
+        Assert.False(actions.IsRenameOpen);
+
+        await actions.RestartCommand.ExecuteAsync(null);
+        Assert.True(studio.Workspace.Restarted.TryDequeue(out var restarted));
+        Assert.Equal(watch.Id, restarted);
+
+        // Closed: gone on the computer and here.
+        actions.BeginCloseCommand.Execute(null);
+        Assert.True(actions.IsCloseOpen);
+        await actions.ConfirmCloseCommand.ExecuteAsync(null);
+        Assert.True(Phone.Until(() => sessions.All(session => session.Id != watch.Id)), "the closed session leaves the list");
+        Assert.True(Phone.Until(() => host.Sections[0].Sessions.Count == 1));
+
+        // A new project: browse the computer's home, step into a folder, make it a project.
+        host.NewProjectCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is FolderPickerPage));
+        var picker = phone.Model<FolderPickerViewModel>();
+        Assert.True(Phone.Until(() => picker.Folders.Count == 2), "the home folder is listed: " + picker.ErrorText);
+        Assert.Equal("/home/ada", picker.Path);
+        Assert.Equal(["code", "notes"], picker.Folders.Select(folder => folder.Name));
+        picker.Folders[0].OpenCommand.Execute(null);
+        Assert.True(Phone.Until(() => picker.Path == "/home/ada/code" && !picker.IsLoading));
+        Assert.True(picker.IsEmpty);
+        Assert.Equal(["/", "home", "ada", "code"], picker.Crumbs.Select(crumb => crumb.Name));
+        Assert.Equal("把“code”设为项目", picker.ChooseText);
+        await picker.ChooseCommand.ExecuteAsync(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostPage));
+        Assert.True(Phone.Until(() => host.Sections.Count == 2), "the new project is listed");
+        Assert.Contains(host.Host.Projects, project => project.Path == "/home/ada/code");
+        // Made from the "+": the "New" sheet opens on it.
+        Assert.True(host.NewSession.IsOpen);
+        Assert.Equal("/home/ada/code", host.NewSession.Projects.Single(choice => choice.IsSelected).Path);
+    }
+
+    [AvaloniaFact]
     public async Task A_session_that_cannot_be_started_leaves_the_sheet_open_with_the_reason()
     {
         await using var relay = new FakeRelay();

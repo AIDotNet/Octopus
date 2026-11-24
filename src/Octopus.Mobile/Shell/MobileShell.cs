@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Octopus.Mobile.Account;
 using Octopus.Mobile.Hosts;
+using Octopus.Mobile.Sessions;
 using Octopus.Mobile.Terminals;
 using Octopus.Mobile.Updates;
 using Octopus.Mobile.Workspace;
@@ -50,7 +51,17 @@ public sealed class MobileShell : ContentControl, INavigator
 
     public void ShowHost(RemoteHost host) => Push(new HostPage(new HostViewModel(host, _workspace, this)));
 
-    public void ShowSession(RemoteSession session) => Push(new TerminalPage(new TerminalViewModel(session, _workspace, this)));
+    public void ShowSession(RemoteSession session)
+    {
+        // A GUI conversation has no terminal here (design/ui/移动端功能扩展方案.html, G-0).
+        if (session.IsGui) ShowSessionDetails(session);
+        else Push(new TerminalPage(new TerminalViewModel(session, _workspace, this)));
+    }
+
+    public void ShowSessionDetails(RemoteSession session) => Push(new SessionDetailPage(new SessionDetailViewModel(session, _workspace, this)));
+
+    public void ShowFolderPicker(RemoteHost host, Action<RemoteProject>? created = null) =>
+        Push(new FolderPickerPage(new FolderPickerViewModel(host, _workspace, this, created)));
 
     public void ShowPairing(RemoteHost host) => Push(new PairingPage(new PairingViewModel(host, _workspace, this)));
 

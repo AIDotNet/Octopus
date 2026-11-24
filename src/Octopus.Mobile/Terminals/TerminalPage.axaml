@@ -4,40 +4,47 @@
            xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
            xmlns:l="using:Octopus.Mobile.Localization"
            xmlns:vm="using:Octopus.Mobile.Terminals"
+           xmlns:common="using:Octopus.Mobile.Common"
            xmlns:term="using:Octopus.Terminal.Avalonia"
            x:Class="Octopus.Mobile.Terminals.TerminalPage"
            x:DataType="vm:TerminalViewModel"
            AvoidKeyboard="True">
+    <arcm:Page.Resources>
+        <StreamGeometry x:Key="MoreGlyph">M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z</StreamGeometry>
+    </arcm:Page.Resources>
+
     <arcm:Page.Header>
         <!-- No text beside the back arrow: a session's title is long, and the strip below names the host. -->
         <arcm:Navbar Title="{Binding Title}"
                      ShowBack="True"
-                     BackCommand="{Binding BackCommand}" />
+                     BackCommand="{Binding BackCommand}">
+            <arcm:Navbar.Trailing>
+                <arcm:IconButton Name="MenuButton"
+                                 Icon="{StaticResource MoreGlyph}"
+                                 Command="{Binding OpenMenuCommand}"
+                                 AutomationProperties.Name="{l:MobileLangResource More}" />
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
     </arcm:Page.Header>
 
-    <Grid RowDefinitions="Auto,*">
-        <!-- Where the session is, and who decides its size. -->
-        <Border Classes="strip" Grid.Row="0">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Name="LocationText" Classes="secondary" Text="{Binding Location}" />
-                    <TextBlock Name="SizeText" Classes="muted" Text="{Binding SizeText}" FontSize="{arc:ArcDesignTokenResource TypeXS}" />
-                </StackPanel>
-                <arcm:Button Name="FitButton" Grid.Column="1" Variant="Plain"
-                             Content="{l:MobileLangResource FitToPhone}"
-                             Command="{Binding FitCommand}"
-                             IsVisible="{Binding IsViewing}" />
-                <arcm:Button Name="ReleaseButton" Grid.Column="1" Variant="Plain"
-                             Content="{l:MobileLangResource ReturnSize}"
-                             Command="{Binding ReleaseCommand}"
-                             IsVisible="{Binding IsFitted}" />
+    <!--
+        Everything that is typed with sits in the content, not the footer: with AvoidKeyboard the content shrinks by the
+        keyboard's height while the footer goes behind it (TKCode.Arc.Mobile.Page), so the bars stay right above the
+        keyboard and the terminal gets what is left. While fitted the smaller grid goes to the host as the new size.
+    -->
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Where the session is and who decides its size, on one line; fitting and giving back are in the menu. -->
+        <Border Classes="strip" Grid.Row="0" Padding="12,4">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Name="LocationText" Classes="secondary" Text="{Binding Location}" VerticalAlignment="Center" />
+                <TextBlock Name="SizeText" Grid.Column="1" Classes="muted" Text="{Binding SizeText}"
+                           FontSize="{arc:ArcDesignTokenResource TypeXS}" VerticalAlignment="Center" />
             </Grid>
         </Border>
-        <term:TerminalControl Name="Terminal" Grid.Row="1" FontSize="12" />
-    </Grid>
 
-    <arcm:Page.Footer>
-        <StackPanel>
+        <term:TerminalControl Name="Terminal" Grid.Row="1" FontSize="{Binding FontSize}" />
+
+        <StackPanel Name="InputBars" Grid.Row="2">
             <!-- Only looking: one button takes the size and opens the input. -->
             <Border Classes="bar" IsVisible="{Binding IsViewing}">
                 <arcm:Button Name="FitAndTypeButton"
@@ -108,5 +115,9 @@
                 </Grid>
             </Border>
         </StackPanel>
-    </arcm:Page.Footer>
+    </Grid>
+
+    <arcm:Page.Overlay>
+        <common:SessionActionOverlays Name="Overlays" DataContext="{Binding Actions}" />
+    </arcm:Page.Overlay>
 </arcm:Page>

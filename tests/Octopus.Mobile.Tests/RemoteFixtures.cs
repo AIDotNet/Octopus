@@ -29,7 +29,7 @@ internal sealed class Computer : IAsyncDisposable
     {
         Identity = identity;
         List<string> capabilities = advertiseWorkspaces
-            ? [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces]
+            ? [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityBrowse]
             : [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilitySizeRelease];
         Service = new RemoteHostService(identity, () => new DeviceDescription(name, DeviceKind.Desktop), new PairedPeerStore(null), Workspace,
             new HelloMessage { AppVersion = "1.0", Capabilities = capabilities });

@@ -42,6 +42,16 @@ public static class RemoteMethods
 
     /// <summary>Event: something under a watched folder changed.</summary>
     public const string FsChanged = "fs/changed";
+    // A GUI conversation (AcpMessages.cs).
+    public const string AcpAttach = "acp/attach";
+    public const string AcpDetach = "acp/detach";
+    public const string AcpPrompt = "acp/prompt";
+    public const string AcpCancel = "acp/cancel";
+    public const string AcpRespond = "acp/respond";
+    public const string AcpSetOption = "acp/setOption";
+    /// <summary>Event: an attached GUI conversation changed.</summary>
+    public const string AcpUpdate = "acp/update";
+
     /// <summary>Event: projects or their items changed; the device reads the lists again.</summary>
     public const string WorkspaceChanged = "workspace/changed";
     /// <summary>Event: one item's title or activity changed.</summary>
@@ -60,6 +70,8 @@ public static class RemoteMethods
     public const string CapabilitySizeRelease = "session.release";
     /// <summary>The host knows <see cref="FsBrowse"/> and <see cref="FsBrowseCreateDirectory"/>.</summary>
     public const string CapabilityBrowse = "fs.browse";
+    /// <summary>The host shows its GUI conversations (<see cref="AcpAttach"/> and the rest of <c>acp/*</c>).</summary>
+    public const string CapabilityAcpGui = "acp.gui";
     /// <summary>The host exposes branch workspaces (<see cref="WorkspaceOptions"/>, <see cref="WorkspaceCreate"/>, and workspace ids on items).</summary>
     public const string CapabilityWorkspaces = "workspaces";
 
@@ -93,6 +105,15 @@ public static class ItemKinds
 {
     public const string Terminal = "terminal";
     public const string Agent = "agent";
+}
+
+/// <summary>How an agent item runs on the host (<see cref="ItemMessage.Surface"/>).</summary>
+public static class ItemSurfaces
+{
+    /// <summary>A program in a terminal: the device can attach to it.</summary>
+    public const string Terminal = "terminal";
+    /// <summary>An ACP conversation in the host's GUI tab: there is no terminal to attach to.</summary>
+    public const string Gui = "gui";
 }
 
 public static class SnapshotFormats
@@ -229,6 +250,12 @@ public sealed class ItemMessage
     public string Activity { get; set; } = ItemActivities.Idle;
     /// <summary>True when its program runs (a tab that was never shown has none yet).</summary>
     public bool IsRunning { get; set; }
+    /// <summary>
+    /// One of <see cref="ItemSurfaces"/>. Null from a host that predates it, and for a plain terminal: both mean a
+    /// terminal. A <see cref="ItemSurfaces.Gui"/> item refuses <see cref="RemoteMethods.SessionAttach"/> and
+    /// <see cref="RemoteMethods.SessionRestart"/>.
+    /// </summary>
+    public string? Surface { get; set; }
 }
 
 public sealed class ItemListMessage

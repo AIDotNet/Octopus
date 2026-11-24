@@ -11,6 +11,7 @@ namespace Octopus.Mobile.Common;
 public sealed partial class SessionRowViewModel : ObservableObject, IDisposable
 {
     private readonly Action<RemoteSession> _open;
+    private DateTime? _heldAt;
 
     public SessionRowViewModel(RemoteSession session, Action<RemoteSession> open)
     {
@@ -52,8 +53,23 @@ public sealed partial class SessionRowViewModel : ObservableObject, IDisposable
         _ => "",
     };
 
+    /// <summary>Runs as a GUI conversation on the host: tagged, and opens its details.</summary>
+    public bool IsGui => Session.IsGui;
+
+    /// <summary>The row was held and its menu opened: the tap that ends the press does not open the session too.</summary>
+    public void Held() => _heldAt = DateTime.UtcNow;
+
     [RelayCommand]
-    private void Open() => _open(Session);
+    private void Open()
+    {
+        // The release of a long press arrives as a tap; one long after is a new tap.
+        if (_heldAt is { } held && DateTime.UtcNow - held < TimeSpan.FromSeconds(2))
+        {
+            _heldAt = null;
+            return;
+        }
+        _open(Session);
+    }
 
     public void Dispose() => Session.PropertyChanged -= OnSessionChanged;
 

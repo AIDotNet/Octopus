@@ -57,6 +57,8 @@ public sealed class DemoWorkspace : IRemoteWorkspace
         var station = new RemoteHost("station", "工作站", HostLink.Relay, isPaired: true) { Agents = [Codex] };
         var console = Add(station, "web-console", "~/srv/web-console");
         var migrate = Add(console, "升级数据库迁移", Codex, "GPT-6 · 中", SessionActivity.Idle, null);
+        // Runs as a GUI conversation on the computer: the phone shows its details, not a terminal.
+        Add(console, "接口文档整理", Codex, "GPT-6 · 高", SessionActivity.Idle, "上一轮写好了 docs/api.md", gui: true);
         _screens[migrate.Id] = () => new DemoTerminalConnection(
             DemoScreens.Lines("\u001b[35m●\u001b[0m 迁移已经生成并应用，测试全部通过。", "", "> "), Echo);
 
@@ -136,6 +138,70 @@ public sealed class DemoWorkspace : IRemoteWorkspace
             request.TaskUrl);
         project.Workspaces.Add(workspace);
         return Task.FromResult(workspace);
+    }
+
+    public Task RenameSessionAsync(RemoteSession session, string? title, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(title)) session.Title = title.Trim();
+        return Task.CompletedTask;
+    }
+
+    public Task CloseSessionAsync(RemoteSession session, CancellationToken cancellationToken = default)
+    {
+        session.Project.Sessions.Remove(session);
+        _factories.Remove(session.Id);
+        return Task.CompletedTask;
+    }
+
+    public Task RestartSessionAsync(RemoteSession session, CancellationToken cancellationToken = default)
+    {
+        Restarted.Add(session.Id);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>The sessions asked to restart, in order, for tests.</summary>
+    internal List<string> Restarted { get; } = [];
+
+    // The made-up computers' folders: the same small tree on each, under a home of /Users/demo.
+    private const string DemoHome = "/Users/demo";
+    private readonly Dictionary<string, List<string>> _folders = new(StringComparer.Ordinal)
+    {
+        ["/"] = ["Users", "opt", "tmp"],
+        ["/Users"] = ["demo"],
+        ["/Users/demo"] = ["code", "Documents", "Downloads"],
+        ["/Users/demo/code"] = ["Octopus", "OctopusServer", "TKCode.Arc", "playground", "website"],
+    };
+
+    public Task<RemoteFolderListing> BrowseFolderAsync(RemoteHost host, string? path, CancellationToken cancellationToken = default)
+    {
+        var current = string.IsNullOrEmpty(path) ? DemoHome : path.TrimEnd('/') is { Length: > 0 } trimmed ? trimmed : "/";
+        var parent = current == "/" ? null : current[..current.LastIndexOf('/')] is { Length: > 0 } up ? up : "/";
+        var projects = host.Projects.Select(project => project.Path.Replace("~", DemoHome, StringComparison.Ordinal)).ToHashSet(StringComparer.Ordinal);
+        var folders = _folders.GetValueOrDefault(current, []).Select(name =>
+        {
+            var full = current == "/" ? "/" + name : current + "/" + name;
+            return new RemoteFolderEntry(name, full, "folder", projects.Contains(full));
+        }).ToList();
+        RemoteFolderEntry[] roots = [new("demo", DemoHome, "home", false), new("/", "/", "drive", false)];
+        return Task.FromResult(new RemoteFolderListing(current, parent, "/", DemoHome, roots, folders));
+    }
+
+    public Task<string> CreateFolderAsync(RemoteHost host, string parentPath, string name, CancellationToken cancellationToken = default)
+    {
+        var trimmed = name.Trim();
+        if (trimmed.Length == 0 || trimmed.Contains('/')) throw new IOException("文件夹名不能为空，也不能含有 /。");
+        if (!_folders.TryGetValue(parentPath, out var children)) _folders[parentPath] = children = [];
+        if (children.Contains(trimmed, StringComparer.Ordinal)) throw new IOException($"“{trimmed}”已经存在。");
+        children.Add(trimmed);
+        return Task.FromResult(parentPath == "/" ? "/" + trimmed : parentPath + "/" + trimmed);
+    }
+
+    public Task<RemoteProject> CreateProjectAsync(RemoteHost host, string path, CancellationToken cancellationToken = default)
+    {
+        var shown = path.StartsWith(DemoHome, StringComparison.Ordinal) ? "~" + path[DemoHome.Length..] : path;
+        if (host.Projects.FirstOrDefault(project => project.Path == shown) is { } known) return Task.FromResult(known);
+        var name = path.TrimEnd('/').Split('/').LastOrDefault(part => part.Length > 0) ?? path;
+        return Task.FromResult(Add(host, name, shown));
     }
 
     public ITerminalConnectionFactory OpenTerminal(RemoteSession session)
@@ -228,11 +294,15 @@ public sealed class DemoWorkspace : IRemoteWorkspace
         return project;
     }
 
-    private RemoteSession Add(RemoteProject project, string title, AgentOption? agent, string detail, SessionActivity activity, string? preview, RemoteBranchWorkspace? workspace = null)
+    private RemoteSession Add(RemoteProject project, string title, AgentOption? agent, string detail, SessionActivity activity, string? preview, RemoteBranchWorkspace? workspace = null, bool gui = false)
     {
+        var parts = agent is null ? [] : detail.Split(" · ");
         var session = new RemoteSession(project, "s" + _nextId++, agent is null ? SessionKind.Terminal : SessionKind.Agent, title)
         {
             AgentId = agent?.Id,
+            Model = parts.ElementAtOrDefault(0),
+            Effort = parts.ElementAtOrDefault(1),
+            IsGui = gui,
             WorkspaceId = workspace?.Id,
             WorkspaceBranch = workspace?.DisplayName,
             WorkspaceTaskKey = workspace?.TaskKey,
