@@ -10,7 +10,7 @@
              sign-in, default relay, and update checks go here. Override with -p:OctopusServiceUrl=… -->
         <OctopusServiceUrl Condition="'$(OctopusServiceUrl)' == ''">https://octoterm.si</OctopusServiceUrl>
     </PropertyGroup>
-    <ItemGroup>
+    <ItemGroup Condition="'$(MSBuildProjectName)' != 'Octopus.SignalForwarder'">
         <!-- Many projects use these types; .NET 11 carries the abstractions in its shared framework, net10.0 does not. -->
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     </ItemGroup>
