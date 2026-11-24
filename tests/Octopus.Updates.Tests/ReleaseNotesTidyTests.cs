@@ -23,6 +23,32 @@ public sealed class ReleaseNotesTidyTests
     }
 
     [Fact]
+    public void NotesWithOnlyTheChangelogLinkComeOutEmpty()
+    {
+        Assert.Equal("", ReleaseNotesTidy.Apply("""
+            ## What's Changed
+
+            **Full Changelog**: https://github.com/AIDotNet/Octopus/compare/v1.0.1131...v1.0.1132
+            """));
+    }
+
+    [Fact]
+    public void CommitNotesKeepTheirSectionsAndLinks()
+    {
+        var notes = """
+            ### New
+
+            - Add immediate send ([#20](https://github.com/AIDotNet/Octopus/pull/20))
+
+            **Full Changelog**: https://github.com/AIDotNet/Octopus/compare/v1.0.1132...v1.0.1133
+            """;
+        Assert.Equal(
+            "### New\n\n- Add immediate send ([#20](https://github.com/AIDotNet/Octopus/pull/20))\n\n" +
+            "[Full changelog](https://github.com/AIDotNet/Octopus/compare/v1.0.1132...v1.0.1133)",
+            ReleaseNotesTidy.Apply(notes));
+    }
+
+    [Fact]
     public void NotesWrittenByHandPassThrough()
     {
         Assert.Equal("### New\n\n- a thing by @someone in prose", ReleaseNotesTidy.Apply("### New\r\n\r\n- a thing by @someone in prose\r\n"));

@@ -278,7 +278,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The whole history and the tags: the release notes list the commits since the previous release.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -286,15 +289,21 @@ jobs:
           pattern: octopus-*
           merge-multiple: true
 
-      # Generate release notes once so GitHub Releases and Octopus Server share the same changelog.
+      # Generate release notes once so GitHub Releases and Octopus Server share the same changelog. They list every
+      # commit since the previous release: GitHub's generated notes only list merged pull requests, and most changes
+      # go straight to main. GitHub's notes are the fallback if the script fails.
       - name: Generate release notes
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh api "repos/$GH_REPO/releases/generate-notes" \
-            -f tag_name="$GITHUB_REF_NAME" \
-            --jq '.body' > "$RUNNER_TEMP/release-notes.md" || true
+          if ! python3 tools/make-release-notes.py --tag "$GITHUB_REF_NAME" --repo "$GH_REPO" --out "$RUNNER_TEMP/release-notes.md"; then
+            echo "::warning::tools/make-release-notes.py failed; falling back to GitHub's generated notes."
+            gh api "repos/$GH_REPO/releases/generate-notes" \
+              -f tag_name="$GITHUB_REF_NAME" \
+              --jq '.body' > "$RUNNER_TEMP/release-notes.md" || true
+          fi
+          cat "$RUNNER_TEMP/release-notes.md" || true
 
       # update.json lists each platform's package with its size and SHA-256, signed with UPDATE_SIGNING_KEY
       # (design/10-自动更新.md §5). Installs only take a release whose manifest is signed by a key they trust.

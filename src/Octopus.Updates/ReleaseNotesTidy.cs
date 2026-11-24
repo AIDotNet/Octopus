@@ -5,7 +5,8 @@ namespace Octopus.Updates;
 /// <summary>
 /// Makes the notes GitHub generates for a release readable in a small dialog: no "What's Changed" heading (the dialog
 /// already says what it is), a pull request as its title and a short link instead of "by @who in https://…", and the
-/// full-changelog line as a link. Notes written by hand pass through untouched.
+/// full-changelog line as a link. Notes written by hand pass through untouched. Notes that say nothing but the
+/// full-changelog link come out empty, so the dialog leaves that release out instead of showing a bare heading.
 /// </summary>
 internal static partial class ReleaseNotesTidy
 {
@@ -20,8 +21,12 @@ internal static partial class ReleaseNotesTidy
             line = FullChangelog().Replace(line, m => $"[Full changelog]({m.Groups["url"].Value})");
             lines.Add(line);
         }
-        return string.Join('\n', lines).Trim();
+        var tidy = string.Join('\n', lines).Trim();
+        return lines.All(l => l.Length == 0 || ChangelogLink().IsMatch(l)) ? "" : tidy;
     }
+
+    [GeneratedRegex(@"^\[Full changelog\]\(\S+\)$")]
+    private static partial Regex ChangelogLink();
 
     [GeneratedRegex(@"^#{1,6}\s*What['’]s Changed\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex WhatsChanged();
