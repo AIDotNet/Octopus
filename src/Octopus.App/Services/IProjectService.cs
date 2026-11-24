@@ -103,6 +103,8 @@ public interface IProjectService
     void SetItemTitle(string itemId, string title);
     /// <summary>Plugin tabs: the state the plugin saved to come back to; saved after a pause, nothing is redrawn.</summary>
     void SetItemViewState(string itemId, string? state);
+    /// <summary>Agents: records the live or resumed session id so restarts can continue the same session; saved after a pause, nothing is redrawn.</summary>
+    void SetItemSessionId(string itemId, string? sessionId, bool isAcp = false);
     void ActivateItem(string itemId);
     /// <summary>Stores the dock layout JSON of a project (saved after a pause).</summary>
     void SetDockLayout(Project project, string? layout);

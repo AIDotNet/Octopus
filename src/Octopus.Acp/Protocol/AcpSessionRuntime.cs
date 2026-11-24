@@ -159,22 +159,39 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
 
             if (!string.IsNullOrWhiteSpace(resumeSessionId))
             {
+                var tryResumeAfterLoad = true;
                 if (init.AgentCapabilities.LoadSession)
                 {
-                    baseParams["sessionId"] = resumeSessionId;
+                    var loadParams = (JsonObject)baseParams.DeepClone();
+                    loadParams["sessionId"] = resumeSessionId;
                     _isLoadingHistory = true;
                     try
                     {
-                        var loaded = await _peer.RequestAsync("session/load", baseParams, TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false);
+                        var loaded = await _peer.RequestAsync("session/load", loadParams, TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false);
                         return AcpProtocolParser.ParseSessionStart("load", resumeSessionId, loaded);
+                    }
+                    catch (AcpRpcException ex) when (!_options.Dialect.IsAuthenticationRequired(ex))
+                    {
+                        Emit(new AcpDiagnosticEvent($"session/load failed for '{resumeSessionId}' ({ex.Message}); falling back."));
+                        // Only try session/resume when the agent rejected the method itself; a missing/stale session id
+                        // would fail session/resume as well and should start fresh via session/new.
+                        tryResumeAfterLoad = ex.Code == -32601;
                     }
                     finally { _isLoadingHistory = false; }
                 }
-                if (init.AgentCapabilities.SessionCapabilities.SupportsResume)
+                if (tryResumeAfterLoad && init.AgentCapabilities.SessionCapabilities.SupportsResume)
                 {
-                    baseParams["sessionId"] = resumeSessionId;
-                    var resumed = await _peer.RequestAsync("session/resume", baseParams, TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false);
-                    return AcpProtocolParser.ParseSessionStart("resume", resumeSessionId, resumed);
+                    var resumeParams = (JsonObject)baseParams.DeepClone();
+                    resumeParams["sessionId"] = resumeSessionId;
+                    try
+                    {
+                        var resumed = await _peer.RequestAsync("session/resume", resumeParams, TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false);
+                        return AcpProtocolParser.ParseSessionStart("resume", resumeSessionId, resumed);
+                    }
+                    catch (AcpRpcException ex) when (!_options.Dialect.IsAuthenticationRequired(ex))
+                    {
+                        Emit(new AcpDiagnosticEvent($"session/resume failed for '{resumeSessionId}' ({ex.Message}); falling back to session/new."));
+                    }
                 }
             }
 

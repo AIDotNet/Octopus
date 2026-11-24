@@ -153,6 +153,13 @@ public class SettingsPagesTests
         Assert.Equal("en-US", ArcLanguage.Current.ToString());
         Assert.Contains(general.Languages, l => (string)l.Value! == "zh-CN");
         general.Language = "zh-CN";
+
+        Assert.True(general.RestoreItemsOnStartup);
+        Assert.True(general.ResumeAgentsOnRestart);
+        general.ResumeAgentsOnRestart = false;
+        general.RestoreItemsOnStartup = false;
+        Assert.False(settings.Current.Terminal.ResumeAgentsOnRestart);
+        Assert.False(settings.Current.Terminal.RestoreItemsOnStartup);
     }
 
     [AvaloniaFact]

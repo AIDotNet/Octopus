@@ -54,7 +54,9 @@ public static class SessionName
                 NonEmptyStringOf(root, "session_id")
                     ?? NonEmptyStringOf(root, "sessionId")
                     ?? NonEmptyStringOf(root, "conversationId")
-                    ?? NonEmptyStringOf(root, "conversation_id"),
+                    ?? NonEmptyStringOf(root, "conversation_id")
+                    ?? NonEmptyStringOf(root, "thread_id")
+                    ?? NonEmptyStringOf(root, "thread-id"),
                 NonEmptyStringOf(root, "artifactDirectoryPath") ?? NonEmptyStringOf(root, "artifact_directory_path"));
         }
         catch (JsonException)

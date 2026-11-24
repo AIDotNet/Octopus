@@ -211,6 +211,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private bool _applyingHistory;
     private bool _initialPromptSent;
     private bool _titledFromPrompt;
+    private bool _hasConnectedOnce;
     private bool _acceptReplay;
     private UserTurnItem? _replayUserTurn;
     private bool _disposed;
@@ -268,7 +269,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             onConfigSelectChanged: ApplyConfigSelectAsync,
             onConfigBoolChanged: ApplyConfigBoolAsync);
 
-        WorkingDirectory = !string.IsNullOrWhiteSpace(item.WorkingDirectory) ? item.WorkingDirectory! : project.Path;
+        var preferredCwd = !string.IsNullOrWhiteSpace(item.WorkingDirectory) ? item.WorkingDirectory! : project.Path;
+        WorkingDirectory = Directory.Exists(preferredCwd) || !Directory.Exists(project.Path) ? preferredCwd : project.Path;
         WorkingDirectoryName = Path.GetFileName(WorkingDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         if (string.IsNullOrEmpty(WorkingDirectoryName)) WorkingDirectoryName = WorkingDirectory;
 
@@ -593,18 +595,29 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 _replayUserTurn = null;
             });
 
+            var skipRestoredResume = !_hasConnectedOnce
+                && _projects.WasRestored(_item.Id)
+                && !_settings.Current.Terminal.ResumeAgentsOnRestart;
+            var requestedResumeId = skipRestoredResume ? null : (_item.AcpSessionId ?? _item.Launch?.SessionId);
+            _hasConnectedOnce = true;
+
             var started = await session.StartAsync(
                 WorkingDirectory,
                 additionalDirectories: null,
-                resumeSessionId: _item.AcpSessionId ?? _item.Launch?.SessionId,
+                resumeSessionId: requestedResumeId,
                 cancellationToken: ct).ConfigureAwait(false);
-
-            _item.AcpSessionId = started.SessionId;
 
             var desiredPermission = Composer.SelectedPermissionId ?? PermissionModes.Default;
 
             SetUi(() =>
             {
+                _projects.SetItemSessionId(_item.Id, started.SessionId, isAcp: true);
+                if (!string.IsNullOrWhiteSpace(requestedResumeId) && started.Kind == "new" && _acceptReplay && Timeline.Count > 0)
+                {
+                    Timeline.Clear();
+                    _activeTurn = null;
+                    _replayUserTurn = null;
+                }
                 FinishHistoryReplay();
                 Composer.UpdateFromSession(
                     session.Initialized,
@@ -1061,6 +1074,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public async Task NewSessionAsync()
     {
         if (IsTurnActive || _isTurnActive) await CancelTurnAsync();
+        _projects.SetItemSessionId(_item.Id, null, isAcp: true);
         _item.AcpSessionId = null;
         if (_item.Launch is not null) _item.Launch.SessionId = null;
         _titledFromPrompt = false;

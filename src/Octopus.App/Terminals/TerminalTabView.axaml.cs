@@ -121,6 +121,11 @@ public partial class TerminalTabView : UserControl, ITabContent
         {
             return;
         }
+        // Clear any stale saved session id so the next restart does not hit the same dead session again.
+        if (!string.IsNullOrWhiteSpace(model.Item.Launch?.SessionId))
+        {
+            AppHost.Get<Services.IProjectService>().SetItemSessionId(model.Item.Id, null, isAcp: false);
+        }
         if (model.TryCreateSpec(allowResume: false) is { } fresh)
         {
             Terminal.Start(fresh, model.Factory, model.Sessions, model.Item.Id);

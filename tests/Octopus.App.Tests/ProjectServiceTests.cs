@@ -111,36 +111,94 @@ public class ProjectServiceTests
     }
 
     [Fact]
-    public async Task Items_loaded_from_the_file_keep_files_as_restored_and_drop_terminals_and_agents()
+    public async Task Items_loaded_from_the_file_keep_agents_and_files_as_restored_and_drop_terminals()
     {
-        var agent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude" };
+        var agent = new ProjectItem
+        {
+            Kind = ProjectItemKind.Agent,
+            AgentId = "claude",
+            Title = "Claude",
+            AcpSessionId = "acp-1",
+            Launch = new Octopus.Core.Agents.AgentLaunchOptions { SessionId = "sess-1" },
+        };
         var terminal = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" };
         var file = new ProjectItem { Kind = ProjectItemKind.File, Title = "README.md", FilePath = "/tmp/p/README.md" };
         var document = new ProjectsDocument { Projects = [new Project { Name = "p", Path = "/tmp/p", DockLayout = "{}", Items = [agent, terminal, file] }] };
         var store = new InMemoryProjectStore(document);
-        var service = new ProjectService(store, new PathComparer(ignoreCase: false));
+        var settings = new InMemorySettingsStore();
+        var service = new ProjectService(store, new PathComparer(ignoreCase: false), settings);
         await service.LoadAsync();
-        var kept = Assert.Single(service.Projects[0].Items);
-        Assert.Equal(file.Id, kept.Id);
+        Assert.Equal([agent.Id, file.Id], service.Projects[0].Items.Select(i => i.Id));
+        Assert.True(service.WasRestored(agent.Id));
         Assert.True(service.WasRestored(file.Id));
-        Assert.False(service.WasRestored(agent.Id));
+        Assert.False(service.WasRestored(terminal.Id));
+        // Terminal was dropped from the saved layout, so layout resets.
         Assert.Null(service.Projects[0].DockLayout);
 
-        // Newly opened terminals and agents stay in memory for the current run, but are never saved to disk.
+        // Newly opened agents are persisted (including their session ids), while terminals stay transient.
         var created = new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "zsh" };
         var createdAgent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "agy", Title = "Antigravity CLI" };
         service.AddItem(service.Projects[0], created);
         service.AddItem(service.Projects[0], createdAgent);
+        service.SetItemSessionId(createdAgent.Id, "conv-99", isAcp: false);
+        service.SetItemSessionId(createdAgent.Id, "acp-99", isAcp: true);
         service.SetDockLayout(service.Projects[0], "{\"v\":1}");
         Assert.False(service.WasRestored(created.Id));
-        Assert.Equal(3, service.Projects[0].Items.Count);
+        Assert.False(service.WasRestored(createdAgent.Id));
+        Assert.Equal(4, service.Projects[0].Items.Count);
 
         await service.FlushAsync();
         var saved = await store.LoadAsync(TestContext.Current.CancellationToken);
-        var savedItem = Assert.Single(saved.Projects[0].Items);
-        Assert.Equal(file.Id, savedItem.Id);
-        Assert.Equal(file.Id, saved.Projects[0].ActiveItemId);
+        Assert.Equal([agent.Id, file.Id, createdAgent.Id], saved.Projects[0].Items.Select(i => i.Id));
+        var savedAgent = saved.Projects[0].Items.Single(i => i.Id == createdAgent.Id);
+        Assert.Equal("conv-99", savedAgent.Launch?.SessionId);
+        Assert.Equal("acp-99", savedAgent.AcpSessionId);
+        Assert.Equal(createdAgent.Id, saved.Projects[0].ActiveItemId);
+        // Terminal was omitted, so DockLayout is cleared when writing snapshot.
         Assert.Null(saved.Projects[0].DockLayout);
+
+        // Without any transient terminal open, DockLayout is preserved alongside agents.
+        service.RemoveItem(created.Id);
+        service.SetDockLayout(service.Projects[0], "{\"v\":2}");
+        await service.FlushAsync();
+        var savedWithLayout = await store.LoadAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("{\"v\":2}", savedWithLayout.Projects[0].DockLayout);
+    }
+
+    [Fact]
+    public async Task Disabling_restore_on_startup_drops_agents_on_load_and_omits_them_on_save()
+    {
+        var agent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Claude" };
+        var file = new ProjectItem { Kind = ProjectItemKind.File, Title = "README.md", FilePath = "/tmp/p/README.md" };
+        var remoteAgent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Remote Claude" };
+        var document = new ProjectsDocument
+        {
+            Projects =
+            [
+                new Project { Name = "local", Path = "/tmp/p", DockLayout = "{}", Items = [agent, file] },
+                new Project { Name = "remote", Path = "/srv/p", RemoteHost = "host-1", RemoteId = "r-1", Items = [remoteAgent] },
+            ],
+        };
+        var store = new InMemoryProjectStore(document);
+        var settings = new InMemorySettingsStore();
+        settings.Update(s => s.Terminal.RestoreItemsOnStartup = false);
+
+        var service = new ProjectService(store, new PathComparer(ignoreCase: false), settings);
+        await service.LoadAsync();
+
+        var kept = Assert.Single(service.Projects[0].Items);
+        Assert.Equal(file.Id, kept.Id);
+        Assert.Null(service.Projects[0].DockLayout);
+        Assert.Empty(service.Projects[1].Items);
+
+        // New agents opened while restore is disabled are not saved to disk either.
+        var added = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "agy", Title = "Antigravity CLI" };
+        service.AddItem(service.Projects[0], added);
+        await service.FlushAsync();
+
+        var saved = await store.LoadAsync(TestContext.Current.CancellationToken);
+        Assert.Single(saved.Projects[0].Items);
+        Assert.Equal(file.Id, saved.Projects[0].Items[0].Id);
     }
 
     [Fact]

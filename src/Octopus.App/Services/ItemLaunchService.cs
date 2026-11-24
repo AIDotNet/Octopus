@@ -30,7 +30,42 @@ public sealed class ItemLaunchService(
     /// <summary>Points at an <c>octopus-signal</c> build when it is not next to the app (development).</summary>
     public const string ForwarderVariable = "OCTOPUS_SIGNAL_FORWARDER";
 
-    public bool Resumes(ProjectItem item) => false;
+    public bool Resumes(ProjectItem item)
+    {
+        if (item.Kind != ProjectItemKind.Agent || item.AgentId is null)
+        {
+            return false;
+        }
+        var project = projects.FindProjectOf(item.Id);
+        // An agent on another computer was never stopped by this app's restart: there is nothing to resume.
+        if (project is not null && ProjectLocation.IsOnRemoteHost(project))
+        {
+            return false;
+        }
+        var definition = catalog.Find(item.AgentId);
+        if (definition is null)
+        {
+            return false;
+        }
+        var restored = projects.WasRestored(item.Id);
+        if (restored && !settings.Current.Terminal.ResumeAgentsOnRestart)
+        {
+            return false;
+        }
+        if (HasUsableSessionId(item, definition))
+        {
+            return true;
+        }
+        if (definition.Capabilities.Resume?.ContinueLatest is not { Count: > 0 })
+        {
+            return false;
+        }
+        if (item.Launch?.Resume == true)
+        {
+            return true;
+        }
+        return restored && (project is null || IsContinueLatestOwner(project, item, definition));
+    }
 
     /// <summary>What a tab of a project on another computer is started with: the program runs there, nothing is launched here.</summary>
     public static LaunchSpec RemoteSession { get; } = new("octopus-remote-session", [], null, new Dictionary<string, string>());
@@ -40,7 +75,7 @@ public sealed class ItemLaunchService(
         // The host plans and runs it (with its own agents, settings and hooks); this side only shows its terminal.
         if (ProjectLocation.IsOnRemoteHost(project)) return RemoteSession;
         var current = settings.Current;
-        var cwd = item.WorkingDirectory ?? project.Path;
+        var cwd = EffectiveWorkingDirectory(project, item);
         if (item.Kind != ProjectItemKind.Agent)
         {
             // The terminal shares its connection with the folder listing: a password given here serves both.
@@ -67,15 +102,23 @@ public sealed class ItemLaunchService(
         {
             throw new InvalidOperationException($"Unknown agent '{item.AgentId}'.");
         }
+        // The prompt is for the first start only; a restored tab continues its session instead (when enabled).
+        var restored = projects.WasRestored(item.Id);
+        var canResume = allowResume && (!restored || current.Terminal.ResumeAgentsOnRestart);
+        var sessionId = canResume && HasUsableSessionId(item, definition) ? item.Launch!.SessionId : null;
+        var continueLatest = canResume
+            && sessionId is null
+            && definition.Capabilities.Resume?.ContinueLatest is { Count: > 0 }
+            && (item.Launch?.Resume == true || (restored && IsContinueLatestOwner(project, item, definition)));
         var launch = new AgentLaunchOptions
         {
             Model = item.Launch?.Model,
             Effort = item.Launch?.Effort,
             Fast = item.Launch?.Fast,
             AccountId = item.Launch?.AccountId,
-            Prompt = item.Launch?.Prompt,
-            Resume = false,
-            SessionId = allowResume ? item.Launch?.SessionId : null,
+            Prompt = restored ? null : item.Launch?.Prompt,
+            Resume = continueLatest,
+            SessionId = sessionId,
             Env = item.Launch?.Env,
         };
         var profile = current.Agents.ProfileOf(definition.Id);
@@ -98,6 +141,44 @@ public sealed class ItemLaunchService(
             command = compiler.Compile(request with { Signals = signal });
         }
         return planner.PlanAgent(UseSystemProxy(command, current.Agents.UseSystemProxy), cwd, current.Terminal.Shell);
+    }
+
+    private static string EffectiveWorkingDirectory(Project project, ProjectItem item)
+    {
+        var cwd = string.IsNullOrWhiteSpace(item.WorkingDirectory) ? project.Path : item.WorkingDirectory;
+        // A deleted worktree directory falls back to the project root so restored tabs still open cleanly.
+        if (ProjectLocation.IsOnThisComputer(project) && !Directory.Exists(cwd) && Directory.Exists(project.Path))
+        {
+            return project.Path;
+        }
+        return cwd;
+    }
+
+    private static bool HasUsableSessionId(ProjectItem item, AgentDefinition definition) =>
+        !string.IsNullOrWhiteSpace(item.Launch?.SessionId) && definition.Capabilities.Resume?.ById is { Count: > 0 };
+
+    /// <summary>
+    /// When several restored terminal tabs of the same agent share a working directory and none has an exact session id,
+    /// only one of them (the active tab, else the last one) gets <c>continueLatest</c> so they do not all attach to
+    /// the same conversation.
+    /// </summary>
+    private bool IsContinueLatestOwner(Project project, ProjectItem item, AgentDefinition definition)
+    {
+        var comparer = paths ?? new PathComparer(OperatingSystem.IsMacOS() || OperatingSystem.IsWindows());
+        var targetCwd = EffectiveWorkingDirectory(project, item);
+        var candidates = project.Items.Where(i =>
+            i.Kind == ProjectItemKind.Agent
+            && i.Surface != AgentSurface.Gui
+            && string.Equals(i.AgentId, item.AgentId, StringComparison.Ordinal)
+            && projects.WasRestored(i.Id)
+            && !HasUsableSessionId(i, definition)
+            && comparer.Equals(EffectiveWorkingDirectory(project, i), targetCwd)).ToList();
+        if (candidates.Count <= 1)
+        {
+            return true;
+        }
+        var active = candidates.FirstOrDefault(i => i.Id == project.ActiveItemId);
+        return (active ?? candidates[^1]).Id == item.Id;
     }
 
     /// <summary>

@@ -153,6 +153,10 @@ public sealed class TerminalSettings
     public int ScrollbackLines { get; set; } = 10_000;
     /// <summary>Absolute path of the shell; null detects the user's shell.</summary>
     public string? Shell { get; set; }
+    /// <summary>Agents that were open come back when the app starts. Off: every start begins without them (files stay).</summary>
+    public bool RestoreItemsOnStartup { get; set; } = true;
+    /// <summary>Restored agents continue their previous session when supported instead of starting fresh.</summary>
+    public bool ResumeAgentsOnRestart { get; set; } = true;
     /// <summary>Ask before pasting text with several lines into a program that does not use bracketed paste.</summary>
     public bool ConfirmMultilinePaste { get; set; } = true;
 }

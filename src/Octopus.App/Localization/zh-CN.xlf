@@ -485,6 +485,10 @@
     <unit id="TrayWaiting"><segment><source>Octopus · {0} waiting for you</source><target state="translated">Octopus · {0} 个智能体在等你</target></segment></unit>
     <unit id="TrayShow"><segment><source>Show Octopus</source><target state="translated">显示 Octopus</target></segment></unit>
     <unit id="TrayQuit"><segment><source>Quit Octopus</source><target state="translated">退出 Octopus</target></segment></unit>
+    <unit id="SettingsRestoreAgents"><segment><source>Restore agents on startup</source><target state="translated">启动时恢复智能体</target></segment></unit>
+    <unit id="SettingsRestoreAgentsHint"><segment><source>Keep open agent tabs in the sidebar across restarts. Background tabs start when you switch to them.</source><target state="translated">重启后保留侧边栏中打开的智能体列表；后台标签仅在切到时启动。</target></segment></unit>
+    <unit id="SettingsResumeAgents"><segment><source>Continue agent sessions on restart</source><target state="translated">重启时继续智能体会话</target></segment></unit>
+    <unit id="SettingsResumeAgentsHint"><segment><source>Resume each restored agent from its previous session when supported, instead of starting fresh.</source><target state="translated">恢复智能体时自动续接它之前的会话（若支持），而不是开启新会话。</target></segment></unit>
     <unit id="SettingsTrayShow"><segment><source>Show the tray icon</source><target state="translated">显示托盘图标</target></segment></unit>
     <unit id="SettingsTrayShowHint"><segment><source>An Octopus icon in the notification area (the menu bar on macOS) brings the window back and has a Quit command.</source><target state="translated">在通知区域（macOS 为菜单栏）显示 Octopus 图标，点击可以唤回窗口，右键菜单里有退出。</target></segment></unit>
     <unit id="SettingsTrayClose"><segment><source>Keep running in the tray when the window is closed</source><target state="translated">关闭窗口时保留在托盘</target></segment></unit>

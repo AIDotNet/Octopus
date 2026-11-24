@@ -1574,17 +1574,122 @@ public class AgentGuiTests
         }
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
+    [AvaloniaFact, FreshApp]
+    public async Task Acp_gui_tab_connects_lazily_persists_session_id_and_respects_resume_setting()
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        while (!condition())
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-persist-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var store = AppHost.Get<IProjectStore>();
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "acp-persist");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        string? firstResumeArg = "unset";
+        fakeFactory.ConfigureNext = session =>
         {
-            if (DateTime.UtcNow > deadline)
-            {
-                throw new TimeoutException("Timed out waiting for headless UI condition.");
-            }
+            session.SessionId = "acp-persisted-42";
+            session.StartHandler = (_, resumeId) => firstResumeArg = resumeId;
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+
+        // Before attaching to visual tree, no ACP session should be spawned (lazy start for background tabs).
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.Empty(fakeFactory.Created);
+
+        var window = new Window { Width = 920, Height = 640, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            Assert.Single(fakeFactory.Created);
+            Assert.Null(firstResumeArg);
+            Assert.Equal("acp-persisted-42", item.AcpSessionId);
+
+            // Flushing persists the agent item and its ACP session id.
+            await projects.FlushAsync();
+            var saved = await store.LoadAsync();
+            var savedItem = Assert.Single(saved.Projects.Single(p => p.Id == project.Id).Items);
+            Assert.Equal("acp-persisted-42", savedItem.AcpSessionId);
+        }
+        finally
+        {
+            fakeFactory.ConfigureNext = null;
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            await Task.Delay(15);
+        }
+
+        // Simulate restart: reload project from store, keep ResumeAgentsOnRestart = true -> passes saved session id.
+        await registry.ReleaseAllAsync();
+        await projects.LoadAsync();
+        var reloadedProject = projects.Projects.Single(p => p.Id == project.Id);
+        var restoredItem = Assert.Single(reloadedProject.Items);
+        Assert.True(projects.WasRestored(restoredItem.Id));
+
+        string? resumedArg = "unset";
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.SessionId = "acp-persisted-42";
+            session.StartHandler = (_, resumeId) => resumedArg = resumeId;
+        };
+        var restoredView = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(reloadedProject, restoredItem));
+        var restoredVm = Assert.IsType<AgentGuiTabViewModel>(restoredView.DataContext);
+        var window2 = new Window { Width = 920, Height = 640, Content = restoredView };
+        window2.Show();
+        try
+        {
+            await WaitUntilAsync(() => restoredVm.State == AgentGuiState.Ready);
+            Assert.Equal("acp-persisted-42", resumedArg);
+        }
+        finally
+        {
+            fakeFactory.ConfigureNext = null;
+            await restoredVm.CloseAsync();
+            restoredVm.Dispose();
+            window2.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+
+        // Simulate restart with ResumeAgentsOnRestart = false -> restored tab starts fresh (resumeSessionId is null).
+        await registry.ReleaseAllAsync();
+        settings.Update(s => s.Terminal.ResumeAgentsOnRestart = false);
+        await projects.LoadAsync();
+        var reloadedProject2 = projects.Projects.Single(p => p.Id == project.Id);
+        var restoredItem2 = Assert.Single(reloadedProject2.Items);
+
+        string? freshArg = "unset";
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.SessionId = "acp-fresh-99";
+            session.StartHandler = (_, resumeId) => freshArg = resumeId;
+        };
+        var freshView = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(reloadedProject2, restoredItem2));
+        var freshVm = Assert.IsType<AgentGuiTabViewModel>(freshView.DataContext);
+        var window3 = new Window { Width = 920, Height = 640, Content = freshView };
+        window3.Show();
+        try
+        {
+            await WaitUntilAsync(() => freshVm.State == AgentGuiState.Ready);
+            Assert.Null(freshArg);
+            Assert.Equal("acp-fresh-99", restoredItem2.AcpSessionId);
+        }
+        finally
+        {
+            fakeFactory.ConfigureNext = null;
+            settings.Update(s => s.Terminal.ResumeAgentsOnRestart = true);
+            await freshVm.CloseAsync();
+            freshVm.Dispose();
+            window3.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
         }
     }
 }
