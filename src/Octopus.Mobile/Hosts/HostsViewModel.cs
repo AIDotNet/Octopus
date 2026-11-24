@@ -37,7 +37,7 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         _navigator = navigator;
         _openBrowser = openBrowser ?? (_ => { });
         IsSignedIn = account.IsSignedIn;
-        workspace.Hosts.CollectionChanged += OnStructureChanged;
+        workspace.Hosts.CollectionChanged += OnHostsChanged;
         RebuildAll();
     }
 
@@ -192,12 +192,19 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        _workspace.Hosts.CollectionChanged -= OnStructureChanged;
+        _workspace.Hosts.CollectionChanged -= OnHostsChanged;
         UnwatchAll();
         ClearRows();
     }
 
-    private void OnStructureChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildAll();
+    private void OnHostsChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildAll();
+
+    private void OnActivityStructureChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        UnwatchAll();
+        WatchAll();
+        RebuildActivity();
+    }
 
     private void OnHostChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -222,11 +229,11 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         foreach (var host in _workspace.Hosts)
         {
             host.PropertyChanged += OnHostChanged;
-            host.Projects.CollectionChanged += OnStructureChanged;
+            host.Projects.CollectionChanged += OnActivityStructureChanged;
             _watchedHosts.Add(host);
             foreach (var project in host.Projects)
             {
-                project.Sessions.CollectionChanged += OnStructureChanged;
+                project.Sessions.CollectionChanged += OnActivityStructureChanged;
                 _watchedProjects.Add(project);
                 foreach (var session in project.Sessions)
                 {
@@ -242,9 +249,9 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         foreach (var host in _watchedHosts)
         {
             host.PropertyChanged -= OnHostChanged;
-            host.Projects.CollectionChanged -= OnStructureChanged;
+            host.Projects.CollectionChanged -= OnActivityStructureChanged;
         }
-        foreach (var project in _watchedProjects) project.Sessions.CollectionChanged -= OnStructureChanged;
+        foreach (var project in _watchedProjects) project.Sessions.CollectionChanged -= OnActivityStructureChanged;
         foreach (var session in _watchedSessions) session.PropertyChanged -= OnSessionChanged;
         _watchedHosts.Clear();
         _watchedProjects.Clear();
