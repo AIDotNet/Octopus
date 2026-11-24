@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:common="using:Octopus.App.Common"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:git="using:Octopus.App.Explorer.Git"
@@ -119,26 +120,27 @@
                         <Border Classes="ex-row" Classes.selected="{Binding IsSelected}" Height="{DynamicResource OctopusGitRowHeight}"
                                 PointerPressed="OnChangePressed" DoubleTapped="OnChangeDoubleTapped"
                                 arc:Tooltip.Tip="{Binding Change.Path}">
-                            <Grid ColumnDefinitions="*,Auto,Auto,Auto,18" Margin="8,0,6,0">
-                                <TextBlock Classes="ex-body" VerticalAlignment="Center" Text="{Binding Name}"
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,18" Margin="8,0,6,0">
+                                <common:FileIconView IconKey="{Binding IconKey}" Size="{DynamicResource OctopusFileTreeIconSize}" Margin="{DynamicResource OctopusFileTreeIconMargin}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Classes="ex-body" VerticalAlignment="Center" Text="{Binding Name}"
                                            TextTrimming="CharacterEllipsis" MinWidth="40" />
-                                <TextBlock Grid.Column="1" Classes="ex-hint" Margin="6,0,4,0" VerticalAlignment="Center"
+                                <TextBlock Grid.Column="2" Classes="ex-hint" Margin="6,0,4,0" VerticalAlignment="Center"
                                            MaxWidth="120" Text="{Binding Directory}" IsVisible="{Binding HasDirectory}"
                                            TextTrimming="PathSegmentEllipsis" />
-                                <arc:Button Grid.Column="2" Classes="git-action" Variant="Ghost" Margin="0,0,2,0"
+                                <arc:Button Grid.Column="3" Classes="git-action" Variant="Ghost" Margin="0,0,2,0"
                                             IsVisible="{Binding CanDiscard}"
                                             Command="{Binding $parent[ItemsControl].((git:GitPanelViewModel)DataContext).DiscardCommand}"
                                             CommandParameter="{Binding}"
                                             AutomationProperties.Name="{Binding DiscardText}" arc:Tooltip.Tip="{Binding DiscardText}">
                                     <lucide:LucideIcon Kind="{Binding DiscardIcon}" Size="13" />
                                 </arc:Button>
-                                <arc:Button Grid.Column="3" Classes="git-action" Variant="Ghost" Margin="0,0,4,0"
+                                <arc:Button Grid.Column="4" Classes="git-action" Variant="Ghost" Margin="0,0,4,0"
                                             Command="{Binding $parent[ItemsControl].((git:GitPanelViewModel)DataContext).ToggleStageCommand}"
                                             CommandParameter="{Binding}"
                                             AutomationProperties.Name="{Binding ActionText}" arc:Tooltip.Tip="{Binding ActionText}">
                                     <lucide:LucideIcon Kind="{Binding ActionIcon}" Size="13" />
                                 </arc:Button>
-                                <git:GitStatusLetter Grid.Column="4" Kind="{Binding Kind}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <git:GitStatusLetter Grid.Column="5" Kind="{Binding Kind}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
                     </DataTemplate>
@@ -166,13 +168,14 @@
                     <DataTemplate DataType="git:GitCommitFileRowViewModel">
                         <Border Classes="ex-row" Classes.selected="{Binding IsSelected}" Height="{DynamicResource OctopusGitCommitFileHeight}"
                                 PointerPressed="OnCommitFilePressed" arc:Tooltip.Tip="{Binding Tip}">
-                            <Grid ColumnDefinitions="*,Auto,18" Margin="26,0,6,0">
-                                <TextBlock Classes="ex-body" VerticalAlignment="Center" Text="{Binding Name}"
+                            <Grid ColumnDefinitions="Auto,*,Auto,18" Margin="26,0,6,0">
+                                <common:FileIconView IconKey="{Binding IconKey}" Size="{DynamicResource OctopusFileTreeIconSize}" Margin="{DynamicResource OctopusFileTreeIconMargin}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Classes="ex-body" VerticalAlignment="Center" Text="{Binding Name}"
                                            TextTrimming="CharacterEllipsis" MinWidth="40" />
-                                <TextBlock Grid.Column="1" Classes="ex-hint" Margin="8,0,6,0" VerticalAlignment="Center"
+                                <TextBlock Grid.Column="2" Classes="ex-hint" Margin="8,0,6,0" VerticalAlignment="Center"
                                            MaxWidth="120" Text="{Binding Directory}" IsVisible="{Binding HasDirectory}"
                                            TextTrimming="PathSegmentEllipsis" />
-                                <git:GitStatusLetter Grid.Column="2" Kind="{Binding Kind}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <git:GitStatusLetter Grid.Column="3" Kind="{Binding Kind}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
                     </DataTemplate>

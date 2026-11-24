@@ -2,9 +2,12 @@ using TKCode.Arc.Icons.Lucide;
 
 namespace Octopus.App.Common;
 
-/// <summary>Picks the Lucide icon of a file by its extension: a few families, everything else is a plain page.</summary>
+/// <summary>Picks the colored file icon key (VS Code Material style) or fallback Lucide icon for a file or folder.</summary>
 internal static class FileIcons
 {
+    public static string KeyFor(string name, bool isDirectory, bool isExpanded = false) =>
+        FileIconStore.Instance.ResolveKey(name, isDirectory, isExpanded);
+
     public static LucideIconKind For(string name, bool isDirectory, bool isExpanded = false)
     {
         if (isDirectory)

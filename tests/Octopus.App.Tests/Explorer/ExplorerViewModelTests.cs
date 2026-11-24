@@ -311,6 +311,41 @@ public class ExplorerViewModelTests
         Assert.Equal(0, opened);
     }
 
+    [AvaloniaFact]
+    public async Task Large_folder_uses_single_batch_reset_and_incremental_git_decoration_updates_cleanly()
+    {
+        using var project = new ExplorerFixture();
+        for (var i = 0; i < 80; i++) project.Write($"file_{i:000}.cs", "class C {}");
+        var tree = AppHost.Get<FileTreeViewModel>();
+
+        var notifications = 0;
+        tree.Roots.CollectionChanged += (_, _) => notifications++;
+
+        tree.Load(project.Root);
+        await tree.ReadAheadIdle;
+
+        Assert.Equal(80, tree.Roots.Count);
+        // Load clears once and replaces 80 rows in a single batch Reset (2 notifications, not 80+ individual inserts).
+        Assert.True(notifications <= 2, $"Expected <= 2 collection notifications, got {notifications}");
+
+        var root = RealPath.Resolve(project.Root);
+        var modified = new GitChange("file_010.cs", Path.Combine(root, "file_010.cs"), GitChangeKind.Modified, false);
+        tree.ApplyGitStatus(new GitStatus("main", null, null, 0, 0, [modified]), root);
+        Assert.Equal(GitChangeKind.Modified, tree.Roots.Single(n => n.Name == "file_010.cs").GitKind);
+        Assert.Null(tree.Roots.Single(n => n.Name == "file_011.cs").GitKind);
+
+        // Subsequent status clears the previous file and marks the new one incrementally.
+        var added = new GitChange("file_020.cs", Path.Combine(root, "file_020.cs"), GitChangeKind.Added, true);
+        tree.ApplyGitStatus(new GitStatus("main", null, null, 0, 0, [added]), root);
+        Assert.Null(tree.Roots.Single(n => n.Name == "file_010.cs").GitKind);
+        Assert.Equal(GitChangeKind.Added, tree.Roots.Single(n => n.Name == "file_020.cs").GitKind);
+
+        // Async reload picks up newly added files off the UI thread.
+        project.Write("file_999.ts", "export const x = 1;");
+        await tree.ReloadAsync();
+        Assert.Contains(tree.Roots, n => n.Name == "file_999.ts" && n.IconKey == "typescript");
+    }
+
     private static async Task WaitUntil(Func<bool> condition)
     {
         for (var i = 0; i < 200 && !condition(); i++)

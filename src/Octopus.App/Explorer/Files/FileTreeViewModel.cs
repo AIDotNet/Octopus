@@ -27,15 +27,26 @@ public sealed partial class FileTreeViewModel : ObservableObject
     private readonly IDialogService _dialogs;
     private readonly PathComparer _paths;
     private readonly Dictionary<string, FileNodeViewModel> _nodes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, FileNodeViewModel> _nodesByRelativePath = new(StringComparer.Ordinal);
+    private readonly HashSet<FileNodeViewModel> _decoratedNodes = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<string> _inFlightDirs = new(StringComparer.Ordinal);
     private Dictionary<string, GitChangeKind> _changedFiles = new(StringComparer.Ordinal);
     private HashSet<string> _changedFolders = new(StringComparer.Ordinal);
     private IReadOnlyList<GitChange>? _appliedChanges;
-    /// <summary>Bumped by <see cref="Load"/>: read-ahead that finishes for an earlier folder is dropped.</summary>
+    /// <summary>Bumped by <see cref="Load"/>: read-ahead and async refreshes from an earlier folder are dropped.</summary>
     private int _generation;
     private Task _readAhead = Task.CompletedTask;
 
     /// <summary>Folders read at once in the background (a local disk, or the runs of an SSH tree).</summary>
     private const int ReadAheadParallelism = 4;
+
+    /// <summary>Maximum child folders read ahead per parent directory so huge flat folders don't storm the disk.</summary>
+    private const int MaxReadAheadFolders = 128;
+
+    /// <summary>Diffs larger than this use a single batch Reset instead of per-item collection events.</summary>
+    private const int BatchReplaceThreshold = 32;
+
+    private readonly BatchObservableCollection<FileNodeViewModel> _roots = [];
 
     public FileTreeViewModel(IFileTreeService service, IFileOpener opener, PathComparer paths, IDialogService dialogs)
     {
@@ -52,7 +63,7 @@ public sealed partial class FileTreeViewModel : ObservableObject
     /// <summary>The folders are on an SSH host: "Reveal" has nothing to show on this computer.</summary>
     [ObservableProperty] public partial bool IsRemote { get; private set; }
 
-    public ObservableCollection<FileNodeViewModel> Roots { get; } = [];
+    public ObservableCollection<FileNodeViewModel> Roots => _roots;
 
     [ObservableProperty] public partial FileNodeViewModel? SelectedNode { get; set; }
 
@@ -73,12 +84,18 @@ public sealed partial class FileTreeViewModel : ObservableObject
 
     partial void OnShowHiddenChanged(bool value) => Reload();
 
-    partial void OnContextNodeChanged(FileNodeViewModel? value)
+    partial void OnContextNodeChanged(FileNodeViewModel? value) => NotifyContextCommands();
+
+    private void NotifyContextCommands()
     {
         OpenContextCommand.NotifyCanExecuteChanged();
         RevealContextCommand.NotifyCanExecuteChanged();
         CopyContextPathCommand.NotifyCanExecuteChanged();
         CopyContextRelativePathCommand.NotifyCanExecuteChanged();
+        NewFileHereCommand.NotifyCanExecuteChanged();
+        NewFolderHereCommand.NotifyCanExecuteChanged();
+        RenameContextCommand.NotifyCanExecuteChanged();
+        DeleteContextCommand.NotifyCanExecuteChanged();
     }
 
     /// <param name="root">The folder to show (null: none).</param>
@@ -86,8 +103,11 @@ public sealed partial class FileTreeViewModel : ObservableObject
     public void Load(string? root, IFileTreeService? service = null)
     {
         _generation++;
-        Roots.Clear();
+        _roots.Clear();
         _nodes.Clear();
+        _nodesByRelativePath.Clear();
+        _decoratedNodes.Clear();
+        _inFlightDirs.Clear();
         _appliedChanges = null;
         SelectedNode = null;
         ContextNode = null;
@@ -96,6 +116,8 @@ public sealed partial class FileTreeViewModel : ObservableObject
         Root = root;
         _service = service ?? _local;
         IsRemote = service is not null;
+        RevealProjectCommand.NotifyCanExecuteChanged();
+        NotifyContextCommands();
         if (root is not null) Refresh(null, populateFolders: true);
     }
 
@@ -107,7 +129,25 @@ public sealed partial class FileTreeViewModel : ObservableObject
     {
         if (!node.IsDirectory) return;
         if (!node.IsLoaded) Refresh(node, populateFolders: true);
-        else PopulateFolders(node.Children);
+        else PopulateFolders(node.BatchChildren);
+    }
+
+    /// <summary>Async variant of <see cref="EnsureLoaded"/> used by UI expansion so large folders never block the UI thread.</summary>
+    public async Task EnsureLoadedAsync(FileNodeViewModel node)
+    {
+        if (!node.IsDirectory) return;
+        if (node.IsLoaded)
+        {
+            PopulateFolders(node.BatchChildren);
+            return;
+        }
+        var generation = _generation;
+        var service = _service;
+        var listing = await Task.Run(() => service.List(node.FullPath));
+        if (generation != _generation) return;
+        if (!_nodes.TryGetValue(node.FullPath, out var known) || !ReferenceEquals(known, node)) return;
+        Apply(node, node.BatchChildren, listing);
+        PopulateFolders(node.BatchChildren);
     }
 
     /// <summary>A directory changed on disk: reread it when it is on screen, keeping what is open and selected.</summary>
@@ -124,13 +164,100 @@ public sealed partial class FileTreeViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Background-thread directory refresh for file-system watcher bursts and file operations: lists the directory off
+    /// the UI thread, coalesces duplicate in-flight reads for the same path, and applies the diff back on the UI thread.
+    /// </summary>
+    public async Task RefreshDirectoryAsync(string directory)
+    {
+        if (Root is null) return;
+        var isRoot = _paths.Equals(directory, Root);
+        FileNodeViewModel? target = null;
+        if (!isRoot && (!_nodes.TryGetValue(directory, out target) || !target.IsLoaded))
+        {
+            return;
+        }
+        var key = isRoot ? Root : target!.FullPath;
+        if (!_inFlightDirs.Add(key)) return;
+
+        var generation = _generation;
+        var service = _service;
+        try
+        {
+            var listing = await Task.Run(() => service.List(key));
+            if (generation != _generation) return;
+            if (isRoot)
+            {
+                Apply(null, _roots, listing);
+                PopulateFolders(_roots);
+            }
+            else if (_nodes.TryGetValue(key, out var current) && current.IsLoaded)
+            {
+                Apply(current, current.BatchChildren, listing);
+                if (current.IsExpanded) PopulateFolders(current.BatchChildren);
+            }
+        }
+        finally
+        {
+            _inFlightDirs.Remove(key);
+        }
+    }
+
     /// <summary>Rereads every folder that has been opened.</summary>
     [RelayCommand]
     public void Reload()
     {
         if (Root is null) return;
         Refresh(null, populateFolders: true);
-        foreach (var node in Roots.ToList()) ReloadNode(node);
+        foreach (var node in _roots.ToList()) ReloadNode(node);
+    }
+
+    /// <summary>Rereads every loaded folder in parallel off the UI thread, then applies updates top-down.</summary>
+    public async Task ReloadAsync()
+    {
+        if (Root is null) return;
+        var generation = _generation;
+        var service = _service;
+        var rootPath = Root;
+
+        var targets = new List<(FileNodeViewModel? Node, string Path)> { (null, rootPath) };
+        CollectLoadedFolders(_roots, targets);
+
+        var listings = new IReadOnlyList<FileEntry>[targets.Count];
+        await Task.Run(() => Parallel.For(0, targets.Count, new ParallelOptions { MaxDegreeOfParallelism = ReadAheadParallelism },
+            i => listings[i] = service.List(targets[i].Path)));
+
+        if (generation != _generation) return;
+
+        Apply(null, _roots, listings[0]);
+        for (var i = 1; i < targets.Count; i++)
+        {
+            var node = targets[i].Node!;
+            if (_nodes.TryGetValue(node.FullPath, out var known) && ReferenceEquals(known, node) && node.IsLoaded)
+            {
+                Apply(node, node.BatchChildren, listings[i]);
+            }
+        }
+        PopulateFolders(_roots);
+        for (var i = 1; i < targets.Count; i++)
+        {
+            var node = targets[i].Node!;
+            if (node.IsExpanded && _nodes.TryGetValue(node.FullPath, out var known) && ReferenceEquals(known, node))
+            {
+                PopulateFolders(node.BatchChildren);
+            }
+        }
+    }
+
+    private static void CollectLoadedFolders(IReadOnlyList<FileNodeViewModel> rows, List<(FileNodeViewModel? Node, string Path)> targets)
+    {
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var node = rows[i];
+            if (!node.IsDirectory || !node.IsLoaded) continue;
+            targets.Add((node, node.FullPath));
+            CollectLoadedFolders(node.BatchChildren, targets);
+        }
     }
 
     [RelayCommand]
@@ -274,7 +401,7 @@ public sealed partial class FileTreeViewModel : ObservableObject
         {
             await ReportAsync(e.Message);
         }
-        RefreshDirectory(folder);
+        await RefreshDirectoryAsync(folder);
     }
 
     private Task ReportAsync(string message) =>
@@ -326,27 +453,43 @@ public sealed partial class FileTreeViewModel : ObservableObject
         }
         _changedFiles = files;
         _changedFolders = folders;
-        foreach (var node in _nodes.Values) Decorate(node);
+
+        // Incremental decoration: only touch previously decorated nodes and newly affected paths — O(changed), not O(all nodes).
+        var affected = new HashSet<FileNodeViewModel>(_decoratedNodes, ReferenceEqualityComparer.Instance);
+        foreach (var path in files.Keys)
+        {
+            if (_nodesByRelativePath.TryGetValue(path, out var node)) affected.Add(node);
+        }
+        foreach (var path in folders)
+        {
+            if (_nodesByRelativePath.TryGetValue(path, out var node)) affected.Add(node);
+        }
+        _decoratedNodes.Clear();
+        foreach (var node in affected)
+        {
+            Decorate(node);
+        }
     }
 
     private void Decorate(FileNodeViewModel node)
     {
-        if (Root is null) return;
-        var key = RealPath.Relative(Root, node.FullPath);
+        var key = node.RelativePath;
         if (key is null)
         {
             node.ApplyGit(null, false);
             return;
         }
         GitChangeKind? kind = !node.IsDirectory && _changedFiles.TryGetValue(key, out var k) ? k : null;
-        node.ApplyGit(kind, node.IsDirectory && _changedFolders.Contains(key));
+        var hasChangedDescendant = node.IsDirectory && _changedFolders.Contains(key);
+        node.ApplyGit(kind, hasChangedDescendant);
+        if (kind is not null || hasChangedDescendant) _decoratedNodes.Add(node);
     }
 
     private void ReloadNode(FileNodeViewModel node)
     {
         if (!node.IsDirectory || !node.IsLoaded) return;
         Refresh(node, node.IsExpanded);
-        foreach (var child in node.Children.ToList()) ReloadNode(child);
+        foreach (var child in node.BatchChildren.ToList()) ReloadNode(child);
     }
 
     /// <summary>
@@ -357,55 +500,72 @@ public sealed partial class FileTreeViewModel : ObservableObject
     {
         var path = parent?.FullPath ?? Root;
         if (path is null) return;
-        var rows = parent?.Children ?? Roots;
+        var rows = parent?.BatchChildren ?? _roots;
         Apply(parent, rows, _service.List(path));
         if (populateFolders) PopulateFolders(rows);
     }
 
     /// <summary>Brings <paramref name="rows"/> in line with <paramref name="listing"/>, keeping the rows that remain.</summary>
-    private void Apply(FileNodeViewModel? parent, ObservableCollection<FileNodeViewModel> rows, IReadOnlyList<FileEntry> listing)
+    private void Apply(FileNodeViewModel? parent, BatchObservableCollection<FileNodeViewModel> rows, IReadOnlyList<FileEntry> listing)
     {
         var existing = new Dictionary<(string, bool), FileNodeViewModel>(rows.Count);
         foreach (var node in rows)
         {
             existing[(node.FullPath, node.IsDirectory)] = node;
         }
+        var parentRelative = parent?.RelativePath;
         var desired = new List<FileNodeViewModel>(listing.Count);
+        var addedCount = 0;
         foreach (var entry in listing)
         {
             if (!ShowHidden && entry.IsHidden) continue;
             if (!existing.Remove((entry.FullPath, entry.IsDirectory), out var node))
             {
-                node = new FileNodeViewModel(entry);
+                var rel = string.IsNullOrEmpty(parentRelative) ? entry.Name : parentRelative + "/" + entry.Name;
+                node = new FileNodeViewModel(entry, rel);
                 _nodes[node.FullPath] = node;
+                _nodesByRelativePath[rel] = node;
                 Decorate(node);
+                addedCount++;
             }
             desired.Add(node);
         }
         // What is left in `existing` is gone from disk (or hidden now).
+        var removedCount = existing.Count;
         foreach (var gone in existing.Values) Forget(gone);
 
-        // Sets, not list searches: a folder with thousands of entries is reread on every change in it.
-        var wanted = new HashSet<FileNodeViewModel>(desired, ReferenceEqualityComparer.Instance);
-        var kept = new HashSet<FileNodeViewModel>(ReferenceEqualityComparer.Instance);
-        for (var i = rows.Count - 1; i >= 0; i--)
+        // Large diffs or initial populations replace in one batch Reset to avoid thousands of per-item CollectionChanged events.
+        if (rows.Count == 0 || desired.Count == 0 || addedCount + removedCount > BatchReplaceThreshold)
         {
-            if (wanted.Contains(rows[i])) kept.Add(rows[i]);
-            else rows.RemoveAt(i);
-        }
-        for (var i = 0; i < desired.Count; i++)
-        {
-            var node = desired[i];
-            if (i < rows.Count && ReferenceEquals(rows[i], node)) continue;
-            if (!kept.Contains(node))
+            if (rows.Count != 0 || desired.Count != 0)
             {
-                rows.Insert(i, node);
-                continue;
+                rows.ReplaceAll(desired);
             }
-            // Rows before i are in place, so a kept row that is out of place is further down.
-            var at = i + 1;
-            while (!ReferenceEquals(rows[at], node)) at++;
-            rows.Move(at, i);
+        }
+        else
+        {
+            // Small live diffs mutate in place so Arc TreeView can smoothly animate added/removed rows.
+            var wanted = new HashSet<FileNodeViewModel>(desired, ReferenceEqualityComparer.Instance);
+            var kept = new HashSet<FileNodeViewModel>(ReferenceEqualityComparer.Instance);
+            for (var i = rows.Count - 1; i >= 0; i--)
+            {
+                if (wanted.Contains(rows[i])) kept.Add(rows[i]);
+                else rows.RemoveAt(i);
+            }
+            for (var i = 0; i < desired.Count; i++)
+            {
+                var node = desired[i];
+                if (i < rows.Count && ReferenceEquals(rows[i], node)) continue;
+                if (!kept.Contains(node))
+                {
+                    rows.Insert(i, node);
+                    continue;
+                }
+                // Rows before i are in place, so a kept row that is out of place is further down.
+                var at = i + 1;
+                while (!ReferenceEquals(rows[at], node)) at++;
+                rows.Move(at, i);
+            }
         }
         if (parent is not null) parent.IsLoaded = true;
     }
@@ -413,45 +573,54 @@ public sealed partial class FileTreeViewModel : ObservableObject
     private static readonly HashSet<string> SkipReadAhead = new(StringComparer.OrdinalIgnoreCase)
     {
         "node_modules", ".venv", "venv", "target", ".gradle", "__pycache__",
+        "bin", "obj", "dist", "build", ".next", ".nuxt", ".cache", "vendor", "Pods",
+        ".dart_tool", ".mypy_cache", ".pytest_cache", ".ruff_cache",
     };
 
     /// <summary>
     /// Reads the folders among <paramref name="rows"/> that have not been read yet (without their own folders), off the
     /// UI thread: opening a folder with hundreds of folders in it would otherwise wait for hundreds of listings.
     /// </summary>
-    private void PopulateFolders(ObservableCollection<FileNodeViewModel> rows)
+    private void PopulateFolders(BatchObservableCollection<FileNodeViewModel> rows)
     {
-        var folders = rows.Where(r => r is { IsDirectory: true, IsLoaded: false } && !SkipReadAhead.Contains(r.Name)).ToArray();
+        var folders = rows
+            .Where(r => r is { IsDirectory: true, IsLoaded: false } && !SkipReadAhead.Contains(r.Name))
+            .Take(MaxReadAheadFolders)
+            .ToArray();
         if (folders.Length == 0) return;
         var task = ReadAheadAsync(rows, folders, _service, _generation);
         _readAhead = _readAhead.IsCompleted ? task : Task.WhenAll(_readAhead, task);
     }
 
-    private async Task ReadAheadAsync(ObservableCollection<FileNodeViewModel> rows, FileNodeViewModel[] folders, IFileTreeService service, int generation)
+    private async Task ReadAheadAsync(BatchObservableCollection<FileNodeViewModel> rows, FileNodeViewModel[] folders, IFileTreeService service, int generation)
     {
         var listings = new IReadOnlyList<FileEntry>[folders.Length];
         await Task.Run(() => Parallel.For(0, folders.Length, new ParallelOptions { MaxDegreeOfParallelism = ReadAheadParallelism },
             i => listings[i] = service.List(folders[i].FullPath)));
         // Back on the UI thread. Another project, or a folder that was read (opened) or dropped meanwhile, is left alone.
         if (generation != _generation) return;
+        var anyPopulated = false;
         for (var i = 0; i < folders.Length; i++)
         {
             var folder = folders[i];
             if (folder.IsLoaded || !_nodes.TryGetValue(folder.FullPath, out var known) || !ReferenceEquals(known, folder)) continue;
-            Apply(folder, folder.Children, listings[i]);
-            // The tree reads whether a row has children when it builds the row, and watches only the children of open
-            // folders. A folder that just got children is "replaced" by itself, so the tree builds its row again.
-            if (folder.Children.Count > 0 && rows.IndexOf(folder) is var at and >= 0) rows[at] = folder;
+            Apply(folder, folder.BatchChildren, listings[i]);
+            if (folder.BatchChildren.Count > 0) anyPopulated = true;
         }
+        // The tree reads whether a row has children when it rebuilds rows; one batch Reset notifies all populated folders in O(1).
+        if (anyPopulated) rows.NotifyReset();
     }
 
     private void Forget(FileNodeViewModel node)
     {
         _nodes.Remove(node.FullPath);
-        if (node.IsDirectory && node.Children.Count > 0)
+        if (node.RelativePath is { } rel) _nodesByRelativePath.Remove(rel);
+        _decoratedNodes.Remove(node);
+        if (node.IsDirectory && node.BatchChildren.Count > 0)
         {
-            foreach (var child in node.Children) Forget(child);
+            foreach (var child in node.BatchChildren) Forget(child);
         }
         if (ReferenceEquals(SelectedNode, node)) SelectedNode = null;
+        if (ReferenceEquals(ContextNode, node)) ContextNode = null;
     }
 }

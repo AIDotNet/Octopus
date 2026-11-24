@@ -305,7 +305,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
             return;
         }
         WatchLocal(folder);
-        Files.Reload();
+        await Files.ReloadAsync();
         if (version == _version) await Git.RefreshAsync(includeLog: IsGitTab);
     }
 
@@ -413,7 +413,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     {
         if (IsGitTab) _ = Git.RefreshAsync();
         else if (IsSessionsTab) _ = Sessions.RefreshAsync();
-        else Files.Reload();
+        else _ = Files.ReloadAsync();
     }
 
     private void OnDirectoryChanged(string directory)
@@ -436,7 +436,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
                 _pendingDirs.Clear();
                 _pendingDirsScheduled = false;
             }
-            foreach (var dir in dirs) Files.RefreshDirectory(dir);
+            foreach (var dir in dirs) _ = Files.RefreshDirectoryAsync(dir);
         });
     }
 

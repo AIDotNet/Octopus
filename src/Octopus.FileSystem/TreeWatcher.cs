@@ -60,7 +60,7 @@ internal sealed class TreeWatcher : IDisposable
         }
         else
         {
-            if (IsInsideGit(changedPath)) return;
+            if (IsIgnored(changedPath)) return;
             directory = Path.GetDirectoryName(changedPath) ?? _root;
         }
         lock (_gate)
@@ -79,7 +79,11 @@ internal sealed class TreeWatcher : IDisposable
         }
     }
 
-    private bool IsInsideGit(string path)
+    /// <summary>
+    /// Ignores everything inside <c>.git</c> and deep churn inside heavy build/dependency folders (while still reporting
+    /// creation or removal of those folders themselves at their parent directory).
+    /// </summary>
+    private bool IsIgnored(string path)
     {
         if (path.Length <= _root.Length) return false;
         var rest = path.AsSpan(_root.Length).TrimStart(Separators);
@@ -88,11 +92,21 @@ internal sealed class TreeWatcher : IDisposable
             var cut = rest.IndexOfAny(Separators);
             var segment = cut < 0 ? rest : rest[..cut];
             if (segment is ".git") return true;
+            // For noisy build/dependency directories, only skip events *inside* them (cut >= 0 means a descendant).
+            if (cut >= 0 && IsNoisyDirectory(segment)) return true;
             if (cut < 0) break;
             rest = rest[(cut + 1)..];
         }
         return false;
     }
+
+    private static bool IsNoisyDirectory(ReadOnlySpan<char> segment) =>
+        segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase)
+        || segment.Equals("obj", StringComparison.OrdinalIgnoreCase)
+        || segment.Equals("__pycache__", StringComparison.OrdinalIgnoreCase)
+        || segment.Equals(".vs", StringComparison.OrdinalIgnoreCase)
+        || segment.Equals(".gradle", StringComparison.OrdinalIgnoreCase)
+        || segment.Equals(".cache", StringComparison.OrdinalIgnoreCase);
 
     private void Flush()
     {

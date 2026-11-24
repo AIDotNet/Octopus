@@ -22,6 +22,7 @@ public sealed class SearchRowViewModel
     /// <summary>The folder of a hit, relative to the project (gray).</summary>
     public string Subtitle { get; private init; } = "";
 
+    public string IconKey { get; private init; } = "";
     public LucideIconKind IconKind { get; private init; }
     public bool IsDirectory { get; private init; }
 
@@ -43,6 +44,7 @@ public sealed class SearchRowViewModel
         {
             Subtitle = relativeDirectory,
             IsDirectory = isDirectory,
+            IconKey = FileIcons.KeyFor(name, isDirectory),
             IconKind = FileIcons.For(name, isDirectory),
         };
 
@@ -50,6 +52,7 @@ public sealed class SearchRowViewModel
         new(SearchRowKind.FileHeader, path, name)
         {
             Subtitle = relativeDirectory,
+            IconKey = FileIcons.KeyFor(name, false),
             IconKind = FileIcons.For(name, false),
         };
 

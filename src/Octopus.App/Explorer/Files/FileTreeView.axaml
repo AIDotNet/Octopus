@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
-             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:common="using:Octopus.App.Common"
              xmlns:files="using:Octopus.App.Explorer.Files"
              xmlns:git="using:Octopus.App.Explorer.Git"
              x:Class="Octopus.App.Explorer.Files.FileTreeView"
@@ -15,8 +15,8 @@
                   ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode, Mode=TwoWay}">
         <arc:TreeView.ItemTemplate>
             <DataTemplate x:DataType="files:FileNodeViewModel">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                    <lucide:LucideIcon Kind="{Binding IconKind}" Size="{DynamicResource OctopusFileTreeIconSize}" Margin="{DynamicResource OctopusFileTreeIconMargin}" VerticalAlignment="Center" />
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Background="Transparent">
+                    <common:FileIconView IconKey="{Binding IconKey}" Size="{DynamicResource OctopusFileTreeIconSize}" Margin="{DynamicResource OctopusFileTreeIconMargin}" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="1" Classes="node-name" Classes.hidden="{Binding IsHidden}"
                                FontSize="{arc:ArcDesignTokenResource TypeSM}" VerticalAlignment="Center"
                                Text="{Binding Name}" TextTrimming="CharacterEllipsis" />

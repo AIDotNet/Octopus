@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.Git;
 using TKCode.Arc.Icons.Lucide;
@@ -14,6 +15,8 @@ public sealed partial class GitChangeRowViewModel(GitChange change) : Observable
 
     /// <summary>The file name; an untracked folder listed whole ends with a slash.</summary>
     public string Name { get; } = Path.GetFileName(change.Path) + (change.IsDirectory ? "/" : "");
+
+    public string IconKey { get; } = FileIcons.KeyFor(Path.GetFileName(change.Path), change.IsDirectory);
 
     /// <summary>The folder of the file, relative to the repository (empty at the top).</summary>
     public string Directory { get; } = change.Path.Contains('/') ? change.Path[..change.Path.LastIndexOf('/')] : "";

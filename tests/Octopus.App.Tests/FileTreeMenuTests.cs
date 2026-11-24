@@ -1,11 +1,16 @@
-using Octopus.App.Explorer.Files;
-using Octopus.App.Services;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using Octopus.App.Common;
 using Octopus.App.Composition;
+using Octopus.App.Explorer.Files;
+using Octopus.App.Services;
 using Octopus.FileSystem;
 using Octopus.Platform;
+using TKCode.Arc;
 using Xunit;
-using Avalonia.Headless.XUnit;
 
 namespace Octopus.App.Tests;
 
@@ -101,5 +106,92 @@ public class FileTreeMenuTests
         Assert.False(tree.RenameContextCommand.CanExecute(null));
         Assert.False(tree.DeleteContextCommand.CanExecute(null));
         Assert.True(tree.NewFileHereCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void ContextNode_change_notifies_rename_and_delete_commands_and_root_change_notifies_creation()
+    {
+        var dialogs = (FakeDialogService)AppHost.Get<IDialogService>();
+        var tree = new FileTreeViewModel(new FileTreeService(), AppHost.Get<IFileOpener>(), new PathComparer(ignoreCase: false), dialogs);
+        var createChanges = 0;
+        var renameChanges = 0;
+        var deleteChanges = 0;
+        tree.NewFileHereCommand.CanExecuteChanged += (_, _) => createChanges++;
+        tree.RenameContextCommand.CanExecuteChanged += (_, _) => renameChanges++;
+        tree.DeleteContextCommand.CanExecuteChanged += (_, _) => deleteChanges++;
+
+        Assert.False(tree.NewFileHereCommand.CanExecute(null));
+        var root = Directory.CreateTempSubdirectory("octopus-menu-notify-").FullName;
+        File.WriteAllText(Path.Combine(root, "a.txt"), "a");
+
+        tree.Load(root);
+        Assert.True(createChanges > 0);
+        Assert.True(tree.NewFileHereCommand.CanExecute(null));
+
+        renameChanges = 0;
+        deleteChanges = 0;
+        tree.ContextNode = tree.Roots.Single(n => n.Name == "a.txt");
+        Assert.Equal(1, renameChanges);
+        Assert.Equal(1, deleteChanges);
+        Assert.True(tree.RenameContextCommand.CanExecute(null));
+        Assert.True(tree.DeleteContextCommand.CanExecute(null));
+
+        tree.ContextNode = null;
+        Assert.Equal(2, renameChanges);
+        Assert.Equal(2, deleteChanges);
+        Assert.False(tree.RenameContextCommand.CanExecute(null));
+        Assert.False(tree.DeleteContextCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void Right_click_directly_on_unselected_row_or_its_blank_area_enables_rename_and_delete_menu_entries()
+    {
+        var (tree, _, _) = Local();
+        var view = new FileTreeView { DataContext = tree };
+        var window = new Window { Width = 320, Height = 300, Content = view };
+        window.Show();
+        Frames.Pump();
+
+        var arcTree = view.GetVisualDescendants().OfType<TKCode.Arc.TreeView>().Single();
+        var menu = TKCode.Arc.ContextMenu.GetMenu(arcTree);
+        Assert.NotNull(menu);
+        var entries = menu!.Items.OfType<MenuEntry>().ToList();
+        var renameEntry = entries[^2];
+        var deleteEntry = entries[^1];
+
+        // Before any click, nothing is selected and Rename/Delete are disabled.
+        Assert.Null(tree.SelectedNode);
+        Assert.Null(tree.ContextNode);
+
+        // Find the realized row Grid and simulate ContextRequested directly on the row's blank area (no prior left-click).
+        var rowGrid = arcTree.GetVisualDescendants().OfType<Grid>().First(g => g.DataContext is FileNodeViewModel);
+        Assert.Equal(Avalonia.Media.Brushes.Transparent, rowGrid.Background);
+
+        // Also verify hitting the outer TreeViewRow directly (indent / chevron zone) resolves the row!
+        var outerRow = rowGrid.GetVisualAncestors().OfType<Control>().First(c => c.GetType().Name == "TreeViewRow");
+        outerRow.RaiseEvent(new ContextRequestedEventArgs());
+        Frames.Pump();
+
+        // Keyboard ContextRequested without position falls back to SelectedNode (still null here), then pointer-based sets it.
+        var pointArgs = new ContextRequestedEventArgs(new PointerReleasedEventArgs(
+            outerRow,
+            new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, true),
+            arcTree,
+            new Point(4, 10),
+            0,
+            new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased),
+            KeyModifiers.None,
+            MouseButton.Right));
+        outerRow.RaiseEvent(pointArgs);
+        Frames.Pump();
+
+        var expected = tree.Roots.Single(n => n.Name == "a.txt");
+        Assert.Same(expected, tree.ContextNode);
+        Assert.Same(expected, tree.SelectedNode);
+        Assert.True(renameEntry.IsEffectivelyEnabled);
+        Assert.True(deleteEntry.IsEffectivelyEnabled);
+
+        menu.Close(returnFocus: false);
+        window.Close();
     }
 }

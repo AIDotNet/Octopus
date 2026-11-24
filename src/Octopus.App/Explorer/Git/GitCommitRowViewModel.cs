@@ -37,6 +37,7 @@ public sealed partial class GitCommitFileRowViewModel(GitCommitRowViewModel owne
     public GitCommitRowViewModel Owner { get; } = owner;
     public GitCommitFile File { get; } = file;
     public string Name { get; } = Path.GetFileName(file.Path);
+    public string IconKey { get; } = FileIcons.KeyFor(Path.GetFileName(file.Path), isDirectory: false);
     public string Directory { get; } = file.Path.Contains('/') ? file.Path[..file.Path.LastIndexOf('/')] : "";
     public bool HasDirectory => Directory.Length > 0;
     public GitChangeKind Kind => File.Kind;
