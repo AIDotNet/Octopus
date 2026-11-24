@@ -2,6 +2,8 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Octopus.App.Files.Code;
+using StreamMark.Avalonia.Extensions;
+using StreamMark.Mermaid;
 using TKCode.Arc;
 
 namespace Octopus.App.Files.Documents;
@@ -13,10 +15,21 @@ namespace Octopus.App.Files.Documents;
 /// </summary>
 public partial class MarkdownViewerView : UserControl, IFileViewerView
 {
+    /// <summary>Arc's Markdown defaults, plus <c>```mermaid</c> blocks drawn as diagrams (with a toggle back to the source).</summary>
+    private static readonly MarkdownServices PreviewServices = new()
+    {
+        Plugins = [.. TKCode.Arc.Markdown.DefaultServices.Plugins, new MermaidPlugin()],
+        CodeBlocks = TKCode.Arc.Markdown.DefaultServices.CodeBlocks,
+    };
+
     private MarkdownViewerModel? _model;
     private int _loadedId;
 
-    public MarkdownViewerView() => InitializeComponent();
+    public MarkdownViewerView()
+    {
+        InitializeComponent();
+        Preview.Services = PreviewServices;
+    }
 
     /// <summary>The editor of the document that is open; null while the file is read-only or not loaded.</summary>
     public RichTextEditor? Editor { get; private set; }

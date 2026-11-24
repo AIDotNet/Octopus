@@ -80,8 +80,8 @@ public class MarkdownViewerTests
         Assert.True(h.Editor.IsEffectivelyVisible);
         Assert.False(h.Markdown.IsDirty);
         Assert.False(h.Editor.CanUndo, "undo must not be able to step back past the loaded file");
-        // The rendered/source switch is two icon buttons in the header bar.
-        Assert.Equal(2, h.View.GetVisualDescendants().Count(d => d is Avalonia.Input.ICommandSource s && ReferenceEquals(s.Command, h.Markdown.SetViewModeCommand)));
+        // The rendered/preview/source switch is three icon buttons in the header bar.
+        Assert.Equal(3, h.View.GetVisualDescendants().Count(d => d is Avalonia.Input.ICommandSource s && ReferenceEquals(s.Command, h.Markdown.SetViewModeCommand)));
     }
 
     [AvaloniaFact]
@@ -259,6 +259,45 @@ public class MarkdownViewerTests
         h.Markdown.SaveDocumentCommand.Execute(null);
         await FileTabHarness.WaitUntil(() => !h.Markdown.IsDirty);
         Assert.Contains("Typed ", Encoding.UTF8.GetString(h.Disk));
+    }
+
+    [AvaloniaFact]
+    public async Task The_preview_beside_the_editor_shows_the_unsaved_edits_and_draws_mermaid_blocks()
+    {
+        using var h = await FileTabHarness.OpenAsync(Plain);
+        Assert.True(h.Markdown.CanPreview);
+        h.Type("Typed ");
+        h.Markdown.SetViewModeCommand.Execute(MarkdownViewerModel.PreviewMode);
+        Frames.Pump();
+        Assert.True(h.Markdown.ShowPreview);
+        Assert.False(h.Markdown.ShowEditor);
+        Assert.Contains("Typed ", h.MarkdownView.PreviewView.Text);
+        Assert.Contains(h.MarkdownView.PreviewView.Services!.Plugins, p => p is StreamMark.Mermaid.MermaidPlugin);
+
+        h.Markdown.SetViewModeCommand.Execute(MarkdownViewerModel.RenderedMode);
+        Frames.Pump();
+        Assert.True(h.Markdown.ShowEditor);
+        Assert.True(h.Markdown.IsDirty, "the edits are still there after looking at the preview");
+        Assert.Equal(Encoding.UTF8.GetBytes(Plain), h.Disk);
+    }
+
+    [AvaloniaFact]
+    public async Task A_mermaid_block_shows_as_a_diagram_in_the_preview()
+    {
+        using var h = await FileTabHarness.OpenAsync("# Flow\n\n```mermaid\nflowchart LR\n    A[\"Start\"] --> B[\"End\"]\n```\n");
+        h.Markdown.SetViewModeCommand.Execute(MarkdownViewerModel.PreviewMode);
+        await FileTabHarness.WaitUntil(() => h.MarkdownView.PreviewView.GetVisualDescendants()
+            .OfType<StreamMark.Avalonia.Rendering.DiagramBlockView>().Any(d => d.IsShowingDiagram));
+    }
+
+    [AvaloniaFact]
+    public async Task A_read_only_file_has_no_separate_preview_its_rendered_view_is_one()
+    {
+        using var h = await FileTabHarness.OpenAsync(FrontMatter);
+        Assert.False(h.Markdown.CanPreview);
+        h.Markdown.SetViewModeCommand.Execute(MarkdownViewerModel.PreviewMode);
+        Assert.Equal(MarkdownViewerModel.RenderedMode, h.Markdown.ViewMode);
+        Assert.True(h.Markdown.ShowPreview);
     }
 
     [AvaloniaFact]

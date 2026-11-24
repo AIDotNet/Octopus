@@ -40,6 +40,8 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     public const long MaxEditBytes = 512 * 1024;
 
     public const string RenderedMode = "rendered";
+    /// <summary>The read-only preview of a document that is open in the editor: what it looks like rendered, diagrams included.</summary>
+    public const string PreviewMode = "preview";
     public const string SourceMode = "source";
 
     /// <summary>Below this many characters the unsaved state follows every keystroke exactly; above it, after a pause.</summary>
@@ -85,7 +87,7 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     [ObservableProperty] public partial string Text { get; private set; } = "";
     [ObservableProperty] public partial long FileSize { get; private set; }
 
-    /// <summary>The text of the source view: the file's, or the editor's export while there are edits.</summary>
+    /// <summary>The text of the source view and the preview: the file's, or the editor's export while there are edits.</summary>
     [ObservableProperty] public partial string SourceText { get; private set; } = "";
 
     /// <summary>
@@ -117,17 +119,21 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     public MarkdownFidelity? Fidelity { get; private set; }
 
     public bool ShowEditor => HasContent && IsEditing && ViewMode == RenderedMode;
-    public bool ShowPreview => HasContent && !IsEditing && ViewMode == RenderedMode;
+    public bool ShowPreview => HasContent && (ViewMode == PreviewMode || (!IsEditing && ViewMode == RenderedMode));
     public bool ShowSource => HasContent && ViewMode == SourceMode;
 
     public bool IsRenderedMode => ViewMode == RenderedMode;
+    public bool IsPreviewMode => ViewMode == PreviewMode;
     public bool IsSourceMode => ViewMode == SourceMode;
 
-    /// <summary>The bar's two icons: the rendered view or the source.</summary>
+    /// <summary>The preview is a view of its own only beside the editor; a read-only file's rendered view already is it.</summary>
+    public bool CanPreview => IsEditing;
+
+    /// <summary>The bar's icons: the rendered view, the preview (while editing) or the source.</summary>
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void SetViewMode(string? mode)
     {
-        if (mode is RenderedMode or SourceMode) ViewMode = mode;
+        if (mode is RenderedMode or SourceMode || (mode == PreviewMode && CanPreview)) ViewMode = mode;
     }
     public bool ShowUnsaved => IsDirty && IsEditing;
     public bool ShowSave => IsEditing;
@@ -156,6 +162,7 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     partial void OnViewModeChanged(string value)
     {
         OnPropertyChanged(nameof(IsRenderedMode));
+        OnPropertyChanged(nameof(IsPreviewMode));
         OnPropertyChanged(nameof(IsSourceMode));
         RefreshSource();
         RaiseShown();
@@ -163,6 +170,9 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
 
     partial void OnIsEditingChanged(bool value)
     {
+        // Without the editor the rendered view is the preview: one icon for it, not two.
+        if (!value && ViewMode == PreviewMode) ViewMode = RenderedMode;
+        OnPropertyChanged(nameof(CanPreview));
         RaiseShown();
         OnPropertyChanged(nameof(ShowUnsaved));
         OnPropertyChanged(nameof(ShowSave));
@@ -198,12 +208,12 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
     private void FeedViews()
     {
         if (_applying) return;
-        if (ShowPreview) PreviewText = Text;
+        if (ShowPreview) PreviewText = SourceText;
         if (ShowSource) SourceViewText = SourceText;
     }
 
     private void RefreshSource() =>
-        SourceText = ViewMode == SourceMode && IsEditing && IsDirty && ReadEditor is { } read ? read() : Text;
+        SourceText = (ViewMode is SourceMode or PreviewMode) && IsEditing && IsDirty && ReadEditor is { } read ? read() : Text;
 
     // ---- loading ------------------------------------------------------------------------------------------------
 

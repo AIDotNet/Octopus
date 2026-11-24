@@ -48,6 +48,7 @@
         <PackageReference Include="TKCode.Arc.Dock" />
         <PackageReference Include="TKCode.Arc.Fonts" />
         <PackageReference Include="TKCode.Arc.Highlighting" />
+        <PackageReference Include="TKCode.Arc.StreamMark.Mermaid" />
         <PackageReference Include="TKCode.Arc.Icons.Lucide" />
         <PackageReference Include="TKCode.Arc.Themes.Corners" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
