@@ -46,9 +46,6 @@ public class TerminalScrollTests
             Assert.Contains("0 个警告", VisibleText(view));
             Assert.Contains("0 个错误", VisibleText(view));
             Assert.DoesNotContain('\uFFFD', terminal.ReadScreenText());
-            var shots = Path.Combine(AppContext.BaseDirectory, "shots");
-            Directory.CreateDirectory(shots);
-            Frames.Save(window, Path.Combine(shots, "terminal-history-top.png"));
 
             terminal.FocusTerminal();
             window.KeyPress(Key.PageDown, RawInputModifiers.Shift, PhysicalKey.PageDown, null);
@@ -77,7 +74,6 @@ public class TerminalScrollTests
             Assert.True(Frames.Until(() => bar.IsVisible));
             bar.Value = bar.Maximum;
             Frames.Pump();
-            Frames.Save(window, Path.Combine(shots, "terminal-history-bottom.png"));
         }
         finally
         {

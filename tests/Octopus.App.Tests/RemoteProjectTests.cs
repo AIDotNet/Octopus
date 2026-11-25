@@ -412,37 +412,4 @@ public class RemoteProjectTests
         var plain = new NewProjectView(null, null);
         Assert.Null(plain.RemoteHost);
     }
-
-    [AvaloniaFact]
-    public async Task Render_the_remote_hosts_page()
-    {
-        await using var other = new OtherComputer();
-        var (page, _) = await Pair(other);
-        using var __ = page;
-        var directory = Path.Combine(AppContext.BaseDirectory, "shots");
-        Directory.CreateDirectory(directory);
-        // A second pairing in progress, for the picture: the number waits to be compared.
-        await using var second = new OtherComputer();
-        AppHost.Get<RemoteClientRuntime>().Dial = second.Dial;
-        second.Service.OpenPairing(TimeSpan.FromMinutes(5));
-        page.Target = "192.168.1.9:47600";
-        page.PairCommand.Execute(null);
-        await Until(() => page.HasSas, "the number shows");
-
-        foreach (var dark in new[] { false, true })
-        {
-            ArcTheme.Apply(t => t.Appearance(dark ? ArcAppearance.Dark : ArcAppearance.Light));
-            var window = new Window
-            {
-                Width = 760, Height = 620,
-                Content = new ScrollViewer { Padding = new Avalonia.Thickness(28), Content = new RemoteHostsPageView { DataContext = page } },
-            };
-            window.Styles.Add(new AppStyles());
-            window.Show();
-            Frames.Save(window, Path.Combine(directory, $"remote-hosts-{(dark ? "dark" : "light")}.png"));
-            window.Close();
-        }
-        page.CancelPairingCommand.Execute(null);
-        await Wait(page.Pairing);
-    }
 }

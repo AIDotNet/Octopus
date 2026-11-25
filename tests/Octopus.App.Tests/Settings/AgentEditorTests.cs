@@ -166,26 +166,4 @@ public class AgentEditorTests
         Assert.False(File.Exists(file));
         Assert.DoesNotContain(page.NotInstalled, r => r.Id == "local-bot");
     }
-
-    /// <summary>Renders the editor (light and dark) to <c>bin/shots</c> for a person to look at.</summary>
-    [AvaloniaFact]
-    public void Render_the_agent_editor()
-    {
-        var dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "shots"));
-        Directory.CreateDirectory(dir);
-        foreach (var dark in new[] { false, true })
-        {
-            TKCode.Arc.ArcTheme.Apply(t => t.Appearance(dark ? TKCode.Arc.ArcAppearance.Dark : TKCode.Arc.ArcAppearance.Light));
-            var model = new AgentEditorModel(Store, Catalog.Find("codex"), []);
-            var window = new Avalonia.Controls.Window
-            {
-                Width = 600, Height = 640,
-                Content = new Avalonia.Controls.Border { Padding = new Avalonia.Thickness(20), Child = new AgentEditorView(model) },
-            };
-            window.Show();
-            Frames.Pump();
-            Frames.Save(window, Path.Combine(dir, $"agent-editor-{(dark ? "dark" : "light")}.png"));
-            window.Close();
-        }
-    }
 }

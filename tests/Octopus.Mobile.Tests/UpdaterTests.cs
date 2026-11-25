@@ -46,8 +46,6 @@ public sealed class UpdaterTests : IDisposable
         Assert.Equal("更新", updater.ActionText);
         Assert.Equal("我的 •", hosts.MeTabLabel);
         Assert.True(page.FindControl<Control>("MeUpdateNotesRow")!.IsVisible);
-        Phone.Settle(300);
-        phone.Save("9-update-available-light");
 
         updater.ActCommand.Execute(null);
         Assert.True(Phone.Until(() => updater.State == MobileUpdateState.Ready));

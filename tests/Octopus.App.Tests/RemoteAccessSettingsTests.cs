@@ -180,36 +180,21 @@ public class RemoteAccessSettingsTests
     }
 
     [AvaloniaFact]
-    public async Task Render_the_page_with_a_request_and_a_paired_device()
+    public async Task A_refused_pairing_request_turns_the_device_away()
     {
         var runtime = AppHost.Get<RemoteHostRuntime>();
-        var directory = Path.Combine(AppContext.BaseDirectory, "shots");
-        Directory.CreateDirectory(directory);
         using var page = Page();
         page.LanEnabled = true;
         await Wait(page.Applied);
-        runtime.Service!.Devices.Add(DeviceIdentity.Create().PublicKey, new DeviceDescription("iPhone", DeviceKind.Phone));
         await Wait(page.StartPairingCommand.ExecuteAsync(null));
         using var device = DeviceIdentity.Create();
         var connecting = RemoteHostClient.ConnectAsync(await Dial(runtime), device, Laptop, PeerExpectation.AnyForPairing, RemoteHostRuntime.Hello,
             new ConnectOptions { RequestPairing = true });
         await Until(() => page.Requests.Count == 1, "the request shows");
 
-        foreach (var dark in new[] { false, true })
-        {
-            ArcTheme.Apply(t => t.Appearance(dark ? ArcAppearance.Dark : ArcAppearance.Light));
-            var window = new Window
-            {
-                Width = 760, Height = 900,
-                Content = new ScrollViewer { Padding = new Avalonia.Thickness(28), Content = new RemoteAccessPageView { DataContext = page } },
-            };
-            // The page's text styles (title, hint, mono) are those of the settings view.
-            window.Styles.Add(new Octopus.App.Common.AppStyles());
-            window.Show();
-            Frames.Save(window, Path.Combine(directory, $"remote-access-{(dark ? "dark" : "light")}.png"));
-            window.Close();
-        }
         page.Requests[0].RefuseCommand.Execute(null);
         await Assert.ThrowsAsync<HandshakeException>(() => Wait(connecting));
+        Assert.Empty(page.Requests);
+        Assert.Empty(page.Devices);
     }
 }

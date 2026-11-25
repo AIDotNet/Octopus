@@ -390,51 +390,6 @@ public class RemoteRelayTests
         Assert.Single(other.Service.Devices.Peers);
     }
 
-    [AvaloniaFact]
-    public async Task Render_the_page_signing_in_and_with_this_computer_on_the_relay()
-    {
-        await using var relay = new FakeRelay();
-        var directory = Path.Combine(AppContext.BaseDirectory, "shots");
-        Directory.CreateDirectory(directory);
-        using var page = NewPage();
-        page.RelayUrl = relay.Url;
-        page.RelayHostEnabled = true;
-        await Wait(page.Applied);
-
-        // While the code waits to be confirmed in the browser.
-        page.SignInRelayCommand.Execute(null);
-        await Until(() => page.RelayLoginCode is not null, "the page shows a code");
-        var code = page.RelayLoginCode!;
-        Shoot("remote-relay-signing-in");
-
-        Assert.True(relay.Approve(code));
-        await Wait(page.RelaySignIn);
-        await Until(() => page.IsRelayOnline, "this computer registers at the relay");
-        // What the page shows for a relay elsewhere that is plain http.
-        page.RelayUrl = "http://relay.example.com";
-        Shoot("remote-relay");
-
-        Assert.True(File.Exists(Path.Combine(directory, "remote-relay-light.png")));
-        Assert.True(File.Exists(Path.Combine(directory, "remote-relay-signing-in-dark.png")));
-
-        void Shoot(string name)
-        {
-            foreach (var dark in new[] { false, true })
-            {
-                TKCode.Arc.ArcTheme.Apply(t => t.Appearance(dark ? TKCode.Arc.ArcAppearance.Dark : TKCode.Arc.ArcAppearance.Light));
-                var window = new Avalonia.Controls.Window
-                {
-                    Width = 760, Height = 1000,
-                    Content = new Avalonia.Controls.ScrollViewer { Padding = new Avalonia.Thickness(28), Content = new RemoteAccessPageView { DataContext = page } },
-                };
-                window.Styles.Add(new Octopus.App.Common.AppStyles());
-                window.Show();
-                Frames.Save(window, Path.Combine(directory, $"{name}-{(dark ? "dark" : "light")}.png"));
-                window.Close();
-            }
-        }
-    }
-
     [Fact]
     public void A_relay_address_is_an_address_of_a_host_and_nothing_else_is()
     {

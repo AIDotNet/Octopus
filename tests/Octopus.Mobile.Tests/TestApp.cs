@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
-using Avalonia.Media.Imaging;
 using Avalonia.Skia;
 using Avalonia.Threading;
 using Octopus.Mobile.Demo;
@@ -90,14 +89,6 @@ internal sealed class Phone : IDisposable
 
     /// <summary>Lets a slide or a sheet come to rest.</summary>
     public static void Settle(int milliseconds = 1200) => Until(() => false, milliseconds);
-
-    public void Save(string name)
-    {
-        var directory = Path.Combine(AppContext.BaseDirectory, "shots");
-        Directory.CreateDirectory(directory);
-        Pump();
-        Window.CaptureRenderedFrame()?.Save(Path.Combine(directory, name + ".png"), PngBitmapEncoderOptions.Default);
-    }
 
     public void Dispose() => Window.Close();
 }

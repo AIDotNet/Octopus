@@ -166,36 +166,4 @@ public class NewProjectDialogTests
             Directory.Delete(root, recursive: true);
         }
     }
-
-    [AvaloniaFact]
-    public void Render_the_dialog()
-    {
-        Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "shots"));
-        foreach (var theme in new[] { "light", "dark" })
-        {
-            ArcTheme.Apply(t => t.Appearance(theme == "dark" ? ArcAppearance.Dark : ArcAppearance.Light));
-            var window = new MainWindow();
-            window.Show();
-            Frames.Pump();
-            var real = new DialogService(AppHost.Get<IWindowAccessor>(), AppHost.Get<IPickerService>(), AppHost.Get<Octopus.Ssh.ISshHostCatalog>());
-            _ = real.AskNewProjectAsync();
-            Frames.Pump();
-            Thread.Sleep(500);
-            Frames.Pump();
-            var form = window.GetVisualDescendants().OfType<NewProjectView>().FirstOrDefault()
-                ?? TopLevel.GetTopLevel(window)!.GetVisualDescendants().OfType<NewProjectView>().First();
-            form.FindControl<Input>("PathInput")!.Text = "~/code/Octopus";
-            Frames.Pump();
-            Frames.Save(window, Path.Combine(AppContext.BaseDirectory, "shots", $"new-project-{theme}.png"));
-
-            // Also capture the in-dialog folder browser view.
-            _ = form.OpenBrowseAsync();
-            Frames.Pump();
-            Thread.Sleep(400);
-            Frames.Pump();
-            Frames.Save(window, Path.Combine(AppContext.BaseDirectory, "shots", $"new-project-browse-{theme}.png"));
-            window.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
 }
