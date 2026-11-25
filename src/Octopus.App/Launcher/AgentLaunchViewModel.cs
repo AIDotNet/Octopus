@@ -241,7 +241,10 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
             {
                 continue;
             }
-            Models.Add(new ModelOptionViewModel(option.Id, option.LabelFor(language), option.NoteFor(language), select: SelectModel)
+            var label = option.LabelFor(language);
+            var note = option.NoteFor(language);
+            var iconKey = ModelIcons.KeyFor(option.Id, label, note, _definition.Id);
+            Models.Add(new ModelOptionViewModel(option.Id, label, note, select: SelectModel, iconKey: iconKey)
             {
                 IsSelected = option.Id == SelectedModelId,
             });
@@ -249,7 +252,12 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         if (AllowCustomModel && query.Length > 0 && _known.All(o => !string.Equals(o.Id, query, StringComparison.OrdinalIgnoreCase)))
         {
             Models.Add(new ModelOptionViewModel(
-                query, AppLangResources.Format(AppLangResourceKind.UseCustomModel, query), null, isCustom: true, select: SelectModel)
+                query,
+                AppLangResources.Format(AppLangResourceKind.UseCustomModel, query),
+                null,
+                isCustom: true,
+                select: SelectModel,
+                iconKey: ModelIcons.KeyFor(query, fallbackAgentId: _definition.Id))
             {
                 IsSelected = query == SelectedModelId,
             });

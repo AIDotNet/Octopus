@@ -4,13 +4,14 @@ using CommunityToolkit.Mvvm.Input;
 namespace Octopus.App.Launcher;
 
 /// <summary>One row of the model list in the agent panel.</summary>
-public sealed partial class ModelOptionViewModel(string? id, string label, string? note = null, bool isCustom = false, Action<ModelOptionViewModel>? select = null) : ObservableObject
+public sealed partial class ModelOptionViewModel(string? id, string label, string? note = null, bool isCustom = false, Action<ModelOptionViewModel>? select = null, string? iconKey = null) : ObservableObject
 {
     /// <summary>The model id passed to the agent; null is "the agent's default".</summary>
     public string? Id { get; } = id;
     public string Label { get; } = label;
     public string? Note { get; } = note;
     public bool IsCustom { get; } = isCustom;
+    public string? IconKey { get; } = iconKey;
 
     [RelayCommand]
     private void Select() => select?.Invoke(this);

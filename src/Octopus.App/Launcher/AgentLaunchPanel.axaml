@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:common="using:Octopus.App.Common"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:vm="using:Octopus.App.Launcher"
@@ -24,12 +25,13 @@
                         <DataTemplate x:DataType="vm:ModelOptionViewModel">
                             <Button Classes="row" Height="{DynamicResource OctopusLauncherModelRowHeight}" Command="{Binding SelectCommand}"
                                     AutomationProperties.Name="{Binding Label}">
-                                <Grid ColumnDefinitions="*,Auto,20" Margin="8,0,4,0">
-                                    <TextBlock Classes="body" VerticalAlignment="Center" Text="{Binding Label}"
+                                <Grid ColumnDefinitions="Auto,*,Auto,20" ColumnSpacing="8" Margin="8,0,4,0">
+                                    <common:ModelIconView Grid.Column="0" IconKey="{Binding IconKey}" Size="14" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Label}"
                                                TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center" Margin="8,0,0,0"
+                                    <TextBlock Grid.Column="2" Classes="hint" VerticalAlignment="Center"
                                                Text="{Binding Note}" TextTrimming="CharacterEllipsis" MaxWidth="120" />
-                                    <lucide:LucideIcon Grid.Column="2" Kind="Check" Size="14" HorizontalAlignment="Right"
+                                    <lucide:LucideIcon Grid.Column="3" Kind="Check" Size="14" HorizontalAlignment="Right"
                                                        IsVisible="{Binding IsSelected}" />
                                 </Grid>
                             </Button>

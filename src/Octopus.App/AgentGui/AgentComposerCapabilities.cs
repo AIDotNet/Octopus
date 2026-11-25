@@ -46,7 +46,8 @@ public sealed partial class ComposerChoiceItem : ObservableObject
         string? description = null,
         string? meta = null,
         LucideIconKind? icon = null,
-        bool isDanger = false)
+        bool isDanger = false,
+        string? modelIconKey = null)
     {
         Id = id;
         Label = label;
@@ -54,6 +55,7 @@ public sealed partial class ComposerChoiceItem : ObservableObject
         Meta = meta;
         Icon = icon;
         IsDanger = isDanger;
+        ModelIconKey = modelIconKey;
         _select = select;
     }
 
@@ -62,6 +64,7 @@ public sealed partial class ComposerChoiceItem : ObservableObject
     public string? Description { get; }
     public string? Meta { get; }
     public LucideIconKind? Icon { get; }
+    public string? ModelIconKey { get; }
     public bool HasIcon => Icon.HasValue;
     public LucideIconKind DisplayIcon => Icon ?? LucideIconKind.Circle;
     public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
@@ -211,6 +214,17 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
     public string SelectedModelLabel =>
         ModelChoices.FirstOrDefault(c => c.Id == SelectedModelId)?.Label
         ?? (!string.IsNullOrWhiteSpace(SelectedModelId) ? SelectedModelId! : AppLangResources.Get(AppLangResourceKind.AgentGuiModelLabel));
+
+    public string? SelectedModelIconKey
+    {
+        get
+        {
+            var chosen = ModelChoices.FirstOrDefault(c => c.Id == SelectedModelId);
+            return chosen is not null
+                ? chosen.ModelIconKey
+                : ModelIcons.KeyFor(SelectedModelId, fallbackAgentId: _definition.Id);
+        }
+    }
 
     public string SelectedEffortLabel =>
         EffortChoices.FirstOrDefault(c => c.Id == SelectedEffortId)?.Label
@@ -731,11 +745,13 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
         foreach (var (id, label, desc, meta) in items)
         {
             var cleanMeta = !string.IsNullOrWhiteSpace(meta) && !string.Equals(meta, label, StringComparison.OrdinalIgnoreCase) ? meta : null;
-            ModelChoices.Add(new ComposerChoiceItem(id, label, SelectModel, desc, cleanMeta) { IsSelected = id == SelectedModelId });
+            var iconKey = ModelIcons.KeyFor(id, label, desc, _definition.Id);
+            ModelChoices.Add(new ComposerChoiceItem(id, label, SelectModel, desc, cleanMeta, modelIconKey: iconKey) { IsSelected = id == SelectedModelId });
         }
         ApplyModelFilter();
         OnPropertyChanged(nameof(ShowModelSearch));
         OnPropertyChanged(nameof(SelectedModelLabel));
+        OnPropertyChanged(nameof(SelectedModelIconKey));
     }
 
     private void RebuildEffortChoices(IEnumerable<(string Id, string Label, string? Description)> items)
@@ -780,6 +796,7 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
         OnPropertyChanged(nameof(PermissionIcon));
         OnPropertyChanged(nameof(IsPermissionDanger));
         OnPropertyChanged(nameof(SelectedModelLabel));
+        OnPropertyChanged(nameof(SelectedModelIconKey));
         OnPropertyChanged(nameof(SelectedEffortLabel));
     }
 
@@ -898,6 +915,7 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
     {
         foreach (var c in ModelChoices) c.IsSelected = c.Id == value;
         OnPropertyChanged(nameof(SelectedModelLabel));
+        OnPropertyChanged(nameof(SelectedModelIconKey));
         if (_syncing || string.IsNullOrEmpty(value)) return;
         if (!_sessionInitialized && !_hasLiveEffort)
         {
