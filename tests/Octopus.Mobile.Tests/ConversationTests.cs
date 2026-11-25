@@ -501,20 +501,39 @@ public class ConversationTests
     }
 
     [AvaloniaFact]
-    public void Entering_and_returning_to_mobile_conversation_keeps_scroll_at_bottom()
+    public async Task Entering_and_returning_to_mobile_conversation_keeps_scroll_at_bottom()
     {
-        using var phone = new Phone();
-        var (page, vm, session) = OpenDemoConversation(phone);
+        await using var relay = new FakeRelay();
+        await using var studio = await Computer.StartAsync(relay);
+        var octopus = studio.Workspace.AddProject("Octopus", "/home/ada/code/Octopus");
+        studio.Workspace.Files["/home/ada/code/Octopus/README.md"] = System.Text.Encoding.UTF8.GetBytes("# Octopus\n");
+        var guiItem = studio.Workspace.AddItem(octopus, "接口文档", "claude", surface: ItemSurfaces.Gui);
+        var hostConv = studio.Workspace.ConversationOf(guiItem.Id);
 
-        // Resolve the initial demo permission card so prompts execute onto the timeline instead of queueing.
+        using var phone = new RealPhone(relay);
+        phone.SignIn(relay);
+        phone.Pair(studio);
+        phone.Model<HostsViewModel>().Online.Single().OpenCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostPage));
+        var hostVm = phone.Model<HostViewModel>();
+        Assert.True(Phone.Until(() => hostVm.Host.Projects.Count == 1 && hostVm.Host.Projects[0].Sessions.Count == 1));
+        var session = hostVm.Host.Projects[0].Sessions.Single();
+
+        phone.Shell.ShowSession(session);
+        Assert.True(Phone.Until(() => phone.Shell.Top is ConversationPage));
+        var page = phone.Top<ConversationPage>();
+        var vm = phone.Model<ConversationViewModel>();
+        Assert.True(Phone.Until(() => vm.IsLoaded && vm.Entries.Count == 3), "initial snapshot loaded: " + vm.ErrorText);
+
+        // Resolve the initial permission card so prompts execute onto the timeline instead of queueing.
         var permission = vm.Entries.OfType<ConversationPermissionEntry>().Single();
         vm.RespondCommand.Execute(permission.Options.Single(option => option.IsAllow));
-        Assert.True(Phone.Until(() => vm.State == ConversationState.Ready));
+        Assert.True(Phone.Until(() => permission.IsResolved && vm.State == ConversationState.Ready));
 
-        // Append enough multi-line messages so the mobile conversation overflows the viewport.
-        for (var i = 1; i <= 8; i++)
+        // Append enough multi-line messages (ASCII + CJK) so the timeline overflows substantially on all platforms/fonts.
+        for (var i = 1; i <= 10; i++)
         {
-            vm.PromptText = $"第 {i} 轮排查：请检查滚动条状态并输出详细结论。\n细节 A：确认重新进入会话时滚动条自动位于底部。\n细节 B：确认返回页面时也能保持底部。";
+            vm.PromptText = $"Round {i} check: verify conversation timeline scroll pinning across desktop and mobile.\nDetail A: re-entering the conversation must land at the very bottom.\nDetail B: returning from a sub-page must also scroll to the bottom.";
             var before = vm.Entries.Count;
             vm.SendCommand.Execute(null);
             Assert.True(Phone.Until(() => !vm.IsSending && vm.Entries.Count > before));
@@ -538,7 +557,7 @@ public class ConversationTests
         Phone.Pump();
         Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y > 100);
 
-        vm.PromptText = "回到最底部的新消息";
+        vm.PromptText = "New prompt that must jump back to the very bottom";
         var beforeSend = vm.Entries.Count;
         vm.SendCommand.Execute(null);
         Assert.True(Phone.Until(() => !vm.IsSending && vm.Entries.Count > beforeSend));
@@ -562,18 +581,20 @@ public class ConversationTests
         Assert.True(Phone.Until(() => scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0),
             $"Returning from sub-page must scroll mobile GUI to bottom, offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
 
-        // 3) Leave conversation completely and re-enter it: must land at the very bottom.
+        // 3) Leave conversation completely and re-enter it: host replays the full overflowing history and must land at bottom.
+        var expectedEntries = vm.Entries.Count;
         scroller.Offset = new Avalonia.Vector(0, 40);
         Phone.Pump();
         phone.Shell.Back();
         Assert.True(Phone.Until(() => phone.Shell.Top is HostPage));
+        Assert.True(Phone.Until(() => hostConv.Viewers == 0));
 
         phone.Shell.ShowSession(session);
         Assert.True(Phone.Until(() => phone.Shell.Top is ConversationPage));
         var reopenedPage = phone.Top<ConversationPage>();
-        Assert.True(Phone.Until(() => reopenedPage.DataContext is ConversationViewModel { IsLoaded: true }));
+        Assert.True(Phone.Until(() => reopenedPage.DataContext is ConversationViewModel { IsLoaded: true } reopenedVm && reopenedVm.Entries.Count == expectedEntries));
         var reopenedScroller = reopenedPage.FindControl<ScrollViewer>("TimelineScroll")!;
-        Assert.True(Phone.Until(() => reopenedScroller.ScrollBarMaximum.Y > 0 && reopenedScroller.ScrollBarMaximum.Y - reopenedScroller.Offset.Y <= 2.0),
+        Assert.True(Phone.Until(() => reopenedScroller.ScrollBarMaximum.Y > 200 && reopenedScroller.ScrollBarMaximum.Y - reopenedScroller.Offset.Y <= 2.0),
             $"Re-entering mobile GUI must scroll to bottom, offset={reopenedScroller.Offset.Y}, max={reopenedScroller.ScrollBarMaximum.Y}");
     }
 
