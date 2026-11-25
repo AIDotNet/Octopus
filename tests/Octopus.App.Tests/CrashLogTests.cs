@@ -112,4 +112,29 @@ public sealed class CrashLogTests : IDisposable
         var dir = CrashLog.ResolveLogDirectory(_dir);
         Assert.Equal(Path.Combine(Path.GetFullPath(_dir), "logs"), dir);
     }
+
+    [Fact]
+    public void ShouldRecover_SwallowsOrdinaryUiExceptions()
+    {
+        Assert.True(CrashLog.ShouldRecover(new InvalidOperationException("handler bug"), nowMs: 1_000));
+        Assert.True(CrashLog.ShouldRecover(new NullReferenceException(), nowMs: 1_001));
+    }
+
+    [Fact]
+    public void ShouldRecover_LetsCorruptingExceptionsTerminate()
+    {
+        Assert.False(CrashLog.ShouldRecover(new OutOfMemoryException(), nowMs: 1_000));
+        Assert.False(CrashLog.ShouldRecover(new AccessViolationException(), nowMs: 1_000));
+    }
+
+    [Fact]
+    public void ShouldRecover_StopsRecoveringWhenFailuresRepeatInABurst_ThenAllowsAgainLater()
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            Assert.True(CrashLog.ShouldRecover(new InvalidOperationException(), nowMs: 1_000 + i));
+        }
+        Assert.False(CrashLog.ShouldRecover(new InvalidOperationException(), nowMs: 1_100));
+        Assert.True(CrashLog.ShouldRecover(new InvalidOperationException(), nowMs: 20_000));
+    }
 }

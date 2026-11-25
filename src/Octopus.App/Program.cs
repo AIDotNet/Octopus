@@ -8,27 +8,43 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        Services.StartupTrace.Install(args);
+        Services.StartupTrace.Log("main:enter");
         if (Services.UninstallHookCleanup.TryHandleCommandLine(args))
         {
+            Services.StartupTrace.Log("main:uninstall-hooks-command");
             return;
         }
         Services.CrashLog.Install();
+        Services.StartupTrace.Log("crashlog:installed");
         // On Windows & Linux, clicking octopus://auth-done in the browser spawns a new process; forward to the live window.
         if (Services.ProtocolActivation.TryParseProtocolUri(args) is { } uri
             && Services.ProtocolActivation.TryForwardToRunningInstance(uri))
         {
+            Services.StartupTrace.Log("main:forwarded-protocol", uri.ToString());
             return;
         }
         try
         {
+            Services.StartupTrace.Log("avalonia:build");
             BuildAvaloniaApp()
-                .AfterSetup(_ => Services.CrashLog.AttachDispatcher())
+                .AfterSetup(_ =>
+                {
+                    Services.StartupTrace.Log("avalonia:after-setup");
+                    Services.CrashLog.AttachDispatcher();
+                })
                 .StartWithClassicDesktopLifetime(args);
+            Services.StartupTrace.Log("lifetime:returned");
         }
         catch (Exception ex)
         {
+            Services.StartupTrace.LogException("main:catch", ex);
             Services.CrashLog.WriteCrash("Main", ex, isTerminating: true);
             throw;
+        }
+        finally
+        {
+            Services.StartupTrace.Log("main:end");
         }
     }
 

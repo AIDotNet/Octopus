@@ -7,6 +7,8 @@
         <RootNamespace>Octopus.App</RootNamespace>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+        <!-- StartupTrace installs a native SIGHUP handler (records the sender and keeps the app alive). -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- The optimized AOT publish drops Avalonia's compiled XAML ("No precompiled XAML found" at start). -->
         <UseOptimizedPublish>false</UseOptimizedPublish>
         <!-- Icons are chosen from data (agent icons, item kinds), so compile all of Lucide in. -->

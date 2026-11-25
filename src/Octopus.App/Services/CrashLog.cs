@@ -65,8 +65,8 @@ public static class CrashLog
     }
 
     /// <summary>
-    /// Subscribes to <see cref="Dispatcher.UnhandledException"/> on the UI thread without marking exceptions handled,
-    /// so the managed stack is recorded immediately before the native run loop unwinds.
+    /// Subscribes to <see cref="Dispatcher.UnhandledException"/> on the UI thread: the managed stack is recorded before the
+    /// native run loop unwinds, and an exception the app can survive is marked handled (see <see cref="ShouldRecover"/>).
     /// </summary>
     public static void AttachDispatcher()
     {
@@ -156,14 +156,55 @@ public static class CrashLog
         lock (s_gate)
         {
             s_lastCrashException = null;
+            s_recoveredAt.Clear();
         }
     }
 
     private static void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e) =>
         WriteCrash("AppDomain.UnhandledException", e.ExceptionObject, e.IsTerminating);
 
-    private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e) =>
-        WriteCrash("Dispatcher.UIThread", e.Exception, isTerminating: !e.Handled);
+    private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        // An exception that escapes a UI-thread callback (a click handler, a binding, a posted job) is not a reason to
+        // take the whole app down: on macOS Avalonia rethrows it after unwinding AppKit's run loop and the process ends
+        // in abort(). Record it and keep running, unless the exception means the process state can no longer be trusted
+        // or the same failure keeps repeating (a handler that throws on every frame would leave a frozen window).
+        var recover = !e.Handled && ShouldRecover(e.Exception, Environment.TickCount64);
+        WriteCrash(recover ? "Dispatcher.UIThread (recovered)" : "Dispatcher.UIThread", e.Exception, isTerminating: !e.Handled && !recover);
+        if (recover)
+        {
+            e.Handled = true;
+            StartupTrace.LogException("dispatcher:recovered", e.Exception);
+        }
+    }
+
+    private const int RecoverBurstLimit = 20;
+    private const long RecoverBurstWindowMs = 10_000;
+    private static readonly Queue<long> s_recoveredAt = new();
+
+    /// <summary>
+    /// Whether a UI-thread exception may be swallowed: not when it signals a corrupted process (out of memory, bad
+    /// native memory access, broken code), and not past <see cref="RecoverBurstLimit"/> within
+    /// <see cref="RecoverBurstWindowMs"/>, where the app is stuck in a loop of failures and ending it is the lesser harm.
+    /// </summary>
+    internal static bool ShouldRecover(Exception exception, long nowMs)
+    {
+        if (exception is OutOfMemoryException or AccessViolationException or InvalidProgramException or BadImageFormatException)
+        {
+            return false;
+        }
+
+        lock (s_gate)
+        {
+            while (s_recoveredAt.Count > 0 && nowMs - s_recoveredAt.Peek() > RecoverBurstWindowMs)
+            {
+                s_recoveredAt.Dequeue();
+            }
+            if (s_recoveredAt.Count >= RecoverBurstLimit) return false;
+            s_recoveredAt.Enqueue(nowMs);
+            return true;
+        }
+    }
 
     private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e) =>
         WriteUnobserved(e.Exception);
