@@ -204,14 +204,31 @@ public class ConversationTests
         Assert.Equal(5, vm.Entries.Count);
 
         var assistant = vm.Entries.OfType<ConversationAssistantEntry>().First();
-        Assert.False(assistant.IsThoughtExpanded);
-        vm.ToggleThoughtCommand.Execute(assistant);
-        Assert.True(assistant.IsThoughtExpanded);
+        Assert.True(assistant.HasWorkArea);
+        Assert.Equal(4, assistant.WorkStepCount); // 1 thought + 3 tools folded into one unified work area
+        Assert.False(assistant.IsWorkExpanded);
+        Assert.Null(assistant.ExpandedWorkSteps); // collapsed by default -> zero step controls!
+        Assert.Null(assistant.LiveTicker);
 
-        var editTool = assistant.Tools.Single(tool => tool.HasDiff);
-        Assert.False(editTool.IsExpanded);
-        vm.ToggleToolCommand.Execute(editTool);
-        Assert.True(editTool.IsExpanded);
+        // Tap unified work area to lazy-mount pure-text steps, then tap the edit step to lazy-mount its diff.
+        vm.ToggleWorkCommand.Execute(assistant);
+        Assert.True(assistant.IsWorkExpanded);
+        Assert.NotNull(assistant.ExpandedWorkSteps);
+        Assert.Equal(4, assistant.ExpandedWorkSteps!.Count);
+
+        var editStep = assistant.ExpandedWorkSteps.Single(step => step.IsTool && step.Tool!.HasDiff);
+        Assert.Null(editStep.ExpandedDetail);
+        vm.ToggleWorkStepCommand.Execute(editStep);
+        Assert.True(editStep.IsExpanded);
+        Assert.Same(editStep, editStep.ExpandedDetail);
+        Assert.True(editStep.Tool!.IsExpanded);
+
+        // Collapsing the work area releases expanded steps and resets child expansion flags.
+        vm.ToggleWorkCommand.Execute(assistant);
+        Assert.False(assistant.IsWorkExpanded);
+        Assert.Null(assistant.ExpandedWorkSteps);
+        Assert.False(editStep.IsExpanded);
+        Assert.Null(editStep.ExpandedDetail);
 
         // "⋯" menu starts with reload conversation + files/changes, and has no restart for GUI sessions.
         var overlays = page.FindControl<SessionActionOverlays>("Overlays")!;
@@ -219,6 +236,89 @@ public class ConversationTests
         Phone.Pump();
         Assert.True(overlays.IsMenuOpen);
         Assert.Equal(["重新载入对话", "浏览文件", "查看改动", "重命名", "用相同设置再开一个", "会话详情", "关闭会话"], overlays.MenuLabels);
+    }
+
+    [Fact]
+    public void Assistant_work_area_shows_3line_sliding_ticker_while_streaming_and_auto_collapses_on_finish()
+    {
+        using var conv = CreateStub();
+        var timeline = conv.Timeline;
+
+        timeline.ApplySnapshot(new AcpSnapshotMessage
+        {
+            ItemId = "s1",
+            Sequence = 1,
+            State = AcpStates.Working,
+            Entries =
+            [
+                new()
+                {
+                    Id = "a1",
+                    Kind = AcpEntryKinds.Assistant,
+                    Thought = "Checking routes and tests",
+                    IsStreaming = true,
+                    Tools =
+                    [
+                        new() { Id = "t1", Title = "Search routes", Kind = "search", Status = "completed" },
+                        new() { Id = "t2", Title = "Read api.ts", Kind = "read", Status = "completed" },
+                        new() { Id = "t3", Title = "dotnet test", Kind = "execute", Status = "in_progress" },
+                        new() { Id = "t4", Title = "bad-cmd", Kind = "execute", Status = "completed", ExitCode = 1 },
+                    ],
+                },
+            ],
+        });
+
+        var turn = Assert.IsType<ConversationAssistantEntry>(Assert.Single(conv.Entries));
+        Assert.Equal(5, turn.WorkStepCount);
+        Assert.True(turn.HasWorkFailures);
+        Assert.True(turn.ShowLiveTicker);
+        Assert.NotNull(turn.LiveTicker);
+        Assert.True(turn.LiveTicker!.Line0.IsVisible);
+        Assert.True(turn.LiveTicker.Line1.IsVisible);
+        Assert.True(turn.LiveTicker.Line2.IsVisible);
+        Assert.True(turn.LiveTicker.Line0.RowOpacity < turn.LiveTicker.Line1.RowOpacity);
+        Assert.True(turn.LiveTicker.Line1.RowOpacity < turn.LiveTicker.Line2.RowOpacity);
+        Assert.True(turn.LiveTicker.Line2.IsRunning);
+        Assert.Equal("dotnet test", turn.LiveTicker.Line2.Target);
+
+        // Manually expand while streaming -> ticker hides, steps materialize.
+        turn.IsWorkExpanded = true;
+        Assert.False(turn.ShowLiveTicker);
+        Assert.Null(turn.LiveTicker);
+        Assert.NotNull(turn.ExpandedWorkSteps);
+
+        // Turn finishes -> auto-collapses work area and unmounts ticker & expanded step list!
+        timeline.Apply(new AcpUpdateMessage
+        {
+            Sequence = 2,
+            State = AcpStates.Ready,
+            Upserts =
+            [
+                new()
+                {
+                    Id = "a1",
+                    Kind = AcpEntryKinds.Assistant,
+                    Thought = "Checking routes and tests",
+                    Text = "All done.",
+                    IsStreaming = false,
+                    Duration = "5s",
+                    Tools =
+                    [
+                        new() { Id = "t1", Title = "Search routes", Kind = "search", Status = "completed" },
+                        new() { Id = "t2", Title = "Read api.ts", Kind = "read", Status = "completed" },
+                        new() { Id = "t3", Title = "dotnet test", Kind = "execute", Status = "completed" },
+                        new() { Id = "t4", Title = "bad-cmd", Kind = "execute", Status = "completed", ExitCode = 1 },
+                    ],
+                },
+            ],
+        });
+
+        Assert.False(turn.IsStreaming);
+        Assert.False(turn.IsWorkExpanded);
+        Assert.Null(turn.ExpandedWorkSteps);
+        Assert.False(turn.ShowLiveTicker);
+        Assert.Null(turn.LiveTicker);
+        Assert.Equal("All done.", turn.Text);
     }
 
     [AvaloniaFact]

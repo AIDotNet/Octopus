@@ -55,9 +55,20 @@ public sealed partial class ConversationUserEntry(string id) : ConversationEntry
     public string AttachmentsText => string.Join("  ", Attachments);
 }
 
-/// <summary>One turn of the agent: what it thought, its answer (Markdown), its tool calls and its plan.</summary>
+/// <summary>One turn of the agent: unified Scheme C pure-text work area (thought, tools, plan) + Markdown answer.</summary>
 public sealed partial class ConversationAssistantEntry(string id) : ConversationEntry(id)
 {
+    private readonly List<ConversationWorkStep> _workSteps = [];
+    private readonly Dictionary<string, ConversationWorkStep> _toolStepsById = new(StringComparer.Ordinal);
+    private ConversationWorkStep? _thoughtStep;
+    private ConversationWorkStep? _planStep;
+    private ObservableCollection<ConversationWorkStep>? _expandedWorkSteps;
+    private ConversationWorkTicker? _ticker;
+    private bool _wasStreaming;
+    private string _workHeaderTitle = "";
+    private string _workHeaderCounts = "";
+    private string _workHeaderFailedText = "";
+
     /// <summary>The answer as Markdown, as the host has it so far.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasText))]
     public partial string Text { get; set; } = "";
@@ -65,15 +76,17 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
     [ObservableProperty] public partial IReadOnlyList<ConversationTextBlock> Blocks { get; private set; } = [];
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasThought))]
     public partial string? Thought { get; set; }
-    /// <summary>The thought is shown in full; folded to one line otherwise.</summary>
+    /// <summary>The thought is shown in full; folded otherwise.</summary>
     [ObservableProperty] public partial bool IsThoughtExpanded { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasMeta))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasMeta), nameof(HasWorkArea), nameof(ShowStandaloneDuration))]
     public partial bool IsStreaming { get; set; }
+    /// <summary>True when the user manually tapped the unified work area header to inspect individual pure-text steps.</summary>
+    [ObservableProperty] public partial bool IsWorkExpanded { get; set; }
     /// <summary>Why the turn failed.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasError))]
     public partial string? ErrorText { get; set; }
     /// <summary>How long the turn took, as the host words it ("12s").</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasDuration), nameof(HasMeta))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasDuration), nameof(HasMeta), nameof(ShowStandaloneDuration))]
     public partial string? Duration { get; set; }
     public ObservableCollection<ConversationTool> Tools { get; } = [];
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPlan), nameof(PlanText))]
@@ -85,6 +98,26 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
     public bool HasDuration => !string.IsNullOrEmpty(Duration);
     public bool HasMeta => IsStreaming || HasDuration;
     public bool HasPlan => Plan.Count > 0;
+
+    /// <summary>All unified work steps (thought, tools, plan) for this turn.</summary>
+    public IReadOnlyList<ConversationWorkStep> WorkSteps => _workSteps;
+    public int WorkStepCount => _workSteps.Count;
+    public bool HasWorkArea => IsStreaming || _workSteps.Count > 0;
+    public bool CanExpandWork => _workSteps.Count > 0;
+    public bool ShowStandaloneDuration => !HasWorkArea && HasDuration;
+
+    /// <summary>Lazy UI collection: null when collapsed so zero step controls exist until tapped.</summary>
+    public ObservableCollection<ConversationWorkStep>? ExpandedWorkSteps => _expandedWorkSteps;
+
+    /// <summary>Fixed 3-line sliding live ticker (Scheme C): non-null ONLY while streaming and collapsed.</summary>
+    public bool ShowLiveTicker => IsStreaming && !IsWorkExpanded && (!HasText || HasAnyRunningTool());
+    public ConversationWorkTicker? LiveTicker => ShowLiveTicker ? _ticker : null;
+
+    public string WorkHeaderTitle => _workHeaderTitle;
+    public string WorkHeaderCounts => _workHeaderCounts;
+    public bool HasWorkHeaderCounts => !string.IsNullOrEmpty(_workHeaderCounts);
+    public string WorkHeaderFailedText => _workHeaderFailedText;
+    public bool HasWorkFailures => !string.IsNullOrEmpty(_workHeaderFailedText);
 
     /// <summary>"Plan 2/3 · the step under way" (the first that is not done when none is under way).</summary>
     public string PlanText
@@ -100,6 +133,633 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
     }
 
     partial void OnTextChanged(string value) => Blocks = ConversationMarkdown.Parse(value);
+
+    partial void OnIsWorkExpandedChanged(bool value)
+    {
+        if (value && _workSteps.Count > 0)
+        {
+            _expandedWorkSteps = new ObservableCollection<ConversationWorkStep>(_workSteps);
+        }
+        else if (_expandedWorkSteps is not null)
+        {
+            for (var i = 0; i < _workSteps.Count; i++)
+            {
+                if (_workSteps[i].IsExpanded) _workSteps[i].IsExpanded = false;
+            }
+            _expandedWorkSteps = null;
+        }
+        OnPropertyChanged(nameof(ExpandedWorkSteps));
+        SyncLiveTicker();
+    }
+
+    /// <summary>
+    /// Synchronizes the unified work steps, summary counts, and 3-line sliding ticker in one pass after a remote update.
+    /// Automatically collapses the work area when streaming finishes.
+    /// </summary>
+    public void SyncWorkArea()
+    {
+        var hadWork = HasWorkArea;
+        var hadExpandable = CanExpandWork;
+        var prevCount = _workSteps.Count;
+
+        // Auto-collapse once a streaming turn finishes so only 1 summary line + clean reply text remain.
+        if (_wasStreaming && !IsStreaming && IsWorkExpanded)
+        {
+            IsWorkExpanded = false;
+        }
+        _wasStreaming = IsStreaming;
+
+        _workSteps.Clear();
+
+        // 1. Thought step (reused in place across updates so expansion state stays intact while open).
+        if (HasThought)
+        {
+            var thoughtActive = IsStreaming && !HasText && Tools.Count == 0;
+            _thoughtStep ??= ConversationWorkStep.CreateThought(Thought!, thoughtActive);
+            _thoughtStep.UpdateThought(Thought!, thoughtActive);
+            _workSteps.Add(_thoughtStep);
+        }
+        else
+        {
+            _thoughtStep = null;
+        }
+
+        // 2. Tool steps in chronological host order.
+        if (Tools.Count > 0)
+        {
+            var liveIds = _toolStepsById.Count > 0 ? new HashSet<string>(StringComparer.Ordinal) : null;
+            for (var i = 0; i < Tools.Count; i++)
+            {
+                var tool = Tools[i];
+                liveIds?.Add(tool.Id);
+                if (!_toolStepsById.TryGetValue(tool.Id, out var step))
+                {
+                    step = ConversationWorkStep.CreateTool(tool);
+                    _toolStepsById[tool.Id] = step;
+                }
+                else
+                {
+                    step.NotifyToolUpdated();
+                }
+                _workSteps.Add(step);
+            }
+            if (liveIds is not null && _toolStepsById.Count > liveIds.Count)
+            {
+                foreach (var stale in _toolStepsById.Keys.Where(k => !liveIds.Contains(k)).ToList())
+                {
+                    _toolStepsById.Remove(stale);
+                }
+            }
+        }
+        else if (_toolStepsById.Count > 0)
+        {
+            _toolStepsById.Clear();
+        }
+
+        // 3. Plan step.
+        if (HasPlan)
+        {
+            _planStep ??= ConversationWorkStep.CreatePlan(Plan, PlanText);
+            _planStep.UpdatePlan(Plan, PlanText);
+            _workSteps.Add(_planStep);
+        }
+        else
+        {
+            _planStep = null;
+        }
+
+        if (_expandedWorkSteps is not null)
+        {
+            if (_workSteps.Count == 0)
+            {
+                IsWorkExpanded = false;
+            }
+            else
+            {
+                ConversationTimeline.Sync(_expandedWorkSteps, _workSteps);
+            }
+        }
+
+        RefreshWorkSummary();
+        SyncLiveTicker();
+
+        if (prevCount != _workSteps.Count) OnPropertyChanged(nameof(WorkStepCount));
+        if (hadWork != HasWorkArea)
+        {
+            OnPropertyChanged(nameof(HasWorkArea));
+            OnPropertyChanged(nameof(ShowStandaloneDuration));
+        }
+        if (hadExpandable != CanExpandWork) OnPropertyChanged(nameof(CanExpandWork));
+    }
+
+    private bool HasAnyRunningTool()
+    {
+        for (var i = 0; i < Tools.Count; i++)
+        {
+            if (Tools[i].IsRunning) return true;
+        }
+        return false;
+    }
+
+    private void SyncLiveTicker()
+    {
+        if (ShowLiveTicker)
+        {
+            var created = _ticker is null;
+            _ticker ??= new ConversationWorkTicker();
+            _ticker.Sync(_workSteps);
+            OnPropertyChanged(nameof(ShowLiveTicker));
+            if (created) OnPropertyChanged(nameof(LiveTicker));
+        }
+        else
+        {
+            var had = _ticker is not null;
+            _ticker = null;
+            OnPropertyChanged(nameof(ShowLiveTicker));
+            if (had) OnPropertyChanged(nameof(LiveTicker));
+        }
+    }
+
+    private void RefreshWorkSummary()
+    {
+        int exec = 0, search = 0, read = 0, edit = 0, fetch = 0, think = 0, plan = 0, other = 0, failed = 0;
+        for (var i = 0; i < _workSteps.Count; i++)
+        {
+            var step = _workSteps[i];
+            if (step.IsFailed) failed++;
+            switch (step.StepKind)
+            {
+                case ConversationWorkStepKind.Thought:
+                    think++;
+                    break;
+                case ConversationWorkStepKind.Plan:
+                    plan++;
+                    break;
+                case ConversationWorkStepKind.Tool:
+                    switch (step.Tool?.Kind)
+                    {
+                        case "execute": exec++; break;
+                        case "search": search++; break;
+                        case "read": read++; break;
+                        case "edit" or "delete" or "move": edit++; break;
+                        case "fetch": fetch++; break;
+                        case "think": think++; break;
+                        default: other++; break;
+                    }
+                    break;
+            }
+        }
+
+        string nextTitle;
+        string nextCounts;
+        if (IsStreaming)
+        {
+            nextTitle = MobileLangResources.Get(MobileLangResourceKind.ConversationWorkArea);
+            var parts = new List<string>(6);
+            if (exec > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCountExec), exec));
+            if (search > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCountSearch), search));
+            if (read > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCountRead), read));
+            if (edit > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCountEdit), edit));
+            if (fetch > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCountFetch), fetch));
+            if (think > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCountThink), think));
+            if (plan > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCountPlan), plan));
+            if (other > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCountOther), other));
+            nextCounts = parts.Count > 0
+                ? string.Join(" · ", parts)
+                : MobileLangResources.Get(MobileLangResourceKind.ConversationWorkPreparing);
+        }
+        else
+        {
+            nextTitle = _workSteps.Count == 1
+                ? MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCompletedSingleStep)
+                : string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCompletedSteps), _workSteps.Count);
+            var parts = new List<string>(6);
+            if (exec > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortExec), exec));
+            if (search > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortSearch), search));
+            if (read > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortRead), read));
+            if (edit > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortEdit), edit));
+            if (fetch > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortFetch), fetch));
+            if (think > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortThink), think));
+            if (plan > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortPlan), plan));
+            if (other > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortOther), other));
+            nextCounts = parts.Count > 0 ? $"· {string.Join(" · ", parts)}" : "";
+        }
+
+        var nextFailed = failed > 0
+            ? $"· {string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkFailedCount), failed)}"
+            : "";
+
+        if (_workHeaderTitle != nextTitle)
+        {
+            _workHeaderTitle = nextTitle;
+            OnPropertyChanged(nameof(WorkHeaderTitle));
+        }
+        if (_workHeaderCounts != nextCounts)
+        {
+            _workHeaderCounts = nextCounts;
+            OnPropertyChanged(nameof(WorkHeaderCounts));
+            OnPropertyChanged(nameof(HasWorkHeaderCounts));
+        }
+        if (_workHeaderFailedText != nextFailed)
+        {
+            _workHeaderFailedText = nextFailed;
+            OnPropertyChanged(nameof(WorkHeaderFailedText));
+            OnPropertyChanged(nameof(HasWorkFailures));
+        }
+    }
+}
+
+/// <summary>Category of a step inside <see cref="ConversationAssistantEntry"/>'s unified work area.</summary>
+public enum ConversationWorkStepKind
+{
+    Thought,
+    Tool,
+    Plan,
+}
+
+/// <summary>
+/// One pure-text step inside a mobile assistant turn's single unified work area.
+/// Details are lazy-mounted via <see cref="ExpandedDetail"/> only when tapped.
+/// </summary>
+public sealed partial class ConversationWorkStep : ObservableObject
+{
+    private const int ThoughtPreviewMaxChars = 90;
+
+    private string _thoughtText = "";
+    private string _thoughtPreview = "";
+    private bool _isThoughtActive;
+    private IReadOnlyList<ConversationPlanItem> _planItems = [];
+    private string _planPreview = "";
+
+    private ConversationWorkStep(ConversationWorkStepKind stepKind) => StepKind = stepKind;
+
+    public static ConversationWorkStep CreateThought(string text, bool isActive)
+    {
+        var step = new ConversationWorkStep(ConversationWorkStepKind.Thought);
+        step.UpdateThought(text, isActive);
+        return step;
+    }
+
+    public static ConversationWorkStep CreateTool(ConversationTool tool) =>
+        new(ConversationWorkStepKind.Tool) { Tool = tool };
+
+    public static ConversationWorkStep CreatePlan(IReadOnlyList<ConversationPlanItem> items, string preview)
+    {
+        var step = new ConversationWorkStep(ConversationWorkStepKind.Plan);
+        step.UpdatePlan(items, preview);
+        return step;
+    }
+
+    public ConversationWorkStepKind StepKind { get; }
+    public ConversationTool? Tool { get; private init; }
+    public IReadOnlyList<ConversationPlanItem> PlanItems => _planItems;
+    public string ThoughtText => _thoughtText;
+
+    [ObservableProperty] public partial bool IsExpanded { get; set; }
+
+    public bool IsThought => StepKind == ConversationWorkStepKind.Thought;
+    public bool IsTool => StepKind == ConversationWorkStepKind.Tool;
+    public bool IsPlan => StepKind == ConversationWorkStepKind.Plan;
+
+    public bool IsRunning => StepKind switch
+    {
+        ConversationWorkStepKind.Tool => Tool!.IsRunning,
+        ConversationWorkStepKind.Thought => _isThoughtActive,
+        _ => false,
+    };
+
+    public bool IsFailed => StepKind == ConversationWorkStepKind.Tool && (Tool!.IsFailed || Tool.HasExitCode);
+    public bool IsCompleted => !IsRunning && !IsFailed;
+    public string StatusMark => IsFailed ? "✕" : IsExpanded ? "▾" : "·";
+
+    public string Verb => StepKind switch
+    {
+        ConversationWorkStepKind.Thought => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThink),
+        ConversationWorkStepKind.Plan => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbPlan),
+        _ => ResolveToolVerb(Tool?.Kind, active: false, done: false),
+    };
+
+    public string ActiveVerb => StepKind switch
+    {
+        ConversationWorkStepKind.Thought => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThinkActive),
+        ConversationWorkStepKind.Plan => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbPlanActive),
+        _ => ResolveToolVerb(Tool?.Kind, active: true, done: false),
+    };
+
+    public string DoneVerb => StepKind switch
+    {
+        ConversationWorkStepKind.Thought => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThinkDone),
+        ConversationWorkStepKind.Plan => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbPlanDone),
+        _ => ResolveToolVerb(Tool?.Kind, active: false, done: true),
+    };
+
+    public string Target => StepKind switch
+    {
+        ConversationWorkStepKind.Thought => _thoughtPreview,
+        ConversationWorkStepKind.Plan => _planPreview,
+        _ => ToSingleLine(Tool!.Title) ?? Tool.Kind,
+    };
+
+    public bool HasAdded => Tool is { HasAdded: true };
+    public bool HasRemoved => Tool is { HasRemoved: true };
+    public string AddedText => Tool?.AddedText ?? "";
+    public string RemovedText => Tool?.RemovedText ?? "";
+    public bool HasCommand => Tool is { Command.Length: > 0 };
+    public string CommandText => Tool?.Command is { Length: > 0 } cmd ? $"$ {cmd}" : "";
+
+    public string TickerStatText
+    {
+        get
+        {
+            if (StepKind == ConversationWorkStepKind.Tool && Tool is not null)
+            {
+                if (Tool.HasCounts)
+                {
+                    if (Tool.HasAdded && Tool.HasRemoved) return $"{Tool.AddedText} {Tool.RemovedText}";
+                    return Tool.HasAdded ? Tool.AddedText : Tool.RemovedText;
+                }
+                if (Tool.HasExitCode) return Tool.ExitCodeText;
+            }
+            return "";
+        }
+    }
+
+    public string MetaText
+    {
+        get
+        {
+            if (IsRunning) return MobileLangResources.Get(MobileLangResourceKind.ConversationStepRunning);
+            if (StepKind == ConversationWorkStepKind.Tool && Tool is { HasExitCode: true }) return Tool.ExitCodeText;
+            return "";
+        }
+    }
+
+    public bool HasMeta => !string.IsNullOrEmpty(MetaText);
+
+    public bool CanExpand => StepKind switch
+    {
+        ConversationWorkStepKind.Thought => !string.IsNullOrWhiteSpace(_thoughtText),
+        ConversationWorkStepKind.Plan => _planItems.Count > 0,
+        _ => Tool is not null && (Tool.HasDetails || !string.IsNullOrEmpty(Tool.Command)),
+    };
+
+    /// <summary>Lazy detail binding: null when collapsed so Avalonia creates zero detail controls.</summary>
+    public ConversationWorkStep? ExpandedDetail => IsExpanded && CanExpand ? this : null;
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        if (Tool is not null && Tool.IsExpanded != value)
+        {
+            Tool.IsExpanded = value;
+        }
+        OnPropertyChanged(nameof(StatusMark));
+        OnPropertyChanged(nameof(ExpandedDetail));
+    }
+
+    internal void UpdateThought(string text, bool isActive)
+    {
+        var changed = _thoughtText != text;
+        var activeChanged = _isThoughtActive != isActive;
+        _thoughtText = text;
+        _isThoughtActive = isActive;
+        if (changed)
+        {
+            _thoughtPreview = BuildThoughtPreview(text);
+            OnPropertyChanged(nameof(ThoughtText));
+            OnPropertyChanged(nameof(Target));
+            OnPropertyChanged(nameof(CanExpand));
+        }
+        if (activeChanged)
+        {
+            OnPropertyChanged(nameof(IsRunning));
+            OnPropertyChanged(nameof(IsCompleted));
+            OnPropertyChanged(nameof(MetaText));
+            OnPropertyChanged(nameof(HasMeta));
+        }
+    }
+
+    internal void UpdatePlan(IReadOnlyList<ConversationPlanItem> items, string preview)
+    {
+        _planItems = items;
+        _planPreview = preview;
+        OnPropertyChanged(nameof(PlanItems));
+        OnPropertyChanged(nameof(Target));
+        OnPropertyChanged(nameof(CanExpand));
+    }
+
+    internal void NotifyToolUpdated()
+    {
+        OnPropertyChanged(nameof(IsRunning));
+        OnPropertyChanged(nameof(IsFailed));
+        OnPropertyChanged(nameof(IsCompleted));
+        OnPropertyChanged(nameof(StatusMark));
+        OnPropertyChanged(nameof(Verb));
+        OnPropertyChanged(nameof(ActiveVerb));
+        OnPropertyChanged(nameof(DoneVerb));
+        OnPropertyChanged(nameof(Target));
+        OnPropertyChanged(nameof(HasAdded));
+        OnPropertyChanged(nameof(HasRemoved));
+        OnPropertyChanged(nameof(AddedText));
+        OnPropertyChanged(nameof(RemovedText));
+        OnPropertyChanged(nameof(HasCommand));
+        OnPropertyChanged(nameof(CommandText));
+        OnPropertyChanged(nameof(MetaText));
+        OnPropertyChanged(nameof(HasMeta));
+        OnPropertyChanged(nameof(CanExpand));
+        OnPropertyChanged(nameof(ExpandedDetail));
+    }
+
+    private static string BuildThoughtPreview(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        var end = text.Length;
+        while (end > 0 && char.IsWhiteSpace(text[end - 1])) end--;
+        if (end == 0) return "";
+        var lineStart = text.LastIndexOf('\n', end - 1) + 1;
+        var slice = text.AsSpan(lineStart, end - lineStart).Trim();
+        if (slice.IsEmpty) slice = text.AsSpan(0, end).Trim();
+        return slice.Length <= ThoughtPreviewMaxChars ? slice.ToString() : string.Concat(slice[..ThoughtPreviewMaxChars], "…");
+    }
+
+    private static string? ToSingleLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var parts = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 0 ? null : string.Join(' ', parts);
+    }
+
+    private static string ResolveToolVerb(string? kind, bool active, bool done) => (kind, active, done) switch
+    {
+        ("read", true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbReadActive),
+        ("read", false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbReadDone),
+        ("read", _, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbRead),
+
+        ("search", true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbSearchActive),
+        ("search", false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbSearchDone),
+        ("search", _, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbSearch),
+
+        ("edit", true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbEditActive),
+        ("edit", false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbEditDone),
+        ("edit", _, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbEdit),
+
+        ("delete", true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbDeleteActive),
+        ("delete", false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbDeleteDone),
+        ("delete", _, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbDelete),
+
+        ("move", true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbMoveActive),
+        ("move", false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbMoveDone),
+        ("move", _, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbMove),
+
+        ("execute", true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbExecActive),
+        ("execute", false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbExecDone),
+        ("execute", _, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbExec),
+
+        ("fetch", true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbFetchActive),
+        ("fetch", false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbFetchDone),
+        ("fetch", _, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbFetch),
+
+        ("think", true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThinkActive),
+        ("think", false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThinkDone),
+        ("think", _, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThink),
+
+        (_, true, _) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbOtherActive),
+        (_, false, true) => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbOtherDone),
+        _ => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbOther),
+    };
+}
+
+/// <summary>One fixed slot inside the mobile Scheme C 3-line sliding live ticker (mutated in place).</summary>
+public sealed partial class ConversationTickerLine : ObservableObject
+{
+    [ObservableProperty] public partial bool IsVisible { get; set; }
+    [ObservableProperty] public partial double RowOpacity { get; set; } = 1.0;
+    [ObservableProperty] public partial bool IsRunning { get; set; }
+    [ObservableProperty] public partial bool IsFailed { get; set; }
+    [ObservableProperty] public partial bool IsThought { get; set; }
+    [ObservableProperty] public partial string Verb { get; set; } = "";
+    [ObservableProperty] public partial string Target { get; set; } = "";
+    [ObservableProperty] public partial string StatText { get; set; } = "";
+
+    public bool IsCompleted => !IsRunning && !IsFailed;
+    public bool HasStat => !string.IsNullOrEmpty(StatText);
+
+    public void SetFrom(ConversationWorkStep step, double opacity)
+    {
+        var running = step.IsRunning;
+        var failed = step.IsFailed;
+        IsVisible = true;
+        RowOpacity = opacity;
+        if (IsRunning != running) { IsRunning = running; OnPropertyChanged(nameof(IsCompleted)); }
+        if (IsFailed != failed) { IsFailed = failed; OnPropertyChanged(nameof(IsCompleted)); }
+        IsThought = step.IsThought;
+        Verb = running ? step.ActiveVerb : step.DoneVerb;
+        Target = step.Target;
+        var stat = step.TickerStatText;
+        if (StatText != stat) { StatText = stat; OnPropertyChanged(nameof(HasStat)); }
+    }
+
+    public void SetPreparing()
+    {
+        IsVisible = true;
+        RowOpacity = 1.0;
+        if (!IsRunning) { IsRunning = true; OnPropertyChanged(nameof(IsCompleted)); }
+        if (IsFailed) { IsFailed = false; OnPropertyChanged(nameof(IsCompleted)); }
+        IsThought = true;
+        Verb = MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThinkActive);
+        Target = MobileLangResources.Get(MobileLangResourceKind.ConversationWorkPreparing);
+        if (StatText.Length > 0) { StatText = ""; OnPropertyChanged(nameof(HasStat)); }
+    }
+
+    public void Clear() => IsVisible = false;
+}
+
+/// <summary>Fixed 3-slot sliding live ticker container for mobile (Scheme C), mounted only while streaming &amp; collapsed.</summary>
+public sealed class ConversationWorkTicker
+{
+    public ConversationTickerLine Line0 { get; } = new();
+    public ConversationTickerLine Line1 { get; } = new();
+    public ConversationTickerLine Line2 { get; } = new();
+
+    public void Sync(IReadOnlyList<ConversationWorkStep> steps)
+    {
+        if (steps.Count == 0)
+        {
+            Line0.SetPreparing();
+            Line1.Clear();
+            Line2.Clear();
+            return;
+        }
+
+        ConversationWorkStep? s0 = null, s1 = null, s2 = null;
+        var count = 0;
+        void Push(ConversationWorkStep item)
+        {
+            if (count == 0) s0 = item;
+            else if (count == 1) s1 = item;
+            else s2 = item;
+            count++;
+        }
+
+        var runningCount = 0;
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].IsRunning) runningCount++;
+        }
+
+        if (runningCount >= 3)
+        {
+            var skipped = runningCount - 3;
+            for (var i = 0; i < steps.Count && count < 3; i++)
+            {
+                if (!steps[i].IsRunning) continue;
+                if (skipped > 0) { skipped--; continue; }
+                Push(steps[i]);
+            }
+        }
+        else if (runningCount > 0)
+        {
+            var doneSlots = 3 - runningCount;
+            var totalDone = steps.Count - runningCount;
+            var skipDone = Math.Max(0, totalDone - doneSlots);
+            for (var i = 0; i < steps.Count && count < doneSlots; i++)
+            {
+                if (steps[i].IsRunning) continue;
+                if (skipDone > 0) { skipDone--; continue; }
+                Push(steps[i]);
+            }
+            for (var i = 0; i < steps.Count && count < 3; i++)
+            {
+                if (steps[i].IsRunning) Push(steps[i]);
+            }
+        }
+        else
+        {
+            var start = Math.Max(0, steps.Count - 3);
+            for (var i = start; i < steps.Count && count < 3; i++)
+            {
+                Push(steps[i]);
+            }
+        }
+
+        if (count == 1)
+        {
+            Line0.SetFrom(s0!, 1.0);
+            Line1.Clear();
+            Line2.Clear();
+        }
+        else if (count == 2)
+        {
+            Line0.SetFrom(s0!, 0.65);
+            Line1.SetFrom(s1!, 1.0);
+            Line2.Clear();
+        }
+        else
+        {
+            Line0.SetFrom(s0!, 0.38);
+            Line1.SetFrom(s1!, 0.66);
+            Line2.SetFrom(s2!, 1.0);
+        }
+    }
 }
 
 /// <summary>One tool call of a turn.</summary>
@@ -162,6 +822,12 @@ public sealed record ConversationPlanItem(string Content, string Status)
 {
     public bool IsCompleted => Status == "completed";
     public bool IsInProgress => Status == "in_progress";
+    public string StatusMark => Status switch
+    {
+        "completed" => "✓",
+        "in_progress" => "◌",
+        _ => "○",
+    };
 }
 
 /// <summary>The agent asks to be allowed to do something; one button per option.</summary>

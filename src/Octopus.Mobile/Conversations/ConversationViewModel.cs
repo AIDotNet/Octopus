@@ -251,6 +251,18 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     }
 
     [RelayCommand]
+    private static void ToggleWork(ConversationAssistantEntry? entry)
+    {
+        if (entry is { CanExpandWork: true }) entry.IsWorkExpanded = !entry.IsWorkExpanded;
+    }
+
+    [RelayCommand]
+    private static void ToggleWorkStep(ConversationWorkStep? step)
+    {
+        if (step is { CanExpand: true }) step.IsExpanded = !step.IsExpanded;
+    }
+
+    [RelayCommand]
     private static void ToggleThought(ConversationAssistantEntry? entry)
     {
         if (entry is not null) entry.IsThoughtExpanded = !entry.IsThoughtExpanded;

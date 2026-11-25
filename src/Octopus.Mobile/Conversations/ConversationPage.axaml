@@ -11,18 +11,10 @@
            AvoidKeyboard="True">
     <arcm:Page.Resources>
         <StreamGeometry x:Key="MoreGlyph">M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z</StreamGeometry>
-        <StreamGeometry x:Key="SparkGlyph">M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z</StreamGeometry>
-        <StreamGeometry x:Key="ShieldGlyph">M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z</StreamGeometry>
-        <StreamGeometry x:Key="QuestionGlyph">M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3 M12 17h.01</StreamGeometry>
-        <StreamGeometry x:Key="ListGlyph">M9 6h11 M9 12h11 M9 18h11 M4 6h.01 M4 12h.01 M4 18h.01</StreamGeometry>
-        <StreamGeometry x:Key="PencilGlyph">M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z</StreamGeometry>
-        <StreamGeometry x:Key="FileGlyph">M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z M14 3v6h6</StreamGeometry>
-        <StreamGeometry x:Key="SearchGlyph">M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-3.5-3.5</StreamGeometry>
         <StreamGeometry x:Key="ClipGlyph">M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7</StreamGeometry>
         <StreamGeometry x:Key="ChevronDownGlyph">M6 9l6 6 6-6</StreamGeometry>
         <StreamGeometry x:Key="ChevronRightGlyph">M9 6l6 6-6 6</StreamGeometry>
         <StreamGeometry x:Key="StopGlyph">M6 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z</StreamGeometry>
-        <StreamGeometry x:Key="AlertGlyph">M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 8v4 M12 16h.01</StreamGeometry>
     </arcm:Page.Resources>
 
     <arcm:Page.Styles>
@@ -40,33 +32,76 @@
             <Setter Property="Padding" Value="8,3" />
         </Style>
 
-        <!-- Transparent clickable rows for collapsible thought and tool cards. -->
+        <!-- Zero-card pure-text tappable rows for Scheme C unified work area & steps. -->
         <Style Selector="Button.plainHit">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="CornerRadius" Value="8" />
         </Style>
-        <Style Selector="Button.plainHit:pressed /template/ ContentPresenter">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Style Selector="Button.plainHit:pressed">
+            <Setter Property="Opacity" Value="0.65" />
         </Style>
 
-        <!-- Tool call card and expandable diff / output. -->
-        <Style Selector="Border.toolCard">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
-            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="ClipToBounds" Value="True" />
+        <!-- Scheme C 3-line sliding ticker typography (zero card). -->
+        <Style Selector="TextBlock.tickerVerb">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
         </Style>
-        <Style Selector="TextBlock.toolTitle">
+        <Style Selector="TextBlock.tickerVerb.failed">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+        <Style Selector="TextBlock.tickerTarget">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="MaxLines" Value="1" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.tickerTarget:not(.thought)">
             <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
         </Style>
+        <Style Selector="TextBlock.tickerTarget.failed">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+
+        <!-- Expanded pure-text step rows (zero card). -->
+        <Style Selector="TextBlock.stepMark">
+            <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.stepMark.failed">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+        <Style Selector="TextBlock.stepVerb">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+        <Style Selector="TextBlock.stepVerb.failed">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+        <Style Selector="TextBlock.stepTarget">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="MaxLines" Value="1" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.stepTarget:not(.thought)">
+            <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.stepTarget.failed">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+
+        <!-- Pure-text diff counts & detail lines. -->
         <Style Selector="TextBlock.diffAddedCount">
             <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
             <Setter Property="FontSize" Value="11" />
@@ -79,13 +114,8 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
         </Style>
-        <Style Selector="Border.toolDetails">
-            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
-            <Setter Property="BorderThickness" Value="0,1,0,0" />
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
-        </Style>
         <Style Selector="Border.diffLine">
-            <Setter Property="Padding" Value="10,2" />
+            <Setter Property="Padding" Value="6,1" />
         </Style>
         <Style Selector="Border.diffLine.added">
             <Setter Property="Background" Value="{arc:ArcDesignTokenResource SuccessSubtle}" />
@@ -111,12 +141,12 @@
             <Setter Property="LineHeight" Value="17" />
         </Style>
 
-        <!-- Markdown fenced code block and quote. -->
+        <!-- Markdown fenced code block. -->
         <Style Selector="Border.codeBlock">
             <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="CornerRadius" Value="8" />
             <Setter Property="Padding" Value="10,8" />
         </Style>
         <Style Selector="TextBlock.codeText">
@@ -126,25 +156,13 @@
             <Setter Property="LineHeight" Value="18" />
         </Style>
 
-        <!-- Plan progress chip. -->
-        <Style Selector="Border.planChip">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
-            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
-            <Setter Property="Padding" Value="10,4" />
-        </Style>
-
-        <!-- Permission card (warning tinted while open, neutral surface once resolved). -->
-        <Style Selector="Border.permCard">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource WarningSubtle}" />
+        <!-- Lightweight left-accent strips for interactive permission & question prompts (no heavy card). -->
+        <Style Selector="Border.permStrip">
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Warning}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="14" />
-            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="BorderThickness" Value="2,0,0,0" />
+            <Setter Property="Padding" Value="10,4,0,4" />
         </Style>
-        <Style Selector="Border.permCard.resolved">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Style Selector="Border.permStrip.resolved">
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
         </Style>
         <Style Selector="TextBlock.permTitle">
@@ -152,15 +170,8 @@
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
         </Style>
-        <Style Selector="Border.permCard.resolved TextBlock.permTitle">
+        <Style Selector="Border.permStrip.resolved TextBlock.permTitle">
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
-        </Style>
-        <Style Selector="Border.permDetail">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
-            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="10,6" />
         </Style>
         <Style Selector="arcm|Button.permOption">
             <Setter Property="Variant" Value="Tinted" />
@@ -173,15 +184,12 @@
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
         </Style>
 
-        <!-- Question card and selectable choices. -->
-        <Style Selector="Border.questionCard">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Style Selector="Border.questionStrip">
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="14" />
-            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="BorderThickness" Value="2,0,0,0" />
+            <Setter Property="Padding" Value="10,4,0,4" />
         </Style>
-        <Style Selector="Border.questionCard.resolved">
+        <Style Selector="Border.questionStrip.resolved">
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
         </Style>
         <Style Selector="Button.choiceRow">
@@ -219,6 +227,166 @@
             <Setter Property="Padding" Value="10,4" />
         </Style>
     </arcm:Page.Styles>
+
+    <arcm:Page.DataTemplates>
+        <!-- Scheme C: Single slot in the fixed 3-line sliding live ticker (pure text, zero card). -->
+        <DataTemplate DataType="ws:ConversationTickerLine">
+            <Grid IsVisible="{Binding IsVisible}"
+                  Opacity="{Binding RowOpacity}"
+                  ColumnDefinitions="14,Auto,*,Auto"
+                  ColumnSpacing="6"
+                  Margin="0,1">
+                <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
+                    <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" VerticalAlignment="Center" />
+                    <TextBlock Text="✓" FontSize="11" Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               IsVisible="{Binding IsCompleted}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBlock Text="✕" FontSize="11" Foreground="{arc:ArcDesignTokenResource Danger}"
+                               IsVisible="{Binding IsFailed}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Panel>
+                <TextBlock Grid.Column="1"
+                           Classes="tickerVerb"
+                           Classes.failed="{Binding IsFailed}"
+                           Text="{Binding Verb}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2"
+                           Classes="tickerTarget"
+                           Classes.thought="{Binding IsThought}"
+                           Classes.failed="{Binding IsFailed}"
+                           Text="{Binding Target}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3"
+                           IsVisible="{Binding HasStat}"
+                           Text="{Binding StatText}"
+                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                           FontSize="11"
+                           Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                           VerticalAlignment="Center" />
+            </Grid>
+        </DataTemplate>
+
+        <!-- Scheme C: Fixed 3-slot sliding live ticker container (mounted ONLY while streaming & collapsed). -->
+        <DataTemplate DataType="ws:ConversationWorkTicker">
+            <StackPanel Margin="14,2,0,0" Spacing="1">
+                <ContentControl Content="{Binding Line0}" />
+                <ContentControl Content="{Binding Line1}" />
+                <ContentControl Content="{Binding Line2}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- One pure-text step inside the expanded unified work area (zero card; lazy-mounts details on tap). -->
+        <DataTemplate DataType="ws:ConversationWorkStep">
+            <StackPanel Spacing="0">
+                <Button Classes="plainHit"
+                        Padding="0,4"
+                        IsHitTestVisible="{Binding CanExpand}"
+                        Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).ToggleWorkStepCommand}"
+                        CommandParameter="{Binding}">
+                    <Grid ColumnDefinitions="14,Auto,*,Auto,Auto" ColumnSpacing="6">
+                        <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
+                            <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" VerticalAlignment="Center" />
+                            <TextBlock Classes="stepMark"
+                                       Classes.failed="{Binding IsFailed}"
+                                       IsVisible="{Binding !IsRunning}"
+                                       Text="{Binding StatusMark}" />
+                        </Panel>
+                        <TextBlock Grid.Column="1"
+                                   Classes="stepVerb"
+                                   Classes.failed="{Binding IsFailed}"
+                                   Text="{Binding Verb}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2"
+                                   Classes="stepTarget"
+                                   Classes.thought="{Binding IsThought}"
+                                   Classes.failed="{Binding IsFailed}"
+                                   Text="{Binding Target}"
+                                   VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Classes="diffAddedCount" Text="{Binding AddedText}" IsVisible="{Binding HasAdded}" />
+                            <TextBlock Classes="diffRemovedCount" Text="{Binding RemovedText}" IsVisible="{Binding HasRemoved}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="4"
+                                   IsVisible="{Binding HasMeta}"
+                                   Text="{Binding MetaText}"
+                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                   FontSize="11"
+                                   Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <!-- Lazy pure-text detail pane: null when collapsed so zero detail controls exist until tapped. -->
+                <ContentControl Content="{Binding ExpandedDetail}">
+                    <ContentControl.ContentTemplate>
+                        <DataTemplate x:DataType="ws:ConversationWorkStep">
+                            <Border BorderBrush="{arc:ArcDesignTokenResource Border}"
+                                    BorderThickness="1,0,0,0"
+                                    Margin="14,1,0,6"
+                                    Padding="10,2,0,2">
+                                <StackPanel Spacing="4">
+                                    <!-- Thought pure-text prose -->
+                                    <TextBlock IsVisible="{Binding IsThought}"
+                                               Text="{Binding ThoughtText}"
+                                               Classes="secondary"
+                                               FontSize="12.5"
+                                               LineHeight="18"
+                                               TextWrapping="Wrap" />
+
+                                    <!-- Plan pure-text checklist -->
+                                    <ItemsControl IsVisible="{Binding IsPlan}" ItemsSource="{Binding PlanItems}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="2" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="ws:ConversationPlanItem">
+                                                <Grid ColumnDefinitions="14,*" ColumnSpacing="6">
+                                                    <TextBlock Text="{Binding StatusMark}" FontSize="11.5"
+                                                               Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Content}" FontSize="12.5"
+                                                               Classes="secondary" TextWrapping="Wrap" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Tool pure-text command, diff & output -->
+                                    <StackPanel IsVisible="{Binding IsTool}" Spacing="4">
+                                        <TextBlock IsVisible="{Binding HasCommand}"
+                                                   Classes="monoOutput"
+                                                   Text="{Binding CommandText}"
+                                                   TextWrapping="Wrap" />
+                                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                      VerticalScrollBarVisibility="Disabled"
+                                                      IsVisible="{Binding Tool.HasDiff, FallbackValue=False}">
+                                            <ItemsControl ItemsSource="{Binding Tool.Diff}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="ws:ConversationDiffLine">
+                                                        <Border Classes="diffLine"
+                                                                Classes.added="{Binding IsAdded}"
+                                                                Classes.removed="{Binding IsRemoved}">
+                                                            <TextBlock Classes="diffText"
+                                                                       Classes.added="{Binding IsAdded}"
+                                                                       Classes.removed="{Binding IsRemoved}"
+                                                                       Text="{Binding Text}" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                        <TextBlock Classes="monoOutput"
+                                                   Text="{Binding Tool.Output}"
+                                                   TextWrapping="Wrap"
+                                                   IsVisible="{Binding Tool.HasOutput, FallbackValue=False}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
+            </StackPanel>
+        </DataTemplate>
+    </arcm:Page.DataTemplates>
 
     <arcm:Page.Header>
         <arcm:Navbar Title="{Binding Title}"
@@ -295,7 +463,7 @@
                 <ItemsControl Name="Timeline" ItemsSource="{Binding Entries}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Spacing="12" />
+                            <StackPanel Spacing="14" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.DataTemplates>
@@ -336,159 +504,76 @@
                             </StackPanel>
                         </DataTemplate>
 
-                        <!-- Assistant turn: collapsible thought, tools, Markdown blocks, plan chip, error/duration. -->
+                        <!-- Assistant turn (Scheme C): One unified zero-card pure-text Work Area + clean Markdown body. -->
                         <DataTemplate DataType="ws:ConversationAssistantEntry">
                             <StackPanel Spacing="8">
-                                <!-- Collapsible thought. -->
-                                <StackPanel Spacing="4" IsVisible="{Binding HasThought}">
+                                <!-- Single Unified Pure-Text Work Area (collapsed to 1 line on finish; fixed 3-line ticker while running) -->
+                                <StackPanel IsVisible="{Binding HasWorkArea}" Spacing="2">
                                     <Button Classes="plainHit"
-                                            Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).ToggleThoughtCommand}"
+                                            Padding="0,4"
+                                            IsHitTestVisible="{Binding CanExpandWork}"
+                                            Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).ToggleWorkCommand}"
                                             CommandParameter="{Binding}">
-                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6" Margin="2,3">
-                                            <arc:ArcGlyph Data="{StaticResource SparkGlyph}" Size="13"
-                                                          Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                          VerticalAlignment="Center" />
+                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6">
+                                            <Panel Grid.Column="0" VerticalAlignment="Center" IsVisible="{Binding CanExpandWork}">
+                                                <arc:ArcGlyph Data="{StaticResource ChevronRightGlyph}" Size="11"
+                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                              IsVisible="{Binding !IsWorkExpanded}" />
+                                                <arc:ArcGlyph Data="{StaticResource ChevronDownGlyph}" Size="11"
+                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                              IsVisible="{Binding IsWorkExpanded}" />
+                                            </Panel>
                                             <TextBlock Grid.Column="1"
-                                                       Text="{l:MobileLangResource ConversationThought}"
-                                                       Classes="muted"
-                                                       FontSize="12"
+                                                       Text="{Binding WorkHeaderTitle}"
+                                                       FontSize="12.5"
                                                        FontWeight="SemiBold"
+                                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}"
                                                        VerticalAlignment="Center" />
                                             <TextBlock Grid.Column="2"
-                                                       Text="{Binding Thought}"
+                                                       IsVisible="{Binding HasWorkHeaderCounts}"
+                                                       Text="{Binding WorkHeaderCounts}"
                                                        Classes="muted"
                                                        FontSize="12"
                                                        MaxLines="1"
                                                        TextTrimming="CharacterEllipsis"
-                                                       IsVisible="{Binding !IsThoughtExpanded}"
                                                        VerticalAlignment="Center" />
-                                            <Panel Grid.Column="3" VerticalAlignment="Center">
-                                                <arc:ArcGlyph Data="{StaticResource ChevronRightGlyph}" Size="12"
-                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                              IsVisible="{Binding !IsThoughtExpanded}" />
-                                                <arc:ArcGlyph Data="{StaticResource ChevronDownGlyph}" Size="12"
-                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                              IsVisible="{Binding IsThoughtExpanded}" />
-                                            </Panel>
+                                            <TextBlock Grid.Column="3"
+                                                       IsVisible="{Binding HasWorkFailures}"
+                                                       Text="{Binding WorkHeaderFailedText}"
+                                                       FontSize="12"
+                                                       FontWeight="Medium"
+                                                       Foreground="{arc:ArcDesignTokenResource Danger}"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="4"
+                                                       IsVisible="{Binding HasDuration}"
+                                                       Text="{Binding Duration}"
+                                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                       FontSize="11.5"
+                                                       Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                       VerticalAlignment="Center" />
                                         </Grid>
                                     </Button>
-                                    <Border BorderThickness="2,0,0,0"
+
+                                    <!-- Scheme C fixed 3-line sliding pure-text ticker (null & unmounted on finish or expand) -->
+                                    <ContentControl Content="{Binding LiveTicker}" />
+
+                                    <!-- Lazy-mounted pure-text step log (null & unmounted when collapsed) -->
+                                    <Border IsVisible="{Binding IsWorkExpanded}"
                                             BorderBrush="{arc:ArcDesignTokenResource Border}"
-                                            Padding="10,2,0,2"
-                                            Margin="6,0,0,0"
-                                            IsVisible="{Binding IsThoughtExpanded}">
-                                        <TextBlock Text="{Binding Thought}"
-                                                   Classes="secondary"
-                                                   FontSize="12.5"
-                                                   LineHeight="18"
-                                                   TextWrapping="Wrap" />
+                                            BorderThickness="1.5,0,0,0"
+                                            Margin="5,2,0,2"
+                                            Padding="10,1,0,1">
+                                        <ItemsControl ItemsSource="{Binding ExpandedWorkSteps}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Spacing="1" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                        </ItemsControl>
                                     </Border>
                                 </StackPanel>
 
-                                <!-- Tool calls. -->
-                                <ItemsControl ItemsSource="{Binding Tools}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Spacing="6" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="ws:ConversationTool">
-                                            <Border Classes="toolCard">
-                                                <StackPanel>
-                                                    <Button Classes="plainHit"
-                                                            Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).ToggleToolCommand}"
-                                                            CommandParameter="{Binding}">
-                                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6" Margin="10,7">
-                                                            <Panel VerticalAlignment="Center">
-                                                                <arc:ArcSpinner Width="13" Height="13" IsVisible="{Binding IsRunning}" />
-                                                                <arc:ArcGlyph Data="{StaticResource AlertGlyph}" Size="14"
-                                                                              Foreground="{arc:ArcDesignTokenResource Danger}"
-                                                                              IsVisible="{Binding IsFailed}" />
-                                                                <Panel IsVisible="{Binding IsCompleted}">
-                                                                    <arc:ArcGlyph Data="{StaticResource PencilGlyph}" Size="13"
-                                                                                  Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                                                  IsVisible="{Binding IsEdit}" />
-                                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Terminal}" Size="13"
-                                                                                  Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                                                  IsVisible="{Binding IsExecute}" />
-                                                                    <arc:ArcGlyph Data="{StaticResource FileGlyph}" Size="13"
-                                                                                  Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                                                  IsVisible="{Binding IsRead}" />
-                                                                    <arc:ArcGlyph Data="{StaticResource SearchGlyph}" Size="13"
-                                                                                  Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                                                  IsVisible="{Binding IsSearch}" />
-                                                                    <arc:ArcGlyph Data="{StaticResource SparkGlyph}" Size="13"
-                                                                                  Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                                                  IsVisible="{Binding IsOther}" />
-                                                                </Panel>
-                                                            </Panel>
-                                                            <TextBlock Grid.Column="1"
-                                                                       Classes="toolTitle"
-                                                                       Text="{Binding Title}"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       VerticalAlignment="Center" />
-                                                            <StackPanel Grid.Column="2"
-                                                                        Orientation="Horizontal"
-                                                                        Spacing="4"
-                                                                        VerticalAlignment="Center"
-                                                                        IsVisible="{Binding HasCounts}">
-                                                                <TextBlock Classes="diffAddedCount"
-                                                                           Text="{Binding AddedText}"
-                                                                           IsVisible="{Binding HasAdded}" />
-                                                                <TextBlock Classes="diffRemovedCount"
-                                                                           Text="{Binding RemovedText}"
-                                                                           IsVisible="{Binding HasRemoved}" />
-                                                            </StackPanel>
-                                                            <Border Grid.Column="3" Classes="pill error" IsVisible="{Binding HasExitCode}">
-                                                                <TextBlock Text="{Binding ExitCodeText}" />
-                                                            </Border>
-                                                            <Panel Grid.Column="4" VerticalAlignment="Center" IsVisible="{Binding HasDetails}">
-                                                                <arc:ArcGlyph Data="{StaticResource ChevronRightGlyph}" Size="12"
-                                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                                              IsVisible="{Binding !IsExpanded}" />
-                                                                <arc:ArcGlyph Data="{StaticResource ChevronDownGlyph}" Size="12"
-                                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                                              IsVisible="{Binding IsExpanded}" />
-                                                            </Panel>
-                                                        </Grid>
-                                                    </Button>
-
-                                                    <!-- Expandable diff and output. -->
-                                                    <Border Classes="toolDetails" IsVisible="{Binding IsExpanded}">
-                                                        <StackPanel>
-                                                            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                                                          VerticalScrollBarVisibility="Disabled"
-                                                                          IsVisible="{Binding HasDiff}">
-                                                                <ItemsControl ItemsSource="{Binding Diff}" Margin="0,4">
-                                                                    <ItemsControl.ItemTemplate>
-                                                                        <DataTemplate x:DataType="ws:ConversationDiffLine">
-                                                                            <Border Classes="diffLine"
-                                                                                    Classes.added="{Binding IsAdded}"
-                                                                                    Classes.removed="{Binding IsRemoved}">
-                                                                                <TextBlock Classes="diffText"
-                                                                                           Classes.added="{Binding IsAdded}"
-                                                                                           Classes.removed="{Binding IsRemoved}"
-                                                                                           Text="{Binding Text}" />
-                                                                            </Border>
-                                                                        </DataTemplate>
-                                                                    </ItemsControl.ItemTemplate>
-                                                                </ItemsControl>
-                                                            </ScrollViewer>
-                                                            <TextBlock Classes="monoOutput"
-                                                                       Margin="10,6"
-                                                                       Text="{Binding Output}"
-                                                                       TextWrapping="Wrap"
-                                                                       IsVisible="{Binding HasOutput}" />
-                                                        </StackPanel>
-                                                    </Border>
-                                                </StackPanel>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-
-                                <!-- Markdown body blocks. -->
+                                <!-- Clean Markdown body blocks directly below the unified work area. -->
                                 <ItemsControl ItemsSource="{Binding Blocks}" IsVisible="{Binding HasText}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
@@ -525,11 +610,9 @@
                                                                LineHeight="21"
                                                                TextWrapping="Wrap" />
                                                 </Grid>
-                                                <Border BorderThickness="3,0,0,0"
+                                                <Border BorderThickness="2,0,0,0"
                                                         BorderBrush="{arc:ArcDesignTokenResource Accent}"
-                                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                                        CornerRadius="0,8,8,0"
-                                                        Padding="10,6"
+                                                        Padding="10,2,0,2"
                                                         IsVisible="{Binding IsQuote}">
                                                     <TextBlock Text="{Binding Text}"
                                                                Classes="secondary"
@@ -548,65 +631,48 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
 
-                                <!-- Plan progress chip. -->
-                                <Border Classes="planChip" HorizontalAlignment="Left" IsVisible="{Binding HasPlan}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <arc:ArcGlyph Data="{StaticResource ListGlyph}" Size="13"
-                                                      Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                      VerticalAlignment="Center" />
-                                        <TextBlock Text="{Binding PlanText}"
-                                                   Classes="secondary"
-                                                   FontSize="12"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   VerticalAlignment="Center" />
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Turn error message. -->
-                                <Border Classes="alertCard danger" Padding="10,8" IsVisible="{Binding HasError}">
+                                <!-- Lightweight pure-text error line (zero card). -->
+                                <Border BorderThickness="2,0,0,0"
+                                        BorderBrush="{arc:ArcDesignTokenResource Danger}"
+                                        Padding="10,2,0,2"
+                                        IsVisible="{Binding HasError}">
                                     <TextBlock Text="{Binding ErrorText}"
                                                Foreground="{arc:ArcDesignTokenResource Danger}"
                                                FontSize="13"
                                                TextWrapping="Wrap" />
                                 </Border>
 
-                                <!-- Streaming indicator / duration. -->
-                                <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasMeta}">
-                                    <arc:ArcSpinner Width="11" Height="11" IsVisible="{Binding IsStreaming}" />
-                                    <TextBlock Text="{Binding Duration}"
-                                               Classes="muted"
-                                               FontSize="11.5"
-                                               IsVisible="{Binding HasDuration}" />
-                                </StackPanel>
+                                <!-- Duration shown standalone only for pure-text turns with zero work steps. -->
+                                <TextBlock Text="{Binding Duration}"
+                                           Classes="muted"
+                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                           FontSize="11.5"
+                                           IsVisible="{Binding ShowStandaloneDuration}" />
                             </StackPanel>
                         </DataTemplate>
 
-                        <!-- Permission card: one button per option, collapses to a resolved pill once answered. -->
+                        <!-- Permission prompt: lightweight left-accent strip, collapses to resolved text once answered. -->
                         <DataTemplate DataType="ws:ConversationPermissionEntry">
-                            <Border Classes="permCard" Classes.resolved="{Binding IsResolved}">
-                                <StackPanel Spacing="8">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                        <arc:ArcGlyph Data="{StaticResource ShieldGlyph}" Size="15"
-                                                      Foreground="{arc:ArcDesignTokenResource Warning}"
-                                                      IsVisible="{Binding !IsResolved}"
-                                                      VerticalAlignment="Center" />
-                                        <arc:ArcGlyph Data="{StaticResource ShieldGlyph}" Size="15"
-                                                      Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                      IsVisible="{Binding IsResolved}"
-                                                      VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="1"
+                            <Border Classes="permStrip" Classes.resolved="{Binding IsResolved}">
+                                <StackPanel Spacing="6">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0"
                                                    Classes="permTitle"
                                                    Text="{Binding Title}"
                                                    TextWrapping="Wrap"
                                                    VerticalAlignment="Center" />
-                                        <Border Grid.Column="2" Classes="pill" IsVisible="{Binding IsResolved}">
-                                            <TextBlock Text="{Binding ResolvedText}" />
-                                        </Border>
+                                        <TextBlock Grid.Column="1"
+                                                   FontSize="12"
+                                                   Foreground="{arc:ArcDesignTokenResource Success}"
+                                                   Text="{Binding ResolvedText}"
+                                                   IsVisible="{Binding IsResolved}"
+                                                   VerticalAlignment="Center" />
                                     </Grid>
 
-                                    <Border Classes="permDetail" IsVisible="{Binding HasDetail}">
-                                        <TextBlock Classes="codeText" Text="{Binding Detail}" TextWrapping="Wrap" />
-                                    </Border>
+                                    <TextBlock Classes="monoOutput"
+                                               Text="{Binding Detail}"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding HasDetail}" />
 
                                     <TextBlock Text="{Binding Warning}"
                                                Foreground="{arc:ArcDesignTokenResource Danger}"
@@ -637,28 +703,23 @@
                             </Border>
                         </DataTemplate>
 
-                        <!-- Question card: single/multi-select choices, optional free text, submit. -->
+                        <!-- Question prompt: lightweight left-accent strip, single/multi-select choices, submit. -->
                         <DataTemplate DataType="ws:ConversationQuestionEntry">
-                            <Border Classes="questionCard" Classes.resolved="{Binding IsResolved}">
-                                <StackPanel Spacing="10">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                        <arc:ArcGlyph Data="{StaticResource QuestionGlyph}" Size="15"
-                                                      Foreground="{arc:ArcDesignTokenResource Accent}"
-                                                      IsVisible="{Binding !IsResolved}"
-                                                      VerticalAlignment="Center" />
-                                        <arc:ArcGlyph Data="{StaticResource QuestionGlyph}" Size="15"
-                                                      Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                      IsVisible="{Binding IsResolved}"
-                                                      VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="1"
+                            <Border Classes="questionStrip" Classes.resolved="{Binding IsResolved}">
+                                <StackPanel Spacing="8">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0"
                                                    Text="{Binding Title}"
                                                    FontSize="14"
                                                    FontWeight="SemiBold"
                                                    TextWrapping="Wrap"
                                                    VerticalAlignment="Center" />
-                                        <Border Grid.Column="2" Classes="pill" IsVisible="{Binding IsResolved}">
-                                            <TextBlock Text="{Binding ResolvedText}" />
-                                        </Border>
+                                        <TextBlock Grid.Column="1"
+                                                   FontSize="12"
+                                                   Foreground="{arc:ArcDesignTokenResource Success}"
+                                                   Text="{Binding ResolvedText}"
+                                                   IsVisible="{Binding IsResolved}"
+                                                   VerticalAlignment="Center" />
                                     </Grid>
 
                                     <ItemsControl ItemsSource="{Binding Fields}"

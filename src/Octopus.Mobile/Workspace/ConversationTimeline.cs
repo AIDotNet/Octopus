@@ -200,6 +200,7 @@ public sealed class ConversationTimeline
                 if (!entry.Plan.SequenceEqual(plan)) entry.Plan = plan;
                 var tools = entry.Tools.ToDictionary(tool => tool.Id, StringComparer.Ordinal);
                 Sync(entry.Tools, [.. (message.Tools ?? []).DistinctBy(tool => tool.Id).Select(tool => Fill(tools.GetValueOrDefault(tool.Id) ?? new ConversationTool(tool.Id), tool))]);
+                entry.SyncWorkArea();
                 return entry;
             }
         }
