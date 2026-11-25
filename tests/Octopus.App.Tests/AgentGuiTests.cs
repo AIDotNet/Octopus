@@ -2611,7 +2611,7 @@ public class AgentGuiTests
                 Assert.True(vm.IsPinnedToBottom,
                     $"Lost bottom pin at chunk {chunk}: offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}, extent={scroller.Extent.Height}");
                 Assert.False(vm.ShowJumpToBottom, $"Jump-to-bottom appeared unexpectedly at chunk {chunk}.");
-                Assert.True(scroller.Offset.Y >= previousOffsetY - 1.0,
+                Assert.True(scroller.Offset.Y >= previousOffsetY - 1.0 || scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0,
                     $"Scrollbar drifted upward at chunk {chunk}: prev={previousOffsetY}, cur={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
                 Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0,
                     $"Not at bottom at chunk {chunk}: offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");

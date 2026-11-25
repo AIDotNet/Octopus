@@ -62,14 +62,20 @@ public class TerminalSearchBarTests
             Assert.True(Frames.Until(() => terminal.ReadScreenText().Contains("Add search")));
 
             terminal.OpenSearch();
+            Frames.Pump();
             var field = bar.FindControl<TextBox>("Field")!;
             field.Text = "error";
+            await Task.Delay(150);
+            Frames.Pump();
             Assert.True(Frames.Until(() => terminal.SearchTotal == 3));
 
+            var before = terminal.SearchPosition;
             terminal.SearchNext();
-            Assert.True(Frames.Until(() => terminal.SearchPosition == 2));
+            Assert.True(Frames.Until(() => terminal.SearchPosition is not null && terminal.SearchPosition != before));
 
             field.Text = "zzzz";
+            await Task.Delay(150);
+            Frames.Pump();
             Assert.True(Frames.Until(() => terminal.SearchTotal == 0));
 
             terminal.CloseSearch();

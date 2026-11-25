@@ -50,9 +50,11 @@ public class TerminalPageTests
         using var phone = new Phone();
         var (terminal, session) = Open(phone, 0, 0);
         terminal.FitCommand.Execute(null);
-        terminal.RefreshQuickReplies();
-
-        Assert.True(terminal.HasQuickReplies);
+        Assert.True(Phone.Until(() =>
+        {
+            terminal.RefreshQuickReplies();
+            return terminal.HasQuickReplies;
+        }));
         Assert.Equal(["1. 是", "2. 是，本次会话不再询问", "3. 否，告诉它怎么改", "Esc"], terminal.QuickReplies.Select(reply => reply.Label));
 
         terminal.ReplyCommand.Execute(terminal.QuickReplies[0]);
