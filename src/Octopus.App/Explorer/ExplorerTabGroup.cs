@@ -19,10 +19,10 @@ namespace Octopus.App.Explorer;
 public sealed class ExplorerTabGroup : ToggleGroup
 {
     /// <summary>
-    /// Shared bounce-free spring (Arc's Quick: visualDuration 0.25s, bounce 0) for both the gliding pill and the
+    /// Shared bounce-free spring (Arc's Settle: visualDuration 0.33s, bounce 0) for both the gliding pill and the
     /// expanding/collapsing tab labels so they accelerate, travel and settle together without jittering the group border.
     /// </summary>
-    internal const ArcSpring TabSpring = ArcSpring.Quick;
+    internal const ArcSpring TabSpring = ArcSpring.Settle;
 
     private const double RectEpsilon = 0.5;
 
