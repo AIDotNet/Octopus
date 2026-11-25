@@ -420,4 +420,77 @@ public class ItemActivityTests
         Assert.Equal("修复标签标题", agent.Title);
         Assert.Equal("conv-new", agent.Launch?.SessionId);
     }
+
+    [AvaloniaFact, FreshApp]
+    public void A_claude_session_stays_working_while_a_dynamic_workflow_is_running()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-workflow-activity-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var active = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Monaco参考设计与代码" };
+        var other = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Other" };
+        projects.AddItem(project, active);
+        projects.AddItem(project, other);
+        projects.ActivateItem(other.Id);
+
+        var activity = AppHost.Get<IItemActivityService>();
+        var rows = AppHost.Get<ShellViewModel>().Panel.Items;
+        var chip = AppHost.Get<Octopus.App.Sidebar.ProjectRailViewModel>().Chips.Single(c => c.Id == project.Id);
+        var hub = AppHost.Get<ISignalHub>();
+        AgentSignal Signal(string channel, string payload) => new("claude", channel, active.Id, "", 0, 0, payload);
+
+        // Turn starts and terminal title spins while Claude launches a dynamic workflow.
+        hub.Publish(Signal("prompt-submit", """{"prompt":"continue workflow"}"""));
+        activity.ReportTitle(active.Id, "◐ Monaco参考设计与代码");
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Working, activity.Of(active.Id));
+        Assert.True(rows.Single(r => r.Id == active.Id).IsWorking);
+        Assert.True(chip.IsWorking);
+
+        // Main turn pauses waiting for the workflow: Stop carries background_tasks with the running workflow.
+        hub.Publish(Signal("stop",
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"w12345678","type":"workflow","status":"running","name":"code-editor-remaining-phases","description":"Run remaining phases"}]}"""));
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Working, activity.Of(active.Id));
+        Assert.True(rows.Single(r => r.Id == active.Id).IsWorking);
+        Assert.False(rows.Single(r => r.Id == active.Id).IsDone);
+        Assert.True(chip.IsWorking);
+        Assert.False(chip.IsDone);
+
+        // Once the workflow finishes and the follow-up turn stops with empty background_tasks, the hidden tab marks Done.
+        hub.Publish(Signal("stop", """{"hook_event_name":"Stop","background_tasks":[]}"""));
+        activity.ReportTitle(active.Id, "✳ Monaco参考设计与代码");
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Done, activity.Of(active.Id));
+        Assert.False(rows.Single(r => r.Id == active.Id).IsWorking);
+        Assert.True(rows.Single(r => r.Id == active.Id).IsDone);
+        Assert.False(chip.IsWorking);
+        Assert.True(chip.IsDone);
+
+        // If the user cancels a running workflow manually (no follow-up Stop), the resting title stops the spinner.
+        projects.ActivateItem(active.Id);
+        hub.Publish(Signal("prompt-submit", """{"prompt":"run workflow"}"""));
+        activity.ReportTitle(active.Id, "◐ Monaco参考设计与代码");
+        hub.Publish(Signal("stop",
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"w87654321","type":"workflow","status":"running","name":"code-editor-remaining-phases"}]}"""));
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Working, activity.Of(active.Id));
+        activity.ReportTitle(active.Id, "✳ Monaco参考设计与代码");
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Idle, activity.Of(active.Id));
+        Assert.False(rows.Single(r => r.Id == active.Id).IsWorking);
+
+        // Cloud session keeps working while the title still spins, and stops when resting.
+        hub.Publish(Signal("prompt-submit", """{"prompt":"cloud workflow"}"""));
+        activity.ReportTitle(active.Id, "◐ Monaco参考设计与代码");
+        hub.Publish(Signal("stop",
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"r12345678","type":"cloud session","status":"running","description":"Cloud dynamic workflow"}]}"""));
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Working, activity.Of(active.Id));
+        activity.ReportTitle(active.Id, "✳ Monaco参考设计与代码");
+        hub.Publish(Signal("stop",
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"r12345678","type":"cloud session","status":"running","description":"Long running autofix-pr"}]}"""));
+        Frames.Pump();
+        Assert.Equal(ItemActivity.Idle, activity.Of(active.Id));
+    }
 }

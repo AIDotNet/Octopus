@@ -190,6 +190,14 @@ public sealed class ItemActivityService : IItemActivityService, IDisposable
             return;
         }
         var status = SignalStatusMap.Resolve(definition, signal);
+        // Remote cloud workflows and active teammates can keep the session busy (with a spinning terminal title) while
+        // the main turn pauses; idle teammates and long-running cloud sessions stop the title spinner first.
+        if (status == SignalStatus.Done
+            && _titleWorking.GetValueOrDefault(signal.ItemId)
+            && SignalBackgroundTasks.Read(signal.Payload).HasActiveDelegatedWork)
+        {
+            status = SignalStatus.Working;
+        }
         NameFromPayload(item, definition, signal, status);
         switch (status)
         {

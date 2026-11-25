@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Octopus.Agents.Signals;
 
 namespace Octopus.Agents.Subagents;
 
@@ -115,7 +116,7 @@ public sealed class SubagentTracker
             case "subagent-stop": return OnStop(payload, now);
             case "subagent-failed": return OnFailed(payload, now);
             case "prompt-submit": return OnNewTurn();
-            case "stop":
+            case "stop": return OnTurnStop(payload, now);
             case "stop-failure":
                 // A foreground subagent is a tool call of the turn: the turn cannot end while it runs.
                 return Interrupt(r => !r.Background, now);
@@ -146,6 +147,10 @@ public sealed class SubagentTracker
             run.Settled = true;
         }
         var changed = false;
+        if (progress.ResolvedPath is { Length: > 0 } resolved && !string.Equals(run.TranscriptPath, resolved, StringComparison.Ordinal))
+        {
+            run.TranscriptPath = resolved;
+        }
         run.TranscriptOffset = progress.ToOffset;
         if (progress.Tools > 0)
         {
@@ -232,7 +237,9 @@ public sealed class SubagentTracker
         {
             return false;
         }
-        if (String(doc.RootElement, "agent_transcript_path") is { Length: > 0 } path && run.TranscriptPath is null)
+        if (String(doc.RootElement, "agent_transcript_path") is { Length: > 0 } path
+            && (run.TranscriptPath is null
+                || (run.TranscriptOffset == 0 && !string.Equals(run.TranscriptPath, path, StringComparison.Ordinal))))
         {
             run.TranscriptPath = path;
         }
@@ -271,6 +278,37 @@ public sealed class SubagentTracker
     {
         _launches.Clear();
         return _runs.RemoveAll(r => r.IsFinished) > 0;
+    }
+
+    private bool OnTurnStop(string payload, DateTimeOffset now)
+    {
+        var bg = SignalBackgroundTasks.Read(payload);
+        var changed = false;
+        foreach (var task in bg.ActiveSubagents)
+        {
+            if (string.IsNullOrEmpty(task.Id))
+            {
+                continue;
+            }
+            if (_runs.FirstOrDefault(r => r.Id == task.Id) is { } run)
+            {
+                run.Background = true;
+                if (run.Description is null && !string.IsNullOrWhiteSpace(task.Description))
+                {
+                    run.Description = task.Description;
+                    changed = true;
+                }
+            }
+        }
+        if (bg.HasActiveWorkflow)
+        {
+            // Workflow subagents are launched by the Workflow tool (not PreToolUse(Agent)) and run inside the
+            // background workflow after the main turn pauses: leave running ones alone until they report SubagentStop.
+            _launches.Clear();
+            return changed;
+        }
+        // A foreground subagent is a tool call of the turn: the turn cannot end while it runs.
+        return Interrupt(r => !r.Background, now) || changed;
     }
 
     private bool Interrupt(Func<SubagentRun, bool> which, DateTimeOffset now)

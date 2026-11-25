@@ -8,7 +8,7 @@ namespace Octopus.Agents.Subagents;
 public sealed record SubagentMeta(string? Description, string? ToolUseId, bool Background);
 
 /// <summary>What one read of a subagent's transcript found, from <see cref="FromOffset"/> to <see cref="ToOffset"/>.</summary>
-public sealed record SubagentProgress(long FromOffset, long ToOffset, int Tools, string? LastAction, SubagentMeta? Meta);
+public sealed record SubagentProgress(long FromOffset, long ToOffset, int Tools, string? LastAction, SubagentMeta? Meta, string? ResolvedPath = null);
 
 /// <summary>
 /// Reads a subagent's own transcript as it grows, for the tool calls it makes, and its <c>.meta.json</c>. Claude Code
@@ -37,7 +37,9 @@ public static class SubagentTranscript
     /// <summary>Reads what was appended since <paramref name="offset"/>, and the meta file when <paramref name="withMeta"/>.</summary>
     public static SubagentProgress Read(string transcriptPath, long offset, bool withMeta)
     {
-        var meta = withMeta ? ReadMeta(Path.ChangeExtension(transcriptPath, ".meta.json")) : null;
+        var resolvedPath = offset == 0 ? ResolveWorkflowPath(transcriptPath) : null;
+        var effectivePath = resolvedPath ?? transcriptPath;
+        var meta = withMeta ? ReadMeta(Path.ChangeExtension(effectivePath, ".meta.json")) : null;
         var requested = offset;
         var tools = 0;
         string? last = null;
@@ -47,12 +49,12 @@ public static class SubagentTranscript
         {
             // Polled every second while the subagent runs: a stat is enough to see that nothing was added, so the
             // file is opened only when it grew (and never when it is not there, as for a remote session).
-            var info = new FileInfo(transcriptPath);
+            var info = new FileInfo(effectivePath);
             if (!info.Exists || info.Length == offset)
             {
-                return new SubagentProgress(requested, end, 0, null, meta);
+                return new SubagentProgress(requested, end, 0, null, meta, resolvedPath);
             }
-            using var stream = new FileStream(transcriptPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1);
+            using var stream = new FileStream(effectivePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1);
             if (stream.Length < offset)
             {
                 // Rewritten from the start: read it again.
@@ -91,7 +93,48 @@ public static class SubagentTranscript
                 ArrayPool<byte>.Shared.Return(buffer);
             }
         }
-        return new SubagentProgress(requested, end, tools, last, meta);
+        return new SubagentProgress(requested, end, tools, last, meta, resolvedPath);
+    }
+
+    /// <summary>
+    /// Claude Code places dynamic-workflow subagent transcripts under <c>subagents/workflows/&lt;runId&gt;/agent-&lt;id&gt;.jsonl</c>
+    /// rather than directly under <c>subagents/</c>. When the direct path does not exist yet, look in the session's
+    /// <c>workflows</c> subdirectories once so future polls stat the real path directly.
+    /// </summary>
+    private static string? ResolveWorkflowPath(string transcriptPath)
+    {
+        try
+        {
+            if (File.Exists(transcriptPath) || File.Exists(Path.ChangeExtension(transcriptPath, ".meta.json")))
+            {
+                return null;
+            }
+            var dir = Path.GetDirectoryName(transcriptPath);
+            if (string.IsNullOrEmpty(dir)
+                || !string.Equals(Path.GetFileName(dir), "subagents", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            var workflowsDir = Path.Combine(dir, "workflows");
+            if (!Directory.Exists(workflowsDir))
+            {
+                return null;
+            }
+            var fileName = Path.GetFileName(transcriptPath);
+            var metaName = Path.ChangeExtension(fileName, ".meta.json");
+            foreach (var runDir in Directory.EnumerateDirectories(workflowsDir))
+            {
+                var candidate = Path.Combine(runDir, fileName);
+                if (File.Exists(candidate) || File.Exists(Path.Combine(runDir, metaName)))
+                {
+                    return candidate;
+                }
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+        return null;
     }
 
     public static SubagentMeta? ReadMeta(string path)

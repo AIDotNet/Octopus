@@ -47,6 +47,18 @@ public static class SignalStatusMap
         return null;
     }
 
-    /// <summary>Convenience for a received signal.</summary>
-    public static SignalStatus? Resolve(AgentDefinition definition, AgentSignal signal) => Resolve(definition, signal.Channel);
+    /// <summary>
+    /// Resolves a received signal's status. A turn-end signal (<see cref="SignalStatus.Done"/>) whose payload reports
+    /// active local background work (such as a Claude Code dynamic workflow or background subagent) keeps the session
+    /// <see cref="SignalStatus.Working"/> until that work completes.
+    /// </summary>
+    public static SignalStatus? Resolve(AgentDefinition definition, AgentSignal signal)
+    {
+        var status = Resolve(definition, signal.Channel);
+        if (status == SignalStatus.Done && SignalBackgroundTasks.Read(signal.Payload).HasActiveLocalWork)
+        {
+            return SignalStatus.Working;
+        }
+        return status;
+    }
 }

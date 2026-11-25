@@ -96,6 +96,56 @@ public class SubagentTrackerTests
     }
 
     [Fact]
+    public void Turn_stop_with_active_workflow_or_background_subagent_keeps_running_subagents_alive()
+    {
+        var tracker = new SubagentTracker();
+        // A workflow subagent has no PreToolUse(Agent) launch, so Background starts false.
+        tracker.Apply("subagent-start", Start("wf_agent_1", "general-purpose"), T0);
+
+        var stopWithWorkflow = JsonSerializer.Serialize(new
+        {
+            hook_event_name = "Stop",
+            background_tasks = new[]
+            {
+                new { id = "w12345678", type = "workflow", status = "running", name = "code-editor-remaining-phases", description = "Run phases" },
+            },
+        });
+        Assert.False(tracker.Apply("stop", stopWithWorkflow, T0.AddSeconds(3)));
+        Assert.Equal(SubagentState.Running, tracker.Runs[0].State);
+
+        // When the workflow subagent finishes, SubagentStop provides the real workflows/<runId>/ transcript path.
+        var workflowTranscript = "/home/u/.claude/projects/-w/20f97ccc/subagents/workflows/wf_abc123/agent-wf_agent_1.jsonl";
+        Assert.True(tracker.Apply("subagent-stop", JsonSerializer.Serialize(new
+        {
+            hook_event_name = "SubagentStop",
+            agent_id = "wf_agent_1",
+            agent_type = "general-purpose",
+            agent_transcript_path = workflowTranscript,
+        }), T0.AddSeconds(10)));
+        Assert.Equal(SubagentState.Done, tracker.Runs[0].State);
+        Assert.Equal(workflowTranscript, tracker.Runs[0].TranscriptPath);
+
+        // Default-background subagent (no run_in_background flag in PreToolUse) vs genuinely interrupted foreground run.
+        tracker.Apply("subagent-start", Start("bg_default_1", "Explore"), T0.AddSeconds(11));
+        tracker.Apply("subagent-start", Start("fg_orphan_1", "Explore"), T0.AddSeconds(11));
+        var stopWithBgSubagent = JsonSerializer.Serialize(new
+        {
+            hook_event_name = "Stop",
+            background_tasks = new[]
+            {
+                new { id = "bg_default_1", type = "subagent", status = "running", agent_type = "Explore", description = "Scan repo" },
+            },
+        });
+        Assert.True(tracker.Apply("stop", stopWithBgSubagent, T0.AddSeconds(12)));
+        var bgRun = tracker.Runs.Single(r => r.Id == "bg_default_1");
+        var fgRun = tracker.Runs.Single(r => r.Id == "fg_orphan_1");
+        Assert.Equal(SubagentState.Running, bgRun.State);
+        Assert.True(bgRun.Background);
+        Assert.Equal("Scan repo", bgRun.Description);
+        Assert.Equal(SubagentState.Interrupted, fgRun.State);
+    }
+
+    [Fact]
     public void A_compaction_keeps_the_list_and_a_new_session_clears_it()
     {
         var tracker = new SubagentTracker();
@@ -199,6 +249,29 @@ public class SubagentTranscriptTests
         tracker.Apply("subagent-stop", JsonSerializer.Serialize(new { agent_id = "a1" }), DateTimeOffset.Now);
         tracker.ApplyProgress(run, SubagentTranscript.Read(run.TranscriptPath!, run.TranscriptOffset, false), final: true);
         Assert.False(run.NeedsRead);
+    }
+
+    [Fact]
+    public void Reads_workflow_subagent_transcripts_under_workflows_subdirectory()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-wf-subagent-").FullName;
+        var sessionTranscript = Path.Combine(dir, "s.jsonl");
+        var workflowDir = Path.Combine(dir, "s", "subagents", "workflows", "wf_run123");
+        Directory.CreateDirectory(workflowDir);
+        var realTranscript = Path.Combine(workflowDir, "agent-a1.jsonl");
+        File.WriteAllText(realTranscript, ToolUse("Edit", """{"file_path":"/w/CodeEditor.cs"}"""));
+        File.WriteAllText(Path.Combine(workflowDir, "agent-a1.meta.json"),
+            """{"agentType":"general-purpose","description":"Implement editing commands"}""");
+
+        var tracker = new SubagentTracker();
+        tracker.Apply("subagent-start", JsonSerializer.Serialize(new { agent_id = "a1", agent_type = "general-purpose", transcript_path = sessionTranscript }), DateTimeOffset.Now);
+        var run = tracker.Runs.Single();
+
+        var progress = SubagentTranscript.Read(run.TranscriptPath!, run.TranscriptOffset, !run.MetaRead);
+        Assert.Equal(realTranscript, progress.ResolvedPath);
+        Assert.True(tracker.ApplyProgress(run, progress));
+        Assert.Equal(realTranscript, run.TranscriptPath);
+        Assert.Equal((1, "Edit CodeEditor.cs", "Implement editing commands"), (run.ToolCount, run.LastAction, run.Description));
     }
 
     [Theory]

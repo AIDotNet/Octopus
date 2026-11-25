@@ -223,6 +223,36 @@ public class SignalSchemaTests
         Assert.Equal(SignalStatus.Done, SignalStatusMap.Resolve(Builtins.Get("opencode"), new AgentSignal("opencode", "session-idle", "i", "", 0, 0, "{}")));
     }
 
+    [Fact]
+    public void Stop_with_active_background_workflow_or_subagent_stays_working()
+    {
+        var claude = Builtins.Get("claude");
+        AgentSignal StopWith(string payload) => new("claude", "stop", "item-1", "", 0, 0, payload);
+
+        // Claude Code 2.1.332 pauses the main turn with Stop + background_tasks while a dynamic workflow runs.
+        Assert.Equal(SignalStatus.Working, SignalStatusMap.Resolve(claude, StopWith(
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"w12345678","type":"workflow","status":"running","name":"code-editor-remaining-phases","description":"Run remaining phases"}]}""")));
+        Assert.Equal(SignalStatus.Working, SignalStatusMap.Resolve(claude, StopWith(
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"a12345678","type":"subagent","status":"pending","agent_type":"Explore","description":"Scan files"}]}""")));
+
+        // Background shells, monitors, scheduled crons, completed tasks, and empty arrays still finish the turn.
+        Assert.Equal(SignalStatus.Done, SignalStatusMap.Resolve(claude, StopWith(
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"b12345678","type":"shell","status":"running","command":"npm run dev","description":"dev server"}]}""")));
+        Assert.Equal(SignalStatus.Done, SignalStatusMap.Resolve(claude, StopWith(
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"m12345678","type":"monitor","status":"running","description":"watch"}]}""")));
+        Assert.Equal(SignalStatus.Done, SignalStatusMap.Resolve(claude, StopWith(
+            """{"hook_event_name":"Stop","background_tasks":[{"id":"w12345678","type":"workflow","status":"completed","name":"done"}]}""")));
+        Assert.Equal(SignalStatus.Done, SignalStatusMap.Resolve(claude, StopWith(
+            """{"hook_event_name":"Stop","background_tasks":[],"session_crons":[{"id":"c1","schedule":"*/5 * * * *","recurring":true,"prompt":"check"}]}""")));
+        Assert.Equal(SignalStatus.Done, SignalStatusMap.Resolve(claude, StopWith("not json")));
+
+        // Cloud sessions and teammates are tracked as delegated work (gated by title activity in ItemActivityService).
+        var cloud = SignalBackgroundTasks.Read(
+            """{"background_tasks":[{"id":"r12345678","type":"cloud session","status":"running","description":"Cloud workflow"}]}""");
+        Assert.False(cloud.HasActiveLocalWork);
+        Assert.True(cloud.HasActiveDelegatedWork);
+    }
+
     [Theory]
     [InlineData("2.1.322", "2.1.80", true)]
     [InlineData("2.1.80", "2.1.80", true)]
