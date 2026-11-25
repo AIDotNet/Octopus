@@ -51,13 +51,14 @@ internal sealed class TokenBinding(ArcDesignTokenKind kind, IDisposable subscrip
 /// properties are applied again, and only when they changed. Unknown component types render as a visible placeholder
 /// instead of failing.
 /// </summary>
-public sealed class UiRenderer(IUiEventSink sink)
+public sealed class UiRenderer(IUiEventSink sink, string? packageDirectory = null)
 {
     public const int MaxNodes = 20_000;
 
     private int _nodes;
 
     internal IUiEventSink Sink => sink;
+    internal string? PackageDirectory => packageDirectory;
 
     /// <summary>Renders <paramref name="tree"/>, reusing <paramref name="previous"/> (the result of the last render) where it can.</summary>
     public Control Render(JsonNode? tree, Control? previous)

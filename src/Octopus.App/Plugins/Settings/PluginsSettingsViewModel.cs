@@ -605,6 +605,7 @@ public sealed partial class PluginRowViewModel : ObservableObject
         Name = manifest is null ? package.Id : manifest.Localized.Pick(PluginText.Language, "name") ?? manifest.Name;
         Description = manifest is null ? null : manifest.Localized.Pick(PluginText.Language, "description") ?? manifest.Description;
         Icon = Rendering.UiIcons.Parse(manifest?.Icon) ?? TKCode.Arc.Icons.Lucide.LucideIconKind.Puzzle;
+        IconBitmap = Rendering.UiIcons.TryLoadPackageBitmap(package.Directory, manifest?.Icon);
         Permissions = manifest?.Permissions.Requests.Select(r => new PermissionRowViewModel(this, r)).ToList() ?? [];
         Contributions = manifest is null ? [] : Describe(manifest.Contributes);
         Settings = manifest is null ? [] : [.. manifest.Contributes.Configuration.Select(p => PluginConfigField.Create(owner.Config, manifest, p)).OfType<PluginConfigField>()];
@@ -619,6 +620,8 @@ public sealed partial class PluginRowViewModel : ObservableObject
     public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
     public string Version => Package.Manifest?.Version is { } v ? $"v{v}" : "";
     public TKCode.Arc.Icons.Lucide.LucideIconKind Icon { get; }
+    public Avalonia.Media.Imaging.Bitmap? IconBitmap { get; }
+    public bool HasIconBitmap => IconBitmap is not null;
     public string Location => Package.Directory;
     public bool CanUninstall => Package.Source == PluginSource.File;
     public bool IsDevelopment => Package.Source == PluginSource.Dev;

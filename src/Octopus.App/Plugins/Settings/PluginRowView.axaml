@@ -147,10 +147,19 @@
                                 Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                                 BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                                 BorderThickness="1"
+                                ClipToBounds="True"
                                 VerticalAlignment="Center">
-                            <lucide:LucideIcon Kind="{Binding Icon}" Size="16"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                            <Panel>
+                                <Image Source="{Binding IconBitmap}"
+                                       Width="20" Height="20"
+                                       Stretch="Uniform"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       IsVisible="{Binding HasIconBitmap}" />
+                                <lucide:LucideIcon Kind="{Binding Icon}" Size="16"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                   IsVisible="{Binding !HasIconBitmap}" />
+                            </Panel>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                             <StackPanel Orientation="Horizontal" Spacing="8">

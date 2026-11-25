@@ -483,6 +483,13 @@ internal sealed class CodeComponent : IUiComponent
 
 internal static class UiIcons
 {
+    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".ico",
+    };
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Path, long Ticks), Avalonia.Media.Imaging.Bitmap> BitmapCache = new();
+
     /// <summary><c>lucide:chart-column</c> → <see cref="LucideIconKind.ChartColumn"/>; unknown names give null.</summary>
     public static LucideIconKind? Parse(string? reference)
     {
@@ -491,20 +498,79 @@ internal static class UiIcons
         return Enum.TryParse<LucideIconKind>(pascal, ignoreCase: false, out var kind) ? kind : null;
     }
 
-    public static Control? Create(string? reference, double size = 16) =>
-        Parse(reference) is { } kind ? new LucideIcon { Kind = kind, Size = size } : null;
+    /// <summary>Loads a package-relative raster icon (e.g. <c>assets/icon.png</c>) into memory without locking the file.</summary>
+    public static Avalonia.Media.Imaging.Bitmap? TryLoadPackageBitmap(string? packageDirectory, string? reference)
+    {
+        if (string.IsNullOrWhiteSpace(packageDirectory) || string.IsNullOrWhiteSpace(reference)) return null;
+        if (reference.StartsWith("lucide:", StringComparison.Ordinal)) return null;
+        var relative = reference.Replace('\\', '/').Trim();
+        if (relative.Length == 0 || relative.StartsWith('/') || Path.IsPathRooted(relative)) return null;
+        var ext = Path.GetExtension(relative);
+        if (!ImageExtensions.Contains(ext)) return null;
+        try
+        {
+            var root = Path.GetFullPath(packageDirectory);
+            var rootWithSep = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+            var fullPath = Path.GetFullPath(Path.Combine(root, relative));
+            if (!fullPath.StartsWith(rootWithSep, StringComparison.Ordinal)) return null;
+            if (!File.Exists(fullPath)) return null;
+            var ticks = File.GetLastWriteTimeUtc(fullPath).Ticks;
+            return BitmapCache.GetOrAdd((fullPath, ticks), static key =>
+            {
+                var bytes = File.ReadAllBytes(key.Path);
+                using var ms = new MemoryStream(bytes);
+                return new Avalonia.Media.Imaging.Bitmap(ms);
+            });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    public static Control? Create(string? reference, double size = 16, string? packageDirectory = null)
+    {
+        if (TryLoadPackageBitmap(packageDirectory, reference) is { } bitmap)
+        {
+            return new Image
+            {
+                Source = bitmap,
+                Width = size,
+                Height = size,
+                Stretch = Stretch.Uniform,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
+        return Parse(reference) is { } kind ? new LucideIcon { Kind = kind, Size = size } : null;
+    }
 }
 
 internal sealed class IconComponent : IUiComponent
 {
-    public Control Create(NodeState state, UiRenderer renderer) => new LucideIcon();
+    public Control Create(NodeState state, UiRenderer renderer) => new Border();
 
     public void Update(Control control, NodeState state, UiRenderer renderer)
     {
-        var icon = (LucideIcon)control;
-        icon.Kind = UiIcons.Parse(Str(state.Props, "icon")) ?? LucideIconKind.CircleHelp;
-        icon.Size = Str(state.Props, "size") switch { "sm" => 14, "lg" => 22, _ => 16 };
+        var host = (Border)control;
+        var reference = Str(state.Props, "icon");
+        var size = Str(state.Props, "size") switch { "sm" => 14, "lg" => 22, _ => 16 };
+        if (UiIcons.TryLoadPackageBitmap(renderer.PackageDirectory, reference) is { } bitmap)
+        {
+            host.Child = new Image
+            {
+                Source = bitmap,
+                Width = size,
+                Height = size,
+                Stretch = Stretch.Uniform,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            return;
+        }
+        var icon = host.Child as LucideIcon ?? new LucideIcon();
+        icon.Kind = UiIcons.Parse(reference) ?? LucideIconKind.CircleHelp;
+        icon.Size = size;
         if (UiLayout.ColorToken(Str(state.Props, "color")) is { } color) UiRenderer.BindToken(state, icon, LucideIcon.ForegroundProperty, color);
+        host.Child = icon;
     }
 }
 

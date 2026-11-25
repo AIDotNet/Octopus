@@ -109,7 +109,7 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
                 return;
             }
             _plugin = plugin;
-            _renderer = new UiRenderer(_workbench.SinkFor(plugin, InstanceId));
+            _renderer = new UiRenderer(_workbench.SinkFor(plugin, InstanceId), plugin.Package.Directory);
             _workbench.Attach(plugin.Id, InstanceId, this);
             var context = new JsonObject
             {

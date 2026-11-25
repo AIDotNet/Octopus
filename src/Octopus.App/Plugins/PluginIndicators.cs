@@ -131,6 +131,7 @@ public sealed class IndicatorStrip : Panel
     private sealed class IndicatorButton : TKCode.Arc.Button
     {
         private readonly PluginIndicator _indicator;
+        private readonly Image _image = new() { Width = 15, Height = 15, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
         private readonly LucideIcon _icon = new() { Size = 14, VerticalAlignment = VerticalAlignment.Center };
         private readonly MiniRing _ring = new() { VerticalAlignment = VerticalAlignment.Center };
         private readonly TextBlock _text = new() { VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
@@ -150,7 +151,7 @@ public sealed class IndicatorStrip : Panel
             Variant = ButtonVariant.Ghost;
             Size = ControlSize.Small;
             VerticalAlignment = VerticalAlignment.Center;
-            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Children = { _ring, _icon, _text } };
+            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Children = { _ring, _image, _icon, _text } };
             indicator.Updated += OnIndicatorUpdated;
             Click += async (_, _) => await OnClickAsync();
             Apply();
@@ -174,7 +175,10 @@ public sealed class IndicatorStrip : Panel
             IsVisible = _indicator.IsShown && (_indicator.Text is not null || _indicator.Icon is not null || _indicator.Value is not null);
             _text.Text = _indicator.Text;
             _text.IsVisible = _indicator.Text is not null;
-            var kind = UiIcons.Parse(_indicator.Icon);
+            var bitmap = UiIcons.TryLoadPackageBitmap(_indicator.Plugin.Package.Directory, _indicator.Icon);
+            _image.Source = bitmap;
+            _image.IsVisible = bitmap is not null && _indicator.Value is null;
+            var kind = bitmap is null ? UiIcons.Parse(_indicator.Icon) : null;
             _icon.IsVisible = kind is not null && _indicator.Value is null;
             if (kind is { } k) _icon.Kind = k;
             _ring.IsVisible = _indicator.Value is not null;
@@ -210,7 +214,7 @@ public sealed class IndicatorStrip : Panel
             if (json is null || JsonNode.Parse(json) is not JsonObject result || result["tree"] is not { } tree) return;
             var workbench = AppHost.Get<PluginWorkbench>();
             _instanceId = result["instanceId"]?.GetValue<string>() ?? $"indicator:{_indicator.Id}";
-            _renderer ??= new UiRenderer(workbench.SinkFor(plugin, _instanceId));
+            _renderer ??= new UiRenderer(workbench.SinkFor(plugin, _instanceId), plugin.Package.Directory);
             var instanceId = _instanceId;
             // The content scrolls once it passes the height cap: a popover listing several agents and accounts is
             // taller than the window can show. The padding sits inside the scroll area, so the bar runs along the edge.
