@@ -17,7 +17,7 @@ Organize terminals, 40+ AI coding agents, files, Git worktrees, SSH tunnels, and
 [![Avalonia 12.2](https://img.shields.io/badge/Avalonia-12.2.0-8B44AC?style=flat-square)](https://avaloniaui.net/)
 [![TKCode.Arc 1.3](https://img.shields.io/badge/TKCode.Arc-1.3.1-0EA5E9?style=flat-square)](https://docs.tkcode.si)
 
-[Website](https://octoterm.si/en) · [Downloads](https://github.com/AIDotNet/Octopus/releases) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/AIDotNet/Octopus/issues)
+[Website](https://octoterm.si/en) · [Downloads](https://github.com/AIDotNet/Octopus/releases) · [Changelog](CHANGELOG.md) · [Issues](https://github.com/AIDotNet/Octopus/issues) · [WeChat Group](#community)
 
 </div>
 
@@ -240,6 +240,14 @@ tools/package-linux.sh 1.0.0 <linux-x64-publish-dir> dist
 - **Full Release Procedure**: See [`.agents/skills/publish-release/SKILL.md`](.agents/skills/publish-release/SKILL.md).
 
 </details>
+
+---
+
+## Community
+
+Scan the QR code below to join the Octopus WeChat group:
+
+<img src="images/wechat.png" alt="Octopus WeChat Group" width="260" />
 
 ---
 

@@ -17,7 +17,7 @@
 [![Avalonia 12.2](https://img.shields.io/badge/Avalonia-12.2.0-8B44AC?style=flat-square)](https://avaloniaui.net/)
 [![TKCode.Arc 1.3](https://img.shields.io/badge/TKCode.Arc-1.3.1-0EA5E9?style=flat-square)](https://docs.tkcode.si)
 
-[官网](https://octoterm.si/) · [下载安装包](https://github.com/AIDotNet/Octopus/releases) · [更新日志](CHANGELOG.md) · [反馈问题](https://github.com/AIDotNet/Octopus/issues)
+[官网](https://octoterm.si/) · [下载安装包](https://github.com/AIDotNet/Octopus/releases) · [更新日志](CHANGELOG.md) · [反馈问题](https://github.com/AIDotNet/Octopus/issues) · [交流群](#交流群)
 
 </div>
 
@@ -240,6 +240,14 @@ tools/package-linux.sh 1.0.0 <linux-x64 发布目录> dist
 - **完整发版流程**：见 [`.agents/skills/publish-release/SKILL.md`](.agents/skills/publish-release/SKILL.md)。
 
 </details>
+
+---
+
+## 交流群
+
+欢迎扫码加入 Octopus 微信交流群：
+
+<img src="images/wechat.png" alt="Octopus 微信交流群" width="260" />
 
 ---
 
