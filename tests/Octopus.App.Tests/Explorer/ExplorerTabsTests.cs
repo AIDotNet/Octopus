@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Octopus.App.Explorer;
 using TKCode.Arc;
+using TKCode.Arc.Localization;
 using TKCode.Arc.Motion;
 using TKCode.Arc.Primitives;
 using Xunit;
@@ -160,6 +161,97 @@ public class ExplorerTabsTests
 
         window.Close();
         view.Model.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task Switching_tabs_never_jumps_the_tab_bar_between_the_top_row_and_second_row()
+    {
+        if (ExplorerFixture.FindGit() is null) return;
+        var previousLanguage = ArcLanguage.Current;
+        ArcLanguage.Set(LanguageTags.EnUS);
+        try
+        {
+            using var repo = new ExplorerFixture();
+            repo.InitRepository();
+            repo.Write("a.txt", "x");
+
+            var view = new ExplorerPanelView();
+            var window = new Window { Width = 304, Height = 400, Content = view };
+            window.Show();
+            Frames.Pump();
+
+            view.ProjectPath = repo.Root;
+            await WaitUntil(() => view.Model.IsGitRepository && view.Model.ChangeCount > 0);
+            Frames.Pump();
+            window.UpdateLayout();
+
+            var group = view.GetVisualDescendants().OfType<ExplorerTabGroup>().Single();
+            var topBar = view.GetVisualDescendants().OfType<Border>().First(b => b.Name == "TopBar");
+            var labels = group.GetVisualDescendants().OfType<TabLabelReveal>().ToList();
+            Assert.Equal(3, labels.Count);
+
+            // Compute the narrowest (Files) vs widest settled width and pick a TrailingInset right in between:
+            // Files alone would fit in row 0, while the widest tab (Changes/Sessions) would not.
+            var filesWidth = group.DesiredSize.Width;
+            var maxWidth = group.ComputeMaxSettledWidth();
+            Assert.True(maxWidth > filesWidth, $"expected widest tab ({maxWidth}) to exceed Files ({filesWidth})");
+
+            var midAvailable = group.Margin.Left + (filesWidth + maxWidth) / 2 + 6;
+            view.TrailingInset = view.Bounds.Width - midAvailable;
+            Frames.Pump();
+            window.UpdateLayout();
+
+            // Because the widest tab does not fit beside the trailing corner, the tab bar starts in row 1
+            // and stays in row 1 across every tab switch and every animation frame.
+            Assert.Equal(1, Grid.GetRow(group));
+            var row1Top = group.TranslatePoint(default, topBar)!.Value.Y;
+            Assert.True(row1Top >= topBar.Bounds.Height);
+
+            foreach (var targetIndex in new[] { 1, 2, 0, 1 })
+            {
+                var observedRows = new HashSet<int>();
+                ClickContainer(window, group, targetIndex);
+                Assert.True(StepUntil(
+                    () => !labels.Any(l => l.IsRunning),
+                    () => observedRows.Add(Grid.GetRow(group))));
+                Frames.Pump();
+                window.UpdateLayout();
+                observedRows.Add(Grid.GetRow(group));
+                Assert.Equal([1], observedRows.ToArray());
+                Assert.Equal(maxWidth, group.ComputeMaxSettledWidth(), 0.5);
+            }
+
+            // Widening the panel enough for the widest tab (+ hysteresis) moves the bar up to row 0,
+            // and switching across all tabs keeps it in row 0 without overlapping the trailing inset.
+            view.TrailingInset = 44;
+            Frames.Pump();
+            window.UpdateLayout();
+            Assert.Equal(0, Grid.GetRow(group));
+
+            foreach (var targetIndex in new[] { 2, 0, 1 })
+            {
+                var observedRows = new HashSet<int>();
+                ClickContainer(window, group, targetIndex);
+                Assert.True(StepUntil(
+                    () => !labels.Any(l => l.IsRunning),
+                    () =>
+                    {
+                        observedRows.Add(Grid.GetRow(group));
+                        Assert.True(group.Margin.Left + group.Bounds.Width <= view.Bounds.Width - view.TrailingInset + 0.5);
+                    }));
+                Frames.Pump();
+                window.UpdateLayout();
+                observedRows.Add(Grid.GetRow(group));
+                Assert.Equal([0], observedRows.ToArray());
+            }
+
+            window.Close();
+            view.Model.Dispose();
+        }
+        finally
+        {
+            ArcLanguage.Set(previousLanguage);
+        }
     }
 
     /// <summary>

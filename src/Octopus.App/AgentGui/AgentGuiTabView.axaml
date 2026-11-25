@@ -5,6 +5,7 @@
              xmlns:l="using:Octopus.App.Localization"
              xmlns:common="using:Octopus.App.Common"
              xmlns:gui="using:Octopus.App.AgentGui"
+             xmlns:ticker="using:Octopus.Ticker"
              x:Class="Octopus.App.AgentGui.AgentGuiTabView"
              x:DataType="gui:AgentGuiTabViewModel">
     <UserControl.Styles>
@@ -158,8 +159,8 @@
             <Setter Property="Foreground" Value="#DC2626" />
         </Style>
 
-        <!-- User turn hover-revealed quick actions -->
-        <Style Selector="Border.userBubble StackPanel.turnActions">
+        <!-- User turn hover-revealed quick actions (shown below the bubble) -->
+        <Style Selector="StackPanel.userTurn StackPanel.turnActions">
             <Setter Property="Opacity" Value="0" />
             <Setter Property="Transitions">
                 <Transitions>
@@ -167,7 +168,7 @@
                 </Transitions>
             </Setter>
         </Style>
-        <Style Selector="Border.userBubble:pointerover StackPanel.turnActions, Border.userBubble:focus-within StackPanel.turnActions">
+        <Style Selector="StackPanel.userTurn:pointerover StackPanel.turnActions, StackPanel.userTurn:focus-within StackPanel.turnActions">
             <Setter Property="Opacity" Value="0.88" />
         </Style>
 
@@ -681,7 +682,6 @@
         <!-- Scheme C: Single fixed slot inside the 3-line sliding live ticker (pure text, zero card) -->
         <DataTemplate DataType="gui:WorkTickerLineViewModel">
             <Grid IsVisible="{Binding IsVisible}"
-                  Opacity="{Binding RowOpacity}"
                   ColumnDefinitions="14,Auto,*,Auto"
                   ColumnSpacing="6"
                   Margin="0,1">
@@ -715,11 +715,7 @@
 
         <!-- Scheme C: Fixed 3-slot sliding live ticker container (mounted ONLY while streaming & collapsed) -->
         <DataTemplate DataType="gui:WorkTickerViewModel">
-            <StackPanel Margin="15,2,0,0" Spacing="1">
-                <ContentControl Content="{Binding Line0}" />
-                <ContentControl Content="{Binding Line1}" />
-                <ContentControl Content="{Binding Line2}" />
-            </StackPanel>
+            <ticker:WorkTickerViewport Margin="15,2,0,0" Spacing="1" />
         </DataTemplate>
 
         <!-- Lazy pure-text tool detail template (mounted ONLY when user clicks a tool step row; zero cards) -->
@@ -832,7 +828,7 @@
                 <Button Classes="workStep"
                         Command="{Binding ToggleExpandedCommand}"
                         IsHitTestVisible="{Binding CanExpand}">
-                    <Grid ColumnDefinitions="14,Auto,*,Auto,Auto" ColumnSpacing="7">
+                    <Grid ColumnDefinitions="14,*,Auto,Auto" ColumnSpacing="7">
                         <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
                             <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" VerticalAlignment="Center" />
                             <TextBlock Classes="stepMark"
@@ -840,18 +836,22 @@
                                        IsVisible="{Binding !IsRunning}"
                                        Text="{Binding StatusMark}" />
                         </Panel>
-                        <TextBlock Grid.Column="1"
-                                   Classes="stepVerb"
-                                   Classes.failed="{Binding IsFailed}"
-                                   Text="{Binding Verb}"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2"
-                                   Classes="stepTarget"
-                                   Classes.thought="{Binding IsThought}"
-                                   Classes.failed="{Binding IsFailed}"
-                                   Text="{Binding Target}"
-                                   VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <Grid Grid.Column="1" ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0"
+                                       Classes="stepVerb"
+                                       Classes.failed="{Binding IsFailed}"
+                                       IsVisible="{Binding HasVerb}"
+                                       Margin="0,0,7,0"
+                                       Text="{Binding Verb}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Classes="stepTarget"
+                                       Classes.thought="{Binding IsProse}"
+                                       Classes.failed="{Binding IsFailed}"
+                                       Text="{Binding Target}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                             <TextBlock IsVisible="{Binding HasAddedStats}"
                                        Text="{Binding AddedStatsText}"
                                        FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
@@ -861,7 +861,7 @@
                                        FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
                                        FontSize="11" Foreground="#DC2626" />
                         </StackPanel>
-                        <TextBlock Grid.Column="4"
+                        <TextBlock Grid.Column="3"
                                    IsVisible="{Binding HasMeta}"
                                    Text="{Binding MetaText}"
                                    FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
@@ -892,6 +892,14 @@
                                                              FontSize="12"
                                                              LineHeight="18"
                                                              Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                    </arc:ScrollArea>
+
+                                    <!-- Intermediate text step (folded into work area) -->
+                                    <arc:ScrollArea IsVisible="{Binding IsText}"
+                                                    MaxHeight="220"
+                                                    Orientation="Vertical"
+                                                    FadeLength="0">
+                                        <arc:Markdown Text="{Binding NoteText}" />
                                     </arc:ScrollArea>
 
                                     <!-- Plan step pure-text checklist -->
@@ -986,10 +994,16 @@
             </Border>
         </DataTemplate>
 
-        <!-- User turn: compact right-aligned quiet capsule with hover-revealed edit-resend & copy -->
+        <!-- User turn: compact right-aligned quiet capsule with hover-revealed edit-resend & copy below -->
         <DataTemplate DataType="gui:UserTurnItem">
-            <StackPanel HorizontalAlignment="Right" MaxWidth="640" Margin="40,2,0,2" Spacing="3">
+            <StackPanel Classes="userTurn"
+                        Background="Transparent"
+                        HorizontalAlignment="Right"
+                        MaxWidth="640"
+                        Margin="40,2,0,0"
+                        Spacing="2">
                 <Border Classes="userBubble"
+                        HorizontalAlignment="Right"
                         Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                         BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                         BorderThickness="1"
@@ -1015,28 +1029,38 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                            <SelectableTextBlock Text="{Binding Text}"
+                        <StackPanel Spacing="2">
+                            <SelectableTextBlock Text="{Binding DisplayText}"
                                                  TextWrapping="Wrap"
                                                  FontSize="{arc:ArcDesignTokenResource TypeSM}"
                                                  LineHeight="19"
                                                  Foreground="{arc:ArcDesignTokenResource Foreground}" />
-                            <StackPanel Grid.Column="1" Classes="turnActions" Orientation="Horizontal" Spacing="2" VerticalAlignment="Top">
-                                <arc:Button Classes="icon" Variant="Ghost"
-                                            IsVisible="{Binding CanReuse}"
-                                            Command="{Binding ReuseCommand}"
-                                            AutomationProperties.Name="{l:AppLangResource AgentGuiReusePrompt}"
-                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiReusePrompt}">
-                                    <lucide:LucideIcon Kind="Pencil" Size="11" />
-                                </arc:Button>
-                                <arc:CopyButton IsIconOnly="True"
-                                                Value="{Binding Text}"
-                                                AutomationProperties.Name="{l:AppLangResource AgentGuiCopyPrompt}"
-                                                arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyPrompt}" />
-                            </StackPanel>
-                        </Grid>
+                            <Button Classes="textLink accent"
+                                    HorizontalAlignment="Left"
+                                    IsVisible="{Binding IsCollapsible}"
+                                    Command="{Binding ToggleExpandedCommand}"
+                                    Content="{Binding ToggleExpandedText}" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
+                <StackPanel Classes="turnActions"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Spacing="2">
+                    <arc:Button Classes="icon" Variant="Ghost"
+                                VerticalAlignment="Center"
+                                IsVisible="{Binding CanReuse}"
+                                Command="{Binding ReuseCommand}"
+                                AutomationProperties.Name="{l:AppLangResource AgentGuiReusePrompt}"
+                                arc:Tooltip.Tip="{l:AppLangResource AgentGuiReusePrompt}">
+                        <lucide:LucideIcon Kind="Pencil" Size="11" />
+                    </arc:Button>
+                    <arc:CopyButton IsIconOnly="True"
+                                    VerticalAlignment="Center"
+                                    Value="{Binding Text}"
+                                    AutomationProperties.Name="{l:AppLangResource AgentGuiCopyPrompt}"
+                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyPrompt}" />
+                </StackPanel>
             </StackPanel>
         </DataTemplate>
 

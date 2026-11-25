@@ -1,6 +1,9 @@
 using System.Text.Json;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Octopus.Acp.Dialects;
 using Octopus.Acp.Process;
 using Octopus.Acp.Protocol;
@@ -17,6 +20,8 @@ using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Platform;
 using Octopus.Storage;
+using Octopus.Ticker;
+using TKCode.Arc.Motion;
 using Xunit;
 
 namespace Octopus.App.Tests;
@@ -680,7 +685,7 @@ public class AgentGuiTests
             firstUserTurn.ReuseCommand.Execute(null);
             Assert.Equal("First task", vm.InputText);
 
-            // Single unified work area records all tools in chronological order with lazy expansion (zero cards).
+            // Single unified work area folds prior intermediate text + all tools in chronological order with lazy expansion.
             var lastAssistant = vm.Timeline.OfType<AssistantTurnItem>().Last();
             lastAssistant.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "run1", Kind = "execute", Title = "dotnet build", Status = "in_progress" });
             lastAssistant.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "r1", Kind = "read", Title = "Read A.cs", Status = "completed" });
@@ -694,7 +699,7 @@ public class AgentGuiTests
                 Diffs = [new AcpToolDiff { Path = "A.cs", OldText = "a", NewText = "b" }],
             });
             Assert.True(lastAssistant.HasWorkArea);
-            Assert.Equal(4, lastAssistant.WorkStepCount);
+            Assert.Equal(5, lastAssistant.WorkStepCount); // 1 folded prior text + 4 tool calls
             Assert.Null(lastAssistant.ExpandedWorkSteps); // collapsed by default -> zero mounted step controls!
             var editTool = Assert.Single(lastAssistant.ToolCalls, t => t.ToolCallId == "e1");
             Assert.True(editTool.CanOpenDiff);
@@ -704,7 +709,7 @@ public class AgentGuiTests
             lastAssistant.ToggleWorkExpandedCommand.Execute(null);
             Assert.True(lastAssistant.IsWorkExpanded);
             Assert.NotNull(lastAssistant.ExpandedWorkSteps);
-            Assert.Equal(4, lastAssistant.ExpandedWorkSteps!.Count);
+            Assert.Equal(5, lastAssistant.ExpandedWorkSteps!.Count);
             lastAssistant.ToggleWorkExpandedCommand.Execute(null);
             Assert.False(lastAssistant.IsWorkExpanded);
             Assert.Null(lastAssistant.ExpandedWorkSteps);
@@ -833,6 +838,133 @@ public class AgentGuiTests
     }
 
     [AvaloniaFact]
+    public void Live_ticker_slides_rows_upward_with_spring_motion_and_respects_reduced_motion()
+    {
+        var turn = new AssistantTurnItem("codex", "Codex");
+        var host = new AgentGuiTabView();
+        var tickerHost = new ContentControl { Content = turn.LiveTicker };
+        // Mount inside AgentGuiTabView's DataTemplates so the real desktop ticker template & WorkTickerViewport run.
+        var container = new StackPanel();
+        container.DataTemplates.AddRange(host.DataTemplates);
+        container.Children.Add(tickerHost);
+
+        var window = new Window { Width = 640, Height = 300, Content = container };
+        window.Show();
+        try
+        {
+            static bool StepUntil(Func<bool> done, Action? onFrame = null, int milliseconds = 3000)
+            {
+                var end = DateTime.UtcNow.AddMilliseconds(milliseconds);
+                while (DateTime.UtcNow < end)
+                {
+                    Dispatcher.UIThread.RunJobs();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    Dispatcher.UIThread.RunJobs();
+                    onFrame?.Invoke();
+                    if (done()) return true;
+                    Thread.Sleep(16);
+                }
+                return false;
+            }
+
+            // Start with 1 step (Preparing -> Step 1) and settle.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t1", Kind = "edit", Title = "File A.cs", Status = "completed" });
+            tickerHost.Content = turn.LiveTicker;
+            Frames.Pump();
+            window.UpdateLayout();
+
+            var viewport = tickerHost.GetVisualDescendants().OfType<WorkTickerViewport>().Single();
+            Assert.True(StepUntil(() => !viewport.IsRunning));
+            Assert.True(viewport.MeasuredRowHeight > 8);
+            var rowH = viewport.MeasuredRowHeight;
+            var stepY = rowH + viewport.Spacing;
+            Assert.Equal(rowH, viewport.Bounds.Height, 1.0);
+
+            // Grow 1 -> 2 -> 3 rows smoothly.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t2", Kind = "edit", Title = "File B.cs", Status = "completed" });
+            var growthHeights = new List<double>();
+            Assert.True(StepUntil(() => !viewport.IsRunning, () => growthHeights.Add(viewport.Bounds.Height)));
+            var twoRowHeight = 2 * rowH + viewport.Spacing;
+            Assert.Contains(growthHeights, h => h > rowH + 0.5 && h < twoRowHeight - 0.5);
+            Assert.Equal(twoRowHeight, viewport.Bounds.Height, 1.0);
+
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t3", Kind = "edit", Title = "File C.cs", Status = "in_progress" });
+            Assert.True(StepUntil(() => !viewport.IsRunning));
+            var threeRowHeight = 3 * rowH + 2 * viewport.Spacing;
+            Assert.Equal(threeRowHeight, viewport.Bounds.Height, 1.0);
+            Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
+            Assert.Equal(stepY, viewport.GetSlotOffsetY(1), 0.5);
+            Assert.Equal(2 * stepY, viewport.GetSlotOffsetY(2), 0.5);
+
+            // In-place update of t3 must NOT trigger a slide animation.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t3", Kind = "edit", Title = "File C.cs", Status = "completed" });
+            Assert.False(viewport.IsRunning);
+            Assert.Equal(0.0, viewport.RemainingShift, 0.01);
+
+            // 3 -> 3 upward shift: t4 enters at bottom, t1 exits at top with smooth upward slide and constant height.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t4", Kind = "edit", Title = "File D.cs", Status = "in_progress" });
+            Assert.True(viewport.IsRunning);
+            Assert.True(viewport.IsExitVisible(0));
+            Assert.Equal("File A.cs", turn.LiveTicker!.Exit0.Target);
+
+            var line0Ys = new List<double>();
+            var exit0Ys = new List<double>();
+            var heights = new List<double>();
+            Assert.True(StepUntil(
+                () => !viewport.IsRunning,
+                () =>
+                {
+                    line0Ys.Add(viewport.GetSlotOffsetY(0));
+                    if (viewport.IsExitVisible(0)) exit0Ys.Add(viewport.GetExitOffsetY(0));
+                    heights.Add(viewport.Bounds.Height);
+                }));
+
+            Assert.True(line0Ys.Count >= 3, $"expected smooth upward frames, got {line0Ys.Count}");
+            Assert.Contains(line0Ys, y => y > 0.5 && y < stepY - 0.5);
+            Assert.Contains(exit0Ys, y => y < -0.5 && y > -stepY + 0.5);
+            Assert.All(heights, h => Assert.Equal(threeRowHeight, h, 1.0));
+
+            // Settled: exiting ghost hidden and slots rest at exact positions & opacities.
+            Assert.False(viewport.IsExitVisible(0));
+            Assert.False(turn.LiveTicker.Exit0.IsVisible);
+            Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
+            Assert.Equal(stepY, viewport.GetSlotOffsetY(1), 0.5);
+            Assert.Equal(2 * stepY, viewport.GetSlotOffsetY(2), 0.5);
+            Assert.Equal(0.38, viewport.GetSlotOpacity(0), 0.02);
+            Assert.Equal(0.66, viewport.GetSlotOpacity(1), 0.02);
+            Assert.Equal(1.0, viewport.GetSlotOpacity(2), 0.02);
+
+            // Mid-flight rapid shift: t5 starts sliding, then t6 arrives mid-flight without jumping backwards.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t4", Kind = "edit", Title = "File D.cs", Status = "completed" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t5", Kind = "edit", Title = "File E.cs", Status = "in_progress" });
+            Assert.True(StepUntil(() => viewport.RemainingShift < 0.75 && viewport.RemainingShift > 0.15));
+            var midVisualYOfSlot1 = viewport.GetSlotOffsetY(1); // File D.cs is currently at slot 1
+
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t5", Kind = "edit", Title = "File E.cs", Status = "completed" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t6", Kind = "edit", Title = "File F.cs", Status = "in_progress" });
+            // File D.cs shifted from slot 1 -> slot 0; its visual Y on screen stays continuous!
+            Assert.Equal(midVisualYOfSlot1, viewport.GetSlotOffsetY(0), 1.5);
+            Assert.True(StepUntil(() => !viewport.IsRunning));
+            Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
+
+            // Motion off: shifts settle immediately without waiting for spring frames.
+            ArcMotion.SetLevel(window, ArcMotionLevel.Off);
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t6", Kind = "edit", Title = "File F.cs", Status = "completed" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t7", Kind = "edit", Title = "File G.cs", Status = "in_progress" });
+            Assert.False(viewport.IsRunning);
+            Assert.False(viewport.IsExitVisible(0));
+            Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
+            Assert.Equal("File G.cs", turn.LiveTicker.Line2.Target);
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+            turn.Complete();
+        }
+    }
+
+    [AvaloniaFact]
     public void Assistant_turn_records_independent_thought_steps_across_tools_and_message_ids_inside_single_work_area()
     {
         var turn = new AssistantTurnItem("agy", "Antigravity CLI");
@@ -886,6 +1018,103 @@ public class AgentGuiTests
         finally
         {
             turn.Complete();
+        }
+    }
+
+    [AvaloniaFact]
+    public void Assistant_turn_folds_intermediate_text_into_work_area_without_counting_text_and_keeps_only_final_text_outside()
+    {
+        var turn = new AssistantTurnItem("codex", "Codex");
+        try
+        {
+            // Intermediate text 1 -> Tool 1 -> Intermediate text 2 -> Tool 2 -> Final output text
+            turn.AppendMessage("Let me inspect the repository first.");
+            Assert.Equal("Let me inspect the repository first.", turn.MarkdownText);
+
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "r1", Kind = "read", Title = "Read Program.cs", Status = "in_progress" });
+            Assert.False(turn.HasMarkdown);
+            Assert.Equal("", turn.MarkdownText);
+            Assert.Equal(2, turn.WorkSteps.Count);
+            Assert.True(turn.WorkSteps[0].IsText);
+            Assert.Equal("Let me inspect the repository first.", turn.WorkSteps[0].NoteText);
+            Assert.Equal("", turn.WorkSteps[0].Verb);
+            Assert.True(turn.WorkSteps[1].IsTool);
+            // Live ticker skips folded text steps and shows only actual work operations.
+            Assert.NotNull(turn.LiveTicker);
+            Assert.True(turn.LiveTicker!.Line0.IsVisible);
+            Assert.Equal("Read Program.cs", turn.LiveTicker.Line0.Target);
+            Assert.False(turn.LiveTicker.Line1.IsVisible);
+
+            // In-place update of existing tool does not duplicate or alter folded text.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "r1", Status = "completed" });
+
+            turn.AppendMessage("Found the issue, updating now.");
+            Assert.Equal("Found the issue, updating now.", turn.MarkdownText);
+
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "e1", Kind = "edit", Title = "Edit Program.cs", Status = "completed" });
+            Assert.False(turn.HasMarkdown);
+            Assert.Equal(4, turn.WorkSteps.Count);
+            Assert.True(turn.WorkSteps[2].IsText);
+            Assert.Equal("Found the issue, updating now.", turn.WorkSteps[2].NoteText);
+            Assert.True(turn.WorkSteps[3].IsTool);
+
+            turn.AppendMessage("All fixed and verified.");
+            turn.Complete();
+
+            // Final display: collapsed work area (counting ONLY the 2 tools, never text) + final output text underneath.
+            Assert.True(turn.HasWorkArea);
+            Assert.False(turn.IsWorkExpanded);
+            Assert.Equal("All fixed and verified.", turn.MarkdownText);
+            Assert.Equal("All fixed and verified.", turn.CopyReplyValue);
+            Assert.Contains("2", turn.WorkHeaderTitle);
+            Assert.DoesNotContain("4", turn.WorkHeaderTitle);
+            Assert.Equal(4, turn.WorkSteps.Count);
+
+            // Expanding work area reveals folded text steps in chronological order with lazy detail expansion.
+            turn.ToggleWorkExpandedCommand.Execute(null);
+            Assert.NotNull(turn.ExpandedWorkSteps);
+            Assert.Equal([WorkStepKind.Text, WorkStepKind.Tool, WorkStepKind.Text, WorkStepKind.Tool],
+                turn.ExpandedWorkSteps!.Select(s => s.StepKind));
+            Assert.Null(turn.ExpandedWorkSteps[0].ExpandedDetail);
+            turn.ExpandedWorkSteps[0].ToggleExpandedCommand.Execute(null);
+            Assert.Same(turn.ExpandedWorkSteps[0], turn.ExpandedWorkSteps[0].ExpandedDetail);
+        }
+        finally
+        {
+            if (turn.IsStreaming) turn.Complete();
+        }
+    }
+
+    [AvaloniaFact]
+    public void User_turn_places_action_buttons_below_the_bubble()
+    {
+        var userTurn = new UserTurnItem("1.默认打开\n2. 一并实现", null, _ => { });
+        var host = new AgentGuiTabView();
+        var presenter = new ContentControl { Content = userTurn };
+        var container = new StackPanel();
+        container.DataTemplates.AddRange(host.DataTemplates);
+        container.Children.Add(presenter);
+
+        var window = new Window { Width = 720, Height = 300, Content = container };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            var bubble = presenter.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("userBubble"));
+            var actions = presenter.GetVisualDescendants().OfType<StackPanel>().Single(p => p.Classes.Contains("turnActions"));
+
+            // Actions must be a sibling below the bubble, NOT nested inside the bubble.
+            Assert.DoesNotContain(actions, bubble.GetVisualDescendants());
+            var bubbleBottom = Avalonia.VisualExtensions.TranslatePoint(bubble, new Avalonia.Point(0, bubble.Bounds.Height), window)!.Value.Y;
+            var actionsTop = Avalonia.VisualExtensions.TranslatePoint(actions, new Avalonia.Point(0, 0), window)!.Value.Y;
+            Assert.True(actionsTop >= bubbleBottom - 0.5, $"Expected actionsTop ({actionsTop}) >= bubbleBottom ({bubbleBottom})");
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
         }
     }
 

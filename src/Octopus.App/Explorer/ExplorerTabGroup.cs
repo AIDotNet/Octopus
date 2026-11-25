@@ -41,6 +41,52 @@ public sealed class ExplorerTabGroup : ToggleGroup
         PropertyChanged += OnGroupPropertyChanged;
     }
 
+    /// <summary>True while any tab label is mid-reveal animation.</summary>
+    public bool IsLabelAnimating => AnyLabelAnimating();
+
+    /// <summary>Raised once all running tab label reveal animations have settled.</summary>
+    public event Action? LabelsSettled;
+
+    /// <summary>
+    /// Computes the maximum settled width of the tab group across all currently visible options (the width it would
+    /// have when its widest tab label is fully expanded and all other labels are collapsed). Falls back to
+    /// <see cref="Layoutable.DesiredSize"/> width while item containers have not yet been measured.
+    /// </summary>
+    public double ComputeMaxSettledWidth()
+    {
+        var currentTotal = DesiredSize.Width;
+        if (currentTotal <= 0 || ItemCount == 0) return currentTotal;
+
+        var sumCurrent = 0.0;
+        var sumCollapsed = 0.0;
+        var maxGain = 0.0;
+        var measuredAny = false;
+
+        for (var i = 0; i < ItemCount; i++)
+        {
+            var container = ContainerFromIndex(i);
+            if (container is null || !container.IsVisible) continue;
+            var currentWidth = container.DesiredSize.Width;
+            if (currentWidth <= 0) return currentTotal;
+            measuredAny = true;
+
+            var label = FindLabel(Items[i]);
+            var currentLabelWidth = label?.DesiredSize.Width ?? 0;
+            var expandedLabelWidth = label?.EnsureExpandedWidth() ?? 0;
+            var baseWidth = Math.Max(0, currentWidth - currentLabelWidth);
+            var collapsedWidth = Math.Max(container.MinWidth, baseWidth);
+            var expandedWidth = Math.Max(container.MinWidth, baseWidth + expandedLabelWidth);
+
+            sumCurrent += currentWidth;
+            sumCollapsed += collapsedWidth;
+            maxGain = Math.Max(maxGain, expandedWidth - collapsedWidth);
+        }
+
+        if (!measuredAny) return currentTotal;
+        var outerChrome = Math.Max(0, currentTotal - sumCurrent);
+        return outerChrome + sumCollapsed + maxGain;
+    }
+
     /// <summary>
     /// Replaces the tab options (for example when switching projects or when git detection finishes) and snaps
     /// both the labels and the selection pill into place without playing a spurious transition.
@@ -170,7 +216,11 @@ public sealed class ExplorerTabGroup : ToggleGroup
         if (e.Property == BoundsProperty) ScheduleLayoutPlace();
     }
 
-    private void OnLabelSettled() => ScheduleLayoutPlace();
+    private void OnLabelSettled()
+    {
+        ScheduleLayoutPlace();
+        if (!AnyLabelAnimating()) LabelsSettled?.Invoke();
+    }
 
     private void ScheduleLayoutPlace()
     {

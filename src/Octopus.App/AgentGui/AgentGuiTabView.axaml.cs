@@ -8,6 +8,8 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Octopus.App.Workspace;
+using StreamMark.Avalonia.Extensions;
+using StreamMark.Avalonia.Rendering;
 using TKCode.Arc;
 
 namespace Octopus.App.AgentGui;
@@ -36,6 +38,17 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDropAsync);
+
+        MarkdownServices.SetServices(this, AgentMarkdownLinks.Services);
+        AddHandler(TKCode.Arc.Markdown.LinkClickedEvent, OnMarkdownLinkClicked);
+    }
+
+    /// <summary>Local file links in replies and plans open in an Octopus tab; web links are left to the Markdown control.</summary>
+    private void OnMarkdownLinkClicked(object? sender, LinkClickedEventArgs e)
+    {
+        if (_model is null || AgentMarkdownLinks.ResolvePath(e.Url, _model.WorkingDirectory) is not { } path) return;
+        e.Handled = true;
+        _model.OpenToolFile(path);
     }
 
     private void OnTimelineTemplateApplied(object? sender, TemplateAppliedEventArgs e)

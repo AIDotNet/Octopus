@@ -56,8 +56,8 @@
 
         <!-- The options are made by the code behind: Files always, Git while the folder is in a repository, Sessions
              for a folder on this computer, Tunnels for a project on an SSH host. The chosen one shows its name.
-             They sit in the top row while they fit left of the trailing inset, and on a row of their own below it when
-             they do not (a narrow panel, or a wide corner such as the sign-in capsule beside the caption buttons). -->
+             They sit in the top row while their widest tab state fits left of the trailing inset, and on a row of their
+             own below it otherwise (so switching tabs never makes the tab bar jump between rows). -->
         <ex:ExplorerTabGroup x:Name="Tabs" Size="Small" Margin="8,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
                              IsVisible="{Binding HasProject}"
                              SelectedValue="{Binding TabKey, Mode=TwoWay}"

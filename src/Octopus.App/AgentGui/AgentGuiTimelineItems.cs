@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Acp.Protocol;
 using Octopus.App.Localization;
+using Octopus.Ticker;
 using TKCode.Arc;
 using TKCode.Arc.Icons.Lucide;
 
@@ -41,7 +42,74 @@ public sealed partial class UserTurnItem : AgentTimelineItem
         }
     }
 
+    /// <summary>Collapsed preview limits: long prompts render only this much text until the user expands them.</summary>
+    internal const int CollapsedMaxChars = 600;
+    internal const int CollapsedMaxLines = 8;
+
+    private bool _isExpanded;
+    private bool _previewComputed;
+    private int _previewLength;
+
     public string Text { get; private set; }
+
+    /// <summary>True when the prompt exceeds the collapsed preview limits.</summary>
+    public bool IsCollapsible
+    {
+        get
+        {
+            EnsurePreview();
+            return _previewLength < Text.Length;
+        }
+    }
+
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        private set
+        {
+            if (_isExpanded == value) return;
+            _isExpanded = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(DisplayText));
+            OnPropertyChanged(nameof(ToggleExpandedText));
+        }
+    }
+
+    /// <summary>Text actually laid out by the view: a short preview while collapsed, so long prompts stay cheap to render.</summary>
+    public string DisplayText
+    {
+        get
+        {
+            if (_isExpanded) return Text;
+            EnsurePreview();
+            return _previewLength < Text.Length ? Text[.._previewLength].TrimEnd() + "…" : Text;
+        }
+    }
+
+    public string ToggleExpandedText => AppLangResources.Get(
+        _isExpanded ? AppLangResourceKind.AgentGuiUserTurnCollapse : AppLangResourceKind.AgentGuiUserTurnExpand);
+
+    [RelayCommand]
+    private void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    // Scans at most CollapsedMaxChars + 1 characters, so the cost is independent of prompt length.
+    private void EnsurePreview()
+    {
+        if (_previewComputed) return;
+        _previewComputed = true;
+        var text = Text;
+        var limit = Math.Min(text.Length, CollapsedMaxChars);
+        var lines = 1;
+        for (var i = 0; i < limit; i++)
+        {
+            if (text[i] == '\n' && ++lines > CollapsedMaxLines)
+            {
+                _previewLength = i;
+                return;
+            }
+        }
+        _previewLength = text.Length > CollapsedMaxChars ? CollapsedMaxChars : text.Length;
+    }
 
     /// <summary>Message id from a replayed <c>user_message_chunk</c>, used to stitch chunks together.</summary>
     public string? MessageId { get; init; }
@@ -51,7 +119,10 @@ public sealed partial class UserTurnItem : AgentTimelineItem
     {
         if (string.IsNullOrEmpty(delta)) return;
         Text += delta;
+        _previewComputed = false;
         OnPropertyChanged(nameof(Text));
+        OnPropertyChanged(nameof(DisplayText));
+        OnPropertyChanged(nameof(IsCollapsible));
         OnPropertyChanged(nameof(CanReuse));
     }
 
@@ -647,10 +718,11 @@ public enum WorkStepKind
     Thought,
     Tool,
     Plan,
+    Text,
 }
 
 /// <summary>
-/// One pure-text step inside an assistant turn's single unified work area (thinking, tool call, or plan).
+/// One pure-text step inside an assistant turn's single unified work area (thinking, tool call, plan, or intermediate text).
 /// Visual details are only materialized when <see cref="IsExpanded"/> is toggled on, and immediately released on collapse.
 /// </summary>
 public sealed partial class WorkStepViewModel : ObservableObject
@@ -661,6 +733,8 @@ public sealed partial class WorkStepViewModel : ObservableObject
     private StringBuilder? _thoughtBuffer;
     private string _thoughtText = "";
     private string _thoughtPreview = "";
+    private string _noteText = "";
+    private string _notePreview = "";
     private bool _isThoughtActive;
     private readonly long _thoughtStartedTimestamp;
     private double? _thoughtElapsedSeconds;
@@ -690,6 +764,17 @@ public sealed partial class WorkStepViewModel : ObservableObject
         return step;
     }
 
+    public static WorkStepViewModel CreateText(string text, string? messageId = null)
+    {
+        var trimmed = text.Trim();
+        return new WorkStepViewModel(WorkStepKind.Text)
+        {
+            MessageId = messageId,
+            _noteText = trimmed,
+            _notePreview = BuildTextPreview(trimmed),
+        };
+    }
+
     public static WorkStepViewModel CreateTool(ToolCallItemViewModel tool) =>
         new(WorkStepKind.Tool) { Tool = tool };
 
@@ -707,6 +792,8 @@ public sealed partial class WorkStepViewModel : ObservableObject
     public bool IsThought => StepKind == WorkStepKind.Thought;
     public bool IsTool => StepKind == WorkStepKind.Tool;
     public bool IsPlan => StepKind == WorkStepKind.Plan;
+    public bool IsText => StepKind == WorkStepKind.Text;
+    public bool IsProse => StepKind is WorkStepKind.Thought or WorkStepKind.Text;
     public bool IsRunning => StepKind switch
     {
         WorkStepKind.Tool => Tool!.IsRunning,
@@ -717,6 +804,7 @@ public sealed partial class WorkStepViewModel : ObservableObject
     public bool IsCompleted => !IsRunning && !IsFailed;
 
     public string ThoughtText => _thoughtText;
+    public string NoteText => _noteText;
     public int ThoughtCharLength => _thoughtBuffer?.Length ?? _thoughtText.Length;
     public bool HasPlanEntries => _planEntries is { Count: > 0 };
     public bool HasPlanMarkdown => !string.IsNullOrWhiteSpace(_planMarkdown);
@@ -727,13 +815,17 @@ public sealed partial class WorkStepViewModel : ObservableObject
     {
         WorkStepKind.Thought => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbThink),
         WorkStepKind.Plan => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbPlan),
+        WorkStepKind.Text => "",
         _ => ResolveToolVerb(Tool?.Kind, active: false, done: false),
     };
+
+    public bool HasVerb => !string.IsNullOrEmpty(Verb);
 
     public string ActiveVerb => StepKind switch
     {
         WorkStepKind.Thought => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbThinkActive),
         WorkStepKind.Plan => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbPlanActive),
+        WorkStepKind.Text => "",
         _ => ResolveToolVerb(Tool?.Kind, active: true, done: false),
     };
 
@@ -741,12 +833,14 @@ public sealed partial class WorkStepViewModel : ObservableObject
     {
         WorkStepKind.Thought => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbThinkDone),
         WorkStepKind.Plan => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbPlanDone),
+        WorkStepKind.Text => "",
         _ => ResolveToolVerb(Tool?.Kind, active: false, done: true),
     };
 
     public string Target => StepKind switch
     {
         WorkStepKind.Thought => _thoughtPreview,
+        WorkStepKind.Text => _notePreview,
         WorkStepKind.Plan => FormatPlanPreview(),
         _ => Tool!.DisplayTitle,
     };
@@ -801,6 +895,7 @@ public sealed partial class WorkStepViewModel : ObservableObject
     public bool CanExpand => StepKind switch
     {
         WorkStepKind.Thought => !string.IsNullOrWhiteSpace(_thoughtText),
+        WorkStepKind.Text => !string.IsNullOrWhiteSpace(_noteText),
         WorkStepKind.Plan => HasPlanEntries || HasPlanMarkdown,
         _ => Tool?.CanExpand ?? false,
     };
@@ -936,6 +1031,15 @@ public sealed partial class WorkStepViewModel : ObservableObject
         return string.Concat(slice[..ThoughtPreviewMaxChars], "…");
     }
 
+    private static string BuildTextPreview(string text)
+    {
+        var single = ToolCallItemViewModel.ToSingleLine(text);
+        if (string.IsNullOrEmpty(single)) return "";
+        return single.Length <= ThoughtPreviewMaxChars
+            ? single
+            : string.Concat(single.AsSpan(0, ThoughtPreviewMaxChars), "…");
+    }
+
     private static string ResolveToolVerb(string? kind, bool active, bool done) => (kind, active, done) switch
     {
         ("read", true, _) => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbReadActive),
@@ -1045,9 +1149,38 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
         }
     }
 
+    public void CopyFrom(WorkTickerLineViewModel source)
+    {
+        IsVisible = source.IsVisible;
+        RowOpacity = source.RowOpacity;
+        if (IsRunning != source.IsRunning)
+        {
+            IsRunning = source.IsRunning;
+            OnPropertyChanged(nameof(IsCompleted));
+        }
+        if (IsFailed != source.IsFailed)
+        {
+            IsFailed = source.IsFailed;
+            OnPropertyChanged(nameof(IsCompleted));
+        }
+        IsThought = source.IsThought;
+        Verb = source.Verb;
+        Target = source.Target;
+        if (StatText != source.StatText)
+        {
+            StatText = source.StatText;
+            OnPropertyChanged(nameof(HasStat));
+        }
+    }
+
     public void Clear()
     {
         IsVisible = false;
+        if (IsRunning)
+        {
+            IsRunning = false;
+            OnPropertyChanged(nameof(IsCompleted));
+        }
     }
 }
 
@@ -1055,81 +1188,137 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
 /// Fixed 3-slot live ticker window (Scheme C) materialized ONLY while a turn is actively running and collapsed.
 /// Immediately detached (set to <c>null</c>) once the turn finishes or expands so idle turns keep zero ticker visuals.
 /// </summary>
-public sealed class WorkTickerViewModel
+public sealed class WorkTickerViewModel : IWorkTickerSource
 {
+    private static readonly object PreparingKey = new();
+
+    private bool _hasSynced;
+    private int _prevCount;
+    private object? _prevKey0;
+    private object? _prevKey1;
+    private object? _prevKey2;
+
     public WorkTickerLineViewModel Line0 { get; } = new();
     public WorkTickerLineViewModel Line1 { get; } = new();
     public WorkTickerLineViewModel Line2 { get; } = new();
 
+    internal WorkTickerLineViewModel Exit0 { get; } = new();
+    internal WorkTickerLineViewModel Exit1 { get; } = new();
+    internal WorkTickerLineViewModel Exit2 { get; } = new();
+
+    public int VisibleCount => _prevCount;
+
+    object IWorkTickerSource.Line0 => Line0;
+    object IWorkTickerSource.Line1 => Line1;
+    object IWorkTickerSource.Line2 => Line2;
+    object IWorkTickerSource.Exit0 => Exit0;
+    object IWorkTickerSource.Exit1 => Exit1;
+    object IWorkTickerSource.Exit2 => Exit2;
+
+    public event Action<int, int>? Updated;
+
+    public void ClearExiting()
+    {
+        Exit0.Clear();
+        Exit1.Clear();
+        Exit2.Clear();
+    }
+
     public void Sync(IReadOnlyList<WorkStepViewModel> steps)
     {
-        if (steps.Count == 0)
-        {
-            Line0.SetPreparing();
-            Line1.Clear();
-            Line2.Clear();
-            return;
-        }
-
-        // Pick up to 3 items: prioritize currently running steps at the bottom (newest = opacity 1.0),
-        // filled above with the most recent completed steps so height stays strictly O(1) <= 3 rows.
         WorkStepViewModel? s0 = null;
         WorkStepViewModel? s1 = null;
         WorkStepViewModel? s2 = null;
         var count = 0;
 
-        void Push(WorkStepViewModel item)
-        {
-            if (count == 0) s0 = item;
-            else if (count == 1) s1 = item;
-            else s2 = item;
-            count++;
-        }
-
-        // Gather running steps from the tail first (at most 3).
+        // Intermediate text steps stay in the expanded work area only; the 3-line live ticker focuses on work operations.
+        var nonTextCount = 0;
         var runningCount = 0;
         for (var i = 0; i < steps.Count; i++)
         {
+            if (steps[i].StepKind == WorkStepKind.Text) continue;
+            nonTextCount++;
             if (steps[i].IsRunning) runningCount++;
         }
 
-        if (runningCount >= 3)
+        var preparing = nonTextCount == 0;
+
+        if (preparing)
         {
-            var skipped = runningCount - 3;
-            for (var i = 0; i < steps.Count && count < 3; i++)
-            {
-                if (!steps[i].IsRunning) continue;
-                if (skipped > 0) { skipped--; continue; }
-                Push(steps[i]);
-            }
-        }
-        else if (runningCount > 0)
-        {
-            var doneSlots = 3 - runningCount;
-            // Collect last `doneSlots` non-running steps in chronological order.
-            var totalDone = steps.Count - runningCount;
-            var skipDone = Math.Max(0, totalDone - doneSlots);
-            for (var i = 0; i < steps.Count && count < doneSlots; i++)
-            {
-                if (steps[i].IsRunning) continue;
-                if (skipDone > 0) { skipDone--; continue; }
-                Push(steps[i]);
-            }
-            for (var i = 0; i < steps.Count && count < 3; i++)
-            {
-                if (steps[i].IsRunning) Push(steps[i]);
-            }
+            count = 1;
         }
         else
         {
-            var start = Math.Max(0, steps.Count - 3);
-            for (var i = start; i < steps.Count && count < 3; i++)
+            // Pick up to 3 items: prioritize currently running steps at the bottom (newest = opacity 1.0),
+            // filled above with the most recent completed steps so height stays strictly O(1) <= 3 rows.
+            void Push(WorkStepViewModel item)
             {
-                Push(steps[i]);
+                if (count == 0) s0 = item;
+                else if (count == 1) s1 = item;
+                else s2 = item;
+                count++;
+            }
+
+            if (runningCount >= 3)
+            {
+                var skipped = runningCount - 3;
+                for (var i = 0; i < steps.Count && count < 3; i++)
+                {
+                    if (steps[i].StepKind == WorkStepKind.Text || !steps[i].IsRunning) continue;
+                    if (skipped > 0) { skipped--; continue; }
+                    Push(steps[i]);
+                }
+            }
+            else if (runningCount > 0)
+            {
+                var doneSlots = 3 - runningCount;
+                // Collect last `doneSlots` non-running steps in chronological order.
+                var totalDone = nonTextCount - runningCount;
+                var skipDone = Math.Max(0, totalDone - doneSlots);
+                for (var i = 0; i < steps.Count && count < doneSlots; i++)
+                {
+                    if (steps[i].StepKind == WorkStepKind.Text || steps[i].IsRunning) continue;
+                    if (skipDone > 0) { skipDone--; continue; }
+                    Push(steps[i]);
+                }
+                for (var i = 0; i < steps.Count && count < 3; i++)
+                {
+                    if (steps[i].StepKind != WorkStepKind.Text && steps[i].IsRunning) Push(steps[i]);
+                }
+            }
+            else
+            {
+                var skip = Math.Max(0, nonTextCount - 3);
+                for (var i = 0; i < steps.Count && count < 3; i++)
+                {
+                    if (steps[i].StepKind == WorkStepKind.Text) continue;
+                    if (skip > 0) { skip--; continue; }
+                    Push(steps[i]);
+                }
             }
         }
 
-        if (count == 1)
+        object? n0 = preparing ? PreparingKey : s0;
+        object? n1 = preparing ? null : s1;
+        object? n2 = preparing ? null : s2;
+
+        var shift = _hasSynced
+            ? WorkTickerShift.Compute(_prevCount, _prevKey0, _prevKey1, _prevKey2, count, n0, n1, n2)
+            : 0;
+        var prevCount = _prevCount;
+
+        if (shift > 0)
+        {
+            ShiftExiting(shift);
+        }
+
+        if (preparing)
+        {
+            Line0.SetPreparing();
+            Line1.Clear();
+            Line2.Clear();
+        }
+        else if (count == 1)
         {
             Line0.SetFrom(s0!, 1.0);
             Line1.Clear();
@@ -1146,6 +1335,40 @@ public sealed class WorkTickerViewModel
             Line0.SetFrom(s0!, 0.38);
             Line1.SetFrom(s1!, 0.66);
             Line2.SetFrom(s2!, 1.0);
+        }
+
+        var wasSynced = _hasSynced;
+        _hasSynced = true;
+        _prevCount = count;
+        _prevKey0 = n0;
+        _prevKey1 = n1;
+        _prevKey2 = n2;
+
+        if (wasSynced && (shift > 0 || prevCount != count))
+        {
+            Updated?.Invoke(shift, count);
+        }
+    }
+
+    private void ShiftExiting(int shift)
+    {
+        if (shift == 1)
+        {
+            Exit2.CopyFrom(Exit1);
+            Exit1.CopyFrom(Exit0);
+            Exit0.CopyFrom(Line0);
+        }
+        else if (shift == 2)
+        {
+            Exit2.CopyFrom(Exit0);
+            Exit1.CopyFrom(Line0);
+            Exit0.CopyFrom(Line1);
+        }
+        else
+        {
+            Exit2.CopyFrom(Line0);
+            Exit1.CopyFrom(Line1);
+            Exit0.CopyFrom(Line2);
         }
     }
 }
@@ -1533,13 +1756,13 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         else
         {
             if (string.IsNullOrWhiteSpace(delta)) return;
+            ArchiveCurrentMarkdownToWorkStep();
             _activeThoughtStep?.FinishThought();
             var step = WorkStepViewModel.CreateThought(delta, messageId, isActive: IsStreaming);
             _activeThoughtStep = step;
             AddWorkStep(step);
         }
 
-        if (_hasMarkdownContent) _markdownBreakPending = true;
         _isWritingReply = false;
 
         var becameNonEmpty = !_hasThoughtContent && !string.IsNullOrWhiteSpace(delta);
@@ -1609,6 +1832,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         var id = string.IsNullOrWhiteSpace(update.ToolCallId) ? $"tool-{ToolCalls.Count + 1}" : update.ToolCallId;
         if (!_toolsById.TryGetValue(id, out var entry))
         {
+            ArchiveCurrentMarkdownToWorkStep();
             var vm = new ToolCallItemViewModel(id, _openFile, _openDiff, _openScript, isReplay: _isReplay);
             vm.Apply(update);
             var step = WorkStepViewModel.CreateTool(vm);
@@ -1623,7 +1847,6 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             entry.Step.NotifyToolUpdated();
         }
 
-        if (_hasMarkdownContent) _markdownBreakPending = true;
         _isWritingReply = false;
 
         RefreshWorkSummary();
@@ -1646,6 +1869,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         {
             if (_planStep is null)
             {
+                ArchiveCurrentMarkdownToWorkStep();
                 _planStep = WorkStepViewModel.CreatePlan(PlanEntries, PlanMarkdown);
                 AddWorkStep(_planStep);
             }
@@ -1671,6 +1895,12 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             _workSteps[i].Seal();
         }
         _markdown?.Seal();
+
+        // If the agent produced no text after its final tool call, surface the last emitted text as the final reply.
+        if (!_hasMarkdownContent && string.IsNullOrWhiteSpace(error))
+        {
+            PromoteLastTextStepToResponse();
+        }
 
         IsStreaming = false;
         IsWaitingForInput = false;
@@ -1707,6 +1937,45 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         OnPropertyChanged(nameof(LiveTicker));
         OnPropertyChanged(nameof(WorkHeaderDurationText));
         OnPropertyChanged(nameof(HasWorkHeaderDuration));
+    }
+
+    /// <summary>Folds any intermediate text emitted before a subsequent work step into the unified work area.</summary>
+    private void ArchiveCurrentMarkdownToWorkStep()
+    {
+        if (_markdown is null) return;
+        _markdown.Seal();
+        var text = _markdown.Text;
+        var messageId = _markdown.MessageId;
+        _markdown = null;
+        _hasMarkdownContent = false;
+        _markdownBreakPending = false;
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            AddWorkStep(WorkStepViewModel.CreateText(text, messageId));
+        }
+        OnPropertyChanged(nameof(ResponseMarkdown));
+        OnPropertyChanged(nameof(MarkdownText));
+        OnPropertyChanged(nameof(HasMarkdown));
+        OnPropertyChanged(nameof(CanCopyReply));
+    }
+
+    private void PromoteLastTextStepToResponse()
+    {
+        for (var i = _workSteps.Count - 1; i >= 0; i--)
+        {
+            if (_workSteps[i].StepKind != WorkStepKind.Text) continue;
+            var step = _workSteps[i];
+            _workSteps.RemoveAt(i);
+            _expandedWorkSteps?.Remove(step);
+            _markdown = new MarkdownBlockViewModel(step.NoteText, step.MessageId, sealedInitial: true);
+            _hasMarkdownContent = !string.IsNullOrWhiteSpace(step.NoteText);
+            OnPropertyChanged(nameof(WorkStepCount));
+            OnPropertyChanged(nameof(CanExpandWork));
+            OnPropertyChanged(nameof(ResponseMarkdown));
+            OnPropertyChanged(nameof(MarkdownText));
+            OnPropertyChanged(nameof(HasMarkdown));
+            break;
+        }
     }
 
     private void AddWorkStep(WorkStepViewModel step)
@@ -1772,8 +2041,13 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
                         default: other++; break;
                     }
                     break;
+                case WorkStepKind.Text:
+                    // Folded intermediate text is intentionally omitted from header counts and step totals.
+                    break;
             }
         }
+
+        var countedSteps = exec + search + read + edit + fetch + think + plan + other;
 
         string nextTitle;
         string nextCounts;
@@ -1795,9 +2069,12 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         }
         else
         {
-            nextTitle = _workSteps.Count == 1
-                ? AppLangResources.Get(AppLangResourceKind.AgentGuiWorkCompletedSingleStep)
-                : AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCompletedSteps, _workSteps.Count);
+            nextTitle = countedSteps switch
+            {
+                0 => AppLangResources.Get(AppLangResourceKind.AgentGuiWorkAreaLabel),
+                1 => AppLangResources.Get(AppLangResourceKind.AgentGuiWorkCompletedSingleStep),
+                _ => AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCompletedSteps, countedSteps),
+            };
             var parts = new List<string>(6);
             if (exec > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortExec, exec));
             if (search > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortSearch, search));
