@@ -484,6 +484,26 @@ public class SessionSizeAndMirrorTests
         await Until(() => !mirror.ReadInputModes().AlternateScreen);
         Assert.Contains("shell line before", mirror.ReadText());
     }
+
+    [Fact]
+    public async Task Mirror_resizes_preserve_cell_pixel_dimensions_instead_of_multiplying_them()
+    {
+        var wire = new Wire();
+        await using var mirror = new TerminalSession(
+            Spec, wire, new TerminalSize(50, 20, 9, 18), TerminalPalettes.Dark, ColorScheme.Dark, 1000, () => false)
+        {
+            IsMirror = true,
+        };
+        mirror.Start();
+
+        foreach (var (cols, rows) in new[] { (120, 40), (80, 30), (200, 60), (48, 25) })
+        {
+            wire.Announce(new TerminalMirrorEvent(TerminalMirrorEventKind.Resize, cols, rows));
+            wire.Feed(".");
+            await Until(() => mirror.Size.Columns == cols && mirror.Size.Rows == rows);
+            Assert.Equal((9, 18), (mirror.Size.CellWidth, mirror.Size.CellHeight));
+        }
+    }
 }
 
 [Collection(TerminalSessionCollection.Name)]

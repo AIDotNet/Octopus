@@ -386,7 +386,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
             switch (change.Kind)
             {
                 case TerminalMirrorEventKind.Resize when change.Columns > 0 && change.Rows > 0:
-                    _size = new TerminalSize(change.Columns, change.Rows, _size.PixelWidth, _size.PixelHeight);
+                    _size = new TerminalSize(change.Columns, change.Rows, _size.CellWidth, _size.CellHeight);
                     _core.Resize(_size);
                     break;
                 case TerminalMirrorEventKind.Reset:
