@@ -96,9 +96,7 @@ public partial class ExplorerPanelView : UserControl
         if (Model.IsSshProject) wanted.Add(_tunnelsOption);
         else if (!Model.IsHostProject) wanted.Add(_sessionsOption);
         if (Tabs.Items.Cast<object>().SequenceEqual(wanted)) return;
-        Tabs.Items.Clear();
-        foreach (var option in wanted) Tabs.Items.Add(option);
-        Tabs.SelectedValue = Model.TabKey;
+        Tabs.ReplaceOptions(wanted, Model.TabKey);
     }
 
     /// <summary>
@@ -115,18 +113,23 @@ public partial class ExplorerPanelView : UserControl
         ArcDesignTokenKind countColor = ArcDesignTokenKind.TextMuted)
     {
         var name = AppLangResources.Get(label);
-        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5 };
+        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0 };
         content.Children.Add(new LucideIcon { Kind = icon, Size = 15, VerticalAlignment = VerticalAlignment.Center });
-        content.Children.Add(new TextBlock
+        content.Children.Add(new TabLabelReveal
         {
-            Text = name,
             VerticalAlignment = VerticalAlignment.Center,
-            [!TextBlock.IsVisibleProperty] = CompiledBinding.Create(isSelected, source: Model),
+            [!TabLabelReveal.IsExpandedProperty] = CompiledBinding.Create(isSelected, source: Model),
+            Child = new TextBlock
+            {
+                Text = name,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
         });
         if (count is not null && hasCount is not null)
         {
             var number = new TextBlock
             {
+                Margin = new Thickness(5, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
                 FontWeight = FontWeight.SemiBold,
                 [!TextBlock.TextProperty] = CompiledBinding.Create(count, source: Model),

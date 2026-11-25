@@ -58,10 +58,10 @@
              for a folder on this computer, Tunnels for a project on an SSH host. The chosen one shows its name.
              They sit in the top row while they fit left of the trailing inset, and on a row of their own below it when
              they do not (a narrow panel, or a wide corner such as the sign-in capsule beside the caption buttons). -->
-        <arc:ToggleGroup x:Name="Tabs" Size="Small" Margin="8,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
-                         IsVisible="{Binding HasProject}"
-                         SelectedValue="{Binding TabKey, Mode=TwoWay}"
-                         Label="{l:AppLangResource ExplorerTabs}" />
+        <ex:ExplorerTabGroup x:Name="Tabs" Size="Small" Margin="8,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                             IsVisible="{Binding HasProject}"
+                             SelectedValue="{Binding TabKey, Mode=TwoWay}"
+                             Label="{l:AppLangResource ExplorerTabs}" />
 
         <!-- Shown above Files / Git when following a branch worktree tab so the user never confuses worktree vs main. -->
         <Border Grid.Row="2" IsVisible="{Binding HasWorkspaceBanner}"
