@@ -39,6 +39,8 @@ public sealed partial class SessionRowViewModel : ObservableObject, IDisposable
     public bool HasWorkspace => !string.IsNullOrEmpty(Session.WorkspaceBranch);
     public string? WorkspaceTaskKey => Session.WorkspaceTaskKey;
     public bool HasWorkspaceTask => !string.IsNullOrEmpty(Session.WorkspaceTaskKey);
+    /// <summary>Compact worktree pill shown on a session row when all workspaces of a project are listed together.</summary>
+    public string? WorkspaceBadgeText => HasWorkspaceTask ? WorkspaceTaskKey : WorkspaceBranch;
     public bool IsWaiting => Session.Activity == SessionActivity.Waiting;
     public bool IsWorking => Session.Activity == SessionActivity.Working;
     public bool IsError => Session.Activity == SessionActivity.Error;

@@ -11,9 +11,9 @@
     <arcm:Page.Resources>
         <StreamGeometry x:Key="GitBranchGlyph">M6 3v12 M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M18 9a9 9 0 0 1-9 9</StreamGeometry>
 
-        <!-- One session: its square, title, what it runs, a line about what it is doing, and its state. -->
+        <!-- One session: its square, title, optional GUI/worktree tags, detail, preview, and live state. -->
         <DataTemplate x:Key="SessionRow" x:DataType="common:SessionRowViewModel">
-            <arcm:ListItem ShowChevron="True" Command="{Binding OpenCommand}">
+            <arcm:ListItem Classes="cardSessionRow" ShowChevron="True" Command="{Binding OpenCommand}">
                 <arcm:ListItem.Trailing>
                     <Border Classes="pill"
                             Classes.waiting="{Binding IsWaiting}"
@@ -26,25 +26,28 @@
                         </StackPanel>
                     </Border>
                 </arcm:ListItem.Trailing>
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="0,4">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11" Margin="0,3">
                     <Panel Grid.Column="0">
                         <Border Classes="badge" Background="{Binding Tint}" IsVisible="{Binding IsAgent}">
                             <TextBlock Text="{Binding Initial}" />
                         </Border>
                         <Border Classes="badge" IsVisible="{Binding IsTerminal}">
-                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Terminal}" Size="16"
+                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Terminal}" Size="15"
                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Panel>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                            <Border Classes="guiTag" IsVisible="{Binding IsGui}">
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5" HorizontalAlignment="Left">
+                            <TextBlock Grid.Column="0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <Border Grid.Column="1" Classes="guiTag" IsVisible="{Binding IsGui}">
                                 <TextBlock Text="{l:MobileLangResource GuiBadge}" />
                             </Border>
-                        </StackPanel>
-                        <TextBlock Classes="secondary" Text="{Binding Detail}" />
+                            <Border Grid.Column="2" Classes="wsPill" IsVisible="{Binding HasWorkspace}">
+                                <TextBlock Text="{Binding WorkspaceBadgeText}" MaxWidth="92" TextTrimming="CharacterEllipsis" />
+                            </Border>
+                        </Grid>
+                        <TextBlock Classes="secondary" Text="{Binding Detail}" IsVisible="{Binding !!Detail}" />
                         <TextBlock Classes="preview" Text="{Binding Preview}" IsVisible="{Binding HasPreview}" />
                     </StackPanel>
                 </Grid>
@@ -66,83 +69,302 @@
         </arcm:Navbar>
     </arcm:Page.Header>
 
-    <Panel Margin="0,12,0,24">
-        <ItemsControl Name="Sections" ItemsSource="{Binding Sections}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Spacing="18" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:ProjectSectionViewModel">
-                    <StackPanel>
-                        <!-- Flat project list when there are no branch worktrees -->
-                        <arcm:ListGroup Header="{Binding Header}"
-                                        ItemsSource="{Binding FlatSessions}"
-                                        ItemTemplate="{StaticResource SessionRow}"
-                                        IsVisible="{Binding !HasWorkspaces}" />
+    <Panel Margin="0,6,0,28">
+        <StackPanel Spacing="8" IsVisible="{Binding ShowControls}">
+            <!-- Search bar -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="16,0">
+                <arcm:TextField Name="SearchField"
+                                Classes="hostSearch"
+                                Grid.Column="0"
+                                Text="{Binding SearchQuery, Mode=TwoWay}"
+                                PlaceholderText="{l:MobileLangResource HostSearchPlaceholder}" />
+                <arcm:IconButton Name="ClearSearchButton"
+                                 Grid.Column="1"
+                                 Icon="{x:Static arc:ArcIcons.X}"
+                                 Command="{Binding ClearSearchCommand}"
+                                 IsVisible="{Binding HasSearchQuery}"
+                                 AutomationProperties.Name="{l:MobileLangResource HostClearFilters}" />
+            </Grid>
 
-                        <!-- Workspace-grouped project view when one or more branch worktrees exist -->
-                        <StackPanel Spacing="10" IsVisible="{Binding HasWorkspaces}">
-                            <Grid ColumnDefinitions="*,Auto" Margin="20,0,16,0">
-                                <TextBlock Classes="sectionHeader"
-                                           Text="{Binding Header}"
-                                           VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" />
-                                <arcm:Button Grid.Column="1"
-                                             Variant="Plain"
-                                             Command="{Binding NewBranchCommand}"
-                                             Content="{l:MobileLangResource WorkspaceNewBranchShort}" />
-                            </Grid>
+            <!-- Horizontal quick filter chips -->
+            <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="16,0">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Button Name="FilterAllChip"
+                            Classes="chipBtn"
+                            Classes.active="{Binding IsFilterAll}"
+                            Command="{Binding SelectFilterAllCommand}">
+                        <TextBlock Text="{Binding FilterAllText}" />
+                    </Button>
+                    <Button Name="FilterAttentionChip"
+                            Classes="chipBtn attention"
+                            Classes.active="{Binding IsFilterAttention}"
+                            Command="{Binding SelectFilterAttentionCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="statusDot warning" />
+                            <TextBlock Text="{Binding FilterAttentionText}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Name="FilterWorkingChip"
+                            Classes="chipBtn"
+                            Classes.active="{Binding IsFilterWorking}"
+                            Command="{Binding SelectFilterWorkingCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="statusDot accent" />
+                            <TextBlock Text="{Binding FilterWorkingText}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Name="FilterSessionsChip"
+                            Classes="chipBtn"
+                            Classes.active="{Binding IsFilterWithSessions}"
+                            Command="{Binding SelectFilterWithSessionsCommand}">
+                        <TextBlock Text="{Binding FilterWithSessionsText}" />
+                    </Button>
+                </StackPanel>
+            </ScrollViewer>
 
-                            <ItemsControl ItemsSource="{Binding WorkspaceGroups}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Spacing="10" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:MobileWorkspaceGroupViewModel">
-                                        <StackPanel Spacing="4">
-                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6" Margin="20,0,16,0">
-                                                <Panel VerticalAlignment="Center">
-                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Folder}" Size="14"
-                                                                  Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                                  IsVisible="{Binding IsDefault}" />
-                                                    <arc:ArcGlyph Data="{StaticResource GitBranchGlyph}" Size="14"
-                                                                  Foreground="{arc:ArcDesignTokenResource Accent}"
-                                                                  IsVisible="{Binding IsWorktree}" />
-                                                </Panel>
-                                                <TextBlock Grid.Column="1"
-                                                           Classes="wsTitle"
-                                                           Text="{Binding Title}"
-                                                           VerticalAlignment="Center"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <Border Grid.Column="2" Classes="wsPill" IsVisible="{Binding HasTask}">
-                                                    <TextBlock Text="{Binding TaskKey}" />
-                                                </Border>
-                                                <arcm:IconButton Grid.Column="3"
-                                                                 Icon="{x:Static arc:ArcIcons.Plus}"
-                                                                 Command="{Binding AddSessionCommand}"
-                                                                 AutomationProperties.Name="{l:MobileLangResource NewSession}" />
-                                            </Grid>
-
-                                            <arcm:ListGroup ItemsSource="{Binding Sessions}"
-                                                            ItemTemplate="{StaticResource SessionRow}"
-                                                            IsVisible="{Binding !IsEmpty}" />
-
-                                            <Border Classes="emptyCard" Margin="16,0" IsVisible="{Binding IsEmpty}">
-                                                <TextBlock Classes="muted" Text="{l:MobileLangResource WorkspaceEmpty}" />
-                                            </Border>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+            <!-- Live host status summary + Expand/Collapse all toggle -->
+            <Border Classes="hostSummaryBar" Margin="16,0">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" IsVisible="{Binding HasActiveSummary}">
+                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasWaiting}" VerticalAlignment="Center">
+                            <Border Classes="statusDot warning" />
+                            <TextBlock Classes="summaryStat warning" Text="{Binding WaitingSummaryText}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasWorking}" VerticalAlignment="Center">
+                            <Border Classes="statusDot accent" />
+                            <TextBlock Classes="summaryStat accent" Text="{Binding WorkingSummaryText}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasError}" VerticalAlignment="Center">
+                            <Border Classes="statusDot danger" />
+                            <TextBlock Classes="summaryStat danger" Text="{Binding ErrorSummaryText}" />
                         </StackPanel>
                     </StackPanel>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                    <TextBlock Classes="muted"
+                               Text="{Binding ProjectCountSummaryText}"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding !HasActiveSummary}" />
+                    <Button Name="ToggleAllButton"
+                            Grid.Column="1"
+                            Classes="inlineLinkBtn"
+                            Command="{Binding ToggleAllExpandedCommand}"
+                            Content="{Binding ToggleAllExpandedText}" />
+                </Grid>
+            </Border>
+
+            <!-- Smart accordion project cards -->
+            <ItemsControl Name="Sections" ItemsSource="{Binding VisibleSections}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="12" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ProjectSectionViewModel">
+                        <Border Classes="projectCard"
+                                Classes.attention="{Binding HasAttention}"
+                                Classes.error="{Binding HasErrorTone}"
+                                Margin="16,0">
+                            <StackPanel>
+                                <!-- Project card header: badge + title/branch/path + summary pill + quick "+" + chevron -->
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                    <Button Grid.Column="0"
+                                            Classes="cardHeaderBtn"
+                                            Command="{Binding ToggleExpandedCommand}">
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
+                                            <Panel Grid.Column="0" Width="38" Height="38" VerticalAlignment="Center">
+                                                <Border Classes="projectBadge" Background="{Binding ProjectBrush}">
+                                                    <TextBlock Text="{Binding Initial}" />
+                                                </Border>
+                                                <Border Classes="cornerBadge"
+                                                        Classes.waiting="{Binding CornerIsWaiting}"
+                                                        Classes.error="{Binding CornerIsError}"
+                                                        Classes.working="{Binding CornerIsWorking}"
+                                                        IsVisible="{Binding HasCornerBadge}">
+                                                    <TextBlock Text="{Binding CornerBadgeText}" />
+                                                </Border>
+                                            </Panel>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
+                                                    <TextBlock Grid.Column="0"
+                                                               Classes="projectCardTitle"
+                                                               Text="{Binding Name}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center" />
+                                                    <Border Grid.Column="1" Classes="branchTag" IsVisible="{Binding HasDefaultBranch}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="10"
+                                                                          Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                                          VerticalAlignment="Center" />
+                                                            <TextBlock Text="{Binding DefaultBranch}" MaxWidth="84" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Grid>
+                                                <TextBlock Classes="projectCardPath" Text="{Binding SubtitleText}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,10,0">
+                                        <!-- Status summary pill while collapsed -->
+                                        <Border Classes="pill"
+                                                Classes.waiting="{Binding SummaryIsWaiting}"
+                                                Classes.working="{Binding SummaryIsWorking}"
+                                                Classes.error="{Binding SummaryIsError}"
+                                                IsVisible="{Binding !IsExpanded}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <arc:ArcSpinner IsVisible="{Binding SummaryIsWorking}" />
+                                                <TextBlock Text="{Binding SummaryPillText}" />
+                                            </StackPanel>
+                                        </Border>
+                                        <!-- Compact count while expanded -->
+                                        <TextBlock Classes="muted monoCount"
+                                                   Text="{Binding ExpandedCountText}"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsExpanded}" />
+                                        <!-- Quick "+" to start a session in this project -->
+                                        <Button Classes="projectPlusBtn"
+                                                Command="{Binding AddSessionCommand}"
+                                                AutomationProperties.Name="{l:MobileLangResource NewSession}">
+                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="14"
+                                                          Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Button>
+                                        <!-- Expand / collapse chevron -->
+                                        <Button Classes="projectChevronBtn"
+                                                Command="{Binding ToggleExpandedCommand}">
+                                            <Panel>
+                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronRight}" Size="15"
+                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                              IsVisible="{Binding !IsExpanded}" />
+                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronDown}" Size="15"
+                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                              IsVisible="{Binding IsExpanded}" />
+                                            </Panel>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Collapsible body: inline workspace tabs, session list, and project footer actions -->
+                                <StackPanel IsVisible="{Binding IsExpanded}">
+                                    <!-- Inline branch workspace filter tabs when worktrees exist -->
+                                    <Border Classes="projectWsBar" IsVisible="{Binding HasWorkspaces}">
+                                        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <ItemsControl ItemsSource="{Binding WorkspaceTabs}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
+                                                            <Button Classes="wsTabBtn"
+                                                                    Classes.active="{Binding IsSelected}"
+                                                                    Classes.worktree="{Binding IsWorktree}"
+                                                                    Command="{Binding SelectCommand}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Folder}" Size="11"
+                                                                                  IsVisible="{Binding IsDefault}"
+                                                                                  VerticalAlignment="Center" />
+                                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="11"
+                                                                                  IsVisible="{Binding IsWorktree}"
+                                                                                  VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding Label}" MaxWidth="136" TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <Button Classes="wsTabBtn newBranch" Command="{Binding NewBranchCommand}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="11" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{l:MobileLangResource WorkspaceNewBranchShort}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                    </Border>
+
+                                    <!-- Session rows inside the card -->
+                                    <Border Classes="projectSessionList">
+                                        <Panel>
+                                            <ItemsControl ItemsSource="{Binding DisplayedSessions}"
+                                                          ItemTemplate="{StaticResource SessionRow}"
+                                                          IsVisible="{Binding HasDisplayedSessions}" />
+                                            <Grid ColumnDefinitions="*,Auto" Margin="14,11" IsVisible="{Binding IsDisplayedEmpty}">
+                                                <TextBlock Grid.Column="0"
+                                                           Classes="muted"
+                                                           Text="{l:MobileLangResource WorkspaceEmpty}"
+                                                           VerticalAlignment="Center" />
+                                                <Button Grid.Column="1"
+                                                        Classes="inlineLinkBtn"
+                                                        Command="{Binding AddSessionCommand}"
+                                                        Content="{l:MobileLangResource ProjectStartSession}" />
+                                            </Grid>
+                                        </Panel>
+                                    </Border>
+
+                                    <!-- Project quick actions footer: Files, Changes, New branch, New session -->
+                                    <Border Classes="projectCardFooter">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                                <Button Classes="projectFooterBtn"
+                                                        Command="{Binding BrowseFilesCommand}"
+                                                        IsVisible="{Binding CanBrowseFiles}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Folder}" Size="12" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{l:MobileLangResource ProjectActionFiles}" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Classes="projectFooterBtn"
+                                                        Command="{Binding ViewChangesCommand}"
+                                                        IsVisible="{Binding CanViewChanges}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.FileText}" Size="12" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{l:MobileLangResource ProjectActionChanges}" />
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Classes="projectFooterBtn"
+                                                        Command="{Binding NewBranchCommand}"
+                                                        IsVisible="{Binding IsGitRepository}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="12" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{l:MobileLangResource WorkspaceNewBranchShort}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Classes="projectFooterBtn primary"
+                                                    Command="{Binding AddSessionCommand}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="12" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{l:MobileLangResource ProjectActionSession}" />
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Empty state when search/filter hides all projects -->
+            <StackPanel Name="FilteredEmptyState" Margin="24,32" Spacing="12" IsVisible="{Binding IsFilteredEmpty}">
+                <TextBlock Classes="muted"
+                           Text="{l:MobileLangResource HostFilterEmpty}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center" />
+                <arcm:Button Name="ResetFiltersButton"
+                             Variant="Tinted"
+                             HorizontalAlignment="Center"
+                             Content="{l:MobileLangResource HostClearFilters}"
+                             Command="{Binding ResetFiltersCommand}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Empty state when the computer has no projects yet -->
         <StackPanel Margin="24,48" Spacing="12" IsVisible="{Binding IsEmpty}">
             <TextBlock Classes="muted"
                        Text="{l:MobileLangResource HostEmpty}"

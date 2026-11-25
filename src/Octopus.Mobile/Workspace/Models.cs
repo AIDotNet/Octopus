@@ -132,6 +132,10 @@ public sealed class RemoteProject(RemoteHost host, string id, string name, strin
     public string Name { get; } = name;
     /// <summary>The folder on the host, as the host shows it.</summary>
     public string Path { get; } = path;
+    /// <summary>Project accent color as <c>#RRGGBB</c>, synced from the desktop rail when set.</summary>
+    public string? Color { get; set; }
+    /// <summary>Optional icon name synced from the desktop rail.</summary>
+    public string? Icon { get; set; }
     public bool IsGitRepository { get; set; }
     public string? DefaultBranch { get; set; }
     public ObservableCollection<RemoteBranchWorkspace> Workspaces { get; } = [];

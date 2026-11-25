@@ -167,6 +167,364 @@
         <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
     </Style>
 
+    <!-- Scheme A smart accordion project cards (HostPage) -->
+    <Style Selector="arcm|TextField.hostSearch">
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="CornerRadius" Value="11" />
+    </Style>
+    <Style Selector="Border.statusDot">
+        <Setter Property="Width" Value="7" />
+        <Setter Property="Height" Value="7" />
+        <Setter Property="CornerRadius" Value="3.5" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource TextMuted}" />
+    </Style>
+    <Style Selector="Border.statusDot.warning">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Warning}" />
+    </Style>
+    <Style Selector="Border.statusDot.accent">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Border.statusDot.danger">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+
+    <Style Selector="Border.hostSummaryBar">
+        <Setter Property="CornerRadius" Value="11" />
+        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.summaryStat">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.summaryStat.warning">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
+    </Style>
+    <Style Selector="TextBlock.summaryStat.accent">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="TextBlock.summaryStat.danger">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+    <Style Selector="TextBlock.monoCount">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+    </Style>
+
+    <!-- Custom flat/pill touch buttons inside HostPage so Arc's default Button chrome never bloats chips or card headers. -->
+    <Style Selector="Button.chipBtn">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+        <Setter Property="Padding" Value="11,5" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.chipBtn:pressed">
+        <Setter Property="Opacity" Value="0.72" />
+    </Style>
+    <Style Selector="Button.chipBtn.active">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.chipBtn.attention.active">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource WarningSubtle}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Warning}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
+    </Style>
+
+    <Style Selector="Button.inlineLinkBtn">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.inlineLinkBtn:pressed">
+        <Setter Property="Opacity" Value="0.65" />
+    </Style>
+
+    <Style Selector="Border.projectCard">
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.projectCard.attention">
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Warning}" />
+    </Style>
+    <Style Selector="Border.projectCard.error">
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+
+    <Style Selector="Button.cardHeaderBtn">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="12,11,4,11" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.cardHeaderBtn:pressed">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+    </Style>
+
+    <Style Selector="Border.projectBadge">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.projectBadge TextBlock">
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.cornerBadge">
+        <Setter Property="MinWidth" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Border.cornerBadge TextBlock">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="9" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.cornerBadge.waiting">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Warning}" />
+    </Style>
+    <Style Selector="Border.cornerBadge.error">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+    <Style Selector="Border.cornerBadge.working">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Border.cornerBadge.working TextBlock">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentForeground}" />
+    </Style>
+
+    <Style Selector="TextBlock.projectCardTitle">
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeBase}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="TextBlock.projectCardPath">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="Border.branchTag">
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Padding" Value="5,1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+    </Style>
+    <Style Selector="Border.branchTag TextBlock">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button.projectPlusBtn">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.projectPlusBtn:pressed">
+        <Setter Property="Opacity" Value="0.7" />
+    </Style>
+
+    <Style Selector="Button.projectChevronBtn">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.projectChevronBtn:pressed">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+    </Style>
+
+    <Style Selector="Border.projectWsBar">
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="Padding" Value="10,7" />
+    </Style>
+    <Style Selector="Button.wsTabBtn">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.wsTabBtn arc|ArcGlyph">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+    </Style>
+    <Style Selector="Button.wsTabBtn.active">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.wsTabBtn.active arc|ArcGlyph">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Button.wsTabBtn.newBranch">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderStrong}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Button.wsTabBtn.newBranch arc|ArcGlyph">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Button.wsTabBtn:pressed">
+        <Setter Property="Opacity" Value="0.7" />
+    </Style>
+
+    <Style Selector="Border.projectSessionList">
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+    </Style>
+
+    <Style Selector="Border.projectCardFooter">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="CornerRadius" Value="0,0,15,15" />
+        <Setter Property="Padding" Value="10,7" />
+    </Style>
+    <Style Selector="Button.projectFooterBtn">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="9,5" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.projectFooterBtn arc|ArcGlyph">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+    </Style>
+    <Style Selector="Button.projectFooterBtn.primary">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.projectFooterBtn.primary arc|ArcGlyph">
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Button.projectFooterBtn:pressed">
+        <Setter Property="Opacity" Value="0.72" />
+    </Style>
+
     <!-- Scheme A dashboard cards, welcome highlights, account profile & code verification card. -->
     <Style Selector="Border.surfaceCard">
         <Setter Property="CornerRadius" Value="16" />

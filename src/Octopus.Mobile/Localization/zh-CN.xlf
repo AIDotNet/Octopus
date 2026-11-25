@@ -268,5 +268,74 @@
     <unit id="UploadTooLarge"><segment><source>The picture is too large: at most {0} MB.</source><target state="translated">图片太大，最多 {0} MB。</target></segment></unit>
     <unit id="UploadUnreadable"><segment><source>This picture cannot be read. Try a JPG or PNG.</source><target state="translated">无法读取这张图片，请换成 JPG 或 PNG。</target></segment></unit>
     <unit id="UploadFailed"><segment><source>The picture was not sent: {0}</source><target state="translated">图片没有发送：{0}</target></segment></unit>
+    <unit id="HostSearchPlaceholder"><segment><source>Search projects, paths, or branches…</source><target state="translated">搜索项目、路径或分支…</target></segment></unit>
+    <unit id="HostFilterAll"><segment><source>All</source><target state="translated">全部</target></segment></unit>
+    <unit id="HostFilterAttention"><segment><source>Attention</source><target state="translated">需关注</target></segment></unit>
+    <unit id="HostFilterWorking"><segment><source>Working</source><target state="translated">工作中</target></segment></unit>
+    <unit id="HostFilterWithSessions"><segment><source>With sessions</source><target state="translated">有会话</target></segment></unit>
+    <unit id="HostExpandAll"><segment><source>Expand all</source><target state="translated">全部展开</target></segment></unit>
+    <unit id="HostCollapseAll"><segment><source>Collapse all</source><target state="translated">全部收起</target></segment></unit>
+    <unit id="HostFilterEmpty"><segment><source>No matching projects or sessions.</source><target state="translated">没有匹配的项目或会话。</target></segment></unit>
+    <unit id="HostClearFilters"><segment><source>Reset filters</source><target state="translated">清除筛选</target></segment></unit>
+    <unit id="ProjectSessionCount"><segment><source>{0} sessions</source><target state="translated">{0} 会话</target></segment></unit>
+    <unit id="ProjectIdleCount"><segment><source>{0} idle</source><target state="translated">{0} 空闲</target></segment></unit>
+    <unit id="ProjectWorkspaceCount"><segment><source>{0} workspaces</source><target state="translated">{0} 工作区</target></segment></unit>
+    <unit id="ProjectActionFiles"><segment><source>Files</source><target state="translated">文件</target></segment></unit>
+    <unit id="ProjectActionChanges"><segment><source>Changes</source><target state="translated">改动</target></segment></unit>
+    <unit id="ProjectActionSession"><segment><source>Session</source><target state="translated">会话</target></segment></unit>
+    <unit id="ProjectStartSession"><segment><source>Start a session</source><target state="translated">启动会话</target></segment></unit>
+    <unit id="WorkspaceAll"><segment><source>All</source><target state="translated">全部</target></segment></unit>
+    <unit id="ConversationWorkArea"><segment><source>Work</source><target state="translated">工作区</target></segment></unit>
+    <unit id="ConversationWorkPreparing"><segment><source>Preparing…</source><target state="translated">准备中…</target></segment></unit>
+    <unit id="ConversationWorkCompletedSteps"><segment><source>Completed {0} steps</source><target state="translated">已完成 {0} 步</target></segment></unit>
+    <unit id="ConversationWorkCompletedSingleStep"><segment><source>Completed 1 step</source><target state="translated">已完成 1 步</target></segment></unit>
+    <unit id="ConversationWorkFailedCount"><segment><source>{0} failed</source><target state="translated">{0} 项失败</target></segment></unit>
+    <unit id="ConversationWorkCountExec"><segment><source>ran {0}</source><target state="translated">执行了 {0} 次</target></segment></unit>
+    <unit id="ConversationWorkCountSearch"><segment><source>searched {0}</source><target state="translated">搜索了 {0} 次</target></segment></unit>
+    <unit id="ConversationWorkCountRead"><segment><source>read {0}</source><target state="translated">读取了 {0} 次</target></segment></unit>
+    <unit id="ConversationWorkCountEdit"><segment><source>edited {0}</source><target state="translated">编辑了 {0} 次</target></segment></unit>
+    <unit id="ConversationWorkCountFetch"><segment><source>fetched {0}</source><target state="translated">抓取了 {0} 次</target></segment></unit>
+    <unit id="ConversationWorkCountThink"><segment><source>thought {0}</source><target state="translated">思考了 {0} 次</target></segment></unit>
+    <unit id="ConversationWorkCountPlan"><segment><source>planned {0}</source><target state="translated">规划了 {0} 次</target></segment></unit>
+    <unit id="ConversationWorkCountOther"><segment><source>{0} ops</source><target state="translated">操作了 {0} 次</target></segment></unit>
+    <unit id="ConversationWorkShortExec"><segment><source>run {0}</source><target state="translated">执行 {0}</target></segment></unit>
+    <unit id="ConversationWorkShortSearch"><segment><source>search {0}</source><target state="translated">搜索 {0}</target></segment></unit>
+    <unit id="ConversationWorkShortRead"><segment><source>read {0}</source><target state="translated">读取 {0}</target></segment></unit>
+    <unit id="ConversationWorkShortEdit"><segment><source>edit {0}</source><target state="translated">编辑 {0}</target></segment></unit>
+    <unit id="ConversationWorkShortFetch"><segment><source>fetch {0}</source><target state="translated">抓取 {0}</target></segment></unit>
+    <unit id="ConversationWorkShortThink"><segment><source>think {0}</source><target state="translated">思考 {0}</target></segment></unit>
+    <unit id="ConversationWorkShortPlan"><segment><source>plan {0}</source><target state="translated">计划 {0}</target></segment></unit>
+    <unit id="ConversationWorkShortOther"><segment><source>other {0}</source><target state="translated">操作 {0}</target></segment></unit>
+    <unit id="ConversationStepVerbThink"><segment><source>Think</source><target state="translated">思考</target></segment></unit>
+    <unit id="ConversationStepVerbThinkActive"><segment><source>Thinking</source><target state="translated">正在思考</target></segment></unit>
+    <unit id="ConversationStepVerbThinkDone"><segment><source>Thought</source><target state="translated">已思考</target></segment></unit>
+    <unit id="ConversationStepVerbRead"><segment><source>Read</source><target state="translated">读取</target></segment></unit>
+    <unit id="ConversationStepVerbReadActive"><segment><source>Reading</source><target state="translated">正在读取</target></segment></unit>
+    <unit id="ConversationStepVerbReadDone"><segment><source>Read</source><target state="translated">已读取</target></segment></unit>
+    <unit id="ConversationStepVerbSearch"><segment><source>Search</source><target state="translated">搜索</target></segment></unit>
+    <unit id="ConversationStepVerbSearchActive"><segment><source>Searching</source><target state="translated">正在搜索</target></segment></unit>
+    <unit id="ConversationStepVerbSearchDone"><segment><source>Searched</source><target state="translated">已搜索</target></segment></unit>
+    <unit id="ConversationStepVerbEdit"><segment><source>Edit</source><target state="translated">编辑</target></segment></unit>
+    <unit id="ConversationStepVerbEditActive"><segment><source>Editing</source><target state="translated">正在编辑</target></segment></unit>
+    <unit id="ConversationStepVerbEditDone"><segment><source>Edited</source><target state="translated">已编辑</target></segment></unit>
+    <unit id="ConversationStepVerbDelete"><segment><source>Delete</source><target state="translated">删除</target></segment></unit>
+    <unit id="ConversationStepVerbDeleteActive"><segment><source>Deleting</source><target state="translated">正在删除</target></segment></unit>
+    <unit id="ConversationStepVerbDeleteDone"><segment><source>Deleted</source><target state="translated">已删除</target></segment></unit>
+    <unit id="ConversationStepVerbMove"><segment><source>Move</source><target state="translated">移动</target></segment></unit>
+    <unit id="ConversationStepVerbMoveActive"><segment><source>Moving</source><target state="translated">正在移动</target></segment></unit>
+    <unit id="ConversationStepVerbMoveDone"><segment><source>Moved</source><target state="translated">已移动</target></segment></unit>
+    <unit id="ConversationStepVerbExec"><segment><source>Run</source><target state="translated">执行</target></segment></unit>
+    <unit id="ConversationStepVerbExecActive"><segment><source>Running</source><target state="translated">正在执行</target></segment></unit>
+    <unit id="ConversationStepVerbExecDone"><segment><source>Ran</source><target state="translated">已执行</target></segment></unit>
+    <unit id="ConversationStepVerbFetch"><segment><source>Fetch</source><target state="translated">抓取</target></segment></unit>
+    <unit id="ConversationStepVerbFetchActive"><segment><source>Fetching</source><target state="translated">正在抓取</target></segment></unit>
+    <unit id="ConversationStepVerbFetchDone"><segment><source>Fetched</source><target state="translated">已抓取</target></segment></unit>
+    <unit id="ConversationStepVerbPlan"><segment><source>Plan</source><target state="translated">计划</target></segment></unit>
+    <unit id="ConversationStepVerbPlanActive"><segment><source>Planning</source><target state="translated">正在规划</target></segment></unit>
+    <unit id="ConversationStepVerbPlanDone"><segment><source>Planned</source><target state="translated">已规划</target></segment></unit>
+    <unit id="ConversationStepVerbOther"><segment><source>Tool</source><target state="translated">调用</target></segment></unit>
+    <unit id="ConversationStepVerbOtherActive"><segment><source>Running</source><target state="translated">正在调用</target></segment></unit>
+    <unit id="ConversationStepVerbOtherDone"><segment><source>Done</source><target state="translated">已调用</target></segment></unit>
+    <unit id="ConversationStepRunning"><segment><source>Running</source><target state="translated">进行中</target></segment></unit>
   </file>
 </xliff>

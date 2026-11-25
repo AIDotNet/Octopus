@@ -279,6 +279,8 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
             if (host.Projects.FirstOrDefault(known => known.Id == message!.Id) is { } known) return known;
             var project = new RemoteProject(host, message!.Id, message.Name, message.Path)
             {
+                Color = message.Color,
+                Icon = message.Icon,
                 IsGitRepository = message.IsGitRepository,
                 DefaultBranch = message.DefaultBranch,
             };
@@ -691,6 +693,8 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         {
             var project = host.Projects.FirstOrDefault(known => known.Id == message.Id && known.Name == message.Name && known.Path == message.Path)
                 ?? new RemoteProject(host, message.Id, message.Name, message.Path);
+            project.Color = message.Color;
+            project.Icon = message.Icon;
             project.IsGitRepository = message.IsGitRepository;
             project.DefaultBranch = message.DefaultBranch;
             var workspaces = (message.Workspaces ?? []).Select(MapWorkspace).ToList();
