@@ -2304,6 +2304,155 @@ public class AgentGuiTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task Streaming_after_new_prompt_stays_pinned_at_bottom_and_single_jump_reaches_true_end()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-scroll-pin-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "scroll-pin");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        var turnGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeAcpSession? activeSession = null;
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            activeSession = session;
+            session.StartHandler = (s, _) =>
+            {
+                // Replay 10 variable-height historical turns so total height far exceeds viewport height.
+                for (var i = 1; i <= 10; i++)
+                {
+                    s.Emit(new AcpUserMessageEvent($"Historical prompt #{i}", $"u-{i}") { IsReplay = true });
+                    var paragraphs = string.Join("\n\n", Enumerable.Range(1, 4).Select(p =>
+                        $"Historical turn {i}, paragraph {p}: reviewing module architecture, state transitions, and layout invariants across multiple lines so each turn has realistic height."));
+                    s.Emit(new AcpTextDeltaEvent("assistant", paragraphs, $"a-{i}") { IsReplay = true });
+                }
+            };
+            session.PromptHandler = async (_, _, _, ct) =>
+            {
+                await turnGate.Task.WaitAsync(ct);
+                return new AcpPromptResult { StopReason = "end_turn" };
+            };
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 1100, Height = 640, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready && vm.Timeline.Count == 20);
+            PumpLayout(window);
+
+            var scroller = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view)
+                .OfType<TKCode.Arc.ScrollArea>()
+                .First(s => s.Name == "PART_ScrollViewer");
+
+            Assert.True(scroller.ScrollBarMaximum.Y > 600, $"Expected tall timeline, got ScrollBarMaximum.Y={scroller.ScrollBarMaximum.Y}");
+            Assert.True(vm.IsPinnedToBottom);
+            Assert.False(vm.ShowJumpToBottom);
+            Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0,
+                $"Expected replay to land at bottom, offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
+
+            // Submit a new prompt and stream output in multiple steps: scrollbar must never drift upward into history.
+            vm.InputText = "Please inspect the layout and explain every detail.";
+            var sendTask = vm.SendPromptAsync();
+            PumpLayout(window);
+
+            var previousOffsetY = scroller.Offset.Y;
+            Assert.True(vm.IsPinnedToBottom, "Submitting a new prompt must remain pinned to bottom.");
+            Assert.False(vm.ShowJumpToBottom);
+
+            for (var chunk = 1; chunk <= 8; chunk++)
+            {
+                var block = $"\n\n### Section {chunk}\n"
+                    + string.Join("\n", Enumerable.Range(1, 6).Select(line =>
+                        $"- Streaming output item {chunk}.{line}: verifying vertical scroll stability while new content grows."));
+                activeSession!.Emit(new AcpTextDeltaEvent("assistant", block, "live-msg"));
+                await Task.Delay(50);
+                PumpLayout(window);
+
+                Assert.True(vm.IsPinnedToBottom,
+                    $"Lost bottom pin at chunk {chunk}: offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}, extent={scroller.Extent.Height}");
+                Assert.False(vm.ShowJumpToBottom, $"Jump-to-bottom appeared unexpectedly at chunk {chunk}.");
+                Assert.True(scroller.Offset.Y >= previousOffsetY - 1.0,
+                    $"Scrollbar drifted upward at chunk {chunk}: prev={previousOffsetY}, cur={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
+                Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0,
+                    $"Not at bottom at chunk {chunk}: offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
+                previousOffsetY = scroller.Offset.Y;
+            }
+
+            // Now user explicitly scrolls up into historical conversation while streaming continues:
+            // viewport must stay in history and NOT yank user back down.
+            scroller.Offset = new Avalonia.Vector(0, 120);
+            PumpLayout(window);
+            Assert.False(vm.IsPinnedToBottom, "Scrolling up into history must unpin auto-scroll.");
+            Assert.True(vm.ShowJumpToBottom);
+
+            var pinnedHistoryOffset = scroller.Offset.Y;
+            activeSession!.Emit(new AcpTextDeltaEvent("assistant", "\n\nMore streamed output while user reads history.\nLine 2\nLine 3\nLine 4", "live-msg"));
+            await Task.Delay(50);
+            PumpLayout(window);
+            Assert.False(vm.IsPinnedToBottom, "Streaming while unpinned must not force re-pin.");
+            Assert.True(Math.Abs(scroller.Offset.Y - pinnedHistoryOffset) <= 2.0,
+                $"Expected history offset to stay at {pinnedHistoryOffset}, got {scroller.Offset.Y}");
+
+            // Finish turn while user is still scrolled up, then click "Jump to latest" ONCE:
+            // must reach the true bottom in a single click (not 4 clicks).
+            turnGate.TrySetResult(true);
+            await sendTask;
+            PumpLayout(window);
+
+            vm.JumpToBottomCommand.Execute(null);
+            PumpLayout(window);
+
+            Assert.True(vm.IsPinnedToBottom, "Single JumpToBottom click must pin to bottom.");
+            Assert.False(vm.ShowJumpToBottom, "JumpToBottom button must disappear after a single click.");
+            Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0,
+                $"Single JumpToBottom click must reach true bottom, offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
+
+            // Re-entering the GUI tab after scrolling up must restore the scrollbar to the very bottom.
+            scroller.Offset = new Avalonia.Vector(0, 80);
+            PumpLayout(window);
+            Assert.False(vm.IsPinnedToBottom);
+
+            window.Content = null;
+            PumpLayout(window);
+            window.Content = view;
+            PumpLayout(window);
+
+            Assert.True(vm.IsPinnedToBottom, "Re-entering the GUI tab must pin to bottom.");
+            Assert.False(vm.ShowJumpToBottom);
+            Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0,
+                $"Re-entering the GUI tab must scroll to the very bottom, offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
+        }
+        finally
+        {
+            turnGate.TrySetResult(true);
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    private static void PumpLayout(Window window)
+    {
+        for (var i = 0; i < 4; i++)
+        {
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);

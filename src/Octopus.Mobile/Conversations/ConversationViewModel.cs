@@ -105,6 +105,9 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     /// <summary>Raised when entries change so the page can stay pinned to the bottom.</summary>
     public event Action? TimelineChanged;
 
+    /// <summary>Raised when the view should force-pin and scroll to the very bottom (initial attach or sending a prompt).</summary>
+    public event Action? ScrollToBottomRequested;
+
     [RelayCommand]
     private void Back() => _navigator.Back();
 
@@ -161,7 +164,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         try
         {
             await _conversation.SendAsync(text, cancellationToken: _lifetime.Token);
-            TimelineChanged?.Invoke();
+            ScrollToBottomRequested?.Invoke();
         }
         catch (IOException e)
         {
@@ -356,7 +359,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         conversation.Composer.PropertyChanged += OnComposerChanged;
         OnPropertyChanged(nameof(Conversation));
         NotifyState();
-        TimelineChanged?.Invoke();
+        ScrollToBottomRequested?.Invoke();
     }
 
     private void DetachConversation()

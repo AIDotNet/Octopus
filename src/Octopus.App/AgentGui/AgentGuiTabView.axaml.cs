@@ -18,10 +18,11 @@ public partial class AgentGuiTabView : UserControl, ITabContent
 
     private AgentGuiTabViewModel? _model;
     private ScrollArea? _timelineScroller;
+    private TopLevel? _topLevel;
     private bool _started;
     private bool _isAttached;
-    private bool _programmaticScroll;
     private bool _scrollQueued;
+    private bool _forceScrollQueued;
     private bool _pointerPressedInTimeline;
 
     public AgentGuiTabView()
@@ -49,14 +50,20 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         if (_timelineScroller is not null)
         {
             _timelineScroller.ScrollChanged += OnTimelineScrollChanged;
-            _timelineScroller.AddHandler(PointerPressedEvent, OnTimelinePointerPressed, RoutingStrategies.Tunnel);
-            _timelineScroller.AddHandler(PointerReleasedEvent, OnTimelinePointerReleased, RoutingStrategies.Tunnel);
+            _timelineScroller.AddHandler(PointerPressedEvent, OnTimelinePointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            _timelineScroller.AddHandler(PointerReleasedEvent, OnTimelinePointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+            if (_model?.IsPinnedToBottom == true)
+            {
+                QueueScrollToBottom(force: true);
+            }
         }
     }
 
     private void OnTimelinePointerPressed(object? sender, PointerPressedEventArgs e) => _pointerPressedInTimeline = true;
 
     private void OnTimelinePointerReleased(object? sender, PointerReleasedEventArgs e) => _pointerPressedInTimeline = false;
+
+    private void OnTopLevelPointerReleased(object? sender, PointerReleasedEventArgs e) => _pointerPressedInTimeline = false;
 
     private void OnModelPopoverPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
@@ -94,6 +101,10 @@ public partial class AgentGuiTabView : UserControl, ITabContent
             _model.ScrollToBottomRequested += OnScrollToBottom;
             _model.FocusComposerRequested += OnFocusComposerRequested;
             TryStartIfVisible();
+            if (_isAttached)
+            {
+                PinAndScrollToBottomOnEntry();
+            }
         }
     }
 
@@ -101,8 +112,13 @@ public partial class AgentGuiTabView : UserControl, ITabContent
     {
         base.OnAttachedToVisualTree(e);
         _isAttached = true;
+        _pointerPressedInTimeline = false;
+        _topLevel = TopLevel.GetTopLevel(this);
+        _topLevel?.AddHandler(PointerReleasedEvent, OnTopLevelPointerReleased, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
         // First time on screen: only now does the ACP process start (a restored tab that is never shown never runs).
         TryStartIfVisible();
+        // Every time the user enters this GUI tab, keep the timeline pinned to the very bottom.
+        PinAndScrollToBottomOnEntry();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -110,6 +126,11 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         base.OnDetachedFromVisualTree(e);
         _isAttached = false;
         _pointerPressedInTimeline = false;
+        if (_topLevel is not null)
+        {
+            _topLevel.RemoveHandler(PointerReleasedEvent, OnTopLevelPointerReleased);
+            _topLevel = null;
+        }
         // Release transient overlays when switching away from this tab.
         if (_model is not null)
         {
@@ -117,6 +138,22 @@ public partial class AgentGuiTabView : UserControl, ITabContent
             _model.IsFilePopupOpen = false;
             if (_model.ScriptPreview.IsOpen) _model.ScriptPreview.Close();
         }
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty && _isAttached && change.GetNewValue<bool>())
+        {
+            PinAndScrollToBottomOnEntry();
+        }
+    }
+
+    private void PinAndScrollToBottomOnEntry()
+    {
+        if (_model is null) return;
+        _model.IsPinnedToBottom = true;
+        QueueScrollToBottom(force: true);
     }
 
     private void TryStartIfVisible()
@@ -152,7 +189,7 @@ public partial class AgentGuiTabView : UserControl, ITabContent
 
     private void OnTimelineScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_model is null || _timelineScroller is null || _programmaticScroll) return;
+        if (_model is null || _timelineScroller is null) return;
         var extentY = _timelineScroller.Extent.Height;
         var viewportY = _timelineScroller.Viewport.Height;
         if (extentY <= viewportY + 1)
@@ -160,21 +197,60 @@ public partial class AgentGuiTabView : UserControl, ITabContent
             _model.IsPinnedToBottom = true;
             return;
         }
+
         var distanceFromBottom = extentY - viewportY - _timelineScroller.Offset.Y;
-        _model.IsPinnedToBottom = distanceFromBottom <= BottomPinThreshold;
+        // When Viewport grows (e.g. multi-line composer clears on submit) or Extent shrinks (e.g. ticker collapses),
+        // Avalonia's CoerceOffset can clamp Offset.Y down before the new Extent is applied. Only an upward offset
+        // delta strictly larger than that layout clamp represents a genuine user scroll upward.
+        var maxLayoutClampDrop = Math.Max(0.0, e.ViewportDelta.Y) + Math.Max(0.0, -e.ExtentDelta.Y);
+
+        if (e.OffsetDelta.Y < -(maxLayoutClampDrop + 1.0) && distanceFromBottom > 1.0)
+        {
+            _model.IsPinnedToBottom = false;
+            return;
+        }
+
+        // User scrolled back down to the bottom (even if content grew in the same layout pass).
+        if (!_model.IsPinnedToBottom && e.OffsetDelta.Y > 0.5 && distanceFromBottom <= BottomPinThreshold)
+        {
+            _model.IsPinnedToBottom = true;
+            return;
+        }
+
+        // Content or viewport size changed (new prompt, streaming output, composer resize, tab re-attach):
+        // preserve pinned state and immediately follow the bottom so large growth deltas never falsely unpin.
+        if (Math.Abs(e.ExtentDelta.Y) > 0.5 || Math.Abs(e.ViewportDelta.Y) > 0.5)
+        {
+            if (_model.IsPinnedToBottom && !_pointerPressedInTimeline && distanceFromBottom > 0.5)
+            {
+                _timelineScroller.ScrollToEnd();
+            }
+            return;
+        }
+
+        if (Math.Abs(e.OffsetDelta.Y) > 0.5)
+        {
+            _model.IsPinnedToBottom = distanceFromBottom <= BottomPinThreshold;
+        }
     }
 
-    private void OnScrollToBottom(object? sender, bool force)
+    private void OnScrollToBottom(object? sender, bool force) => QueueScrollToBottom(force);
+
+    private void QueueScrollToBottom(bool force)
     {
-        if (!force && (_pointerPressedInTimeline || _scrollQueued)) return;
+        if (!force && _pointerPressedInTimeline) return;
+        if (force) _forceScrollQueued = true;
+        if (_scrollQueued) return;
         _scrollQueued = true;
         Dispatcher.UIThread.Post(() =>
         {
+            var forced = _forceScrollQueued;
             _scrollQueued = false;
-            if (_model is null || _timelineScroller is null || (!force && (!_model.IsPinnedToBottom || _pointerPressedInTimeline))) return;
-            _programmaticScroll = true;
-            try { _timelineScroller.ScrollToEnd(); }
-            finally { _programmaticScroll = false; }
+            _forceScrollQueued = false;
+            if (_model is null || _timelineScroller is null) return;
+            if (!forced && (!_model.IsPinnedToBottom || _pointerPressedInTimeline)) return;
+            if (forced) _model.IsPinnedToBottom = true;
+            _timelineScroller.ScrollToEnd();
         }, DispatcherPriority.Background);
     }
 

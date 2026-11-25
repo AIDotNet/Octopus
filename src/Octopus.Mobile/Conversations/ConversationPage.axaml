@@ -428,7 +428,8 @@
         <ScrollViewer Name="TimelineScroll"
                       Grid.Row="1"
                       VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
+                      HorizontalScrollBarVisibility="Disabled"
+                      BringIntoViewOnFocusChange="False">
             <StackPanel Margin="12,10,12,14" Spacing="12">
                 <TextBlock Name="EarlierNotice"
                            Classes="muted"

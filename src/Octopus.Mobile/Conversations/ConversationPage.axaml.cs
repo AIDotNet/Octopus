@@ -23,8 +23,10 @@ public partial class ConversationPage : Page, IClosablePage
         DataContext = viewModel;
         viewModel.OptionPickerRequested += OnOptionPickerRequested;
         viewModel.TimelineChanged += OnTimelineChanged;
+        viewModel.ScrollToBottomRequested += ScrollToBottomOnEntry;
         TimelineScroll.ScrollChanged += OnTimelineScrollChanged;
         PromptField.AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
+        if (viewModel.IsLoaded) ScrollToBottomOnEntry();
     }
 
     /// <summary>True while the model/mode/effort picker sheet is open, for tests.</summary>
@@ -37,6 +39,7 @@ public partial class ConversationPage : Page, IClosablePage
     {
         _viewModel.OptionPickerRequested -= OnOptionPickerRequested;
         _viewModel.TimelineChanged -= OnTimelineChanged;
+        _viewModel.ScrollToBottomRequested -= ScrollToBottomOnEntry;
         TimelineScroll.ScrollChanged -= OnTimelineScrollChanged;
         PromptField.RemoveHandler(KeyDownEvent, OnPromptKeyDown);
         _viewModel.Dispose();
@@ -45,7 +48,14 @@ public partial class ConversationPage : Page, IClosablePage
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        if (_pinnedToBottom) PostScrollToBottom();
+        ScrollToBottomOnEntry();
+    }
+
+    /// <summary>Pins and scrolls the conversation timeline to the bottom whenever the user enters this page.</summary>
+    internal void ScrollToBottomOnEntry()
+    {
+        _pinnedToBottom = true;
+        PostScrollToBottom();
     }
 
     // ActionSheets take their rows as controls, not from an ItemsSource.
@@ -73,15 +83,40 @@ public partial class ConversationPage : Page, IClosablePage
 
     private void OnTimelineScrollChanged(object? sender, Avalonia.Controls.ScrollChangedEventArgs e)
     {
-        if (Math.Abs(e.ExtentDelta.Y) > 0.5)
+        var extentY = TimelineScroll.Extent.Height;
+        var viewportY = TimelineScroll.Viewport.Height;
+        if (extentY <= viewportY + 1)
         {
-            if (_pinnedToBottom) TimelineScroll.ScrollToEnd();
+            _pinnedToBottom = true;
             return;
         }
+
+        var distanceFromBottom = extentY - viewportY - TimelineScroll.Offset.Y;
+        // When Viewport grows (e.g. multi-line composer clears on send or keyboard hides) or Extent shrinks,
+        // Avalonia's CoerceOffset can clamp Offset.Y down before the new Extent is applied.
+        var maxLayoutClampDrop = Math.Max(0.0, e.ViewportDelta.Y) + Math.Max(0.0, -e.ExtentDelta.Y);
+
+        if (e.OffsetDelta.Y < -(maxLayoutClampDrop + 1.0) && distanceFromBottom > 1.0)
+        {
+            _pinnedToBottom = false;
+            return;
+        }
+
+        if (!_pinnedToBottom && e.OffsetDelta.Y > 0.5 && distanceFromBottom <= BottomPinTolerance)
+        {
+            _pinnedToBottom = true;
+            return;
+        }
+
+        if (Math.Abs(e.ExtentDelta.Y) > 0.5 || Math.Abs(e.ViewportDelta.Y) > 0.5)
+        {
+            if (_pinnedToBottom && distanceFromBottom > 0.5) TimelineScroll.ScrollToEnd();
+            return;
+        }
+
         if (Math.Abs(e.OffsetDelta.Y) > 0.5)
         {
-            var max = TimelineScroll.ScrollBarMaximum.Y;
-            _pinnedToBottom = max <= 1 || TimelineScroll.Offset.Y >= max - BottomPinTolerance;
+            _pinnedToBottom = distanceFromBottom <= BottomPinTolerance;
         }
     }
 

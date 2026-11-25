@@ -501,6 +501,83 @@ public class ConversationTests
     }
 
     [AvaloniaFact]
+    public void Entering_and_returning_to_mobile_conversation_keeps_scroll_at_bottom()
+    {
+        using var phone = new Phone();
+        var (page, vm, session) = OpenDemoConversation(phone);
+
+        // Resolve the initial demo permission card so prompts execute onto the timeline instead of queueing.
+        var permission = vm.Entries.OfType<ConversationPermissionEntry>().Single();
+        vm.RespondCommand.Execute(permission.Options.Single(option => option.IsAllow));
+        Assert.True(Phone.Until(() => vm.State == ConversationState.Ready));
+
+        // Append enough multi-line messages so the mobile conversation overflows the viewport.
+        for (var i = 1; i <= 8; i++)
+        {
+            vm.PromptText = $"第 {i} 轮排查：请检查滚动条状态并输出详细结论。\n细节 A：确认重新进入会话时滚动条自动位于底部。\n细节 B：确认返回页面时也能保持底部。";
+            var before = vm.Entries.Count;
+            vm.SendCommand.Execute(null);
+            Assert.True(Phone.Until(() => !vm.IsSending && vm.Entries.Count > before));
+            if (vm.CanStop)
+            {
+                vm.CancelCommand.Execute(null);
+                Assert.True(Phone.Until(() => vm.State == ConversationState.Ready));
+            }
+            Phone.Pump();
+        }
+
+        var scroller = page.FindControl<ScrollViewer>("TimelineScroll")!;
+        Assert.True(Phone.Until(() => scroller.ScrollBarMaximum.Y > 200),
+            $"Expected overflowing mobile timeline, max={scroller.ScrollBarMaximum.Y}");
+        Phone.Pump();
+        Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0,
+            $"Expected initial/sent timeline at bottom, offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
+
+        // 1) Scroll up into history, then send a new prompt: must force-scroll back to the very bottom.
+        scroller.Offset = new Avalonia.Vector(0, 40);
+        Phone.Pump();
+        Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y > 100);
+
+        vm.PromptText = "回到最底部的新消息";
+        var beforeSend = vm.Entries.Count;
+        vm.SendCommand.Execute(null);
+        Assert.True(Phone.Until(() => !vm.IsSending && vm.Entries.Count > beforeSend));
+        if (vm.CanStop)
+        {
+            vm.CancelCommand.Execute(null);
+            Assert.True(Phone.Until(() => vm.State == ConversationState.Ready));
+        }
+        Assert.True(Phone.Until(() => scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0),
+            $"Sending while scrolled up must scroll mobile GUI to bottom, offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
+
+        // 2) Scroll up into history, push another page (Files), and pop back: must return to the very bottom.
+        scroller.Offset = new Avalonia.Vector(0, 40);
+        Phone.Pump();
+        Assert.True(scroller.ScrollBarMaximum.Y - scroller.Offset.Y > 100);
+
+        phone.Shell.ShowFiles(session.Project, RemoteFolders.WorkspacePathOf(session));
+        Assert.True(Phone.Until(() => phone.Shell.Top is FilesPage));
+        phone.Shell.Back();
+        Assert.True(Phone.Until(() => phone.Shell.Top is ConversationPage));
+        Assert.True(Phone.Until(() => scroller.ScrollBarMaximum.Y - scroller.Offset.Y <= 2.0),
+            $"Returning from sub-page must scroll mobile GUI to bottom, offset={scroller.Offset.Y}, max={scroller.ScrollBarMaximum.Y}");
+
+        // 3) Leave conversation completely and re-enter it: must land at the very bottom.
+        scroller.Offset = new Avalonia.Vector(0, 40);
+        Phone.Pump();
+        phone.Shell.Back();
+        Assert.True(Phone.Until(() => phone.Shell.Top is HostPage));
+
+        phone.Shell.ShowSession(session);
+        Assert.True(Phone.Until(() => phone.Shell.Top is ConversationPage));
+        var reopenedPage = phone.Top<ConversationPage>();
+        Assert.True(Phone.Until(() => reopenedPage.DataContext is ConversationViewModel { IsLoaded: true }));
+        var reopenedScroller = reopenedPage.FindControl<ScrollViewer>("TimelineScroll")!;
+        Assert.True(Phone.Until(() => reopenedScroller.ScrollBarMaximum.Y > 0 && reopenedScroller.ScrollBarMaximum.Y - reopenedScroller.Offset.Y <= 2.0),
+            $"Re-entering mobile GUI must scroll to bottom, offset={reopenedScroller.Offset.Y}, max={reopenedScroller.ScrollBarMaximum.Y}");
+    }
+
+    [AvaloniaFact]
     public async Task Older_host_without_acp_gui_capability_opens_session_details_with_notice()
     {
         await using var relay = new FakeRelay();

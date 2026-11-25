@@ -316,12 +316,6 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="Padding" Value="6,4" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
-                    <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
-                </Transitions>
-            </Setter>
         </Style>
         <Style Selector="Border.queueItem:pointerover">
             <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
@@ -361,12 +355,6 @@
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusAdorner" Value="{x:Null}" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
-                    <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
-                </Transitions>
-            </Setter>
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Background="{TemplateBinding Background}"
@@ -458,8 +446,6 @@
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.13" />
-                    <BrushTransition Property="BorderBrush" Duration="0:0:0.13" />
                     <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.10" Easing="CubicEaseOut" />
                 </Transitions>
             </Setter>
@@ -520,11 +506,6 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
             <Setter Property="BorderThickness" Value="0,0,0,1" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
-                </Transitions>
-            </Setter>
         </Style>
         <Style Selector="Border.activityRow:pointerover">
             <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
@@ -540,12 +521,6 @@
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusAdorner" Value="{x:Null}" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.12" />
-                    <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
-                </Transitions>
-            </Setter>
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border Background="{TemplateBinding Background}"
@@ -601,12 +576,6 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="7" />
             <Setter Property="Padding" Value="8,6" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15" />
-                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
-                </Transitions>
-            </Setter>
         </Style>
         <Style Selector="Border.taskRow:pointerover">
             <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
@@ -1497,21 +1466,22 @@
                     </StackPanel>
                 </arc:ScrollArea>
 
-                <!-- Virtualized Main Timeline: realizes only viewport + cache items so long sessions keep constant UI memory -->
+                <!-- Main Timeline: non-virtualized StackPanel avoids Avalonia VirtualizingStackPanel's
+                     variable-height StartU invalidation and estimated-extent drift while streaming. -->
                 <ItemsControl x:Name="TimelineList"
                               Grid.Row="1"
                               IsVisible="{Binding HasTimeline}"
                               ItemsSource="{Binding Timeline}">
                     <ItemsControl.Styles>
-                        <Style Selector="ItemsControl#TimelineList VirtualizingStackPanel > ContentPresenter">
+                        <Style Selector="ItemsControl#TimelineList StackPanel.timelinePanel > ContentPresenter">
                             <Setter Property="MaxWidth" Value="860" />
                             <Setter Property="HorizontalAlignment" Value="Stretch" />
-                            <Setter Property="Margin" Value="0,0,0,10" />
                         </Style>
                     </ItemsControl.Styles>
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <VirtualizingStackPanel CacheLength="0.6" />
+                            <StackPanel Classes="timelinePanel"
+                                        Spacing="{DynamicResource OctopusAgentGuiTurnSpacing}" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.Template>
@@ -1520,6 +1490,7 @@
                                             Orientation="Vertical"
                                             FadeLength="0"
                                             HorizontalScrollBarVisibility="Disabled"
+                                            BringIntoViewOnFocusChange="False"
                                             Padding="{DynamicResource OctopusAgentGuiStreamMargin}">
                                 <ItemsPresenter Name="PART_ItemsPresenter"
                                                 ItemsPanel="{TemplateBinding ItemsPanel}" />
