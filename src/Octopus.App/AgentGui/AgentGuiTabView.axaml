@@ -32,68 +32,130 @@
             <Setter Property="Foreground" Value="#DC2626" />
         </Style>
 
-        <!-- Smooth timeline item entrance animations -->
-        <Style Selector="Border.cardEnter">
-            <Setter Property="RenderTransform">
-                <TranslateTransform Y="0" />
+        <!-- Zero-card pure-text unified work area styles (Scheme C) -->
+        <Style Selector="Button.workHeader">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,1" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="Center" />
+                </ControlTemplate>
             </Setter>
-            <Style.Animations>
-                <Animation Duration="0:0:0.18" Easing="CubicEaseOut" FillMode="Forward">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0" />
-                        <Setter Property="TranslateTransform.Y" Value="5" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1" />
-                        <Setter Property="TranslateTransform.Y" Value="0" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
         </Style>
-        <Style Selector="StackPanel.turnEnter">
-            <Setter Property="RenderTransform">
-                <TranslateTransform Y="0" />
-            </Setter>
-            <Style.Animations>
-                <Animation Duration="0:0:0.18" Easing="CubicEaseOut" FillMode="Forward">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0" />
-                        <Setter Property="TranslateTransform.Y" Value="4" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1" />
-                        <Setter Property="TranslateTransform.Y" Value="0" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+        <Style Selector="Button.workHeader:pointerover TextBlock.workTitle">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        </Style>
+        <Style Selector="Button.workHeader:pointerover TextBlock.workCounts">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
         </Style>
 
-        <!-- Tool call card subtle hover border transition & action reveal -->
-        <Style Selector="Border.toolCard">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
-            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="ClipToBounds" Value="True" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="BorderBrush" Duration="0:0:0.14" />
-                </Transitions>
+        <Style Selector="Button.workStep">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,2" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="Center" />
+                </ControlTemplate>
             </Setter>
         </Style>
-        <Style Selector="Border.toolCard:pointerover">
-            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Style Selector="Button.workStep:pointerover TextBlock.stepTarget">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
         </Style>
-        <Style Selector="Border.toolCard arc|Button.toolAction">
-            <Setter Property="Opacity" Value="0.55" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.14" />
-                </Transitions>
+
+        <Style Selector="Button.textLink">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      Padding="{TemplateBinding Padding}"
+                                      VerticalContentAlignment="Center" />
+                </ControlTemplate>
             </Setter>
         </Style>
-        <Style Selector="Border.toolCard:pointerover arc|Button.toolAction">
-            <Setter Property="Opacity" Value="1" />
+        <Style Selector="Button.textLink:pointerover">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        </Style>
+        <Style Selector="Button.textLink.accent">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+        </Style>
+
+        <Style Selector="TextBlock.tickerVerb">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.tickerVerb.failed">
+            <Setter Property="Foreground" Value="#DC2626" />
+        </Style>
+        <Style Selector="TextBlock.tickerTarget">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="MaxLines" Value="1" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.tickerTarget:not(.thought)">
+            <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.tickerTarget.failed">
+            <Setter Property="Foreground" Value="#DC2626" />
+        </Style>
+
+        <Style Selector="TextBlock.stepMark">
+            <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.stepMark.failed">
+            <Setter Property="Foreground" Value="#DC2626" />
+        </Style>
+        <Style Selector="TextBlock.stepVerb">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+        <Style Selector="TextBlock.stepVerb.failed">
+            <Setter Property="Foreground" Value="#DC2626" />
+        </Style>
+        <Style Selector="TextBlock.stepTarget">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="MaxLines" Value="1" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+        <Style Selector="TextBlock.stepTarget:not(.thought)">
+            <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="TextBlock.stepTarget.failed">
+            <Setter Property="Foreground" Value="#DC2626" />
         </Style>
 
         <!-- User turn hover-revealed quick actions -->
@@ -219,6 +281,17 @@
         </Style>
         <Style Selector="Border.composerCard:focus-within">
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        </Style>
+
+        <!-- Single composer send/loading button hover-to-stop visual -->
+        <Style Selector="arc|Button#SendButton lucide|LucideIcon.stopHoverIcon">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="arc|Button#SendButton.canStop:pointerover arc|ArcSpinner.loadingIcon">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="arc|Button#SendButton.canStop:pointerover lucide|LucideIcon.stopHoverIcon">
+            <Setter Property="IsVisible" Value="True" />
         </Style>
 
         <!-- Docked queued prompts tray above composer -->
@@ -636,268 +709,275 @@
     </UserControl.Styles>
 
     <UserControl.DataTemplates>
-        <!-- Reusable compact ToolCall card with Bash Style 2 (single-line header + output-first + script capsule & modal) -->
-        <DataTemplate DataType="gui:ToolCallItemViewModel">
-            <Border Classes="toolCard cardEnter">
-                <StackPanel>
-                    <Grid ColumnDefinitions="*,Auto,Auto">
-                        <Button Classes="row" Padding="8,4" Command="{Binding ToggleExpandedCommand}">
-                            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
-                                <lucide:LucideIcon Grid.Column="0" Kind="{Binding KindIcon}" Size="12"
-                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
-                                <Border Grid.Column="1" IsVisible="{Binding HasScriptLanguage}"
-                                        Padding="5,0" CornerRadius="4" VerticalAlignment="Center"
-                                        Background="{arc:ArcDesignTokenResource AccentSubtle}">
-                                    <TextBlock Text="{Binding ScriptLanguage}"
-                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                               FontSize="10" FontWeight="SemiBold"
-                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
-                                </Border>
-                                <Grid Grid.Column="2" ColumnDefinitions="Auto,*" ColumnSpacing="6" VerticalAlignment="Center">
-                                    <TextBlock Grid.Column="0"
-                                               Text="{Binding DisplayTitle}"
-                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                               FontSize="11.5"
-                                               MaxLines="1"
-                                               TextTrimming="CharacterEllipsis"
-                                               Foreground="{arc:ArcDesignTokenResource Foreground}"
-                                               VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1"
-                                               IsVisible="{Binding HasSecondaryHeaderPreview}"
-                                               Text="{Binding SecondaryHeaderPreview}"
-                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                               FontSize="11"
-                                               MaxLines="1"
-                                               TextTrimming="CharacterEllipsis"
-                                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                               VerticalAlignment="Center" />
-                                </Grid>
-                                <Border Grid.Column="3" IsVisible="{Binding ShowLinesBadge}"
-                                        Padding="5,0" CornerRadius="8" VerticalAlignment="Center"
-                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                                    <TextBlock Text="{Binding LinesBadgeText}"
-                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                               FontSize="10"
-                                               Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
-                                </Border>
-                                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                                    <TextBlock IsVisible="{Binding HasAddedStats}"
-                                               Text="{Binding AddedStatsText}"
-                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                               FontSize="11" Foreground="#16A34A" />
-                                    <TextBlock IsVisible="{Binding HasRemovedStats}"
-                                               Text="{Binding RemovedStatsText}"
-                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                               FontSize="11" Foreground="#DC2626" />
-                                </StackPanel>
-                                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                                    <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" VerticalAlignment="Center" />
-                                    <lucide:LucideIcon Kind="Check" Size="12" Foreground="#16A34A" IsVisible="{Binding IsCompleted}" VerticalAlignment="Center" />
-                                    <lucide:LucideIcon Kind="CircleAlert" Size="12" Foreground="#DC2626" IsVisible="{Binding IsFailed}" VerticalAlignment="Center" />
-                                    <TextBlock Classes="hint" Text="{Binding StatusText}" VerticalAlignment="Center" />
-                                </StackPanel>
-                                <lucide:LucideIcon Grid.Column="6"
-                                                   Classes="chevron"
-                                                   Classes.open="{Binding IsExpanded}"
-                                                   Kind="ChevronRight"
-                                                   Size="12"
-                                                   IsVisible="{Binding CanExpand}"
-                                                   VerticalAlignment="Center" />
-                            </Grid>
-                        </Button>
-                        <arc:Button Grid.Column="1"
-                                    Classes="icon toolAction" Variant="Ghost"
-                                    IsVisible="{Binding CanOpenDiff}"
-                                    Command="{Binding OpenDiffCommand}"
-                                    AutomationProperties.Name="{l:AppLangResource AgentGuiOpenDiff}"
-                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiOpenDiff}">
-                            <lucide:LucideIcon Kind="FileDiff" Size="12" />
-                        </arc:Button>
-                        <arc:Button Grid.Column="2"
-                                    Classes="icon toolAction" Variant="Ghost"
-                                    IsVisible="{Binding CanOpenFile}"
-                                    Command="{Binding OpenFileCommand}"
-                                    Margin="0,0,2,0"
-                                    AutomationProperties.Name="{l:AppLangResource AgentGuiOpenFile}"
-                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiOpenFile}">
-                            <lucide:LucideIcon Kind="ExternalLink" Size="12" />
-                        </arc:Button>
-                    </Grid>
-
-                    <common:SmoothCollapse IsExpanded="{Binding IsExpanded}" LazyData="{Binding}">
-                        <common:SmoothCollapse.ContentTemplate>
-                            <DataTemplate x:DataType="gui:ToolCallItemViewModel">
-                                <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                                        BorderThickness="0,1,0,0"
-                                        Background="{arc:ArcDesignTokenResource Background}"
-                                        Padding="0,4">
-                                    <Grid RowDefinitions="Auto,Auto,*">
-                                        <!-- Bash Style 2: large/multiline script folds into a 1-line capsule above output + View Full Script modal button -->
-                                        <Border Grid.Row="0"
-                                                IsVisible="{Binding IsLargeCommand}"
-                                                Margin="8,2,8,5"
-                                                Padding="8,4"
-                                                CornerRadius="6"
-                                                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                                                BorderThickness="1">
-                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
-                                                <TextBlock Grid.Column="0" Text="$"
-                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                           FontSize="11.5" FontWeight="Bold"
-                                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}"
-                                                           VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding SingleLineCommandPreview}"
-                                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                           FontSize="11"
-                                                           MaxLines="1"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                           VerticalAlignment="Center" />
-                                                <Border Grid.Column="2" Padding="5,1" CornerRadius="8" VerticalAlignment="Center"
-                                                        Background="{arc:ArcDesignTokenResource Background}"
-                                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                                                    <TextBlock Text="{Binding LinesCollapsedText}"
-                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                               FontSize="10"
-                                                               Foreground="{arc:ArcDesignTokenResource TextMuted}" />
-                                                </Border>
-                                                <arc:Badge Grid.Column="3" Size="Small" Tone="Neutral" Content="{Binding ExitCodeText}"
-                                                           IsVisible="{Binding HasExitCode}" VerticalAlignment="Center" />
-                                                <arc:Button Grid.Column="4" Size="Small" Variant="Secondary"
-                                                            IsVisible="{Binding CanOpenScriptPreview}"
-                                                            Command="{Binding OpenScriptPreviewCommand}">
-                                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                                        <lucide:LucideIcon Kind="ExternalLink" Size="11" VerticalAlignment="Center" />
-                                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}"
-                                                                   Text="{l:AppLangResource AgentGuiBashViewFullScript}"
-                                                                   VerticalAlignment="Center" />
-                                                    </StackPanel>
-                                                </arc:Button>
-                                                <arc:CopyButton Grid.Column="5"
-                                                                IsIconOnly="True"
-                                                                VerticalAlignment="Center"
-                                                                Value="{Binding CommandText}"
-                                                                AutomationProperties.Name="{l:AppLangResource AgentGuiCopyOutput}"
-                                                                arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyOutput}" />
-                                            </Grid>
-                                        </Border>
-
-                                        <!-- Short 1-3 line command: height-capped inline header with ExitCode & CopyButton -->
-                                        <Grid Grid.Row="1"
-                                              IsVisible="{Binding IsCompactCommand}"
-                                              ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="8,2,6,4">
-                                            <arc:ScrollArea MaxHeight="84" Orientation="Vertical" FadeLength="0">
-                                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6" VerticalAlignment="Center">
-                                                    <TextBlock Grid.Column="0" Text="$" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="11.5"
-                                                               Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Top" />
-                                                    <SelectableTextBlock Grid.Column="1" Text="{Binding CommandText}"
-                                                                         FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                         FontSize="11.5" TextWrapping="Wrap" />
-                                                    <arc:Badge Grid.Column="2" Size="Small" Tone="Neutral" Content="{Binding ExitCodeText}"
-                                                               IsVisible="{Binding HasExitCode}" VerticalAlignment="Top" />
-                                                </Grid>
-                                            </arc:ScrollArea>
-                                            <arc:CopyButton Grid.Column="1"
-                                                            IsIconOnly="True"
-                                                            VerticalAlignment="Top"
-                                                            Value="{Binding CopyableOutput}"
-                                                            AutomationProperties.Name="{l:AppLangResource AgentGuiCopyOutput}"
-                                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyOutput}" />
-                                        </Grid>
-
-                                        <arc:ScrollArea Grid.Row="2" MaxHeight="260" Orientation="Vertical" FadeLength="0">
-                                            <StackPanel Spacing="4">
-                                                <SelectableTextBlock IsVisible="{Binding HasInputSummary}"
-                                                                     Margin="8,0"
-                                                                     Text="{Binding InputSummary}"
-                                                                     FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                     FontSize="11.5"
-                                                                     TextWrapping="Wrap"
-                                                                     Foreground="{arc:ArcDesignTokenResource TextMuted}" />
-
-                                                <StackPanel IsVisible="{Binding IsRunningWithoutOutput}"
-                                                            Orientation="Horizontal" Spacing="6" Margin="8,2">
-                                                    <arc:ArcSpinner Width="10" Height="10" VerticalAlignment="Center" />
-                                                    <TextBlock Classes="hint" Text="{Binding StatusText}" VerticalAlignment="Center" />
-                                                </StackPanel>
-
-                                                <ItemsControl ItemsSource="{Binding DiffLines}" IsVisible="{Binding HasDiff}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="gui:DiffLineViewModel">
-                                                            <Border Classes="diffLine" Classes.add="{Binding IsAdd}" Classes.remove="{Binding IsRemove}">
-                                                                <Grid ColumnDefinitions="14,*">
-                                                                    <TextBlock Classes="diffText" Text="{Binding Prefix}" Opacity="0.7" />
-                                                                    <SelectableTextBlock Grid.Column="1" Classes="diffText" Text="{Binding Text}" TextWrapping="Wrap" />
-                                                                </Grid>
-                                                            </Border>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-
-                                                <SelectableTextBlock IsVisible="{Binding HasStdout}"
-                                                                     Margin="8,0"
-                                                                     Text="{Binding Stdout}"
-                                                                     FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                     FontSize="11.5"
-                                                                     TextWrapping="Wrap"
-                                                                     Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
-                                                <SelectableTextBlock IsVisible="{Binding HasStderr}"
-                                                                     Margin="8,0"
-                                                                     Text="{Binding Stderr}"
-                                                                     FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                     FontSize="11.5"
-                                                                     TextWrapping="Wrap"
-                                                                     Foreground="#DC2626" />
-                                                <SelectableTextBlock IsVisible="{Binding HasOutputText}"
-                                                                     Margin="8,0"
-                                                                     Text="{Binding OutputText}"
-                                                                     FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                     FontSize="11.5"
-                                                                     TextWrapping="Wrap"
-                                                                     Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
-                                            </StackPanel>
-                                        </arc:ScrollArea>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </common:SmoothCollapse.ContentTemplate>
-                    </common:SmoothCollapse>
-                </StackPanel>
-            </Border>
+        <!-- Scheme C: Single fixed slot inside the 3-line sliding live ticker (pure text, zero card) -->
+        <DataTemplate DataType="gui:WorkTickerLineViewModel">
+            <Grid IsVisible="{Binding IsVisible}"
+                  Opacity="{Binding RowOpacity}"
+                  ColumnDefinitions="14,Auto,*,Auto"
+                  ColumnSpacing="6"
+                  Margin="0,1">
+                <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
+                    <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" VerticalAlignment="Center" />
+                    <TextBlock Text="✓" FontSize="10.5" Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               IsVisible="{Binding IsCompleted}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBlock Text="✕" FontSize="10.5" Foreground="#DC2626"
+                               IsVisible="{Binding IsFailed}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Panel>
+                <TextBlock Grid.Column="1"
+                           Classes="tickerVerb"
+                           Classes.failed="{Binding IsFailed}"
+                           Text="{Binding Verb}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2"
+                           Classes="tickerTarget"
+                           Classes.thought="{Binding IsThought}"
+                           Classes.failed="{Binding IsFailed}"
+                           Text="{Binding Target}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3"
+                           IsVisible="{Binding HasStat}"
+                           Text="{Binding StatText}"
+                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                           FontSize="11"
+                           Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                           VerticalAlignment="Center" />
+            </Grid>
         </DataTemplate>
 
-        <!-- Claude Code ExitPlanMode interactive Plan Approval Gate card -->
+        <!-- Scheme C: Fixed 3-slot sliding live ticker container (mounted ONLY while streaming & collapsed) -->
+        <DataTemplate DataType="gui:WorkTickerViewModel">
+            <StackPanel Margin="15,2,0,0" Spacing="1">
+                <ContentControl Content="{Binding Line0}" />
+                <ContentControl Content="{Binding Line1}" />
+                <ContentControl Content="{Binding Line2}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Lazy pure-text tool detail template (mounted ONLY when user clicks a tool step row; zero cards) -->
+        <DataTemplate DataType="gui:ToolCallItemViewModel">
+            <StackPanel Spacing="4">
+                <!-- Inline pure-text action strip (script modal / diff / open file / copy) -->
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock IsVisible="{Binding HasExitCode}"
+                               Text="{Binding ExitCodeText}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="11"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding ShowLinesBadge}"
+                               Text="{Binding LinesCollapsedText}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="11"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               VerticalAlignment="Center" />
+                    <Button Classes="textLink accent"
+                            IsVisible="{Binding CanOpenScriptPreview}"
+                            Command="{Binding OpenScriptPreviewCommand}"
+                            Content="{l:AppLangResource AgentGuiBashViewFullScript}" />
+                    <Button Classes="textLink"
+                            IsVisible="{Binding CanOpenDiff}"
+                            Command="{Binding OpenDiffCommand}"
+                            Content="{l:AppLangResource AgentGuiOpenDiff}" />
+                    <Button Classes="textLink"
+                            IsVisible="{Binding CanOpenFile}"
+                            Command="{Binding OpenFileCommand}"
+                            Content="{l:AppLangResource AgentGuiOpenFile}" />
+                    <arc:CopyButton IsIconOnly="True"
+                                    IsVisible="{Binding HasDetails}"
+                                    VerticalAlignment="Center"
+                                    Value="{Binding CopyableOutput}"
+                                    AutomationProperties.Name="{l:AppLangResource AgentGuiCopyOutput}"
+                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyOutput}" />
+                </StackPanel>
+
+                <!-- Pure-text command preview (1 line for large scripts, wrapped up to 76px for short commands) -->
+                <TextBlock IsVisible="{Binding IsLargeCommand}"
+                           Text="{Binding SingleLineCommandPreview, StringFormat='$ {0}'}"
+                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                           FontSize="11.5"
+                           MaxLines="1"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                <arc:ScrollArea IsVisible="{Binding IsCompactCommand}" MaxHeight="76" Orientation="Vertical" FadeLength="0">
+                    <SelectableTextBlock Text="{Binding CommandText, StringFormat='$ {0}'}"
+                                         FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                         FontSize="11.5"
+                                         TextWrapping="Wrap"
+                                         Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                </arc:ScrollArea>
+
+                <arc:ScrollArea MaxHeight="220" Orientation="Vertical" FadeLength="0">
+                    <StackPanel Spacing="3">
+                        <SelectableTextBlock IsVisible="{Binding HasInputSummary}"
+                                             Text="{Binding InputSummary}"
+                                             FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                             FontSize="11.5"
+                                             TextWrapping="Wrap"
+                                             Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+
+                        <StackPanel IsVisible="{Binding IsRunningWithoutOutput}"
+                                    Orientation="Horizontal" Spacing="6">
+                            <arc:ArcSpinner Width="10" Height="10" VerticalAlignment="Center" />
+                            <TextBlock Classes="hint" Text="{Binding StatusText}" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <ItemsControl ItemsSource="{Binding DiffLines}" IsVisible="{Binding HasDiff}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="gui:DiffLineViewModel">
+                                    <Border Classes="diffLine" Classes.add="{Binding IsAdd}" Classes.remove="{Binding IsRemove}">
+                                        <Grid ColumnDefinitions="14,*">
+                                            <TextBlock Classes="diffText" Text="{Binding Prefix}" Opacity="0.7" />
+                                            <SelectableTextBlock Grid.Column="1" Classes="diffText" Text="{Binding Text}" TextWrapping="Wrap" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <SelectableTextBlock IsVisible="{Binding HasStdout}"
+                                             Text="{Binding Stdout}"
+                                             FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                             FontSize="11.5"
+                                             TextWrapping="Wrap"
+                                             Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                        <SelectableTextBlock IsVisible="{Binding HasStderr}"
+                                             Text="{Binding Stderr}"
+                                             FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                             FontSize="11.5"
+                                             TextWrapping="Wrap"
+                                             Foreground="#DC2626" />
+                        <SelectableTextBlock IsVisible="{Binding HasOutputText}"
+                                             Text="{Binding OutputText}"
+                                             FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                             FontSize="11.5"
+                                             TextWrapping="Wrap"
+                                             Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                    </StackPanel>
+                </arc:ScrollArea>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- One pure-text step row inside the expanded unified work area (zero card; lazy-mounts details on click) -->
+        <DataTemplate DataType="gui:WorkStepViewModel">
+            <StackPanel Spacing="0">
+                <Button Classes="workStep"
+                        Command="{Binding ToggleExpandedCommand}"
+                        IsHitTestVisible="{Binding CanExpand}">
+                    <Grid ColumnDefinitions="14,Auto,*,Auto,Auto" ColumnSpacing="7">
+                        <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
+                            <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" VerticalAlignment="Center" />
+                            <TextBlock Classes="stepMark"
+                                       Classes.failed="{Binding IsFailed}"
+                                       IsVisible="{Binding !IsRunning}"
+                                       Text="{Binding StatusMark}" />
+                        </Panel>
+                        <TextBlock Grid.Column="1"
+                                   Classes="stepVerb"
+                                   Classes.failed="{Binding IsFailed}"
+                                   Text="{Binding Verb}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2"
+                                   Classes="stepTarget"
+                                   Classes.thought="{Binding IsThought}"
+                                   Classes.failed="{Binding IsFailed}"
+                                   Text="{Binding Target}"
+                                   VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock IsVisible="{Binding HasAddedStats}"
+                                       Text="{Binding AddedStatsText}"
+                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                       FontSize="11" Foreground="#16A34A" />
+                            <TextBlock IsVisible="{Binding HasRemovedStats}"
+                                       Text="{Binding RemovedStatsText}"
+                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                       FontSize="11" Foreground="#DC2626" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="4"
+                                   IsVisible="{Binding HasMeta}"
+                                   Text="{Binding MetaText}"
+                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                   FontSize="11"
+                                   Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                   Opacity="0.78"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <!-- Lazy pure-text detail pane: null when collapsed so zero controls exist until clicked -->
+                <ContentControl Content="{Binding ExpandedDetail}">
+                    <ContentControl.ContentTemplate>
+                        <DataTemplate x:DataType="gui:WorkStepViewModel">
+                            <Border BorderBrush="{arc:ArcDesignTokenResource Border}"
+                                    BorderThickness="1,0,0,0"
+                                    Margin="16,2,0,6"
+                                    Padding="10,2,0,2">
+                                <StackPanel Spacing="4">
+                                    <!-- Thought step pure-text prose -->
+                                    <arc:ScrollArea Classes="thoughtScroll"
+                                                    IsVisible="{Binding IsThought}"
+                                                    MaxHeight="220"
+                                                    Orientation="Vertical"
+                                                    FadeLength="0">
+                                        <SelectableTextBlock Text="{Binding ThoughtText}"
+                                                             TextWrapping="Wrap"
+                                                             FontSize="12"
+                                                             LineHeight="18"
+                                                             Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                    </arc:ScrollArea>
+
+                                    <!-- Plan step pure-text checklist -->
+                                    <StackPanel IsVisible="{Binding IsPlan}" Spacing="3">
+                                        <ItemsControl ItemsSource="{Binding PlanEntries}" IsVisible="{Binding HasPlanEntries}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Spacing="2" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="gui:PlanEntryViewModel">
+                                                    <Grid ColumnDefinitions="14,*" ColumnSpacing="6">
+                                                        <TextBlock Text="{Binding StatusMark}" FontSize="11"
+                                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Content}" FontSize="12"
+                                                                   TextWrapping="Wrap" Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <arc:Markdown IsVisible="{Binding HasPlanMarkdown}" Text="{Binding PlanMarkdown}" />
+                                    </StackPanel>
+
+                                    <!-- Tool step pure-text detail (lazy-bound via ToolCallItemViewModel DataTemplate) -->
+                                    <ContentControl IsVisible="{Binding IsTool}" Content="{Binding Tool}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Claude Code ExitPlanMode interactive Plan Approval strip (lightweight left-accent, no heavy card) -->
         <DataTemplate DataType="gui:PlanApprovalCardItem">
-            <Border Classes="questionCard cardEnter"
+            <Border Classes="questionCard"
                     Classes.resolved="{Binding IsResolved}"
                     Margin="0,2,0,6"
-                    Background="{arc:ArcDesignTokenResource Surface}"
-                    BorderThickness="1.5"
-                    CornerRadius="9"
-                    Padding="11,9">
-                <StackPanel Spacing="7">
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
-                        <lucide:LucideIcon Kind="ListChecks" Size="14" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold"
+                    BorderThickness="2,0,0,0"
+                    Padding="10,4,0,4">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
                                    FontSize="{arc:ArcDesignTokenResource TypeSM}" VerticalAlignment="Center" />
-                        <arc:Badge Grid.Column="2" Size="Small" Tone="Success"
-                                   Content="{Binding ResolvedSummary}" IsVisible="{Binding IsResolved}" />
+                        <TextBlock Grid.Column="1" FontSize="11.5" Foreground="#16A34A"
+                                   Text="{Binding ResolvedSummary}" IsVisible="{Binding IsResolved}" VerticalAlignment="Center" />
                     </Grid>
-                    <Border IsVisible="{Binding HasPlanMarkdown}"
-                            Background="{arc:ArcDesignTokenResource Background}"
-                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                            BorderThickness="1" CornerRadius="7" Padding="10,8">
-                        <arc:ScrollArea MaxHeight="240" Orientation="Vertical" FadeLength="0">
-                            <arc:Markdown Text="{Binding PlanMarkdown}" />
-                        </arc:ScrollArea>
-                    </Border>
+                    <arc:ScrollArea IsVisible="{Binding HasPlanMarkdown}" MaxHeight="220" Orientation="Vertical" FadeLength="0">
+                        <arc:Markdown Text="{Binding PlanMarkdown}" />
+                    </arc:ScrollArea>
                     <common:SmoothCollapse IsExpanded="{Binding !IsResolved}" LazyData="{Binding}">
                         <common:SmoothCollapse.ContentTemplate>
                             <DataTemplate x:DataType="gui:PlanApprovalCardItem">
-                                <StackPanel Spacing="7">
+                                <StackPanel Spacing="6">
                                     <Grid IsVisible="{Binding IsFeedbackOpen}" ColumnDefinitions="*,Auto" ColumnSpacing="6">
                                         <arc:Input Size="Small" IsLabelVisible="False"
                                                    Placeholder="{l:AppLangResource AgentGuiPlanRevisePlaceholder}"
@@ -939,7 +1019,7 @@
 
         <!-- User turn: compact right-aligned quiet capsule with hover-revealed edit-resend & copy -->
         <DataTemplate DataType="gui:UserTurnItem">
-            <StackPanel Classes="turnEnter" HorizontalAlignment="Right" MaxWidth="640" Margin="40,2,0,2" Spacing="3">
+            <StackPanel HorizontalAlignment="Right" MaxWidth="640" Margin="40,2,0,2" Spacing="3">
                 <Border Classes="userBubble"
                         Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                         BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
@@ -991,115 +1071,7 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- Independent collapsible Thinking segment inside an assistant turn -->
-        <DataTemplate DataType="gui:ThoughtBlockViewModel">
-            <Border Classes="cardEnter"
-                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                    CornerRadius="6"
-                    Padding="7,4">
-                <StackPanel Spacing="0">
-                    <Button Classes="row" Command="{Binding ToggleCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <lucide:LucideIcon Kind="Brain" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
-                            <TextBlock Classes="hint" Text="{Binding Header}" VerticalAlignment="Center" />
-                            <lucide:LucideIcon Classes="chevron" Classes.open="{Binding IsExpanded}" Kind="ChevronRight" Size="12" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <common:SmoothCollapse IsExpanded="{Binding IsExpanded}" LazyData="{Binding}">
-                        <common:SmoothCollapse.ContentTemplate>
-                            <DataTemplate x:DataType="gui:ThoughtBlockViewModel">
-                                <arc:ScrollArea Classes="thoughtScroll"
-                                                Margin="0,4,0,2"
-                                                MaxHeight="240"
-                                                Orientation="Vertical"
-                                                FadeLength="0">
-                                    <SelectableTextBlock Margin="0,0,6,0"
-                                                         Text="{Binding Text}"
-                                                         TextWrapping="Wrap"
-                                                         FontSize="{arc:ArcDesignTokenResource TypeXS}"
-                                                         LineHeight="17"
-                                                         Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
-                                </arc:ScrollArea>
-                            </DataTemplate>
-                        </common:SmoothCollapse.ContentTemplate>
-                    </common:SmoothCollapse>
-                </StackPanel>
-            </Border>
-        </DataTemplate>
-
-        <!-- Contiguous burst of tool calls inside an assistant turn -->
-        <DataTemplate DataType="gui:ToolRunBlockViewModel">
-            <StackPanel Spacing="4">
-                <!-- Smoothly collapsible folded read-only exploration burst (>= 2 completed read/search/fetch steps) -->
-                <Border IsVisible="{Binding HasExplorationGroup}"
-                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                        CornerRadius="6"
-                        Padding="7,4">
-                    <StackPanel Spacing="0">
-                        <Button Classes="row" Command="{Binding ToggleExplorationCommand}">
-                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                <lucide:LucideIcon Kind="Search" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
-                                <TextBlock Classes="hint" Text="{Binding ExplorationSummary}" VerticalAlignment="Center" />
-                                <lucide:LucideIcon Classes="chevron" Classes.open="{Binding IsExplorationExpanded}" Kind="ChevronRight" Size="12" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <common:SmoothCollapse IsExpanded="{Binding IsExplorationExpanded}" LazyData="{Binding}">
-                            <common:SmoothCollapse.ContentTemplate>
-                                <DataTemplate x:DataType="gui:ToolRunBlockViewModel">
-                                    <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding ExplorationTools}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Spacing="3" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                    </ItemsControl>
-                                </DataTemplate>
-                            </common:SmoothCollapse.ContentTemplate>
-                        </common:SmoothCollapse>
-                    </StackPanel>
-                </Border>
-
-                <!-- Smoothly collapsible folded completed shell commands (>= 2 completed execute steps) -->
-                <Border IsVisible="{Binding HasCommandGroup}"
-                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                        CornerRadius="6"
-                        Padding="7,4">
-                    <StackPanel Spacing="0">
-                        <Button Classes="row" Command="{Binding ToggleCommandsCommand}">
-                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                <lucide:LucideIcon Kind="SquareTerminal" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
-                                <TextBlock Classes="hint" Text="{Binding CommandGroupSummary}" VerticalAlignment="Center" />
-                                <lucide:LucideIcon Classes="chevron" Classes.open="{Binding IsCommandsExpanded}" Kind="ChevronRight" Size="12" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <common:SmoothCollapse IsExpanded="{Binding IsCommandsExpanded}" LazyData="{Binding}">
-                            <common:SmoothCollapse.ContentTemplate>
-                                <DataTemplate x:DataType="gui:ToolRunBlockViewModel">
-                                    <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding CommandTools}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate>
-                                                <StackPanel Spacing="3" />
-                                            </ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                    </ItemsControl>
-                                </DataTemplate>
-                            </common:SmoothCollapse.ContentTemplate>
-                        </common:SmoothCollapse>
-                    </StackPanel>
-                </Border>
-
-                <!-- Primary Tool Calls (edits, running, failed, or single exploration/command step) -->
-                <ItemsControl ItemsSource="{Binding PrimaryTools}" IsVisible="{Binding HasPrimaryTools}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Spacing="4" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-            </StackPanel>
-        </DataTemplate>
-
-        <!-- Markdown response segment inside an assistant turn (frozen paragraphs + active streaming tail) -->
+        <!-- Single Markdown response block (frozen paragraphs + active streaming tail) -->
         <DataTemplate DataType="gui:MarkdownBlockViewModel">
             <StackPanel Spacing="6">
                 <ItemsControl ItemsSource="{Binding FrozenChunks}" IsVisible="{Binding HasFrozenChunks}">
@@ -1118,122 +1090,130 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- Assistant turn: compact Style A editorial document stream -->
+        <!-- Assistant turn (Scheme C): One unified zero-card pure-text Work Area + clean Markdown response -->
         <DataTemplate DataType="gui:AssistantTurnItem">
-            <StackPanel Classes="turnEnter" Margin="0,2,0,6" Spacing="6">
-                <!-- Slim agent header row -->
-                <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="6">
-                    <common:AgentIcon Grid.Column="0" AgentId="{Binding AgentId}" AgentName="{Binding AgentName}" Size="16" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="{Binding AgentName}" FontSize="{arc:ArcDesignTokenResource TypeSM}" FontWeight="SemiBold"
-                               Foreground="{arc:ArcDesignTokenResource Foreground}" VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                        <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsStreaming}" VerticalAlignment="Center" />
-                        <TextBlock Classes="hint" Text="{Binding DurationText}" IsVisible="{Binding HasDuration}" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <arc:CopyButton Grid.Column="4"
-                                    IsIconOnly="True"
-                                    Value="{Binding CopyReplyValue}"
-                                    IsVisible="{Binding CanCopyReply}"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.Name="{l:AppLangResource AgentGuiCopyReply}"
-                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyReply}" />
-                </Grid>
+            <StackPanel Margin="0,2,0,8" Spacing="8">
+                <!-- Single Unified Pure-Text Work Area (collapsed to 1 line on finish; fixed 3-line sliding ticker while running) -->
+                <StackPanel IsVisible="{Binding HasWorkArea}" Spacing="2">
+                    <Button Classes="workHeader"
+                            Command="{Binding ToggleWorkExpandedCommand}"
+                            IsHitTestVisible="{Binding CanExpandWork}">
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
+                            <lucide:LucideIcon Grid.Column="0"
+                                               Classes="chevron"
+                                               Classes.open="{Binding IsWorkExpanded}"
+                                               Kind="ChevronRight"
+                                               Size="11"
+                                               IsVisible="{Binding CanExpandWork}"
+                                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                               VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Classes="workTitle"
+                                       Text="{Binding WorkHeaderTitle}"
+                                       FontSize="12.5"
+                                       FontWeight="Medium"
+                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2"
+                                       Classes="workCounts"
+                                       IsVisible="{Binding HasWorkHeaderCounts}"
+                                       Text="{Binding WorkHeaderCounts}"
+                                       FontSize="12"
+                                       MaxLines="1"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="3"
+                                       IsVisible="{Binding HasWorkFailures}"
+                                       Text="{Binding WorkHeaderFailedText}"
+                                       FontSize="12"
+                                       FontWeight="Medium"
+                                       Foreground="#DC2626"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="4"
+                                       IsVisible="{Binding ShowWaitingBadge}"
+                                       Text="{l:AppLangResource AgentGuiWorkWaiting}"
+                                       FontSize="12"
+                                       FontWeight="Medium"
+                                       Foreground="{arc:ArcDesignTokenResource Warning}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="5"
+                                       IsVisible="{Binding HasWorkHeaderDuration}"
+                                       Text="{Binding WorkHeaderDurationText}"
+                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                       FontSize="11.5"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                       Opacity="0.78"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
 
-                <!-- Compact Plan checklist -->
-                <Border IsVisible="{Binding HasPlan}"
-                        Classes="cardEnter"
-                        Background="{arc:ArcDesignTokenResource Surface}"
-                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                        BorderThickness="1"
-                        CornerRadius="7"
-                        Padding="9,6">
-                    <StackPanel Spacing="4">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <lucide:LucideIcon Kind="ListChecks" Size="12" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                            <TextBlock Text="{l:AppLangResource AgentGuiPlanTitle}" FontSize="{arc:ArcDesignTokenResource TypeXS}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <ItemsControl ItemsSource="{Binding PlanEntries}" IsVisible="{Binding HasPlanEntries}">
+                    <!-- Scheme C fixed 3-line sliding pure-text ticker (null & unmounted once finished or expanded) -->
+                    <ContentControl Content="{Binding LiveTicker}" />
+
+                    <!-- Lazy-mounted full pure-text step log (null & unmounted when collapsed) -->
+                    <Border IsVisible="{Binding IsWorkExpanded}"
+                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                            BorderThickness="1.5,0,0,0"
+                            Margin="5,2,0,2"
+                            Padding="12,1,0,1">
+                        <ItemsControl ItemsSource="{Binding ExpandedWorkSteps}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <StackPanel Spacing="2" />
+                                    <StackPanel Spacing="1" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="gui:PlanEntryViewModel">
-                                    <StackPanel Orientation="Horizontal" Spacing="5">
-                                        <lucide:LucideIcon Kind="{Binding Icon}" Size="12" VerticalAlignment="Center"
-                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
-                                        <TextBlock Classes="body" FontSize="{arc:ArcDesignTokenResource TypeXS}" Text="{Binding Content}" TextWrapping="Wrap" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <arc:Markdown IsVisible="{Binding HasPlanMarkdown}" Text="{Binding PlanMarkdown}" />
-                    </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Clean Final Markdown Response directly below the unified work area -->
+                <ContentControl Content="{Binding ResponseMarkdown}" IsVisible="{Binding HasMarkdown}" />
+
+                <!-- Unobtrusive copy action once response finishes -->
+                <StackPanel IsVisible="{Binding CanCopyReply}"
+                            Orientation="Horizontal"
+                            Spacing="4"
+                            Margin="0,-4,0,0"
+                            Opacity="0.65">
+                    <arc:CopyButton IsIconOnly="True"
+                                    Value="{Binding CopyReplyValue}"
+                                    AutomationProperties.Name="{l:AppLangResource AgentGuiCopyReply}"
+                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyReply}" />
+                </StackPanel>
+
+                <!-- Lightweight pure-text error notice -->
+                <Border IsVisible="{Binding HasError}"
+                        BorderBrush="#DC2626"
+                        BorderThickness="2,0,0,0"
+                        Padding="10,2,0,2">
+                    <SelectableTextBlock Text="{Binding ErrorText}"
+                                         FontSize="12.5"
+                                         TextWrapping="Wrap"
+                                         Foreground="#DC2626" />
                 </Border>
-
-                <!-- Chronological stream of Thinking strips, Tool Run bursts, and Markdown segments -->
-                <ItemsControl ItemsSource="{Binding Blocks}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Spacing="6" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-
-                <!-- Reassuring live status feedback while the assistant turn is actively working -->
-                <Border Classes="liveStatusBar"
-                        IsVisible="{Binding ShowLiveStatus}"
-                        HorizontalAlignment="Left"
-                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                        CornerRadius="6"
-                        Padding="8,4"
-                        Margin="0,2,0,0">
-                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <arc:ArcSpinner Width="11" Height="11" VerticalAlignment="Center" />
-                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}"
-                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                   Text="{Binding LiveStatusText}"
-                                   VerticalAlignment="Center" />
-                        <TextBlock IsVisible="{Binding HasLiveElapsed}"
-                                   Classes="hint"
-                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                   Text="{Binding LiveElapsedText}"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Turn error banner -->
-                <arc:Alert IsVisible="{Binding HasError}" Tone="Danger" Content="{Binding ErrorText}" />
             </StackPanel>
         </DataTemplate>
 
-        <!-- Interactive Permission Approval Card: glides in while pending, smoothly collapses & disappears once resolved -->
+        <!-- Interactive Permission Approval Strip (lightweight left-accent, glides away once resolved) -->
         <DataTemplate DataType="gui:PermissionCardItem">
             <common:SmoothCollapse IsExpanded="{Binding !IsResolved}">
-                <Border Classes="permCard cardEnter"
+                <Border Classes="permCard"
                         Classes.resolved="{Binding IsResolved}"
                         Margin="0,2,0,6"
-                        Background="{arc:ArcDesignTokenResource Surface}"
                         BorderBrush="{arc:ArcDesignTokenResource Warning}"
-                        BorderThickness="1.5"
-                        CornerRadius="8"
-                        Padding="10,8">
-                    <StackPanel Spacing="6">
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
-                            <lucide:LucideIcon Kind="ShieldAlert" Size="14" Foreground="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold" FontSize="{arc:ArcDesignTokenResource TypeSM}"
-                                       VerticalAlignment="Center" MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" />
-                        </Grid>
-                        <Border IsVisible="{Binding HasActionDetail}"
-                                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                                CornerRadius="5" Padding="8,5">
-                            <arc:ScrollArea MaxHeight="96" Orientation="Vertical" FadeLength="0">
-                                <SelectableTextBlock Text="{Binding ActionDetail}"
-                                                     FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                     FontSize="11.5" TextWrapping="Wrap" />
-                            </arc:ScrollArea>
-                        </Border>
+                        BorderThickness="2,0,0,0"
+                        Padding="10,3,0,3">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                   MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" />
+                        <arc:ScrollArea IsVisible="{Binding HasActionDetail}" MaxHeight="84" Orientation="Vertical" FadeLength="0">
+                            <SelectableTextBlock Text="{Binding ActionDetail}"
+                                                 FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                 FontSize="11.5"
+                                                 TextWrapping="Wrap"
+                                                 Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                        </arc:ScrollArea>
                         <TextBlock IsVisible="{Binding HasWarning}"
                                    Text="{Binding WarningMessage}"
                                    FontSize="{arc:ArcDesignTokenResource TypeXS}" TextWrapping="Wrap"
@@ -1263,25 +1243,23 @@
             </common:SmoothCollapse>
         </DataTemplate>
 
-        <!-- Compact Interactive Elicitation / Question Card -->
+        <!-- Interactive Elicitation / Question Strip (lightweight left-accent, no heavy card) -->
         <DataTemplate DataType="gui:QuestionCardItem">
-            <Border Classes="questionCard cardEnter"
+            <Border Classes="questionCard"
                     Classes.resolved="{Binding IsResolved}"
                     Margin="0,2,0,6"
-                    Background="{arc:ArcDesignTokenResource Surface}"
-                    BorderThickness="1.5"
-                    CornerRadius="8"
-                    Padding="10,8">
+                    BorderThickness="2,0,0,0"
+                    Padding="10,3,0,3">
                 <StackPanel Spacing="0">
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-                        <lucide:LucideIcon Kind="CircleHelp" Size="14" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold" FontSize="{arc:ArcDesignTokenResource TypeSM}" VerticalAlignment="Center" />
-                        <arc:Badge Grid.Column="2" Size="Small" Tone="Success" Content="{Binding ResolvedSummary}" IsVisible="{Binding IsResolved}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" FontSize="{arc:ArcDesignTokenResource TypeSM}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" FontSize="11.5" Foreground="#16A34A"
+                                   Text="{Binding ResolvedSummary}" IsVisible="{Binding IsResolved}" VerticalAlignment="Center" />
                     </Grid>
                     <common:SmoothCollapse IsExpanded="{Binding !IsResolved}" LazyData="{Binding}">
                         <common:SmoothCollapse.ContentTemplate>
                             <DataTemplate x:DataType="gui:QuestionCardItem">
-                                <StackPanel Margin="0,7,0,0" Spacing="7">
+                                <StackPanel Margin="0,6,0,0" Spacing="7">
                                     <ItemsControl ItemsSource="{Binding Fields}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
@@ -2607,7 +2585,7 @@
                                                 AutomationProperties.Name="{l:AppLangResource AgentGuiModelLabel}"
                                                 arc:Tooltip.Tip="{Binding Composer.SelectedModelLabel}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <lucide:LucideIcon Kind="Sparkles" Size="12" VerticalAlignment="Center" />
+                                                <common:ModelIconView IconKey="{Binding Composer.SelectedModelIconKey}" Size="13" VerticalAlignment="Center" />
                                                 <TextBlock Text="{Binding Composer.SelectedModelLabel}"
                                                            FontSize="{arc:ArcDesignTokenResource TypeXS}"
                                                            FontWeight="Medium"
@@ -2649,21 +2627,22 @@
                                                             <Button Classes="row" Classes.selected="{Binding IsSelected}" Padding="8,5"
                                                                     Command="{Binding SelectCommand}"
                                                                     AutomationProperties.Name="{Binding Label}">
-                                                                <Grid ColumnDefinitions="*,Auto,18" ColumnSpacing="8">
-                                                                    <StackPanel Spacing="1" VerticalAlignment="Center">
+                                                                <Grid ColumnDefinitions="Auto,*,Auto,18" ColumnSpacing="8">
+                                                                    <common:ModelIconView Grid.Column="0" IconKey="{Binding ModelIconKey}" Size="15" VerticalAlignment="Center" />
+                                                                    <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
                                                                         <TextBlock Classes="body" FontSize="{arc:ArcDesignTokenResource TypeXS}"
                                                                                    Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
                                                                         <TextBlock Classes="hint" Text="{Binding Description}"
                                                                                    IsVisible="{Binding HasDescription}" TextTrimming="CharacterEllipsis" />
                                                                     </StackPanel>
-                                                                    <TextBlock Grid.Column="1" Classes="hint"
+                                                                    <TextBlock Grid.Column="2" Classes="hint"
                                                                                FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
                                                                                Text="{Binding Meta}"
                                                                                IsVisible="{Binding HasMeta}"
                                                                                MaxWidth="96"
                                                                                TextTrimming="CharacterEllipsis"
                                                                                VerticalAlignment="Center" />
-                                                                    <lucide:LucideIcon Grid.Column="2" Kind="Check" Size="13"
+                                                                    <lucide:LucideIcon Grid.Column="3" Kind="Check" Size="13"
                                                                                        Foreground="{arc:ArcDesignTokenResource AccentStrong}"
                                                                                        IsVisible="{Binding IsSelected}"
                                                                                        HorizontalAlignment="Right" VerticalAlignment="Center" />
@@ -2780,39 +2759,32 @@
                                 <TextBlock Classes="hint" Opacity="0.6" VerticalAlignment="Center"
                                            IsVisible="{Binding !IsTurnActive}"
                                            Text="{l:AppLangResource AgentGuiComposerHint}" />
-                                <arc:Button x:Name="StopButton"
-                                            Variant="Secondary" Size="Small"
-                                            IsVisible="{Binding IsTurnActive}"
-                                            Command="{Binding CancelTurnCommand}"
-                                            AutomationProperties.Name="{Binding StopButtonLabel}">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsCancelling}" VerticalAlignment="Center" />
-                                        <lucide:LucideIcon Kind="Square" Size="11" IsVisible="{Binding !IsCancelling}" VerticalAlignment="Center" />
-                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" Text="{Binding StopButtonLabel}" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                </arc:Button>
-                                <arc:Button x:Name="SendNowButton"
-                                            Variant="Secondary" Size="Small"
-                                            IsVisible="{Binding IsTurnActive}"
-                                            Command="{Binding SendPromptNowCommand}"
-                                            AutomationProperties.Name="{l:AppLangResource AgentGuiSendNow}"
-                                            arc:Tooltip.Tip="{Binding SendNowTooltip}">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <lucide:LucideIcon Kind="Zap" Size="11.5" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
-                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" Text="{l:AppLangResource AgentGuiSendNow}" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                </arc:Button>
                                 <arc:Button x:Name="SendButton"
                                             Size="Small"
-                                            Command="{Binding SendPromptCommand}"
+                                            Classes.loading="{Binding ShowComposerLoading}"
+                                            Classes.canStop="{Binding CanStopFromComposerButton}"
+                                            Command="{Binding ComposerActionCommand}"
                                             AutomationProperties.Name="{Binding SendButtonTooltip}"
                                             arc:Tooltip.Tip="{Binding SendButtonTooltip}">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <lucide:LucideIcon Kind="Clock" Size="12" IsVisible="{Binding IsTurnActive}" VerticalAlignment="Center" />
-                                        <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}" IsVisible="{Binding IsTurnActive}"
-                                                   Text="{l:AppLangResource AgentGuiQueuePrompt}" VerticalAlignment="Center" />
-                                        <lucide:LucideIcon Kind="ArrowUp" Size="13" IsVisible="{Binding !IsTurnActive}" VerticalAlignment="Center" />
-                                    </StackPanel>
+                                    <Panel Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Panel x:Name="SendButtonLoadingVisual"
+                                               IsVisible="{Binding ShowComposerLoading}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <arc:ArcSpinner x:Name="SendButtonSpinner"
+                                                            Classes="loadingIcon"
+                                                            Width="13" Height="13"
+                                                            Foreground="{Binding $parent[arc:Button].Foreground}"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <lucide:LucideIcon x:Name="SendButtonStopIcon"
+                                                               Classes="stopHoverIcon"
+                                                               Kind="Square" Size="11"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Panel>
+                                        <lucide:LucideIcon x:Name="SendButtonSendIcon"
+                                                           Kind="ArrowUp" Size="13"
+                                                           IsVisible="{Binding !ShowComposerLoading}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Panel>
                                 </arc:Button>
                             </StackPanel>
                         </Grid>

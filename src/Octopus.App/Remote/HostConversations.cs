@@ -201,11 +201,18 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
     /// </summary>
     private sealed class Conversation
     {
-        // Properties that move on their own while a turn runs (a clock, a rotating phrase) or only fold the view here.
+        // Properties that move on their own while a turn runs (a clock, live ticker) or only fold the view here.
         private static readonly HashSet<string> Ignored = new(StringComparer.Ordinal)
         {
-            nameof(AssistantTurnItem.LiveElapsedText), nameof(AssistantTurnItem.HasLiveElapsed), nameof(AssistantTurnItem.LiveStatusText),
-            nameof(AssistantTurnItem.IsThoughtExpanded), nameof(AssistantTurnItem.IsExplorationExpanded), nameof(AssistantTurnItem.IsCommandsExpanded),
+            nameof(AssistantTurnItem.LiveElapsedText), nameof(AssistantTurnItem.HasLiveElapsed),
+            nameof(AssistantTurnItem.IsWorkExpanded), nameof(AssistantTurnItem.ExpandedWorkSteps),
+            nameof(AssistantTurnItem.ShowLiveTicker), nameof(AssistantTurnItem.LiveTicker),
+            nameof(AssistantTurnItem.WorkHeaderTitle), nameof(AssistantTurnItem.WorkHeaderCounts),
+            nameof(AssistantTurnItem.HasWorkHeaderCounts), nameof(AssistantTurnItem.WorkHeaderFailedText),
+            nameof(AssistantTurnItem.HasWorkFailures), nameof(AssistantTurnItem.WorkHeaderDurationText),
+            nameof(AssistantTurnItem.HasWorkHeaderDuration), nameof(AssistantTurnItem.ShowWaitingBadge),
+            nameof(AssistantTurnItem.HasWorkArea), nameof(AssistantTurnItem.CanExpandWork),
+            nameof(AssistantTurnItem.WorkStepCount),
             nameof(PlanApprovalCardItem.IsFeedbackOpen), nameof(PlanApprovalCardItem.FeedbackText),
         };
 
