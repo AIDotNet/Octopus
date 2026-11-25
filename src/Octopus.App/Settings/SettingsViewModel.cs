@@ -5,6 +5,7 @@ using Octopus.App.Localization;
 using Octopus.App.Settings.About;
 using Octopus.App.Settings.Agents;
 using Octopus.App.Settings.Appearance;
+using Octopus.App.Settings.Experiments;
 using Octopus.App.Settings.General;
 using Octopus.App.Settings.Shortcuts;
 using Octopus.App.Settings.Ssh;
@@ -42,6 +43,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         ];
         About =
         [
+            new("experiments", LucideIconKind.FlaskConical, AppLangResourceKind.SettingsNavExperiments, () => ActivatorUtilities.CreateInstance<ExperimentsSettingsViewModel>(services)),
             new("about", LucideIconKind.Info, AppLangResourceKind.SettingsNavAbout, () => ActivatorUtilities.CreateInstance<AboutSettingsViewModel>(services)),
         ];
         foreach (var section in All)

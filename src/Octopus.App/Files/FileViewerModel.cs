@@ -1,11 +1,21 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Octopus.App.Services;
+using Octopus.Storage;
 
 namespace Octopus.App.Files;
 
 /// <summary>What a viewer is given when it is created.</summary>
 /// <param name="Remote">The file is a copy of one on an SSH host: a save is written to the host first (null: this computer's file).</param>
-public sealed record FileViewerContext(FileLocation Location, string? MonoFontFamily, double FontSize, IDialogService Dialogs, RemoteCopy? Remote = null)
+/// <param name="ProjectRoot">The root folder of the owning project, if any (used as the LSP workspace root).</param>
+/// <param name="Settings">The live settings store, so viewers react when experimental flags are toggled.</param>
+public sealed record FileViewerContext(
+    FileLocation Location,
+    string? MonoFontFamily,
+    double FontSize,
+    IDialogService Dialogs,
+    RemoteCopy? Remote = null,
+    string? ProjectRoot = null,
+    ISettingsStore? Settings = null)
 {
     public string Path => Location.Path;
 }

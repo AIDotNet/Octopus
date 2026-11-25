@@ -74,6 +74,62 @@ public static class FileLanguages
         _ => language.ToUpperInvariant(),
     };
 
+    /// <summary>
+    /// Maps a file name to a Monaco language id recognized by <c>TKCode.Arc.CodeEditor</c>.
+    /// Falls back to <c>"plaintext"</c> for unknown names.
+    /// </summary>
+    public static string ForCodeEditor(string fileName)
+    {
+        var name = Path.GetFileName(fileName);
+        if (name.Equals("Dockerfile", StringComparison.OrdinalIgnoreCase) || name.StartsWith("Dockerfile.", StringComparison.OrdinalIgnoreCase))
+            return "dockerfile";
+        return Path.GetExtension(name).ToLowerInvariant() switch
+        {
+            ".cs" or ".csx" => "csharp",
+            ".fs" or ".fsx" or ".fsi" => "fsharp",
+            ".vb" => "vb",
+            ".ts" or ".mts" or ".cts" or ".tsx" => "typescript",
+            ".js" or ".mjs" or ".cjs" or ".jsx" => "javascript",
+            ".json" or ".jsonc" or ".json5" => "json",
+            ".axaml" or ".xaml" or ".xml" or ".csproj" or ".fsproj" or ".vbproj" or ".props" or ".targets" or ".xlf" or ".svg" or ".plist" or ".config" or ".slnx" => "xml",
+            ".html" or ".htm" or ".vue" or ".svelte" or ".astro" => "html",
+            ".css" => "css",
+            ".scss" => "scss",
+            ".less" => "less",
+            ".py" or ".pyi" => "python",
+            ".rs" => "rust",
+            ".go" => "go",
+            ".java" => "java",
+            ".kt" or ".kts" => "kotlin",
+            ".scala" => "scala",
+            ".swift" => "swift",
+            ".rb" => "ruby",
+            ".php" => "php",
+            ".lua" => "lua",
+            ".dart" => "dart",
+            ".r" => "r",
+            ".pl" or ".pm" => "perl",
+            ".c" or ".h" => "c",
+            ".cc" or ".cpp" or ".cxx" or ".hpp" or ".hh" or ".hxx" => "cpp",
+            ".m" or ".mm" => "objective-c",
+            ".sh" or ".bash" or ".zsh" => "shell",
+            ".ps1" or ".psm1" or ".psd1" => "powershell",
+            ".bat" or ".cmd" => "bat",
+            ".yaml" or ".yml" => "yaml",
+            ".ini" or ".cfg" or ".conf" or ".editorconfig" or ".toml" or ".properties" => "ini",
+            ".gradle" or ".groovy" => "groovy",
+            ".sql" => "sql",
+            ".graphql" or ".gql" => "graphql",
+            ".proto" => "protobuf",
+            ".tf" or ".tfvars" => "hcl",
+            ".clj" or ".cljs" or ".cljc" => "clojure",
+            ".ex" or ".exs" => "elixir",
+            ".md" or ".markdown" => "markdown",
+            ".dockerfile" => "dockerfile",
+            _ => "plaintext",
+        };
+    }
+
     /// <summary>Markdown files get a rendered preview besides their source.</summary>
     public static bool IsMarkdown(string fileName)
     {

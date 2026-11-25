@@ -1,0 +1,72 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:exp="using:Octopus.App.Settings.Experiments"
+             x:Class="Octopus.App.Settings.Experiments.ExperimentsPageView"
+             x:DataType="exp:ExperimentsSettingsViewModel">
+    <StackPanel Spacing="{DynamicResource OctopusSettingsPageSpacing}">
+        <StackPanel Spacing="4">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsExperimentsTitle}" />
+            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsExperimentsSubtitle}" />
+        </StackPanel>
+
+        <arc:Alert Tone="Info" Content="{l:AppLangResource SettingsExperimentsNotice}" />
+
+        <arc:SettingsGroup Appearance="Plain">
+            <arc:SettingsRow Header="{l:AppLangResource SettingsExpCodeEditor}"
+                             Description="{l:AppLangResource SettingsExpCodeEditorHint}">
+                <arc:Switch x:Name="CodeEditorSwitch" IsChecked="{Binding CodeEditor, Mode=TwoWay}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsExpDiffEditor}"
+                             Description="{l:AppLangResource SettingsExpDiffEditorHint}">
+                <arc:Switch x:Name="DiffEditorSwitch" IsChecked="{Binding DiffEditor, Mode=TwoWay}" />
+            </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsExpLsp}"
+                             Description="{l:AppLangResource SettingsExpLspHint}">
+                <arc:Switch x:Name="LspSwitch"
+                            IsChecked="{Binding LanguageServer, Mode=TwoWay}"
+                            IsEnabled="{Binding CanConfigureLanguageServer}" />
+            </arc:SettingsRow>
+        </arc:SettingsGroup>
+
+        <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="group" VerticalAlignment="Center"
+                           Text="{l:AppLangResource SettingsExpLspServers}" />
+                <arc:Button Grid.Column="1" Variant="Ghost" Size="Small"
+                            Command="{Binding RescanServersCommand}"
+                            IsEnabled="{Binding !IsScanning}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <lucide:LucideIcon Kind="RefreshCw" Size="13" />
+                        <TextBlock Text="{l:AppLangResource SettingsExpLspRescan}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+            </Grid>
+
+            <Border Background="{arc:ArcDesignTokenResource Surface}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,8">
+                <ItemsControl ItemsSource="{Binding Servers}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="exp:LanguageServerRow">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,5">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Classes="name" Text="{Binding Name}" />
+                                    <TextBlock Classes="mono" Text="{Binding DetailText}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                                    <arc:Badge Tone="Success" Size="Small" Content="{Binding StatusText}" IsVisible="{Binding IsInstalled}" />
+                                    <arc:Badge Tone="Neutral" Size="Small" Content="{Binding StatusText}" IsVisible="{Binding !IsInstalled}" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

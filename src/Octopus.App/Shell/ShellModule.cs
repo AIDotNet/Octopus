@@ -32,6 +32,7 @@ internal static class ShellModule
         services.AddSingleton<Octopus.App.Activity.IItemActivityService, Octopus.App.Activity.ItemActivityService>();
         services.AddSingleton<Octopus.App.Activity.ISubagentService, Octopus.App.Activity.SubagentService>();
         services.AddSingleton<IItemOpener, ItemOpener>();
+        services.AddSingleton<Octopus.App.Files.Lsp.ILanguageServerManager, Octopus.App.Files.Lsp.LanguageServerManager>();
         services.AddSingleton<Octopus.App.Services.Workspaces.IGitHubTaskProvider, Octopus.App.Services.Workspaces.GhCliTaskProvider>();
         services.AddSingleton<Octopus.App.Services.Workspaces.IWorkspaceManager, Octopus.App.Services.Workspaces.WorkspaceManager>();
         services.AddSingleton<Octopus.App.Services.Workspaces.IWorkspaceCleanupService, Octopus.App.Services.Workspaces.WorkspaceCleanupService>();

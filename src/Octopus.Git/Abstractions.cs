@@ -176,6 +176,13 @@ public interface IGitService
     /// <summary>The diff one commit made to one file (against its first parent), ready to show; null when git fails.</summary>
     Task<GitFileDiff?> GetCommitFileDiffAsync(string repositoryRoot, string commit, string path, string? originalPath = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Full original and modified text of one file diff (working tree vs index, index vs HEAD, or commit vs parent)
+    /// for an interactive diff editor; null when binary, oversized, or unsupported.
+    /// </summary>
+    Task<GitFileDiffPair?> GetFileDiffPairAsync(string repositoryRoot, string path, bool staged, string? originalPath = null, string? commit = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult<GitFileDiffPair?>(null);
+
     /// <summary>Every worktree linked to the repository (<c>git worktree list --porcelain</c>), main worktree first.</summary>
     Task<IReadOnlyList<GitWorktree>> GetWorktreesAsync(string repositoryRoot, CancellationToken cancellationToken = default);
 

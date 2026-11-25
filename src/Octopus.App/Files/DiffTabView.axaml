@@ -15,7 +15,25 @@
                         <arc:Badge Tone="Success" Size="Small" Content="{Binding AddedText}" />
                         <arc:Badge Tone="Danger" Size="Small" Content="{Binding RemovedText}" />
                     </StackPanel>
-                    <arc:Button Classes="icon header" Classes.active="{Binding WrapLines}" IsVisible="{Binding HasRows}"
+                    <arc:Badge Tone="Warning" Size="Small" Content="{l:AppLangResource MdUnsaved}" IsVisible="{Binding ShowUnsaved}" />
+                    <arc:Button x:Name="SaveButton" Classes="icon header" IsVisible="{Binding ShowSave}" Command="{Binding SaveDocumentCommand}"
+                                AutomationProperties.Name="{l:AppLangResource MdSave}"
+                                arc:Tooltip.Tip="{l:AppLangResource MdSave}">
+                        <lucide:LucideIcon Kind="Save" Size="14" />
+                    </arc:Button>
+                    <arc:Button Classes="icon header" Classes.active="{Binding RenderSideBySide}" IsVisible="{Binding ShowDiffEditor}"
+                                Command="{Binding ToggleSideBySideCommand}"
+                                AutomationProperties.Name="{l:AppLangResource DiffSideBySide}"
+                                arc:Tooltip.Tip="{l:AppLangResource DiffSideBySide}">
+                        <lucide:LucideIcon Kind="Columns2" Size="14" />
+                    </arc:Button>
+                    <arc:Button Classes="icon header" Classes.active="{Binding HideUnchangedRegions}" IsVisible="{Binding ShowDiffEditor}"
+                                Command="{Binding ToggleHideUnchangedCommand}"
+                                AutomationProperties.Name="{l:AppLangResource DiffHideUnchanged}"
+                                arc:Tooltip.Tip="{l:AppLangResource DiffHideUnchanged}">
+                        <lucide:LucideIcon Kind="FoldVertical" Size="14" />
+                    </arc:Button>
+                    <arc:Button Classes="icon header" Classes.active="{Binding WrapLines}" IsVisible="{Binding ShowUnifiedFallback}"
                                 Command="{Binding ToggleWrapCommand}"
                                 AutomationProperties.Name="{l:AppLangResource FileWrapLines}"
                                 arc:Tooltip.Tip="{l:AppLangResource FileWrapLines}">
@@ -25,28 +43,45 @@
             </vm:FileHeaderBar.Trailing>
         </vm:FileHeaderBar>
 
-        <arc:Alert Grid.Row="1" Margin="12,8,12,4" Tone="Warning" Title="{Binding TruncatedNotice}"
-                   IsVisible="{Binding HasTruncatedNotice}" />
+        <Grid Grid.Row="1">
+            <arc:Alert Margin="12,8,12,4" Tone="Warning" Title="{Binding TruncatedNotice}"
+                       IsVisible="{Binding HasTruncatedNotice}" />
+            <arc:Alert Margin="12,8,12,4" Tone="Danger" Title="{l:AppLangResource MdSaveFailedTitle}"
+                       Content="{Binding SaveError}" IsVisible="{Binding HasSaveError}" />
+        </Grid>
 
-        <!-- The same viewer as a file's, with a second number column, a sign and a tint on the changed rows. -->
-        <arc:ScrollArea x:Name="Scroller" Grid.Row="2" Orientation="Both" FadeLength="0" IsVisible="{Binding HasRows}">
-            <vm:CodeView x:Name="Lines" Text="{Binding CodeText}" Marks="{Binding Marks}" Language="{Binding Language}"
-                         WrapLines="{Binding WrapLines}" FontSize="{Binding FontSize}"
-                         FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                         Background="{arc:ArcDesignTokenResource Background}"
-                         Foreground="{arc:ArcDesignTokenResource Foreground}"
-                         MutedForeground="{arc:ArcDesignTokenResource TextSecondary}"
-                         GutterForeground="{arc:ArcDesignTokenResource TextMuted}"
-                         HoverBrush="{arc:ArcDesignTokenResource SurfaceMuted}"
-                         SelectionBrush="{arc:ArcDesignTokenResource AccentSubtle}"
-                         DividerBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                         AddedBrush="{arc:ArcDesignTokenResource Success}"
-                         RemovedBrush="{arc:ArcDesignTokenResource Danger}"
-                         HunkBrush="{arc:ArcDesignTokenResource Accent}" />
-        </arc:ScrollArea>
+        <!-- Monaco DiffEditor when both sides are available; unified CodeView fallback for truncated / remote diffs. -->
+        <Grid Grid.Row="2">
+            <arc:DiffEditor x:Name="Diff"
+                            IsVisible="{Binding ShowDiffEditor}"
+                            LanguageId="{Binding EditorLanguageId}"
+                            RenderSideBySide="{Binding RenderSideBySide}"
+                            HideUnchangedRegions="{Binding HideUnchangedRegions}"
+                            IsReadOnly="{Binding IsDiffReadOnly}"
+                            FontSize="{Binding FontSize}"
+                            BorderThickness="0"
+                            CornerRadius="0"
+                            AutomationProperties.Name="{Binding Title}" />
 
-        <arc:EmptyState Grid.Row="2" IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
-                        Icon="{x:Static arc:ArcIcons.FileText}"
-                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <arc:ScrollArea x:Name="Scroller" Orientation="Both" FadeLength="0" IsVisible="{Binding ShowUnifiedFallback}">
+                <vm:CodeView x:Name="Lines" Text="{Binding CodeText}" Marks="{Binding Marks}" Language="{Binding Language}"
+                             WrapLines="{Binding WrapLines}" FontSize="{Binding FontSize}"
+                             FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                             Background="{arc:ArcDesignTokenResource Background}"
+                             Foreground="{arc:ArcDesignTokenResource Foreground}"
+                             MutedForeground="{arc:ArcDesignTokenResource TextSecondary}"
+                             GutterForeground="{arc:ArcDesignTokenResource TextMuted}"
+                             HoverBrush="{arc:ArcDesignTokenResource SurfaceMuted}"
+                             SelectionBrush="{arc:ArcDesignTokenResource AccentSubtle}"
+                             DividerBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                             AddedBrush="{arc:ArcDesignTokenResource Success}"
+                             RemovedBrush="{arc:ArcDesignTokenResource Danger}"
+                             HunkBrush="{arc:ArcDesignTokenResource Accent}" />
+            </arc:ScrollArea>
+
+            <arc:EmptyState IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
+                            Icon="{x:Static arc:ArcIcons.FileText}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Grid>
     </Grid>
 </UserControl>

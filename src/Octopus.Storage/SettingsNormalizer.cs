@@ -19,6 +19,7 @@ internal static class SettingsNormalizer
             ? null
             : settings.Workspaces.RootDirectory.Trim();
         settings.WorkspaceCleanup ??= new();
+        settings.Experiments ??= new();
         settings.WorkspaceCleanup.InactiveDays = settings.WorkspaceCleanup.InactiveDays <= 0
             ? WorkspaceCleanupSettings.DefaultInactiveDays
             : Math.Clamp(settings.WorkspaceCleanup.InactiveDays, WorkspaceCleanupSettings.MinInactiveDays, WorkspaceCleanupSettings.MaxInactiveDays);

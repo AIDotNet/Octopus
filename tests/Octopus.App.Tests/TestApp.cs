@@ -66,6 +66,8 @@ public static class TestApp
             services.AddSingleton(p => (FakeModelDiscovery)p.GetRequiredService<IModelDiscovery>());
             services.Replace(ServiceDescriptor.Singleton<Octopus.Agents.Sessions.IAgentSessionService, FakeAgentSessionService>());
             services.AddSingleton(p => (FakeAgentSessionService)p.GetRequiredService<Octopus.Agents.Sessions.IAgentSessionService>());
+            services.Replace(ServiceDescriptor.Singleton<Octopus.App.Files.Lsp.ILanguageServerManager, FakeLanguageServerManager>());
+            services.AddSingleton(p => (FakeLanguageServerManager)p.GetRequiredService<Octopus.App.Files.Lsp.ILanguageServerManager>());
             services.Replace(ServiceDescriptor.Singleton<IDialogService, FakeDialogService>());
             services.AddSingleton(p => (FakeDialogService)p.GetRequiredService<IDialogService>());
             services.Replace(ServiceDescriptor.Singleton<IAppIcon, NoAppIcon>()); // never touch the real Dock

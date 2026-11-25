@@ -17,6 +17,23 @@ public sealed class AppSettingsModel
     public RemoteSettings Remote { get; set; } = new();
     public WorkspaceSettings Workspaces { get; set; } = new();
     public WorkspaceCleanupSettings WorkspaceCleanup { get; set; } = new();
+    public ExperimentalSettings Experiments { get; set; } = new();
+}
+
+/// <summary>Opt-in / preview capabilities controlled from the Experiments settings page.</summary>
+public sealed class ExperimentalSettings
+{
+    /// <summary>Use Arc's Monaco-based <c>CodeEditor</c> for code tabs and Markdown source mode (off: lightweight read-only viewer).</summary>
+    public bool CodeEditor { get; set; } = true;
+
+    /// <summary>Use Arc's Monaco-based <c>DiffEditor</c> for git diffs (off: read-only unified diff view).</summary>
+    public bool DiffEditor { get; set; } = true;
+
+    /// <summary>
+    /// Start installed local language servers (LSP) on demand for code tabs to provide completion, hover docs,
+    /// diagnostics and go-to-definition. Requires <see cref="CodeEditor"/>.
+    /// </summary>
+    public bool LanguageServer { get; set; }
 }
 
 /// <summary>Global preferences for isolated branch workspaces (git worktrees).</summary>

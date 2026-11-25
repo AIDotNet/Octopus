@@ -75,8 +75,26 @@
             <arc:ScrollArea x:Name="PreviewScroller" Orientation="Vertical" FadeLength="0" IsVisible="{Binding ShowPreview}">
                 <arc:Markdown x:Name="Preview" Margin="24,16,24,32" MaxWidth="820" Text="{Binding PreviewText}" />
             </arc:ScrollArea>
-            <code:CodeSurface x:Name="Source" IsVisible="{Binding ShowSource}" Text="{Binding SourceViewText}" Language="md"
-                              CodeFontSize="{Binding FontSize}" MonoFontFamily="{Binding MonoFontFamily}" />
+            <arc:CodeEditor x:Name="Source"
+                            IsVisible="{Binding ShowSourceEditor}"
+                            LanguageId="markdown"
+                            IsReadOnly="{Binding IsSourceReadOnly}"
+                            WordWrap="True"
+                            ShowLineNumbers="True"
+                            ShowIndentGuides="True"
+                            ShowMinimap="True"
+                            Folding="True"
+                            StickyScroll="False"
+                            FontSize="{Binding FontSize}"
+                            BorderThickness="0"
+                            CornerRadius="0"
+                            AutomationProperties.Name="{Binding Location.Label}" />
+            <code:CodeSurface x:Name="SourceFallback"
+                              IsVisible="{Binding ShowSourceFallback}"
+                              Text="{Binding SourceViewText}"
+                              Language="md"
+                              CodeFontSize="{Binding FontSize}"
+                              MonoFontFamily="{Binding MonoFontFamily}" />
             <arc:EmptyState IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
                             Icon="{x:Static arc:ArcIcons.FileText}"
                             HorizontalAlignment="Center" VerticalAlignment="Center" />

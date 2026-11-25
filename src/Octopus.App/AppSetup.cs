@@ -22,6 +22,7 @@ public static class AppSetup
                    .UseLanguages(AppLanguages.Initial, AppLanguages.Supported)
                    .UseArcBlocks()       // Arc's controls and blocks (SettingsPage); registers UseArcControls() and UseArcMarkdown() too
                    .UseArcHighlighting() // TextMate syntax highlighting for CodeBlock, the Markdown editor and fenced code
+                   .UseArcCodeEditor()   // Monaco-based code editor for editable source and config file tabs
                    .UseArcDock()         // the workspace: tab groups and splits
                    .UseArcCorners()      // compact corners: the whole app is a dense tool, not a landing page
                    // The app's own package: its text (Localization/) and any Arc controls of its own.

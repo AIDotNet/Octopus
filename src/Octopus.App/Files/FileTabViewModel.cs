@@ -38,7 +38,9 @@ public sealed class FileTabViewModel : ObservableObject, IDisposable
             dialogs ?? AppHost.Get<IDialogService>(),
             Remote: item.RemotePath is { } remotePath && AppHost.Get<Remote.RemoteProjectAccess>().TreeOf(project) is { } tree
                 ? new RemoteCopy(tree, remotePath, File.Exists(Path) ? File.ReadAllBytes(Path) : [], dialogs ?? AppHost.Get<IDialogService>())
-                : null);
+                : null,
+            ProjectRoot: root,
+            Settings: settings);
         Viewer = FileViewers.For(Kind).CreateModel(context);
         Viewer.PropertyChanged += (_, e) =>
         {

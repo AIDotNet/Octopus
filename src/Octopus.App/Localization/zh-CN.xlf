@@ -446,6 +446,8 @@
     <unit id="DiffEmpty"><segment><source>No changes to show. The file may have been changed back.</source><target state="translated">没有可显示的改动，文件可能已改回原样。</target></segment></unit>
     <unit id="DiffTruncated"><segment><source>Showing the first {0} of {1} lines. The rest is not shown.</source><target state="translated">只显示前 {0} 行，共 {1} 行，其余部分不显示。</target></segment></unit>
     <unit id="DiffFailed"><segment><source>The changes could not be read.</source><target state="translated">无法读取改动。</target></segment></unit>
+    <unit id="DiffSideBySide"><segment><source>Side by side</source><target state="translated">并排对比</target></segment></unit>
+    <unit id="DiffHideUnchanged"><segment><source>Hide unchanged regions</source><target state="translated">折叠未改动区域</target></segment></unit>
     <unit id="ChangeProjectIcon"><segment><source>Change icon…</source><target state="translated">更换图标…</target></segment></unit>
     <unit id="ProjectAppearanceTitle"><segment><source>Project icon</source><target state="translated">项目图标</target></segment></unit>
     <unit id="ProjectAppearanceDescription"><segment><source>Pick a color and an icon, or use a picture.</source><target state="translated">选择颜色和图标，或者使用一张图片。</target></segment></unit>
@@ -1122,6 +1124,8 @@
     <unit id="AgentGuiQuickPromptTests"><segment><source>Run tests and investigate failures</source><target state="translated">运行测试并排查失败</target></segment></unit>
     <unit id="AgentGuiOpenDiff"><segment><source>View diff tab</source><target state="translated">在 Diff 标签查看</target></segment></unit>
     <unit id="AgentGuiReusePrompt"><segment><source>Edit and resend</source><target state="translated">编辑重发</target></segment></unit>
+    <unit id="AgentGuiUserTurnExpand"><segment><source>Show more</source><target state="translated">展开</target></segment></unit>
+    <unit id="AgentGuiUserTurnCollapse"><segment><source>Show less</source><target state="translated">收起</target></segment></unit>
     <unit id="AgentGuiNewSession"><segment><source>New session</source><target state="translated">新建会话</target></segment></unit>
     <unit id="AgentGuiExplorationSummary"><segment><source>Explored {0} steps ({1})</source><target state="translated">探索了 {0} 项操作（{1}）</target></segment></unit>
     <unit id="AgentGuiExploreRead"><segment><source>read {0}</source><target state="translated">阅读 {0}</target></segment></unit>
@@ -1253,6 +1257,20 @@
     <unit id="AccountCapsuleTooltipEnded"><segment><source>Sign-in expired. Click to sign in again.</source><target state="translated">登录已失效，点击重新登录。</target></segment></unit>
     <unit id="SettingsGroupAbout"><segment><source>About</source><target state="translated">关于</target></segment></unit>
     <unit id="SettingsNavAbout"><segment><source>About</source><target state="translated">关于</target></segment></unit>
+    <unit id="SettingsNavExperiments"><segment><source>Experiments</source><target state="translated">实验性功能</target></segment></unit>
+    <unit id="SettingsExperimentsTitle"><segment><source>Experiments</source><target state="translated">实验性功能</target></segment></unit>
+    <unit id="SettingsExperimentsSubtitle"><segment><source>Preview and opt-in editing capabilities that you can turn on or off at any time.</source><target state="translated">预览与可选编辑能力，可随时按需开启或关闭。</target></segment></unit>
+    <unit id="SettingsExperimentsNotice"><segment><source>Experimental features may change in future releases. Turning one off restores the lightweight read-only viewer for new and clean open tabs.</source><target state="translated">实验性功能在后续版本中可能会调整。关闭后，新建标签页和无未保存修改的标签页会自动回退为原有的轻量只读视图。</target></segment></unit>
+    <unit id="SettingsExpCodeEditor"><segment><source>Code file editor</source><target state="translated">代码文件编辑器</target></segment></unit>
+    <unit id="SettingsExpCodeEditorHint"><segment><source>Edit source code files and Markdown source in place with the Monaco-based editor (syntax highlighting, multi-cursor, folding, minimap).</source><target state="translated">使用基于 Monaco 的编辑器就地编辑代码文件和 Markdown 源码（支持语法高亮、多光标、折叠和缩略图）。</target></segment></unit>
+    <unit id="SettingsExpDiffEditor"><segment><source>Interactive diff editor</source><target state="translated">交互式 Diff 编辑器</target></segment></unit>
+    <unit id="SettingsExpDiffEditorHint"><segment><source>Compare Git changes side by side or inline with collapsible unchanged regions and direct editing on unstaged local files.</source><target state="translated">以并排或行内方式对比 Git 改动，支持折叠未改动区域及在本地未暂存文件右侧直接编辑保存。</target></segment></unit>
+    <unit id="SettingsExpLsp"><segment><source>Language server intelligence (LSP)</source><target state="translated">语言服务器智能提示（LSP）</target></segment></unit>
+    <unit id="SettingsExpLspHint"><segment><source>Lazily start installed local language servers for open projects to enable completion, hover docs, diagnostics and go to definition.</source><target state="translated">按项目按需拉起本机已安装的语言服务器，提供代码补全、悬停文档、错误诊断和跳转定义。</target></segment></unit>
+    <unit id="SettingsExpLspServers"><segment><source>Local language servers on PATH</source><target state="translated">本机 PATH 已检测到的语言服务器</target></segment></unit>
+    <unit id="SettingsExpLspRescan"><segment><source>Rescan</source><target state="translated">重新扫描</target></segment></unit>
+    <unit id="SettingsExpLspDetected"><segment><source>Installed</source><target state="translated">已安装</target></segment></unit>
+    <unit id="SettingsExpLspNotInstalled"><segment><source>Not found</source><target state="translated">未安装</target></segment></unit>
     <unit id="SettingsAboutTitle"><segment><source>About</source><target state="translated">关于</target></segment></unit>
     <unit id="SettingsAboutSlogan"><segment><source>A cross-platform terminal and coding agent workspace organized by project.</source><target state="translated">按项目组织的跨平台终端与编码智能体工作台。</target></segment></unit>
     <unit id="SettingsAboutIntro"><segment><source>Organize local and remote repositories into project workspaces running native terminals and 40+ CLI coding agents side by side — with multi-account isolation, session resume, SSH tunnels, encrypted remote access, and plugins.</source><target state="translated">将本机与远端代码目录组织为项目工作区，在同一窗口中并排运行原生终端与 40+ 命令行编码智能体，内置多订阅账户隔离、历史会话恢复、SSH 隧道、跨设备加密远程访问与插件扩展。</target></segment></unit>

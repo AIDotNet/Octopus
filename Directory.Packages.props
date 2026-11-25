@@ -3,7 +3,7 @@
          packages on it, and all TKCode.Arc packages on the same Arc version. -->
     <PropertyGroup>
         <AvaloniaVersion>12.2.0</AvaloniaVersion>
-        <ArcVersion>1.3.1</ArcVersion>
+        <ArcVersion>1.3.2-preview.1</ArcVersion>
     </PropertyGroup>
     <ItemGroup>
         <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
@@ -19,6 +19,7 @@
         <PackageVersion Include="TKCode.Arc" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Blocks" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Dock" Version="$(ArcVersion)" />
+        <PackageVersion Include="TKCode.Arc.Editor.Controls" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Fonts" Version="$(ArcVersion)" />
         <PackageVersion Include="TKCode.Arc.Highlighting" Version="$(ArcVersion)" />
         <!-- Mermaid diagrams in the Markdown preview (Mermaider and Svg.Skia, no browser). -->

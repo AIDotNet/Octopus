@@ -5,6 +5,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Octopus.App.Composition;
 using Octopus.App.Files;
+using Octopus.App.Files.Code;
 using Octopus.App.Files.Documents;
 using Octopus.App.Services;
 using Octopus.Core.Projects;
@@ -36,6 +37,9 @@ internal sealed class FileTabHarness : IDisposable
     public MarkdownViewerModel Markdown => Assert.IsType<MarkdownViewerModel>(Tab.Viewer);
     public MarkdownViewerView MarkdownView => Assert.IsType<MarkdownViewerView>(View.ViewerView);
     public RichTextEditor Editor => MarkdownView.Editor ?? throw new InvalidOperationException("no editor is open");
+    public CodeViewerModel Code => Assert.IsType<CodeViewerModel>(Tab.Viewer);
+    public CodeViewerView CodeView => Assert.IsType<CodeViewerView>(View.ViewerView);
+    public CodeEditor CodeEditor => CodeView.EditorControl;
     public FakeDialogService Dialogs => AppHost.Get<FakeDialogService>();
 
     public byte[] Disk => File.ReadAllBytes(Path);
@@ -66,6 +70,7 @@ internal sealed class FileTabHarness : IDisposable
     private static bool ViewerLoaded(FileViewerModel viewer) => viewer switch
     {
         MarkdownViewerModel md => md.FileSize > 0 || md.Text.Length > 0 || md.Banner != MarkdownBanner.None || md.LoadId > 0 || md.IsEditing,
+        CodeViewerModel code => code.FileSize > 0 || code.Text.Length > 0 || code.Banner != CodeBanner.None || code.LoadId > 0 || code.IsEditing,
         _ => true,
     };
 
@@ -91,12 +96,29 @@ internal sealed class FileTabHarness : IDisposable
         }
     }
 
-    /// <summary>Types into the editor the way a person does: key text to the focused editor.</summary>
+    /// <summary>Types into the Markdown editor the way a person does: key text to the focused editor.</summary>
     public void Type(string text)
     {
         Editor.FocusEditor();
         Frames.Pump();
         Window.KeyTextInput(text);
+        Frames.Pump();
+    }
+
+    /// <summary>Types into the code editor the way a person does: key text to the focused editor.</summary>
+    public void TypeCode(string text)
+    {
+        CodeView.FocusViewer();
+        Frames.Pump();
+        Window.KeyTextInput(text);
+        Frames.Pump();
+    }
+
+    /// <summary>Sends the platform undo shortcut (Cmd+Z on macOS, Ctrl+Z elsewhere) to the window.</summary>
+    public void PressUndo()
+    {
+        var modifiers = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        Window.KeyPress(Key.Z, modifiers, PhysicalKey.Z, "z");
         Frames.Pump();
     }
 

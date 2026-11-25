@@ -47,6 +47,9 @@ public sealed record GitFileDiff(
     public static GitFileDiff Of(GitFileDiffKind kind) => new(kind, []);
 }
 
+/// <summary>The full original and modified text of one file diff for an interactive side-by-side or inline diff editor.</summary>
+public sealed record GitFileDiffPair(string OriginalText, string ModifiedText, bool CanEditModified = false);
+
 /// <summary>Reads the output of <c>git diff</c> (one file) into lines with numbers.</summary>
 public static class GitDiffParser
 {

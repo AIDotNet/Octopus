@@ -7,12 +7,18 @@
              xmlns:code="using:Octopus.App.Files.Code"
              x:Class="Octopus.App.Files.Code.CodeViewerView"
              x:DataType="code:CodeViewerModel">
-    <Grid Background="{arc:ArcDesignTokenResource Background}" RowDefinitions="Auto,*">
+    <Grid Background="{arc:ArcDesignTokenResource Background}" RowDefinitions="Auto,Auto,*">
         <files:FileHeaderBar Folder="{Binding Location.Folder}" FileName="{Binding Location.Label}"
                              CopyText="{Binding Path}" RevealPath="{Binding Path}">
             <files:FileHeaderBar.Trailing>
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <TextBlock Classes="headerMeta" Text="{Binding MetaText}" IsVisible="{Binding HasContent}" />
+                    <arc:Badge Tone="Warning" Size="Small" Content="{l:AppLangResource MdUnsaved}" IsVisible="{Binding ShowUnsaved}" />
+                    <arc:Button x:Name="SaveButton" Classes="icon header" IsVisible="{Binding ShowSave}" Command="{Binding SaveDocumentCommand}"
+                                AutomationProperties.Name="{l:AppLangResource MdSave}"
+                                arc:Tooltip.Tip="{l:AppLangResource MdSave}">
+                        <lucide:LucideIcon Kind="Save" Size="14" />
+                    </arc:Button>
                     <arc:Button Classes="icon header" Classes.active="{Binding WrapLines}" IsVisible="{Binding HasContent}"
                                 Command="{Binding ToggleWrapCommand}"
                                 AutomationProperties.Name="{l:AppLangResource FileWrapLines}"
@@ -23,11 +29,51 @@
             </files:FileHeaderBar.Trailing>
         </files:FileHeaderBar>
 
-        <code:CodeSurface x:Name="Body" Grid.Row="1" IsVisible="{Binding HasContent}"
-                          Text="{Binding Text}" Language="{Binding Language}" WrapLines="{Binding WrapLines}"
-                          CodeFontSize="{Binding FontSize}" MonoFontFamily="{Binding MonoFontFamily}" />
-        <arc:EmptyState Grid.Row="1" IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
-                        Icon="{x:Static arc:ArcIcons.FileText}"
-                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <!-- One strip at a time under the bar: read-only notice, disk conflict, or save failure. -->
+        <Grid Grid.Row="1">
+            <arc:Alert Margin="12,8,12,0" Tone="Info" Title="{l:AppLangResource MdReadOnlyTitle}"
+                       Content="{Binding BannerText}" IsVisible="{Binding BannerIsInfo}" />
+            <arc:Alert Margin="12,8,12,0" Tone="Warning" Title="{l:AppLangResource MdDiskChangedTitle}"
+                       IsVisible="{Binding BannerIsDiskChanged}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{l:AppLangResource MdDiskChangedBody}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <arc:Button Size="Small" Variant="Secondary" Command="{Binding ReloadFromDiskCommand}"
+                                    Content="{l:AppLangResource MdReloadDiscard}" />
+                        <arc:Button Size="Small" Variant="Secondary" Command="{Binding KeepMineCommand}"
+                                    Content="{l:AppLangResource MdKeepMine}" />
+                    </StackPanel>
+                </StackPanel>
+            </arc:Alert>
+            <arc:Alert Margin="12,8,12,0" Tone="Danger" Title="{l:AppLangResource MdSaveFailedTitle}"
+                       Content="{Binding BannerText}" IsVisible="{Binding BannerIsSaveFailed}" />
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <arc:CodeEditor x:Name="Editor"
+                            IsVisible="{Binding ShowCodeEditor}"
+                            LanguageId="{Binding EditorLanguageId}"
+                            IsReadOnly="{Binding IsReadOnly}"
+                            WordWrap="{Binding WrapLines}"
+                            ShowLineNumbers="True"
+                            ShowIndentGuides="True"
+                            ShowMinimap="True"
+                            Folding="True"
+                            StickyScroll="True"
+                            FontSize="{Binding FontSize}"
+                            BorderThickness="0"
+                            CornerRadius="0"
+                            AutomationProperties.Name="{Binding Location.Label}" />
+            <code:CodeSurface x:Name="Fallback"
+                              IsVisible="{Binding ShowReadOnlyFallback}"
+                              Text="{Binding Text}"
+                              Language="{Binding Language}"
+                              WrapLines="{Binding WrapLines}"
+                              CodeFontSize="{Binding FontSize}"
+                              MonoFontFamily="{Binding MonoFontFamily}" />
+            <arc:EmptyState IsVisible="{Binding HasNotice}" Description="{Binding Notice}"
+                            Icon="{x:Static arc:ArcIcons.FileText}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Grid>
     </Grid>
 </UserControl>

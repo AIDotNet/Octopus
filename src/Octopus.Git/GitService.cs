@@ -104,6 +104,75 @@ public sealed partial class GitService(IProcessRunner runner, IExecutableLocator
         return diff is { Succeeded: true } ? GitDiffParser.Parse(diff.StandardOutput) : null;
     }
 
+    public async Task<GitFileDiffPair?> GetFileDiffPairAsync(string repositoryRoot, string path, bool staged, string? originalPath = null, string? commit = null, CancellationToken cancellationToken = default)
+    {
+        var oldPath = originalPath ?? path;
+        if (commit is not null)
+        {
+            if (!IsHash(commit)) return null;
+            var orig = await ReadGitObjectTextAsync(repositoryRoot, $"{commit}^:{oldPath}", cancellationToken).ConfigureAwait(false);
+            if (orig is null) return null;
+            var mod = await ReadGitObjectTextAsync(repositoryRoot, $"{commit}:{path}", cancellationToken).ConfigureAwait(false);
+            return mod is null ? null : new GitFileDiffPair(orig, mod, CanEditModified: false);
+        }
+        if (staged)
+        {
+            var orig = await ReadGitObjectTextAsync(repositoryRoot, $"HEAD:{oldPath}", cancellationToken).ConfigureAwait(false);
+            if (orig is null) return null;
+            var mod = await ReadGitObjectTextAsync(repositoryRoot, $":0:{path}", cancellationToken).ConfigureAwait(false);
+            return mod is null ? null : new GitFileDiffPair(orig, mod, CanEditModified: false);
+        }
+        else
+        {
+            var orig = await ReadGitObjectTextAsync(repositoryRoot, $":0:{oldPath}", cancellationToken).ConfigureAwait(false);
+            if (orig is null) return null;
+            var worktree = await ReadWorktreeTextAsync(repositoryRoot, path, cancellationToken).ConfigureAwait(false);
+            return worktree is null ? null : new GitFileDiffPair(orig, worktree.Value.Text, worktree.Value.CanEdit);
+        }
+    }
+
+    private async Task<string?> ReadGitObjectTextAsync(string repositoryRoot, string objectSpec, CancellationToken cancellationToken)
+    {
+        var sizeResult = await RunAsync(["-C", repositoryRoot, "cat-file", "-s", objectSpec], null, cancellationToken).ConfigureAwait(false);
+        if (sizeResult is not { Succeeded: true }) return "";
+        if (long.TryParse(sizeResult.StandardOutput.Trim(), CultureInfo.InvariantCulture, out var bytes) && bytes > MaxFileBytes) return null;
+        var show = await RunAsync(["-C", repositoryRoot, "show", objectSpec], null, cancellationToken).ConfigureAwait(false);
+        if (show is not { Succeeded: true }) return "";
+        var text = show.StandardOutput;
+        if (text.AsSpan(0, Math.Min(text.Length, 8192)).IndexOf('\0') >= 0) return null;
+        return text.Replace("\r\n", "\n").Replace('\r', '\n');
+    }
+
+    private static async Task<(string Text, bool CanEdit)?> ReadWorktreeTextAsync(string repositoryRoot, string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var full = Path.Combine(repositoryRoot, path.Replace('/', Path.DirectorySeparatorChar));
+            var info = new FileInfo(full);
+            if (!info.Exists) return ("", false);
+            if (info.Length > MaxFileBytes) return null;
+            var bytes = await File.ReadAllBytesAsync(full, cancellationToken).ConfigureAwait(false);
+            if (Array.IndexOf(bytes, (byte)0, 0, Math.Min(bytes.Length, 8192)) >= 0) return null;
+            var hasBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+            var offset = hasBom ? 3 : 0;
+            try
+            {
+                var strict = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+                var text = strict.GetString(bytes, offset, bytes.Length - offset);
+                return (text.Replace("\r\n", "\n").Replace('\r', '\n'), true);
+            }
+            catch (System.Text.DecoderFallbackException)
+            {
+                var fallback = System.Text.Encoding.UTF8.GetString(bytes, offset, bytes.Length - offset);
+                return (fallback.Replace("\r\n", "\n").Replace('\r', '\n'), false);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>A file git does not track yet shows as all added, read here (git has no read-only way to diff it against nothing).</summary>
     private async Task<GitFileDiff?> UntrackedDiffAsync(string repositoryRoot, string path, CancellationToken cancellationToken)
     {

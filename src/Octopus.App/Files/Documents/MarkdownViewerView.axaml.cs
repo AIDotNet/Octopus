@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Threading;
-using Octopus.App.Files.Code;
 using StreamMark.Avalonia.Extensions;
 using StreamMark.Mermaid;
 using TKCode.Arc;
@@ -10,11 +10,15 @@ namespace Octopus.App.Files.Documents;
 
 /// <summary>
 /// The Markdown viewer: the rich text editor (a fresh one per load, in Arc's Docs profile so tables, images, headings 4 to
-/// 6, task lists and code languages are kept), the read-only preview, and the source. All state and every decision is in
-/// <see cref="MarkdownViewerModel"/>; this view only loads text into the editor and reports what the editor does.
+/// 6, task lists and code languages are kept), the read-only preview, and the editable raw Markdown source
+/// (<see cref="CodeEditor"/>). All state and every decision is in <see cref="MarkdownViewerModel"/>; this view only loads
+/// text into the editors and reports what they do.
 /// </summary>
 public partial class MarkdownViewerView : UserControl, IFileViewerView
 {
+    /// <summary>Hide the source editor's minimap below this width so prose keeps room in narrow splits.</summary>
+    private const double MinimapMinWidth = 520;
+
     /// <summary>Arc's Markdown defaults, plus <c>```mermaid</c> blocks drawn as diagrams (with a toggle back to the source).</summary>
     private static readonly MarkdownServices PreviewServices = new()
     {
@@ -24,24 +28,29 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
 
     private MarkdownViewerModel? _model;
     private int _loadedId;
+    private int _sourceLoadedId;
 
     public MarkdownViewerView()
     {
         InitializeComponent();
         Preview.Services = PreviewServices;
+        Source.TextChanged += OnSourceTextChanged;
+        Source.SizeChanged += OnSourceSizeChanged;
     }
 
-    /// <summary>The editor of the document that is open; null while the file is read-only or not loaded.</summary>
+    /// <summary>The rich text editor of the document that is open; null while the file is read-only or not loaded.</summary>
     public RichTextEditor? Editor { get; private set; }
 
     public ScrollArea PreviewScrollArea => PreviewScroller;
     public ScrollArea EditorScrollArea => EditorScroller;
-    public CodeSurface SourceSurface => Source;
+    public CodeEditor SourceEditor => Source;
     public TKCode.Arc.Markdown PreviewView => Preview;
 
     public void FocusViewer()
     {
-        if (Editor is not null && _model?.ShowEditor == true) Editor.FocusEditor();
+        if (_model?.ShowSourceEditor == true) Source.Focus();
+        else if (_model?.ShowSourceFallback == true) SourceFallback.CodeView.Focus();
+        else if (Editor is not null && _model?.ShowEditor == true) Editor.FocusEditor();
         else Focus();
     }
 
@@ -52,16 +61,35 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
         {
             _model.PropertyChanged -= OnModelPropertyChanged;
             _model.ReadEditor = null;
+            _model.ReadSourceEditor = null;
         }
+        _loadedId = 0;
+        _sourceLoadedId = 0;
         _model = DataContext as MarkdownViewerModel;
         if (_model is null)
         {
             DetachEditor();
+            Source.ClearValue(FontFamilyProperty);
             return;
         }
+        ApplySourceFont(_model.MonoFontFamily);
         _model.ReadEditor = () => Editor?.GetMarkdown() ?? _model.Text;
+        _model.ReadSourceEditor = () => Source.Text ?? _model.SourceViewText;
         _model.PropertyChanged += OnModelPropertyChanged;
         LoadEditorIfNeeded();
+        LoadSourceIfNeeded();
+    }
+
+    private void ApplySourceFont(string? family)
+    {
+        if (!string.IsNullOrWhiteSpace(family)) Source.FontFamily = new FontFamily(family);
+        else Source.ClearValue(FontFamilyProperty);
+    }
+
+    private void OnSourceSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        var show = e.NewSize.Width >= MinimapMinWidth;
+        if (Source.ShowMinimap != show) Source.ShowMinimap = show;
     }
 
     private void DetachEditor()
@@ -74,6 +102,7 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
     }
 
     private void OnEditorContentChanged(object? sender, EventArgs e) => _model?.EditorChanged();
+    private void OnSourceTextChanged(object? sender, EventArgs e) => _model?.SourceEditorChanged();
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -82,13 +111,16 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
             case nameof(MarkdownViewerModel.LoadId):
                 LoadEditorIfNeeded();
                 break;
+            case nameof(MarkdownViewerModel.SourceLoadId):
+                LoadSourceIfNeeded();
+                break;
             case nameof(MarkdownViewerModel.PreviewText):
                 KeepPreviewPlace();
                 break;
         }
     }
 
-    /// <summary>Puts the model's text into a new editor whenever the model says a load is due.</summary>
+    /// <summary>Puts the model's text into a new rich text editor whenever the model says a load is due.</summary>
     private void LoadEditorIfNeeded()
     {
         if (_model is not { IsEditing: true } model || model.LoadId == _loadedId || model.LoadId == 0) return;
@@ -105,6 +137,16 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
         model.EditorLoaded(model.ExportOfEditorText ?? editor.GetMarkdown());
         // Edits are reported from here on; the load itself raised nothing the model could mistake for one.
         editor.ContentChanged += OnEditorContentChanged;
+    }
+
+    /// <summary>Loads raw Markdown into the source <see cref="CodeEditor"/> when the model requests it.</summary>
+    private void LoadSourceIfNeeded()
+    {
+        if (_model is not { HasContent: true } model || model.SourceLoadId == _sourceLoadedId || model.SourceLoadId == 0) return;
+        _sourceLoadedId = model.SourceLoadId;
+        model.BeginSourceLoad();
+        Source.Text = model.SourceViewText;
+        model.SourceLoaded(Source.Text ?? "");
     }
 
     /// <summary>A relative picture address (./img.png) starts at the Markdown file's own folder.</summary>

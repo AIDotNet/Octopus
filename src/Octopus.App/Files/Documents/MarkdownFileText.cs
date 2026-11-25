@@ -49,6 +49,18 @@ public sealed record MarkdownFileText(string Text, bool HasBom, string NewLine, 
     {
         var body = markdown.Replace("\r\n", "\n").Replace('\r', '\n').TrimEnd('\n');
         if (body.Length > 0 && EndsWithNewline) body += "\n";
+        return EncodeNormalized(body);
+    }
+
+    /// <summary>
+    /// Encodes raw Markdown from the source editor, preserving whatever trailing newlines the user edited while
+    /// keeping this file's original BOM and line ending style.
+    /// </summary>
+    public byte[] EncodeRaw(string source) =>
+        EncodeNormalized(source.Replace("\r\n", "\n").Replace('\r', '\n'));
+
+    private byte[] EncodeNormalized(string body)
+    {
         if (NewLine != "\n") body = body.Replace("\n", NewLine);
         var text = new UTF8Encoding(false).GetBytes(body);
         if (!HasBom) return text;

@@ -1,5 +1,6 @@
 using System.Text;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Octopus.App.Composition;
@@ -74,7 +75,7 @@ public class MarkdownViewerTests
         Assert.False(h.Markdown.ShowPreview);
         // The hidden preview and source are given nothing to parse or color.
         Assert.Equal("", h.MarkdownView.PreviewView.Text ?? "");
-        Assert.Equal("", h.MarkdownView.SourceSurface.Text ?? "");
+        Assert.Equal("", h.MarkdownView.SourceEditor.Text ?? "");
         Assert.NotNull(h.MarkdownView.EditorScrollArea);
         Assert.Contains("Some **bold** text.", h.Editor.GetMarkdown());
         Assert.True(h.Editor.IsEffectivelyVisible);
@@ -307,7 +308,37 @@ public class MarkdownViewerTests
         h.Markdown.ViewMode = MarkdownViewerModel.SourceMode;
         Assert.Equal(Wrapped, h.Markdown.SourceText);
         Frames.Pump();
-        Assert.Equal(Wrapped, h.MarkdownView.SourceSurface.Text);
+        Assert.Equal(Wrapped, h.MarkdownView.SourceEditor.Text);
+    }
+
+    [AvaloniaFact]
+    public async Task A_lossy_markdown_file_can_be_edited_and_saved_losslessly_in_source_mode()
+    {
+        using var h = await FileTabHarness.OpenAsync(FrontMatter);
+        Assert.False(h.Markdown.IsEditing);
+        Assert.False(h.Markdown.CanSave);
+
+        h.Markdown.ViewMode = MarkdownViewerModel.SourceMode;
+        Frames.Pump();
+        Assert.True(h.Markdown.ShowSource);
+        Assert.True(h.Markdown.CanEditSource);
+        Assert.False(h.MarkdownView.SourceEditor.IsReadOnly);
+        Assert.True(h.Markdown.CanSave);
+        Assert.Equal(FrontMatter, h.MarkdownView.SourceEditor.Text);
+
+        h.MarkdownView.FocusViewer();
+        Frames.Pump();
+        h.Window.KeyTextInput("# comment\n");
+        Frames.Pump();
+        Assert.True(h.Markdown.IsDirty);
+        Assert.True(h.Tab.HasUnsavedChanges);
+
+        // Saving raw source never asks the rich-text loss warning and preserves front matter intact.
+        Assert.True(await h.Tab.SaveAsync());
+        Assert.Equal(0, h.Dialogs.Asked);
+        Assert.False(h.Markdown.IsDirty);
+        var saved = Encoding.UTF8.GetString(h.Disk);
+        Assert.StartsWith("# comment\n---\ntitle: Hello", saved);
     }
 
     [AvaloniaFact]

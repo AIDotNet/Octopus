@@ -30,6 +30,7 @@ public class SettingsPagesTests
     [InlineData("terminal")]
     [InlineData("appearance")]
     [InlineData("shortcuts")]
+    [InlineData("experiments")]
     [InlineData("about")]
     public void The_view_opens_on_the_requested_section(string section)
     {

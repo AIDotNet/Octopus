@@ -229,20 +229,65 @@ public class DiffTabTests
         window.Show();
         await WaitUntil(() => ((Octopus.App.Files.Code.CodeViewerModel)model.Viewer).Text.Length > 0);
         Frames.Pump();
-        var scroller = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(view).OfType<ScrollArea>().First();
+        var codeView = Assert.IsType<Octopus.App.Files.Code.CodeViewerView>(view.ViewerView);
+        var vBar = codeView.FindScrollBar(Avalonia.Layout.Orientation.Vertical);
+        Assert.NotNull(vBar);
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(20), $"showing 20000 lines took {clock.Elapsed}");
 
-        scroller.Offset = new Avalonia.Vector(0, 3000);
+        vBar.Value = 3000;
         Frames.Pump();
-        Assert.Equal(3000, scroller.Offset.Y, 1);
+        Assert.Equal(3000, vBar.Value, 1);
         lines[10] = "changed";
         File.WriteAllText(path, string.Join('\n', lines) + "\n");
         await WaitUntil(() => ((Octopus.App.Files.Code.CodeViewerModel)model.Viewer).Text.Contains("changed"));
         await Task.Delay(500);
         Frames.Pump();
 
-        Assert.Equal(3000, scroller.Offset.Y, 1);
+        Assert.Equal(3000, vBar.Value, 1);
         window.Close();
         model.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task Local_worktree_diff_uses_diff_editor_and_saves_modified_side_while_staged_is_read_only()
+    {
+        if (ExplorerFixture.FindGit() is null) return;
+        using var repo = Repository();
+        repo.Write("a.txt", "one\nTWO\nthree\n");
+
+        using var worktree = Open(repo, "a.txt", staged: false);
+        var view = new DiffTabView { DataContext = worktree };
+        var window = new Avalonia.Controls.Window { Width = 960, Height = 500, Content = view };
+        window.Show();
+        await WaitUntil(() => worktree.ShowDiffEditor && worktree.DiffLoadId > 0);
+        Frames.Pump();
+
+        Assert.Equal("one\ntwo\nthree\n", view.DiffEditorControl.OriginalText);
+        Assert.Equal("one\nTWO\nthree\n", view.DiffEditorControl.ModifiedText);
+        Assert.False(view.DiffEditorControl.IsReadOnly);
+        Assert.True(worktree.RenderSideBySide);
+
+        worktree.ToggleSideBySideCommand.Execute(null);
+        Assert.False(view.DiffEditorControl.RenderSideBySide);
+        worktree.ToggleHideUnchangedCommand.Execute(null);
+        Assert.False(view.DiffEditorControl.HideUnchangedRegions);
+
+        // Editing the modified side marks the diff tab dirty and saving writes back to disk.
+        view.DiffEditorControl.ModifiedText = "one\nEDITED\nthree\n";
+        Frames.Pump();
+        Assert.True(worktree.IsDirty);
+        Assert.True(await view.HasUnsavedChangesAsync());
+        Assert.True(await worktree.SaveAsync());
+        Assert.False(worktree.IsDirty);
+        Assert.Equal("one\nEDITED\nthree\n", File.ReadAllText(Path.Combine(repo.Root, "a.txt")));
+        window.Close();
+
+        // Staged diffs use DiffEditor in read-only mode.
+        repo.Git("add", "a.txt");
+        using var staged = Open(repo, "a.txt", staged: true);
+        await WaitUntil(() => staged.ShowDiffEditor && staged.DiffLoadId > 0);
+        Assert.True(staged.IsDiffReadOnly);
+        Assert.Equal("one\ntwo\nthree\n", staged.OriginalText);
+        Assert.Equal("one\nEDITED\nthree\n", staged.ModifiedText);
     }
 }

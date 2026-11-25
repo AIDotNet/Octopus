@@ -88,7 +88,9 @@ public class FileTabTests
             window.Show();
             Frames.Pump();
             Assert.DoesNotContain(view.GetVisualDescendants(), d => d is SegmentedControl);
-            Assert.NotNull(view.GetVisualDescendants().OfType<CodeSurface>().Single());
+            var editor = view.GetVisualDescendants().OfType<CodeEditor>().Single();
+            Assert.Equal("csharp", editor.LanguageId);
+            Assert.Equal("class A { }\n", editor.Text);
 
             File.Delete(path);
             await model.Viewer.LoadAsync();
@@ -146,20 +148,20 @@ public class FileTabTests
             var window = new Window { Width = 800, Height = 500, Content = view };
             window.Show();
             Frames.Pump();
-            var surface = view.GetVisualDescendants().OfType<CodeSurface>().Single();
-            var scroller = surface.ScrollArea;
-            var code = surface.CodeView;
-            Assert.Equal(3000, code.LineCount);
+            var codeView = Assert.IsType<CodeViewerView>(view.ViewerView);
+            var vBar = codeView.FindScrollBar(Avalonia.Layout.Orientation.Vertical);
+            Assert.NotNull(vBar);
+            Assert.Equal(3000, Code(model).LineCount);
 
-            scroller.Offset = new Avalonia.Vector(0, 1200);
+            vBar.Value = 1200;
             Frames.Pump();
-            Assert.Equal(1200, scroller.Offset.Y, 1);
+            Assert.Equal(1200, vBar.Value, 1);
 
             File.WriteAllText(path, string.Concat(Enumerable.Range(1, 3001).Select(i => $"int v{i} = {i};\n")));
             await model.Viewer.LoadAsync();
             Frames.Pump();
-            Assert.Equal(3001, code.LineCount);
-            Assert.Equal(1200, scroller.Offset.Y, 1);
+            Assert.Equal(3001, Code(model).LineCount);
+            Assert.Equal(1200, vBar.Value, 1);
             window.Close();
         }
         finally
@@ -182,13 +184,11 @@ public class FileTabTests
             var window = new Window { Width = 500, Height = 300, Content = view };
             window.Show();
             Frames.Pump();
-            var code = view.GetVisualDescendants().OfType<CodeSurface>().Single().CodeView;
-            Assert.False(code.WrapLines);
-            Assert.Equal(1, code.TotalRows);
+            var editor = view.GetVisualDescendants().OfType<CodeEditor>().Single();
+            Assert.False(editor.WordWrap);
             Code(model).ToggleWrapCommand.Execute(null);
             Frames.Pump();
-            Assert.True(code.WrapLines);
-            Assert.True(code.TotalRows > 1);
+            Assert.True(editor.WordWrap);
             window.Close();
         }
         finally
