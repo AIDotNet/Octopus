@@ -244,4 +244,43 @@ public class KeyInputTests
         for (var i = 0; i < 50 && rec.Written.Count == 0; i++) await Task.Delay(20, TestContext.Current.CancellationToken);
         Assert.Equal("pasted text", rec.Text());
     }
+
+    /// <summary>
+    /// Dragging a selection past the edges of the view reports cells outside the grid; libghostty rejected them with
+    /// InvalidValue and the exception ended the app (crash 2026-11-25 11:28). They are clamped to the grid now.
+    /// </summary>
+    [Fact]
+    public async Task Dragging_a_selection_outside_the_grid_selects_up_to_the_edge()
+    {
+        var rec = new Recorder();
+        await using var session = new TerminalSession(
+            new LaunchSpec("x", [], null, new Dictionary<string, string>()), rec, new TerminalSize(80, 24, 0, 0),
+            TerminalPalettes.Dark, ColorScheme.Dark, 100, () => false);
+        session.Start();
+        session.Use(c => c.Write("hello world\r\n"u8));
+        using var router = new TerminalInputRouter(session, () => new MacTerminalKeymap(),
+            () => Task.FromResult<string?>(null), () => Task.FromResult<string?>(null), _ => Task.CompletedTask,
+            (_, _) => Task.FromResult(true), () => { });
+
+        var geometry = new MouseGeometry(800, 480, 10, 20, 0, 0, 0, 0);
+        TerminalPointerEventArgs Left(TerminalPointerKind kind, MouseAction action, int column, int row) => new(
+            kind, new ViewportPoint(column, row), new MouseInput(action, MouseButton.Left, KeyMods.None, 0, 0), geometry, 0);
+
+        router.HandlePointer(Left(TerminalPointerKind.Press, MouseAction.Press, 0, 0));
+        router.HandlePointer(Left(TerminalPointerKind.Move, MouseAction.Motion, 500, 300));
+        router.HandlePointer(Left(TerminalPointerKind.Move, MouseAction.Motion, -5, -5));
+        router.HandlePointer(Left(TerminalPointerKind.Move, MouseAction.Motion, 200, 0));
+        router.HandlePointer(Left(TerminalPointerKind.Release, MouseAction.Release, 200, 0));
+
+        Assert.StartsWith("hello world", session.Read(c => c.GetSelectionText()));
+    }
+
+    [Fact]
+    public void ClampToGrid_keeps_cells_inside_the_grid()
+    {
+        var size = new TerminalSize(80, 24, 0, 0);
+        Assert.Equal(new ViewportPoint(79, 23), TerminalInputRouter.ClampToGrid(new ViewportPoint(500, 300), size));
+        Assert.Equal(new ViewportPoint(0, 0), TerminalInputRouter.ClampToGrid(new ViewportPoint(-3, -1), size));
+        Assert.Equal(new ViewportPoint(5, 7), TerminalInputRouter.ClampToGrid(new ViewportPoint(5, 7), size));
+    }
 }

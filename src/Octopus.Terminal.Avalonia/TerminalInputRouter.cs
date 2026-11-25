@@ -228,15 +228,15 @@ public sealed class TerminalInputRouter(
                 {
                     switch (count)
                     {
-                        case 2: c.Select(SelectionRequest.Word(cell)); break;
-                        case 3: c.Select(SelectionRequest.Line(cell)); break;
+                        case 2: TrySelect(c, SelectionRequest.Word(ClampToGrid(cell, c.Size))); break;
+                        case 3: TrySelect(c, SelectionRequest.Line(ClampToGrid(cell, c.Size))); break;
                         default: c.ClearSelection(); break;
                     }
                 });
                 break;
             case TerminalPointerKind.Move when _dragging && _clickCount == 1:
                 var (start, end) = (_dragStart, e.Cell);
-                session.Use(c => c.Select(SelectionRequest.Range(start, end)));
+                session.Use(c => TrySelect(c, SelectionRequest.Range(ClampToGrid(start, c.Size), ClampToGrid(end, c.Size))));
                 break;
             case TerminalPointerKind.Release when e.Mouse.Button == MouseButton.Left:
                 _dragging = false;
@@ -346,4 +346,21 @@ public sealed class TerminalInputRouter(
     }
 
     public void Dispose() => _encoder.Dispose();
+
+    /// <summary>
+    /// Brings a cell inside the grid. A drag reports cells past the edges once the pointer leaves the view (negative,
+    /// or beyond the last column / row), and a resize between press and move leaves the press cell outside the new
+    /// grid; libghostty rejects either with InvalidValue.
+    /// </summary>
+    public static ViewportPoint ClampToGrid(ViewportPoint cell, TerminalSize size) =>
+        size.Columns <= 0 || size.Rows <= 0
+            ? cell
+            : new ViewportPoint(Math.Clamp(cell.Column, 0, size.Columns - 1), Math.Clamp(cell.Row, 0, size.Rows - 1));
+
+    /// <summary>A selection the core refuses (the grid changed under it) is dropped: it must not take the app down.</summary>
+    private static void TrySelect(TerminalCore core, SelectionRequest request)
+    {
+        try { core.Select(request); }
+        catch (GhosttyException) { }
+    }
 }
