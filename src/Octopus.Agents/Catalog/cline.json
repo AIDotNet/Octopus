@@ -22,6 +22,12 @@
     },
     "extraArgs": true
   },
+  "accounts": {
+    "mode": "envDir",
+    "env": "CLINE_DIR",
+    "defaultDir": "~/.cline",
+    "loginArgs": ["auth"]
+  },
   "acp": {
     "mode": "native",
     "args": [

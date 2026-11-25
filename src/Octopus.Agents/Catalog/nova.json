@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "nova",
+  "name": "Nova",
+  "icon": "nova",
+  "homepage": "https://www.compassap.ai/portfolio/nova.html",
+  "verified": false,
+  "detect": {
+    "executables": ["nova", "compass"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @compass-ai/nova" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "nova",
+      "executables": ["nova", "compass"],
+      "args": ["acp"],
+      "npxPackage": "@compass-ai/nova",
+      "npxArgs": ["acp"]
+    }
+  }
+}

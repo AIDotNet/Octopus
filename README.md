@@ -6,7 +6,7 @@
 
 **Cross-Platform Terminal & AI Coding Agent Workbench**
 
-Organize terminals, 40+ AI coding agents, files, Git worktrees, SSH tunnels, and remote devices by project — compiled natively with NativeAOT and protected with end-to-end encryption.
+Organize terminals, 60+ AI coding agents, files, Git worktrees, SSH tunnels, and remote devices by project — compiled natively with NativeAOT and protected with end-to-end encryption.
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -28,7 +28,7 @@ Organize terminals, 40+ AI coding agents, files, Git worktrees, SSH tunnels, and
 | Pillar | What Octopus Gives You |
 | --- | --- |
 | **Native Performance** | Built on .NET 10, Avalonia 12, and NativeAOT across macOS, Windows, and Linux — fast startup, low memory usage, no browser runtime. |
-| **40 Agents · Dual Mode** | Auto-detects 40 coding agent CLIs; switch seamlessly between real PTY terminals and an **ACP visual GUI** (32 agents supported) with multi-account isolation. |
+| **61 Agents · Dual Mode** | Auto-detects 61 coding agent CLIs; switch seamlessly between real PTY terminals and an **ACP visual GUI** (49 agents supported) with multi-account isolation. |
 | **Zero-Knowledge Remote** | Pick up work from another computer or the Android companion app over LAN, official encrypted relay, or self-hosted server — keys never leave your device. |
 | **Extensible & Transparent** | Sandboxed JavaScript plugin engine (`Jaunt`) with explicit permission grants, built-in 92-day usage & cost billing, and ECDSA-signed updates. |
 
@@ -42,9 +42,9 @@ Organize terminals, 40+ AI coding agents, files, Git worktrees, SSH tunnels, and
 - **Split Layouts & Branch Workspaces**: Drag tabs into horizontal or vertical split panes saved per project. Spin up **Git Worktree** branch workspaces so multiple agents can edit isolated branches in parallel without conflicts.
 - **Refined Desktop Experience**: Switch between **Compact** and **Comfortable** UI density, light/dark themes, and English / Simplified Chinese UI. Supports system tray / menu bar residency, automatic session & open-tab restore on startup, and crash resilience with logs stored under `~/.octopus/logs/`.
 
-### 40 Built-in AI Coding Agents & ACP Visual GUI
+### 61 Built-in AI Coding Agents & ACP Visual GUI
 - **Dual-Mode Workflow (Terminal ⇄ ACP GUI)**:
-  - Run any agent in a native terminal, or switch to the **ACP (Agent Client Protocol)** visual interface (supported by **32 of 40** built-in agents via native ACP or official adapters, plus custom agent definitions and optional ACP Registry integration).
+  - Run any agent in a native terminal, or switch to the **ACP (Agent Client Protocol)** visual interface (supported by **49 of 61** built-in agents via native ACP or official adapters, plus custom agent definitions and optional ACP Registry integration).
   - Features a unified work timeline and docked activity tray, interactive permission approval cards and form prompts, collapsible tool calls and inline code diffs, queued prompts with **Immediate Send**, bundled model/provider brand icons, third-party API model discovery, and one-click **Continue in Terminal** handoff.
 - **Multi-Account & Session Lifecycle**:
   - Manage multiple subscription accounts per agent with isolated config directories (concurrent across projects/tabs) or keychain credential snapshots. Bind default accounts per project or pick one at launch.
@@ -54,9 +54,9 @@ Organize terminals, 40+ AI coding agents, files, Git worktrees, SSH tunnels, and
   - Automatic system proxy injection (`HTTP_PROXY` / `HTTPS_PROXY`) for CLI and ACP child processes without overriding explicit user proxy variables.
 
 <details>
-<summary><strong>View all 40 built-in coding agents (26 Native ACP · 6 ACP Adapter · 8 Terminal CLI)</strong></summary>
+<summary><strong>View all 61 built-in coding agents (28 Native ACP · 21 ACP Adapter · 12 Terminal CLI)</strong></summary>
 
-#### Native ACP + Terminal (26)
+#### Native ACP + Terminal (28)
 
 | | | | |
 | --- | --- | --- | --- |
@@ -65,22 +65,27 @@ Organize terminals, 40+ AI coding agents, files, Git worktrees, SSH tunnels, and
 | Gemini CLI | GitHub Copilot CLI | Goose | Grok CLI |
 | Hermes Agent | IBM Bob | Junie | Kilo Code |
 | Kimi Code CLI | Kiro | MiMo Code | Muse Code |
-| omp | OpenCode | Qoder CLI | Qwen Code |
-| Stakpak | VT Code | | |
+| omp | OpenCode | OpenHands CLI | Qoder CLI |
+| Qoder CLI CN | Qwen Code | Stakpak | VT Code |
 
-#### ACP Adapter + Terminal (6)
-
-| | | |
-| --- | --- | --- |
-| Amp | Claude Code | Codex CLI |
-| MiniMax Code | Mistral Vibe | Pi |
-
-#### Terminal CLI (8)
+#### ACP Adapter + Terminal (21)
 
 | | | | |
 | --- | --- | --- | --- |
-| Aider | Codebuff | Continue CLI | Crush |
-| Jules Tools | Letta Code | Nanocoder | OpenHands CLI |
+| Agoragentic | Amp | Claude Code | Codex CLI |
+| Cortex Code | Corust Agent | crow-cli | DeepAgents |
+| DimCode | Dirac | fast-agent | GLM Agent |
+| Harn | Kimchi | MiniMax Code | Minion Code |
+| Mistral Vibe | Nova | Pi | Poolside |
+| siGit Code | | | |
+
+#### Terminal CLI (12)
+
+| | | | |
+| --- | --- | --- | --- |
+| Aider | Codebuff | Comate CLI | Continue CLI |
+| Crush | ForgeCode | Jules Tools | Letta Code |
+| Nanocoder | OpenClaw | Trae Agent | Warp Oz CLI |
 
 > You can also add custom agents or override launch commands, arguments, and environment variables in **Settings → Agents**.
 
@@ -201,7 +206,7 @@ src/
 ├── Octopus.Storage                           Local persistence (projects.json, settings.json, etc.)
 ├── Octopus.Platform(.MacOS/.Linux/.Windows)  Shell discovery, env, paths, OS keychain & migration
 ├── Octopus.Terminal(.MiniPty/.Avalonia)      PTY abstractions, MiniPty backend & Avalonia control
-├── Octopus.Agents                            40 built-in agent definitions, scanner, accounts, sessions & signals
+├── Octopus.Agents                            61 built-in agent definitions, scanner, accounts, sessions & signals
 ├── Octopus.Acp                               ACP JSON-RPC runtime, 19 agent dialects & adapter installer
 ├── Octopus.SignalForwarder                   Bundled NativeAOT IPC signal forwarder (octopus-signal)
 ├── Octopus.FileSystem                        File tree, watcher, search & directory browser

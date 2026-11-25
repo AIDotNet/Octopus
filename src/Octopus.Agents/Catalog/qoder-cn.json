@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "id": "qoder-cn",
+  "name": "Qoder CLI CN",
+  "icon": "qoder-cn",
+  "homepage": "https://qoder.com.cn/cli",
+  "verified": false,
+  "detect": {
+    "executables": ["qoderclicn", "qodercn"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://qoder.com.cn/install | bash" },
+      { "kind": "npm", "command": "npm i -g @qodercn-ai/qoderclicn" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "permission": {
+      "default": "default",
+      "modes": {
+        "default": { "args": [] },
+        "full": { "args": ["--yolo"], "danger": true }
+      }
+    },
+    "resume": {
+      "continueLatest": ["--continue"],
+      "byId": ["--resume", "{id}"]
+    },
+    "additionalDirs": { "mode": "repeat", "args": ["--add-dir", "{value}"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "QODER_PERSONAL_ACCESS_TOKEN", "label": "Personal access token", "secret": true, "localized": { "zh-CN": { "label": "个人访问令牌" } } },
+        { "name": "QODERCN_CONFIG_DIR", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } },
+        { "name": "QODER_MODEL", "label": "Model", "localized": { "zh-CN": { "label": "模型" } } }
+      ],
+      "allowCustom": true
+    }
+  },
+  "signals": {
+    "minVersion": "1.0.0",
+    "dialect": "qoder",
+    "account": { "env": "QODERCN_CONFIG_DIR", "default": "~/.qoder-cn" },
+    "attach": [
+      { "args": ["--settings", "{signalSettings}"], "verified": false, "note": "Qoder CLI CN layers hooks from --settings <file> using Claude-compatible event names" }
+    ],
+    "channels": {
+      "prompt-submit": { "via": "hook", "event": "UserPromptSubmit" },
+      "tool-call": { "via": "hook", "event": "PreToolUse" },
+      "notification": { "via": "hook", "event": "Notification" },
+      "stop": { "via": "hook", "event": "Stop" }
+    },
+    "status": {
+      "working": ["prompt-submit", "tool-call"],
+      "waiting": ["notification"],
+      "done": ["stop"]
+    }
+  },
+  "accounts": {
+    "mode": "envDir",
+    "env": "QODERCN_CONFIG_DIR",
+    "defaultDir": "~/.qoder-cn",
+    "loginArgs": ["login"],
+    "unsetEnv": ["QODER_PERSONAL_ACCESS_TOKEN"]
+  },
+  "acp": {
+    "mode": "native",
+    "args": [
+      "--acp"
+    ],
+    "dialect": "generic"
+  }
+}

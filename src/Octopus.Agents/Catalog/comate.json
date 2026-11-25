@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "comate",
+  "name": "Comate CLI",
+  "icon": "comate",
+  "homepage": "https://comate.baidu.com",
+  "verified": false,
+  "detect": {
+    "executables": ["comatecli", "comate-cli"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @comate/comatecli" },
+      { "kind": "uv", "command": "uv tool install comate-cli" }
+    ]
+  },
+  "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  }
+}

@@ -6,7 +6,7 @@
 
 **跨平台终端管理与 AI 编码智能体工作台**
 
-按项目组织终端、40 款 AI 编码智能体、文件、Git 工作树、SSH 隧道与远程设备 —— NativeAOT 原生编译，端到端加密。
+按项目组织终端、61 款 AI 编码智能体、文件、Git 工作树、SSH 隧道与远程设备 —— NativeAOT 原生编译，端到端加密。
 
 [English](README.md) · **简体中文**
 
@@ -28,7 +28,7 @@
 | 维度 | Octopus 提供的能力 |
 | --- | --- |
 | **原生高性能** | 基于 .NET 10、Avalonia 12 与 NativeAOT 原生编译，覆盖 macOS / Windows / Linux —— 启动快、内存占用低，无浏览器内核开销。 |
-| **40 款智能体 · 双模式** | 自动探测 40 款主流编码智能体 CLI；其中 **32 款支持 ACP 图形界面**，可在真终端与图形对话间无缝切换，支持多订阅账户隔离。 |
+| **61 款智能体 · 双模式** | 自动探测 61 款主流编码智能体 CLI；其中 **49 款支持 ACP 图形界面**，可在真终端与图形对话间无缝切换，支持多订阅账户隔离。 |
 | **零知识远程接管** | 通过局域网直连、官方密文中转或自托管服务，在另一台电脑或 Android 手机端继续操控主机 —— 私钥永不出设备。 |
 | **插件与透明安全** | 内置 `Jaunt` 独立 JS 插件引擎与细粒度授权、92 天多账户用量账单导出，以及 ECDSA P-256 签名校验的自动更新。 |
 
@@ -42,9 +42,9 @@
 - **拖拽分屏与分支工作区**：支持左右 / 上下自由分屏并按项目记忆布局；内置 **Git Worktree 分支工作区**，可让多个智能体在相互隔离的分支中并行开发。
 - **精致桌面体验**：支持**紧凑 / 宽松**界面风格切换、明暗主题与中英双语界面；支持系统托盘 / 菜单栏常驻、重启后自动恢复标签与智能体会话，并在 `~/.octopus/logs/` 记录异常日志保障主程序稳定运行。
 
-### 40 款内置 AI 编码智能体与 ACP 图形界面
+### 61 款内置 AI 编码智能体与 ACP 图形界面
 - **双模式工作流（终端 ⇄ ACP GUI）**：
-  - 既可在原生终端中运行任意智能体 CLI，也可一键切换至 **ACP（Agent Client Protocol）图形界面**（内置 **32 款**智能体支持，涵盖原生 ACP 与官方适配器，另支持自定义智能体定义与可选 ACP Registry）。
+  - 既可在原生终端中运行任意智能体 CLI，也可一键切换至 **ACP（Agent Client Protocol）图形界面**（内置 **49 款**智能体支持，涵盖原生 ACP 与官方适配器，另支持自定义智能体定义与可选 ACP Registry）。
   - 提供统一工作时间线与停靠式活动托盘、可视化权限确认卡片与表单问答、可折叠工具调用与内联代码 Diff、提示词队列与**立即发送**、内置模型 / 服务商品牌图标、第三方 API 模型自动发现与切换，以及一键**在终端中继续**无缝接力。
 - **多订阅账户与会话管理**：
   - 支持为同一智能体配置多个订阅账户（按环境变量隔离独立目录并发运行，或按系统钥匙串保存 / 切换登录快照），可绑定项目专属账户或启动时按需选用。
@@ -54,9 +54,9 @@
   - 默认自动向命令行及 ACP 子进程注入系统代理（`HTTP_PROXY` / `HTTPS_PROXY`），且不会覆盖用户显式设置的代理变量。
 
 <details>
-<summary><strong>查看全部 40 款内置编码智能体（26 款原生 ACP · 6 款 ACP 适配器 · 8 款终端 CLI）</strong></summary>
+<summary><strong>查看全部 61 款内置编码智能体（28 款原生 ACP · 21 款 ACP 适配器 · 12 款终端 CLI）</strong></summary>
 
-#### 原生 ACP + 终端模式（26）
+#### 原生 ACP + 终端模式（28）
 
 | | | | |
 | --- | --- | --- | --- |
@@ -65,22 +65,27 @@
 | Gemini CLI | GitHub Copilot CLI | Goose | Grok CLI |
 | Hermes Agent | IBM Bob | Junie | Kilo Code |
 | Kimi Code CLI | Kiro | MiMo Code | Muse Code |
-| omp | OpenCode | Qoder CLI | Qwen Code |
-| Stakpak | VT Code | | |
+| omp | OpenCode | OpenHands CLI | Qoder CLI |
+| Qoder CLI CN | Qwen Code | Stakpak | VT Code |
 
-#### ACP 适配器 + 终端模式（6）
-
-| | | |
-| --- | --- | --- |
-| Amp | Claude Code | Codex CLI |
-| MiniMax Code | Mistral Vibe | Pi |
-
-#### 仅终端 CLI 模式（8）
+#### ACP 适配器 + 终端模式（21）
 
 | | | | |
 | --- | --- | --- | --- |
-| Aider | Codebuff | Continue CLI | Crush |
-| Jules Tools | Letta Code | Nanocoder | OpenHands CLI |
+| Agoragentic | Amp | Claude Code | Codex CLI |
+| Cortex Code | Corust Agent | crow-cli | DeepAgents |
+| DimCode | Dirac | fast-agent | GLM Agent |
+| Harn | Kimchi | MiniMax Code | Minion Code |
+| Mistral Vibe | Nova | Pi | Poolside |
+| siGit Code | | | |
+
+#### 仅终端 CLI 模式（12）
+
+| | | | |
+| --- | --- | --- | --- |
+| Aider | Codebuff | Comate CLI | Continue CLI |
+| Crush | ForgeCode | Jules Tools | Letta Code |
+| Nanocoder | OpenClaw | Trae Agent | Warp Oz CLI |
 
 > 你也可以在「设置 → 智能体」中自由新增自定义智能体，或覆写启动命令、参数与环境变量。
 
@@ -201,7 +206,7 @@ src/
 ├── Octopus.Storage                           本地持久化（projects.json、settings.json 等）
 ├── Octopus.Platform(.MacOS/.Linux/.Windows)  Shell 发现、环境、路径、系统钥匙串与数据迁移
 ├── Octopus.Terminal(.MiniPty/.Avalonia)      PTY 抽象、MiniPty 后端与 Avalonia 终端控件
-├── Octopus.Agents                            40 款智能体定义、扫描、多账户、会话与状态信号
+├── Octopus.Agents                            61 款智能体定义、扫描、多账户、会话与状态信号
 ├── Octopus.Acp                               ACP JSON-RPC 引擎、19 种方言适配与适配器托管
 ├── Octopus.SignalForwarder                   随附的 NativeAOT 本地信号转发器（octopus-signal）
 ├── Octopus.FileSystem                        文件树、监听、搜索与目录浏览

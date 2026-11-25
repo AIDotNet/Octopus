@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "openclaw",
+  "name": "OpenClaw",
+  "icon": "openclaw",
+  "homepage": "https://openclaw.ai",
+  "verified": false,
+  "detect": {
+    "executables": ["openclaw"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g openclaw" },
+      { "kind": "script", "command": "curl -fsSL https://openclaw.ai/install.sh | bash" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  }
+}

@@ -13,9 +13,12 @@ public sealed class AgentCatalog : IAgentCatalog
     [
         "claude", "codex", "grok", "opencode", "cursor", "muse", "gemini", "copilot",
         "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi",
-        "cline", "kilo", "auggie", "codebuddy", "qoder", "vibe", "pi", "openhands",
+        "cline", "kilo", "auggie", "codebuddy", "qoder", "qoder-cn", "vibe", "pi", "openhands",
         "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp", "agy",
-        "devin", "hermes", "autohand", "mimo", "vtcode", "bob", "stakpak", "minimax"
+        "devin", "hermes", "autohand", "mimo", "vtcode", "bob", "stakpak", "minimax",
+        "glm", "comate", "trae", "dimcode", "cortex", "poolside", "deepagents", "fast-agent",
+        "dirac", "sigit", "nova", "kimchi", "harn", "crow", "corust", "minion",
+        "agoragentic", "oz", "forge", "openclaw"
     ];
 
     private readonly IAppPaths _paths;

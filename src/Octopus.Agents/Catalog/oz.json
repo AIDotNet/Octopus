@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "oz",
+  "name": "Warp Oz CLI",
+  "icon": "oz",
+  "homepage": "https://docs.warp.dev",
+  "verified": false,
+  "detect": {
+    "executables": ["oz"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "native", "command": "https://docs.warp.dev" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "WARP_API_KEY", "label": "Warp API key", "secret": true, "localized": { "zh-CN": { "label": "Warp API 密钥" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

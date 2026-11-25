@@ -243,7 +243,7 @@ public sealed class SignalAttachPlanner : ISignalAttachPlanner
         private string? Produce(string placeholder) => placeholder switch
         {
             "{forwarder}" => request.ForwarderPath,
-            "{signalSettings}" => ClaudeSettings(),
+            "{signalSettings}" => SettingsFile(),
             "{signalPluginDir}" => PluginDirectory(),
             "{signalConfig}" => Dialect switch
             {
@@ -296,6 +296,24 @@ public sealed class SignalAttachPlanner : ISignalAttachPlanner
                 (null, { } b) => b,
                 _ => null,
             };
+
+        private string? SettingsFile() => Dialect switch
+        {
+            "claude" => ClaudeSettings(),
+            "qoder" => QoderSettings(),
+            _ => null,
+        };
+
+        private string? QoderSettings()
+        {
+            var hooks = Hooks(null);
+            if (hooks.Count == 0)
+            {
+                return null;
+            }
+            var content = SignalAttachContent.SettingsHooks(hooks, HookTimeoutSeconds);
+            return planner.EnsureFile($"{Dialect}-settings-{ContentHash(content)}.json", content);
+        }
 
         private string? ClaudeSettings()
         {

@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "forge",
+  "name": "ForgeCode",
+  "icon": "forge",
+  "homepage": "https://forgecode.dev",
+  "verified": false,
+  "detect": {
+    "executables": ["forge"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "fingerprint": "forge",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://forgecode.dev/cli | sh" },
+      { "kind": "npm", "command": "npm i -g forgecode" }
+    ]
+  },
+  "capabilities": {
+    "resume": {
+      "byId": ["--conversation-id", "{id}"]
+    },
+    "extraArgs": true,
+    "env": { "allowCustom": true },
+    "features": [
+      { "id": "agent", "type": "string", "label": "Agent", "args": ["--agent", "{value}"], "localized": { "zh-CN": { "label": "智能体角色" } } },
+      { "id": "sandbox", "type": "string", "label": "Sandbox worktree", "args": ["--sandbox", "{value}"], "localized": { "zh-CN": { "label": "沙盒工作树" } } }
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "corust",
+  "name": "Corust Agent",
+  "icon": "corust",
+  "homepage": "https://corust.ai/",
+  "verified": false,
+  "detect": {
+    "executables": ["corust-agent-acp"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "native", "command": "https://github.com/Corust-ai/corust-agent-release/releases" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "corust-agent",
+      "executables": ["corust-agent-acp"]
+    }
+  }
+}

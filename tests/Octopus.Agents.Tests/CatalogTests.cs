@@ -8,9 +8,12 @@ public class CatalogTests
     private static readonly string[] ExpectedIds =
         ["claude", "codex", "grok", "opencode", "cursor", "muse", "gemini", "copilot",
          "amp", "droid", "aider", "qwen", "kiro", "goose", "crush", "kimi",
-         "cline", "kilo", "auggie", "codebuddy", "qoder", "vibe", "pi", "openhands",
+         "cline", "kilo", "auggie", "codebuddy", "qoder", "qoder-cn", "vibe", "pi", "openhands",
          "continue", "junie", "letta", "codebuff", "nanocoder", "jules", "omp", "agy",
-         "devin", "hermes", "autohand", "mimo", "vtcode", "bob", "stakpak", "minimax"];
+         "devin", "hermes", "autohand", "mimo", "vtcode", "bob", "stakpak", "minimax",
+         "glm", "comate", "trae", "dimcode", "cortex", "poolside", "deepagents", "fast-agent",
+         "dirac", "sigit", "nova", "kimchi", "harn", "crow", "corust", "minion",
+         "agoragentic", "oz", "forge", "openclaw"];
 
     [Fact]
     public void Builtins_load_in_fixed_order_without_errors()
@@ -235,9 +238,9 @@ public class CatalogTests
         var acpAgents = Builtins.All.Definitions.Where(d => d.SupportsAcp).ToList();
         var terminalOnly = Builtins.All.Definitions.Where(d => !d.SupportsAcp).Select(d => d.Id).Order().ToList();
 
-        Assert.Equal(32, acpAgents.Count);
+        Assert.Equal(49, acpAgents.Count);
         Assert.Equal(
-            ["aider", "codebuff", "continue", "crush", "jules", "letta", "nanocoder", "openhands"],
+            ["aider", "codebuff", "comate", "continue", "crush", "forge", "jules", "letta", "nanocoder", "openclaw", "oz", "trae"],
             terminalOnly);
 
         // Native and adapter specs are well-formed.
@@ -273,5 +276,24 @@ public class CatalogTests
 
         settings.Profiles["opencode"] = new AgentProfile { Surface = AgentSurface.Terminal };
         Assert.Equal(AgentSurface.Terminal, AgentSurfaceResolver.Resolve(opencode, settings));
+    }
+
+    [Fact]
+    public void Qoder_cn_is_built_in_with_native_acp_and_expected_executables()
+    {
+        using var dir = new TempDir();
+        var catalog = new AgentCatalog(new TestPaths(dir.Path));
+        var store = new AgentDefinitionStore(new TestPaths(dir.Path), catalog);
+
+        Assert.True(store.IsBuiltIn("qoder-cn"));
+        var def = catalog.Find("qoder-cn");
+        Assert.NotNull(def);
+        Assert.Equal("Qoder CLI CN", def.Name);
+        Assert.Equal(["qoderclicn", "qodercn"], def.Detect.Executables);
+        Assert.Equal("https://qoder.com.cn/cli", def.Homepage);
+        Assert.True(def.SupportsAcp);
+        Assert.Equal("native", def.Acp!.Mode);
+        Assert.Equal(["--acp"], def.Acp.Args);
+        Assert.Contains(def.Capabilities.Env!.Known, v => v.Name == "QODERCN_CONFIG_DIR");
     }
 }

@@ -15,14 +15,55 @@
     ]
   },
   "capabilities": {
+    "model": {
+      "args": ["-m", "{value}"],
+      "allowCustom": true,
+      "options": []
+    },
     "permission": {
       "default": "default",
       "modes": { "default": {"args": []}, "full": {"args": ["--yolo"], "danger": true} }
     },
     "resume": {
-      "continueLatest": ["--continue"]
+      "continueLatest": ["--continue"],
+      "byId": ["--resume", "{id}"]
     },
-    "extraArgs": true
+    "additionalDirs": { "mode": "repeat", "args": ["--add-dir", "{value}"] },
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "QODER_PERSONAL_ACCESS_TOKEN", "label": "Personal access token", "secret": true, "localized": { "zh-CN": { "label": "个人访问令牌" } } },
+        { "name": "QODER_CONFIG_DIR", "label": "Config directory", "localized": { "zh-CN": { "label": "配置目录" } } },
+        { "name": "QODER_MODEL", "label": "Model", "localized": { "zh-CN": { "label": "模型" } } }
+      ],
+      "allowCustom": true
+    }
+  },
+  "signals": {
+    "minVersion": "1.0.0",
+    "dialect": "qoder",
+    "account": { "env": "QODER_CONFIG_DIR", "default": "~/.qoder" },
+    "attach": [
+      { "args": ["--settings", "{signalSettings}"], "verified": false, "note": "Qoder CLI layers hooks from --settings <file> using Claude-compatible event names" }
+    ],
+    "channels": {
+      "prompt-submit": { "via": "hook", "event": "UserPromptSubmit" },
+      "tool-call": { "via": "hook", "event": "PreToolUse" },
+      "notification": { "via": "hook", "event": "Notification" },
+      "stop": { "via": "hook", "event": "Stop" }
+    },
+    "status": {
+      "working": ["prompt-submit", "tool-call"],
+      "waiting": ["notification"],
+      "done": ["stop"]
+    }
+  },
+  "accounts": {
+    "mode": "envDir",
+    "env": "QODER_CONFIG_DIR",
+    "defaultDir": "~/.qoder",
+    "loginArgs": ["login"],
+    "unsetEnv": ["QODER_PERSONAL_ACCESS_TOKEN"]
   },
   "acp": {
     "mode": "native",

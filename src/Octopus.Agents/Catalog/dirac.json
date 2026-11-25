@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "dirac",
+  "name": "Dirac",
+  "icon": "dirac",
+  "homepage": "https://dirac.run",
+  "verified": false,
+  "detect": {
+    "executables": ["dirac"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g dirac-cli" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "dirac",
+      "executables": ["dirac"],
+      "args": ["--acp"],
+      "npxPackage": "dirac-cli",
+      "npxArgs": ["--acp"]
+    }
+  }
+}

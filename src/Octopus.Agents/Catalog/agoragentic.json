@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "agoragentic",
+  "name": "Agoragentic",
+  "icon": "agoragentic",
+  "homepage": "https://agoragentic.com",
+  "verified": false,
+  "detect": {
+    "executables": ["agoragentic-mcp"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g agoragentic-mcp" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "agoragentic-acp",
+      "executables": ["agoragentic-mcp"],
+      "args": ["--acp"],
+      "npxPackage": "agoragentic-mcp",
+      "npxArgs": ["--acp"]
+    }
+  }
+}

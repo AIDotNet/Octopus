@@ -61,7 +61,26 @@ public sealed class AgentAccountServiceTests : IDisposable
         Assert.Equal("antigravity", agy.Accounts.Keyring.Account);
         Assert.Equal("gemini:antigravity", agy.Accounts.Keyring.WindowsTarget);
 
-        foreach (var def in new[] { claude, codex, copilot, agy })
+        var qoder = Builtins.Get("qoder");
+        var qoderCn = Builtins.Get("qoder-cn");
+        var kimi = Builtins.Get("kimi");
+        var cline = Builtins.Get("cline");
+
+        Assert.Equal(AccountModes.EnvDir, qoder.Accounts!.Mode);
+        Assert.Equal("QODER_CONFIG_DIR", qoder.Accounts.Env);
+        Assert.Contains("QODER_PERSONAL_ACCESS_TOKEN", qoder.Accounts.UnsetEnv!);
+
+        Assert.Equal(AccountModes.EnvDir, qoderCn.Accounts!.Mode);
+        Assert.Equal("QODERCN_CONFIG_DIR", qoderCn.Accounts.Env);
+        Assert.Contains("QODER_PERSONAL_ACCESS_TOKEN", qoderCn.Accounts.UnsetEnv!);
+
+        Assert.Equal(AccountModes.EnvDir, kimi.Accounts!.Mode);
+        Assert.Equal("KIMI_CODE_HOME", kimi.Accounts.Env);
+
+        Assert.Equal(AccountModes.EnvDir, cline.Accounts!.Mode);
+        Assert.Equal("CLINE_DIR", cline.Accounts.Env);
+
+        foreach (var def in new[] { claude, codex, copilot, agy, qoder, qoderCn, kimi, cline })
         {
             var json = JsonSerializer.Serialize(def, AgentJsonContext.Default.AgentDefinition);
             var roundTripped = JsonSerializer.Deserialize(json, AgentJsonContext.Default.AgentDefinition)!;

@@ -101,6 +101,15 @@ internal static class SignalAttachContent
         writer.WriteEndObject();
     });
 
+    /// <summary>Settings JSON containing only <c>hooks</c>, for CLIs that layer hooks from <c>--settings &lt;file&gt;</c> (e.g. Qoder CLI).</summary>
+    public static string SettingsHooks(IReadOnlyList<GeneratedHook> hooks, int timeoutSeconds) => Write(Indented, writer =>
+    {
+        writer.WriteStartObject();
+        writer.WritePropertyName("hooks");
+        WriteMatcherGroups(writer, hooks, timeoutSeconds);
+        writer.WriteEndObject();
+    });
+
     /// <summary>
     /// The name of the entry Octopus keeps in agy's <c>hooks.json</c>. Every other entry of the file is the user's and is left
     /// as it is.

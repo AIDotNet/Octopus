@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "sigit",
+  "name": "siGit Code",
+  "icon": "sigit",
+  "homepage": "https://github.com/getsigit/sigit",
+  "verified": false,
+  "detect": {
+    "executables": ["sigit"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g @smbcloud/sigit" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "sigit",
+      "executables": [
+        "sigit",
+        "sigit-linux-arm64",
+        "sigit-linux-amd64",
+        "sigit-win-arm64",
+        "sigit-win-amd64"
+      ],
+      "npxPackage": "@smbcloud/sigit"
+    }
+  }
+}

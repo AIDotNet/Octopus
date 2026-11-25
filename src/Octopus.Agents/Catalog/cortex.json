@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "cortex",
+  "name": "Cortex Code",
+  "icon": "cortex",
+  "homepage": "https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code",
+  "verified": false,
+  "detect": {
+    "executables": ["cortex"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "cortex-code",
+      "executables": ["cortex"],
+      "args": ["acp", "serve"]
+    }
+  }
+}

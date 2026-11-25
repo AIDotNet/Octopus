@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "id": "poolside",
+  "name": "Poolside",
+  "icon": "poolside",
+  "homepage": "https://poolside.ai",
+  "verified": false,
+  "detect": {
+    "executables": ["pool"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "script", "command": "curl -fsSL https://downloads.poolside.ai/pool/install.sh | sh" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "poolside",
+      "executables": [
+        "pool",
+        "pool-darwin-arm64",
+        "pool-darwin-amd64",
+        "pool-linux-arm64",
+        "pool-linux-amd64",
+        "pool-windows-arm64",
+        "pool-windows-amd64"
+      ],
+      "args": ["acp"]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "id": "trae",
+  "name": "Trae Agent",
+  "icon": "trae",
+  "homepage": "https://github.com/bytedance/trae-agent",
+  "verified": false,
+  "detect": {
+    "executables": ["trae-cli"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "uv", "command": "uv tool install git+https://github.com/bytedance/trae-agent.git" }
+    ]
+  },
+  "capabilities": {
+    "baseArgs": ["interactive"],
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "ANTHROPIC_API_KEY", "label": "Anthropic API key", "secret": true, "localized": { "zh-CN": { "label": "Anthropic API 密钥" } } },
+        { "name": "OPENAI_API_KEY", "label": "OpenAI API key", "secret": true, "localized": { "zh-CN": { "label": "OpenAI API 密钥" } } }
+      ],
+      "allowCustom": true
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "deepagents",
+  "name": "DeepAgents",
+  "icon": "deepagents",
+  "homepage": "https://docs.langchain.com/oss/javascript/deepagents/overview",
+  "verified": false,
+  "detect": {
+    "executables": ["deepagents-acp", "deepagents"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g deepagents-acp" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "deepagents",
+      "executables": ["deepagents-acp"],
+      "npxPackage": "deepagents-acp"
+    }
+  }
+}

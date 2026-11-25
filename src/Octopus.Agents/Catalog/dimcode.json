@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "dimcode",
+  "name": "DimCode",
+  "icon": "dimcode",
+  "homepage": "https://dimagent.cn",
+  "verified": false,
+  "detect": {
+    "executables": ["dimcode", "dim"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "npm", "command": "npm i -g dimcode" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "dimcode",
+      "executables": ["dimcode", "dim"],
+      "args": ["acp"],
+      "npxPackage": "dimcode",
+      "npxArgs": ["acp"]
+    }
+  }
+}

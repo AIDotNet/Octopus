@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "id": "fast-agent",
+  "name": "fast-agent",
+  "icon": "fast-agent",
+  "homepage": "https://fast-agent.ai",
+  "verified": false,
+  "detect": {
+    "executables": ["fast-agent-acp", "fast-agent"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "uv", "command": "uv tool install fast-agent-acp" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": {
+      "known": [
+        { "name": "FAST_AGENT_MODEL", "label": "Model", "localized": { "zh-CN": { "label": "模型" } } }
+      ],
+      "allowCustom": true
+    }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "fast-agent",
+      "executables": ["fast-agent-acp"],
+      "args": ["-x"],
+      "uvxPackage": "fast-agent-acp",
+      "uvxArgs": ["-x"]
+    }
+  }
+}

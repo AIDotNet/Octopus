@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "minion",
+  "name": "Minion Code",
+  "icon": "minion",
+  "homepage": "https://github.com/femto/minion-code",
+  "verified": false,
+  "detect": {
+    "executables": ["minion-code"],
+    "versionArgs": ["--version"],
+    "versionRegex": "(\\d+\\.\\d+\\.\\d+)",
+    "installHints": [
+      { "kind": "uv", "command": "uv tool install minion-code" }
+    ]
+  },
+  "capabilities": {
+    "extraArgs": true,
+    "env": { "allowCustom": true }
+  },
+  "acp": {
+    "mode": "adapter",
+    "dialect": "generic",
+    "adapter": {
+      "registryId": "minion-code",
+      "executables": ["minion-code"],
+      "args": ["acp"],
+      "uvxPackage": "minion-code",
+      "uvxArgs": ["acp"]
+    }
+  }
+}

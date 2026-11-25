@@ -505,4 +505,23 @@ public sealed class SignalAttachPlannerTests : IDisposable
         Assert.Equal(["--settings", "/s.json", "--model", "opus", "hello"], compiled.Arguments);
         Assert.Equal("i", compiled.Environment["OCTOPUS_ITEM_ID"]);
     }
+
+    [Fact]
+    public void Qoder_and_qoder_cn_attach_hooks_via_settings_file()
+    {
+        foreach (var (id, accountEnv) in new[] { ("qoder", "QODER_CONFIG_DIR"), ("qoder-cn", "QODERCN_CONFIG_DIR") })
+        {
+            var attachment = Plan(Builtins.Get(id), "1.1.97");
+            Assert.Equal(2, attachment.Arguments.Count);
+            Assert.Equal("--settings", attachment.Arguments[0]);
+            var settingsPath = attachment.Arguments[1];
+            Assert.True(File.Exists(settingsPath));
+            using var doc = JsonDocument.Parse(File.ReadAllText(settingsPath));
+            var hooks = doc.RootElement.GetProperty("hooks");
+            Assert.True(hooks.TryGetProperty("UserPromptSubmit", out _));
+            Assert.True(hooks.TryGetProperty("PreToolUse", out _));
+            Assert.True(hooks.TryGetProperty("Stop", out _));
+            Assert.Equal(accountEnv, attachment.Environment[SignalAttachPlanner.AccountVariable]);
+        }
+    }
 }

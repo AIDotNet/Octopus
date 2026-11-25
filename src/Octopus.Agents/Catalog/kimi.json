@@ -39,6 +39,12 @@
       "allowCustom": true
     }
   },
+  "accounts": {
+    "mode": "envDir",
+    "env": "KIMI_CODE_HOME",
+    "defaultDir": "~/.kimi-code",
+    "loginArgs": ["login"]
+  },
   "acp": {
     "mode": "native",
     "args": [

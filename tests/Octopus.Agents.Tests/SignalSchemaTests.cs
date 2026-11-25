@@ -6,7 +6,7 @@ namespace Octopus.Agents.Tests;
 
 public class SignalSchemaTests
 {
-    private static readonly string[] SignalAgents = ["claude", "codebuddy", "codex", "grok", "cursor", "opencode", "agy"];
+    private static readonly string[] SignalAgents = ["claude", "codebuddy", "codex", "grok", "cursor", "opencode", "agy", "qoder", "qoder-cn"];
     private static readonly string[] ProbeOnlyAgents = ["copilot"];
 
     [Fact]
