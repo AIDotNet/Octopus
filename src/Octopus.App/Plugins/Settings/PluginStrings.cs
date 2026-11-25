@@ -59,4 +59,26 @@ public static class PluginStrings
     public static string Details => PluginText.Get("详情", "Details");
     public static string Id => PluginText.Get("标识", "Id");
     public static string Location => PluginText.Get("位置", "Location");
+
+    // Marketplace & Multi-Agent Skills Installer
+    public static string TabInstalled => PluginText.Get("已安装", "Installed");
+    public static string TabMarketplace => PluginText.Get("发现市场", "Marketplace");
+    public static string TabSkills => PluginText.Get("开发 Skill", "Authoring Skill");
+    public static string MarketSearchPlaceholder => PluginText.Get("搜索插件市场（名称、ID、标签）…", "Search marketplace (name, id, tags)…");
+    public static string MarketRefresh => PluginText.Get("刷新市场", "Refresh");
+    public static string MarketOpenWeb => PluginText.Get("在网页打开市场 / 上传插件", "Open web marketplace / upload");
+    public static string MarketEmpty => PluginText.Get("插件市场暂无匹配结果。", "No matching plugins found in the marketplace.");
+    public static string MarketInstall => PluginText.Get("安装", "Install");
+    public static string MarketUpgrade => PluginText.Get("升级", "Upgrade");
+    public static string MarketInstalledBadge => PluginText.Get("已安装", "Installed");
+    public static string SkillHeading => PluginText.Get("安装插件制作 Skill（octopus-plugin）", "Install plugin authoring Skill (octopus-plugin)");
+    public static string SkillSubtitle => PluginText.Get(
+        "将官方插件开发规范、API 参考与脚手架模板写入所选 AI 智能体目录。每次点击安装都会强制覆盖旧版目录，杜绝过时文档残留；默认勾选 .agents、Claude Code、Cursor 与 Codex。",
+        "Writes the official plugin authoring guide, API reference, and templates into the selected AI coding agent directories. Every click strictly overwrites any previous version; defaults to .agents, Claude Code, Cursor, and Codex.");
+    public static string SkillScopeGlobal => PluginText.Get("用户全局 (~)", "User global (~)");
+    public static string SkillScopeProject => PluginText.Get("当前项目 (./)", "Current project (./)");
+    public static string SkillCustomPlaceholder => PluginText.Get("添加自定义 Skills 目录（例如 ~/.my-agent/skills）", "Add custom skills folder (e.g. ~/.my-agent/skills)");
+    public static string SkillAddCustom => PluginText.Get("添加目录", "Add folder");
+    public static string SkillInstallNow => PluginText.Get("覆盖安装到所选 Agent", "Overwrite & install to selected agents");
+    public static string SkillResetDefaults => PluginText.Get("恢复默认勾选", "Reset defaults");
 }

@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "acme.ocean-theme",
+  "name": "Ocean Pixel Theme",
+  "version": "1.0.0",
+  "description": "Pure declarative dark color theme for Octopus.",
+  "publisher": "acme",
+  "category": "theme",
+  "license": "MIT",
+  "engines": { "api": 0 },
+  "contributes": {
+    "themes": [
+      {
+        "id": "acme.ocean-theme.dark",
+        "label": "Ocean Pixel Dark",
+        "appearance": "dark",
+        "path": "themes/dark.json",
+        "localized": { "zh-CN": { "label": "深海像素暗色" } }
+      }
+    ]
+  },
+  "localized": {
+    "zh-CN": {
+      "name": "深海像素主题",
+      "description": "纯声明式暗色配色主题（零权限）。"
+    }
+  }
+}

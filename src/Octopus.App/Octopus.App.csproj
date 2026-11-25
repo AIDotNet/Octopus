@@ -99,6 +99,8 @@
     <ItemGroup>
         <!-- Built-in plugins ship as plain packages next to the executable (design/plugins/03-清单与生命周期.md §5). -->
         <None Include="BuiltinPlugins/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
+        <!-- Built-in plugin authoring Skill bundle for offline fallback & atomic overwrite installation. -->
+        <None Include="BuiltinSkills/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <!-- Development runs: the forwarder's framework-dependent build goes next to the app. A release publishes the

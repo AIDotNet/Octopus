@@ -8,8 +8,10 @@ using Octopus.Core.Projects;
 using Octopus.Plugins;
 using Octopus.Plugins.Catalog;
 using Octopus.Plugins.Jaunt;
+using Octopus.Plugins.Marketplace;
 using Octopus.Plugins.Runtime;
 using Octopus.Plugins.Runtime.Modules;
+using Octopus.Plugins.Skills;
 using Octopus.Plugins.Usage;
 using Octopus.Storage;
 using TKCode.Arc;
@@ -31,6 +33,13 @@ internal static class PluginsAppModule
         var beside = Path.Combine(AppContext.BaseDirectory, "BuiltinPlugins");
         var bundle = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "BuiltinPlugins"));
         return OperatingSystem.IsMacOS() && Directory.Exists(bundle) ? [bundle] : [beside];
+    }
+
+    private static string BuiltinSkillDirectory()
+    {
+        var beside = Path.Combine(AppContext.BaseDirectory, "BuiltinSkills", PluginSkillInstaller.SkillName);
+        var bundle = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "BuiltinSkills", PluginSkillInstaller.SkillName));
+        return OperatingSystem.IsMacOS() && Directory.Exists(bundle) ? bundle : beside;
     }
 
     public static void Register(IServiceCollection services)
@@ -78,6 +87,8 @@ internal static class PluginsAppModule
         services.AddSingleton<PluginWorkbench>();
         services.AddSingleton<PluginIndicators>();
         services.AddSingleton<PluginThemes>();
+        services.AddSingleton<PluginMarketplaceClient>();
+        services.AddSingleton(_ => new PluginSkillInstaller(BuiltinSkillDirectory()));
     }
 
     private static SemanticVersion AppVersion()

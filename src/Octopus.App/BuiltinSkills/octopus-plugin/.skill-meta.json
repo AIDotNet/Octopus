@@ -1,0 +1,6 @@
+{
+  "name": "octopus-plugin",
+  "version": "1.0.0",
+  "pluginApiVersion": 0,
+  "defaultTargets": ["agents", "claude", "cursor", "codex"]
+}

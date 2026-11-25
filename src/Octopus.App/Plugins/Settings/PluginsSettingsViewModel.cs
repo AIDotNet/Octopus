@@ -4,11 +4,14 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Services;
+using Octopus.Core;
 using Octopus.Core.Plugins;
 using Octopus.Plugins;
 using Octopus.Plugins.Catalog;
+using Octopus.Plugins.Marketplace;
 using Octopus.Plugins.Packages;
 using Octopus.Plugins.Runtime;
+using Octopus.Plugins.Skills;
 using Octopus.Storage;
 using TKCode.Arc;
 
@@ -28,9 +31,26 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
     private readonly PluginPaths _paths;
     private readonly IWindowAccessor _window;
     private readonly PluginThemes _themes;
+    private readonly PluginMarketplaceClient _marketplace;
+    private readonly PluginSkillInstaller _skillInstaller;
+    private readonly ISettingsStore _settings;
+    private readonly IProjectService _projects;
     private bool _loadingThemes;
+    private bool _marketLoadedOnce;
 
-    public PluginsSettingsViewModel(IPluginCatalog catalog, IPluginStateStore state, PluginManager manager, PluginInstaller installer, PluginPaths paths, IWindowAccessor window, PluginThemes themes, Octopus.Plugins.Runtime.Modules.PluginConfigStore config)
+    public PluginsSettingsViewModel(
+        IPluginCatalog catalog,
+        IPluginStateStore state,
+        PluginManager manager,
+        PluginInstaller installer,
+        PluginPaths paths,
+        IWindowAccessor window,
+        PluginThemes themes,
+        Octopus.Plugins.Runtime.Modules.PluginConfigStore config,
+        PluginMarketplaceClient marketplace,
+        PluginSkillInstaller skillInstaller,
+        ISettingsStore settings,
+        IProjectService projects)
     {
         Config = config;
         _catalog = catalog;
@@ -40,17 +60,262 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         _paths = paths;
         _window = window;
         _themes = themes;
+        _marketplace = marketplace;
+        _skillInstaller = skillInstaller;
+        _settings = settings;
+        _projects = projects;
         _catalog.Changed += OnCatalogChanged;
         _state.Changed += OnStateChanged;
         _manager.HostChanged += OnHostChanged;
         _themes.Changed += OnThemesChanged;
+        InitMarketCategories();
         Refresh();
+        RefreshSkillTargets();
     }
 
     public ObservableCollection<PluginRowViewModel> Builtin { get; } = [];
     public ObservableCollection<PluginRowViewModel> Installed { get; } = [];
+    public ObservableCollection<MarketplacePluginRowViewModel> MarketItems { get; } = [];
+    public ObservableCollection<SelectOption> MarketCategories { get; } = [];
+    public ObservableCollection<SkillTargetRowViewModel> SkillTargets { get; } = [];
     public bool HasBuiltin => Builtin.Count > 0;
     public bool HasInstalled => Installed.Count > 0;
+    public bool HasMarketItems => MarketItems.Count > 0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInstalledTab))]
+    [NotifyPropertyChangedFor(nameof(IsMarketplaceTab))]
+    [NotifyPropertyChangedFor(nameof(IsSkillsTab))]
+    public partial string ActiveTab { get; set; } = "installed";
+
+    public bool IsInstalledTab => ActiveTab == "installed";
+    public bool IsMarketplaceTab => ActiveTab == "marketplace";
+    public bool IsSkillsTab => ActiveTab == "skills";
+
+    [ObservableProperty] public partial string MarketQuery { get; set; } = "";
+    [ObservableProperty] public partial string MarketCategory { get; set; } = "all";
+    [ObservableProperty] public partial bool IsMarketLoading { get; private set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMarketError))]
+    public partial string? MarketError { get; private set; }
+    public bool HasMarketError => !string.IsNullOrWhiteSpace(MarketError);
+
+    [ObservableProperty] public partial string SkillScopeKey { get; set; } = "global";
+    [ObservableProperty] public partial string CustomSkillPath { get; set; } = "";
+    [ObservableProperty] public partial bool IsSkillInstalling { get; private set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSkillResult))]
+    public partial string? SkillInstallSummary { get; private set; }
+    public bool HasSkillResult => !string.IsNullOrWhiteSpace(SkillInstallSummary);
+    public bool HasCurrentProject => _projects.Current is not null;
+
+    partial void OnActiveTabChanged(string value)
+    {
+        if (value == "marketplace" && !_marketLoadedOnce)
+        {
+            _marketLoadedOnce = true;
+            _ = RefreshMarketplaceAsync();
+        }
+        else if (value == "skills")
+        {
+            RefreshSkillTargets();
+        }
+    }
+
+    partial void OnMarketCategoryChanged(string value)
+    {
+        if (IsMarketplaceTab) _ = RefreshMarketplaceAsync();
+    }
+
+    partial void OnSkillScopeKeyChanged(string value) => RefreshSkillTargets();
+
+    private string ActiveServerUrl()
+    {
+        var configured = _settings.Current.Remote.RelayUrl?.Trim().TrimEnd('/');
+        if (!string.IsNullOrWhiteSpace(configured)) return configured;
+        return ServiceEndpoints.OfficialServiceUrl ?? ServiceEndpoints.DefaultOfficialServiceUrl;
+    }
+
+    private void InitMarketCategories()
+    {
+        MarketCategories.Add(new SelectOption("all", PluginText.Get("全部分类", "All categories")));
+        MarketCategories.Add(new SelectOption("agent", PluginText.Get("智能体", "Agents")));
+        MarketCategories.Add(new SelectOption("editor", PluginText.Get("查看器 / 编辑器", "Editors & Views")));
+        MarketCategories.Add(new SelectOption("theme", PluginText.Get("主题", "Themes")));
+        MarketCategories.Add(new SelectOption("terminal", PluginText.Get("终端", "Terminal")));
+        MarketCategories.Add(new SelectOption("workflow", PluginText.Get("工作流", "Workflow")));
+        MarketCategories.Add(new SelectOption("utility", PluginText.Get("工具", "Utilities")));
+    }
+
+    [RelayCommand]
+    private async Task RefreshMarketplaceAsync()
+    {
+        IsMarketLoading = true;
+        MarketError = null;
+        try
+        {
+            var page = await _marketplace.SearchAsync(
+                ActiveServerUrl(),
+                query: MarketQuery,
+                category: MarketCategory,
+                apiVersion: PluginApi.CurrentVersion);
+            var installedMap = _catalog.Packages
+                .Where(p => p.Status != PluginStatus.Shadowed && p.Manifest is not null)
+                .ToDictionary(p => p.Id, p => p.Manifest!.Version, StringComparer.OrdinalIgnoreCase);
+
+            MarketItems.Clear();
+            foreach (var entry in page.Items)
+            {
+                installedMap.TryGetValue(entry.Plugin.Id, out var installedVer);
+                MarketItems.Add(new MarketplacePluginRowViewModel(entry, installedVer, this));
+            }
+            OnPropertyChanged(nameof(HasMarketItems));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or InvalidOperationException)
+        {
+            MarketError = PluginText.Get($"无法连接插件市场（{ActiveServerUrl()}）：{ex.Message}", $"Could not reach marketplace ({ActiveServerUrl()}): {ex.Message}");
+        }
+        finally
+        {
+            IsMarketLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenWebMarketplaceAsync()
+    {
+        if (_window.Window is { } owner)
+        {
+            await owner.Launcher.LaunchUriAsync(new Uri($"{ActiveServerUrl()}/plugins"));
+        }
+    }
+
+    internal async Task InstallFromMarketplaceAsync(MarketplacePluginRowViewModel row)
+    {
+        if (_window.Window is not { } owner) return;
+        row.IsBusy = true;
+        string? tempFile = null;
+        try
+        {
+            tempFile = await _marketplace.DownloadVerifiedAsync(ActiveServerUrl(), row.Entry.Latest);
+            var installed = await StageConfirmAndInstallAsync(owner, tempFile);
+            if (installed)
+            {
+                row.UpdateInstalledState(row.Entry.Latest.Version);
+            }
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException or InvalidDataException or PluginPackageException or UnauthorizedAccessException)
+        {
+            Say(PluginText.Get($"从市场安装失败：{e.Message}", $"Marketplace install failed: {e.Message}"), AlertTone.Danger);
+        }
+        finally
+        {
+            row.IsBusy = false;
+            if (tempFile is not null)
+            {
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+            }
+        }
+    }
+
+    private SkillInstallScope CurrentSkillScope() =>
+        SkillScopeKey == "project" && _projects.Current is not null ? SkillInstallScope.ProjectLocal : SkillInstallScope.UserGlobal;
+
+    private void RefreshSkillTargets()
+    {
+        var scope = CurrentSkillScope();
+        var projectRoot = _projects.Current?.Path;
+        var statuses = _skillInstaller.InspectTargets(scope, projectRoot);
+        var prevSelection = SkillTargets.ToDictionary(r => r.TargetId, r => r.IsSelected, StringComparer.OrdinalIgnoreCase);
+        var customRows = SkillTargets.Where(r => r.IsCustom).ToList();
+
+        SkillTargets.Clear();
+        foreach (var status in statuses)
+        {
+            var selected = prevSelection.TryGetValue(status.Spec.Id, out var wasSelected) ? wasSelected : status.Spec.DefaultSelected;
+            SkillTargets.Add(new SkillTargetRowViewModel(status, selected));
+        }
+        foreach (var custom in customRows)
+        {
+            var resolved = _skillInstaller.ResolveTargetPath(custom.TargetId, scope, projectRoot);
+            custom.ResolvedPath = resolved;
+            custom.RefreshStatus(Directory.Exists(resolved), PluginSkillInstaller.ReadInstalledVersion(resolved));
+            SkillTargets.Add(custom);
+        }
+    }
+
+    [RelayCommand]
+    private void ResetSkillDefaults()
+    {
+        var scope = CurrentSkillScope();
+        var projectRoot = _projects.Current?.Path;
+        var statuses = _skillInstaller.InspectTargets(scope, projectRoot);
+        SkillTargets.Clear();
+        foreach (var status in statuses)
+        {
+            SkillTargets.Add(new SkillTargetRowViewModel(status, status.Spec.DefaultSelected));
+        }
+    }
+
+    [RelayCommand]
+    private void AddCustomSkillTarget()
+    {
+        var raw = CustomSkillPath.Trim();
+        if (string.IsNullOrWhiteSpace(raw)) return;
+        var resolved = _skillInstaller.ResolveTargetPath(raw, CurrentSkillScope(), _projects.Current?.Path);
+        if (SkillTargets.Any(r => r.ResolvedPath.Equals(resolved, StringComparison.OrdinalIgnoreCase)))
+        {
+            CustomSkillPath = "";
+            return;
+        }
+        SkillTargets.Add(new SkillTargetRowViewModel(resolved, PluginSkillInstaller.ReadInstalledVersion(resolved)));
+        CustomSkillPath = "";
+    }
+
+    [RelayCommand]
+    private async Task InstallSkillAsync()
+    {
+        var selected = SkillTargets.Where(t => t.IsSelected).Select(t => t.TargetId).ToList();
+        if (selected.Count == 0)
+        {
+            Say(PluginText.Get("请至少勾选一个目标 Agent 目录。", "Select at least one target Agent directory."), AlertTone.Warning);
+            return;
+        }
+
+        IsSkillInstalling = true;
+        try
+        {
+            var result = await _skillInstaller.InstallOverwriteAsync(
+                selected,
+                CurrentSkillScope(),
+                projectRoot: _projects.Current?.Path,
+                serverBaseUrl: ActiveServerUrl());
+
+            var lines = result.Results.Select(r =>
+            {
+                if (!r.Succeeded) return $"✕ {r.TargetPath}: {r.Error}";
+                var verb = r.PreviousVersion is null
+                    ? PluginText.Get("已安装", "installed")
+                    : PluginText.Get($"已覆盖旧版 v{r.PreviousVersion}", $"overwrote v{r.PreviousVersion}");
+                return $"✓ {r.TargetPath} ({verb} → v{r.InstalledVersion})";
+            });
+            SkillInstallSummary = string.Join("\n", lines);
+            RefreshSkillTargets();
+            var srcLabel = result.Source == "server" ? PluginText.Get("在线最新", "server latest") : PluginText.Get("本地内置", "built-in");
+            Say(PluginText.Get(
+                $"已覆盖安装 octopus-plugin Skill v{result.SkillVersion}（{srcLabel}）至 {result.SucceededCount}/{result.Results.Count} 个 Agent 目录。",
+                $"Overwrote octopus-plugin Skill v{result.SkillVersion} ({srcLabel}) in {result.SucceededCount}/{result.Results.Count} agent directories."),
+                result.FailedCount == 0 ? AlertTone.Success : AlertTone.Warning);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            Say(PluginText.Get($"安装 Skill 失败：{ex.Message}", $"Skill install failed: {ex.Message}"), AlertTone.Danger);
+        }
+        finally
+        {
+            IsSkillInstalling = false;
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMessage))]
@@ -250,7 +515,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
     [RelayCommand]
     private Task OpenFolderAsync() => OpenDirectoryAsync(_paths.PluginsDirectory);
 
-    /// <summary>Installs a <c>.zip</c> package after showing what it asks for; it starts enabled with those permissions.</summary>
+    /// <summary>Installs a <c>.octoplugin</c> or <c>.zip</c> package after showing what it asks for; it starts enabled with those permissions.</summary>
     [RelayCommand]
     private async Task InstallAsync()
     {
@@ -259,10 +524,15 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         {
             Title = PluginText.Get("选择插件包", "Choose a plugin package"),
             AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType(PluginText.Get("插件包", "Plugin package")) { Patterns = ["*.zip", "*.octopus-plugin"] }],
+            FileTypeFilter = [new FilePickerFileType(PluginText.Get("插件包", "Plugin package")) { Patterns = ["*.octoplugin", "*.zip", "*.octopus-plugin"] }],
         });
         var path = files.FirstOrDefault()?.TryGetLocalPath();
         if (path is null) return;
+        await StageConfirmAndInstallAsync(owner, path);
+    }
+
+    private async Task<bool> StageConfirmAndInstallAsync(Avalonia.Controls.TopLevel owner, string path)
+    {
         StagedPlugin staged;
         try
         {
@@ -271,13 +541,13 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         catch (Exception e) when (e is PluginPackageException or IOException or InvalidDataException or UnauthorizedAccessException)
         {
             Say(PluginText.Get($"无法读取插件包：{e.Message}", $"The package cannot be read: {e.Message}"), AlertTone.Danger);
-            return;
+            return false;
         }
         if (!staged.CanInstall || staged.Manifest is not { } manifest)
         {
             _installer.Discard(staged);
             Say(PluginText.Get("插件包无效：", "The package is not valid: ") + string.Join("; ", staged.Result.Errors.Select(i => i.ToString())), AlertTone.Danger);
-            return;
+            return false;
         }
         var required = manifest.Permissions.Requests.Where(r => !r.Optional).ToList();
         var lines = required.Count == 0
@@ -291,7 +561,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         if (!accepted)
         {
             _installer.Discard(staged);
-            return;
+            return false;
         }
         await _manager.SetEnabledAsync(manifest.Id, false);
         await Task.Run(() => _installer.Install(staged));
@@ -304,6 +574,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         });
         await _manager.SetEnabledAsync(manifest.Id, true);
         Say(PluginText.Get($"已{verb} {manifest.Name}。", $"{manifest.Name}: {verb.ToLowerInvariant()} done."));
+        return true;
     }
 
     public void Dispose()

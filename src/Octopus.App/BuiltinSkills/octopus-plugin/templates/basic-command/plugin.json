@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "acme.hello",
+  "name": "Hello Octopus",
+  "version": "1.0.0",
+  "description": "Minimal command plugin template for Octopus.",
+  "publisher": "acme",
+  "category": "workflow",
+  "license": "MIT",
+  "engines": { "api": 0 },
+  "main": "main.js",
+  "permissions": {
+    "notifications": { "optional": true }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "id": "acme.hello.run",
+        "title": "Hello Octopus",
+        "localized": { "zh-CN": { "title": "你好 Octopus" } }
+      }
+    ]
+  },
+  "localized": {
+    "zh-CN": {
+      "name": "你好 Octopus",
+      "description": "最小化 Octopus 命令插件模板。"
+    }
+  }
+}
