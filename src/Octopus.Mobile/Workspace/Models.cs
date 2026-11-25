@@ -32,7 +32,17 @@ public enum SessionActivity
 /// <summary>An agent installed and enabled on a host, with what can be chosen when starting it.</summary>
 /// <param name="Initial">One letter for its square.</param>
 /// <param name="Color">The color of its square, as <c>#RRGGBB</c>.</param>
-public sealed record AgentOption(string Id, string Name, string Initial, string Color, IReadOnlyList<string> Models, IReadOnlyList<string> Efforts);
+/// <param name="SupportsAcp">True when this agent can be launched as an ACP GUI conversation on the host.</param>
+/// <param name="DefaultGui">True when the host defaults this agent to GUI mode.</param>
+public sealed record AgentOption(
+    string Id,
+    string Name,
+    string Initial,
+    string Color,
+    IReadOnlyList<string> Models,
+    IReadOnlyList<string> Efforts,
+    bool SupportsAcp = false,
+    bool DefaultGui = false);
 
 /// <summary>
 /// A computer running Octopus that this account can see. Everything under it (projects, sessions) lives on that
@@ -191,13 +201,15 @@ public sealed partial class RemoteSession : ObservableObject
 /// <param name="Model">Null for the agent's default.</param>
 /// <param name="WorkspaceId">Null for the project's default folder; otherwise the id of a branch workspace.</param>
 /// <param name="InjectTaskPrompt">When true and the target workspace has a linked task, prepend task context to the initial prompt.</param>
+/// <param name="LaunchAsGui">When true, request ACP GUI conversation launch; when false, request terminal launch; null lets the host decide.</param>
 public sealed record NewSessionRequest(
     string? AgentId,
     string? Model,
     string? Effort,
     string? Prompt,
     string? WorkspaceId = null,
-    bool InjectTaskPrompt = false);
+    bool InjectTaskPrompt = false,
+    bool? LaunchAsGui = null);
 
 /// <summary>One entry while browsing the host's folders for a new project.</summary>
 /// <param name="Kind"><c>folder</c>, <c>drive</c> or <c>home</c>.</param>

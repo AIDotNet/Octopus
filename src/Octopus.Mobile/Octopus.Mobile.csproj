@@ -17,6 +17,8 @@
     <ItemGroup>
         <!-- The logo of the welcome page: the desktop app's transparent in-app logo, not a second copy of it. -->
         <AvaloniaResource Include="../Octopus.App/Assets/Icon/logo.png" Link="Assets/logo.png" />
+        <!-- Shared clipped spring-animated 3-line work ticker so desktop and mobile motion stay identical. -->
+        <Compile Include="../Octopus.App/AgentGui/WorkTickerViewport.cs" Link="Conversations/WorkTickerViewport.cs" />
     </ItemGroup>
 
     <ItemGroup>

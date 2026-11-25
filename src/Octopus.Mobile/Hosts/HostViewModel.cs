@@ -852,6 +852,7 @@ public sealed partial class NewSessionViewModel : ObservableObject, IDisposable
     public ObservableCollection<string> Efforts { get; } = [];
     [ObservableProperty] public partial int SelectedEffort { get; set; }
     [ObservableProperty] public partial string Prompt { get; set; } = "";
+    [ObservableProperty] public partial bool LaunchAsGui { get; set; }
     [ObservableProperty] public partial bool IsModelMenuOpen { get; set; }
     [ObservableProperty] public partial bool IsBusy { get; private set; }
     /// <summary>Why the session could not be started on the host; null when nothing went wrong.</summary>
@@ -859,9 +860,17 @@ public sealed partial class NewSessionViewModel : ObservableObject, IDisposable
     public bool HasError => !string.IsNullOrEmpty(ErrorText);
 
     partial void OnErrorTextChanged(string? value) => OnPropertyChanged(nameof(HasError));
+    partial void OnLaunchAsGuiChanged(bool value) => OnPropertyChanged(nameof(StartButtonText));
 
     private AgentOption? Agent => SelectedKind >= 0 && SelectedKind < _host.Agents.Count ? _host.Agents[SelectedKind] : null;
     public bool IsAgent => Agent is not null;
+    public bool CanLaunchAsGui => Agent is { SupportsAcp: true } && _workspace.SupportsConversations(_host);
+    public string LaunchAsGuiSubtitle => MobileLangResources.Get(CanLaunchAsGui
+        ? MobileLangResourceKind.NewSessionLaunchGuiHint
+        : MobileLangResourceKind.NewSessionLaunchGuiUnsupported);
+    public string StartButtonText => MobileLangResources.Get(IsAgent && CanLaunchAsGui && LaunchAsGui
+        ? MobileLangResourceKind.NewSessionStartGui
+        : MobileLangResourceKind.NewSessionStart);
     public bool HasEfforts => Efforts.Count > 0;
     public string ModelText => SelectedModel ?? MobileLangResources.Get(MobileLangResourceKind.NewSessionModelDefault);
     private RemoteProject? Project => Projects.FirstOrDefault(choice => choice.IsSelected)?.Project;
@@ -987,13 +996,19 @@ public sealed partial class NewSessionViewModel : ObservableObject, IDisposable
             }
 
             var agent = Agent;
+            bool? launchAsGui = agent is null
+                ? null
+                : CanLaunchAsGui && LaunchAsGui
+                    ? true
+                    : false;
             var request = new NewSessionRequest(
                 agent?.Id,
                 agent is null ? null : SelectedModel,
                 agent is not null && SelectedEffort >= 0 && SelectedEffort < Efforts.Count ? Efforts[SelectedEffort] : null,
                 agent is null || string.IsNullOrWhiteSpace(Prompt) ? null : Prompt,
                 targetWorkspaceId,
-                injectTaskPrompt);
+                injectTaskPrompt,
+                launchAsGui);
             var session = await _workspace.CreateSessionAsync(project, request);
             IsOpen = false;
             _created(session);
@@ -1284,7 +1299,11 @@ public sealed partial class NewSessionViewModel : ObservableObject, IDisposable
         }
         SelectedModel = null;
         SelectedEffort = Efforts.Count == 0 ? -1 : Efforts.Count - 1;
+        LaunchAsGui = CanLaunchAsGui && agent?.DefaultGui == true;
         OnPropertyChanged(nameof(IsAgent));
+        OnPropertyChanged(nameof(CanLaunchAsGui));
+        OnPropertyChanged(nameof(LaunchAsGuiSubtitle));
+        OnPropertyChanged(nameof(StartButtonText));
         OnPropertyChanged(nameof(HasEfforts));
         OnPropertyChanged(nameof(ModelText));
     }

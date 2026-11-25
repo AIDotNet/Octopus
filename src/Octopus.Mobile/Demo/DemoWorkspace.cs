@@ -17,8 +17,8 @@ namespace Octopus.Mobile.Demo;
 /// </summary>
 public sealed partial class DemoWorkspace : IRemoteWorkspace
 {
-    private static readonly AgentOption Claude = new("claude", "Claude", "C", "#D97757", ["Fable 5.2", "Opus 5.5", "Sonnet 5.5"], ["低", "中", "高", "极高"]);
-    private static readonly AgentOption Codex = new("codex", "Codex", "X", "#1F9D74", ["GPT-6", "GPT-6 mini"], ["低", "中", "高"]);
+    private static readonly AgentOption Claude = new("claude", "Claude", "C", "#D97757", ["Fable 5.2", "Opus 5.5", "Sonnet 5.5"], ["低", "中", "高", "极高"], SupportsAcp: true);
+    private static readonly AgentOption Codex = new("codex", "Codex", "X", "#1F9D74", ["GPT-6", "GPT-6 mini"], ["低", "中", "高"], SupportsAcp: true);
 
     private readonly Dictionary<string, Func<DemoTerminalConnection>> _screens = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DemoTerminalFactory> _factories = new(StringComparer.Ordinal);
@@ -126,12 +126,16 @@ public sealed partial class DemoWorkspace : IRemoteWorkspace
         var detail = agent is null
             ? "zsh"
             : string.Join(" · ", new[] { request.Model ?? agent.Models.FirstOrDefault(), request.Effort }.Where(part => !string.IsNullOrEmpty(part)));
-        var session = Add(project, title, agent, detail, agent is not null && prompt is not null ? SessionActivity.Working : SessionActivity.Idle, prompt is null ? null : "正在读代码", workspace);
+        var isGui = agent is not null && agent.SupportsAcp && ConversationsSupported && request.LaunchAsGui == true;
+        var session = Add(project, title, agent, detail, agent is not null && prompt is not null ? SessionActivity.Working : SessionActivity.Idle, prompt is null ? null : "正在读代码", workspace, gui: isGui);
         var folder = workspace is not null ? $"{project.Name} ({workspace.DisplayName})" : project.Name;
-        _screens[session.Id] = agent is null
-            ? () => new DemoTerminalConnection(DemoScreens.Prompt(folder), input => Shell(folder, input))
-            : () => new DemoTerminalConnection(
-                prompt is null ? "> " : DemoScreens.Working(folder, prompt, "正在读代码"), Echo);
+        if (!isGui)
+        {
+            _screens[session.Id] = agent is null
+                ? () => new DemoTerminalConnection(DemoScreens.Prompt(folder), input => Shell(folder, input))
+                : () => new DemoTerminalConnection(
+                    prompt is null ? "> " : DemoScreens.Working(folder, prompt, "正在读代码"), Echo);
+        }
         return Task.FromResult(session);
     }
 

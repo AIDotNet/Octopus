@@ -34,14 +34,22 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _navigator = navigator;
         // Closed from its own menu: the page leaves (the session on the host has ended).
         Actions = new SessionActionsViewModel(workspace, navigator, session, _ => navigator.Back());
+        WorkspaceMenu = new SessionWorkspaceViewModel(session, workspace, navigator, Actions, BackCommand)
+        {
+            PrimaryActionLabel = Text(MobileLangResourceKind.ConversationReconnect),
+            PrimaryActionCommand = ReloadCommand,
+        };
         session.PropertyChanged += OnSessionChanged;
         _ = OpenAsync();
     }
 
     public RemoteSession Session { get; }
 
-    /// <summary>The "⋯" menu, rename sheet, close confirmation, and toast notices.</summary>
+    /// <summary>The rename sheet, close confirmation, and toast notices.</summary>
     public SessionActionsViewModel Actions { get; }
+
+    /// <summary>The Scheme B capsule top bar and Scheme C top-right popover menu (files, changes, branches, sessions, actions).</summary>
+    public SessionWorkspaceViewModel WorkspaceMenu { get; }
 
     /// <summary>The live conversation once attached; null while opening or if opening failed.</summary>
     public RemoteConversation? Conversation => _conversation;
@@ -111,26 +119,9 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private void Back() => _navigator.Back();
 
-    /// <summary>Opens the "⋯" menu: reload conversation, project files/changes when supported, then standard session actions.</summary>
+    /// <summary>Opens the top-right workspace &amp; session popover menu.</summary>
     [RelayCommand]
-    private void OpenMenu()
-    {
-        var leading = new List<SessionMenuEntry>
-        {
-            new(Text(MobileLangResourceKind.ConversationReconnect), ReloadCommand),
-        };
-        if (_workspace.SupportsFiles(Session.Project.Host))
-        {
-            leading.Add(new(Text(MobileLangResourceKind.FilesBrowse), new RelayCommand(() =>
-                _navigator.ShowFiles(Session.Project, RemoteFolders.WorkspacePathOf(Session)))));
-        }
-        if (_workspace.SupportsGit(Session.Project.Host))
-        {
-            leading.Add(new(Text(MobileLangResourceKind.ChangesView), new RelayCommand(() =>
-                _navigator.ShowChanges(Session.Project, RemoteFolders.WorkspacePathOf(Session)))));
-        }
-        Actions.ShowMenu(Session, leading);
-    }
+    private void OpenMenu() => WorkspaceMenu.OpenMenuCommand.Execute(null);
 
     [RelayCommand]
     private async Task ReloadAsync()
@@ -310,6 +301,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _lifetime.Cancel();
         _lifetime.Dispose();
         Session.PropertyChanged -= OnSessionChanged;
+        WorkspaceMenu.Dispose();
         DetachConversation();
     }
 
@@ -432,6 +424,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(ShowComposerTopRow));
         OnPropertyChanged(nameof(CanStop));
         OnPropertyChanged(nameof(CanSend));
+        WorkspaceMenu.UpdateLiveStatus(IsWorking, IsWaiting, IsError, ShowSpinner, HasStatusPill ? StatusText : null);
     }
 
     private static string LinkName(HostLink link) => Text(link switch

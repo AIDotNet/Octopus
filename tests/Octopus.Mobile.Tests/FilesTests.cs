@@ -113,11 +113,12 @@ public class FilesTests
         Assert.True(Phone.Until(() => phone.Top<TerminalPage>().ReadScreenText().Trim().Length > 0));
         var terminalPage = phone.Top<TerminalPage>();
         var terminal = (TerminalViewModel)terminalPage.DataContext!;
-        var overlays = terminalPage.FindControl<SessionActionOverlays>("Overlays")!;
+        var overlay = terminalPage.FindControl<SessionWorkspaceOverlay>("WorkspaceOverlay")!;
         terminal.OpenMenuCommand.Execute(null);
         Phone.Pump();
-        Assert.DoesNotContain("浏览文件", overlays.MenuLabels);
-        Assert.DoesNotContain("查看改动", overlays.MenuLabels);
+        Assert.True(overlay.IsPopoverOpen);
+        Assert.DoesNotContain("项目文件管理", terminal.WorkspaceMenu.VisibleMenuLabels());
+        Assert.DoesNotContain("查看改动", terminal.WorkspaceMenu.VisibleMenuLabels());
 
         phone.Shell.ShowFiles(project);
         var files = (FilesViewModel)phone.Top<FilesPage>().DataContext!;

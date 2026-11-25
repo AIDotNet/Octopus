@@ -151,6 +151,13 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 Prompt = agent is null ? null : request.Prompt,
                 WorkspaceId = request.WorkspaceId,
                 InjectTaskPrompt = request.InjectTaskPrompt,
+                Surface = agent is null
+                    ? null
+                    : request.LaunchAsGui is true
+                        ? ItemSurfaces.Gui
+                        : request.LaunchAsGui is false
+                            ? ItemSurfaces.Terminal
+                            : null,
             }, cancellationToken).ConfigureAwait(false);
             return await UiAsync(() =>
             {
@@ -670,11 +677,19 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
             Ui(() =>
             {
                 if (load != Volatile.Read(ref state.Loads) || _states.GetValueOrDefault(hostId) != state) return;
-                if (!agents.Select(agent => agent.Id).SequenceEqual(state.Host.Agents.Select(agent => agent.Id)))
+                var mappedAgents = agents.Select(agent => new AgentOption(
+                    agent.Id,
+                    agent.Name,
+                    InitialOf(agent.Name),
+                    ColorOf(agent.Id),
+                    [.. agent.Models.Select(model => model.Label)],
+                    [.. agent.Efforts.Select(effort => effort.Label)],
+                    agent.SupportsAcp,
+                    agent.DefaultSurface == ItemSurfaces.Gui)).ToList();
+                if (!mappedAgents.Select(a => (a.Id, a.SupportsAcp, a.DefaultGui)).SequenceEqual(state.Host.Agents.Select(a => (a.Id, a.SupportsAcp, a.DefaultGui))))
                 {
                     state.Agents = agents.ToDictionary(agent => agent.Id, StringComparer.Ordinal);
-                    state.Host.Agents = [.. agents.Select(agent => new AgentOption(agent.Id, agent.Name, InitialOf(agent.Name), ColorOf(agent.Id),
-                        [.. agent.Models.Select(model => model.Label)], [.. agent.Efforts.Select(effort => effort.Label)]))];
+                    state.Host.Agents = mappedAgents;
                 }
                 Apply(state, projects, items);
             });

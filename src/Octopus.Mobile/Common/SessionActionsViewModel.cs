@@ -111,7 +111,13 @@ public sealed partial class SessionActionsViewModel : ObservableObject
     {
         if (Session is not { } session) return;
         RemoteSession? created = null;
-        var request = new NewSessionRequest(session.AgentId, session.Model, session.Effort, null, session.WorkspaceId);
+        var request = new NewSessionRequest(
+            session.AgentId,
+            session.Model,
+            session.Effort,
+            null,
+            session.WorkspaceId,
+            LaunchAsGui: session.Kind == SessionKind.Agent ? session.IsGui : null);
         if (await RunAsync(async () => created = await _workspace.CreateSessionAsync(session.Project, request)) && created is not null)
         {
             _navigator.ShowSession(created);

@@ -1,0 +1,94 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.Mobile.Localization"
+             xmlns:common="using:Octopus.Mobile.Common"
+             x:Class="Octopus.Mobile.Common.SessionTopBar"
+             x:DataType="common:SessionWorkspaceViewModel">
+    <UserControl.Resources>
+        <StreamGeometry x:Key="MoreVerticalGlyph">M12 6a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5z M12 13.25a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5z M12 20.5a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5z</StreamGeometry>
+    </UserControl.Resources>
+
+    <!-- Scheme B floating capsule header: circular back button, centered tappable context pill, circular menu button with waiting badge. -->
+    <Border Name="TopBarRoot" Classes="sessionTopBar">
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <Button Name="BackButton"
+                    Grid.Column="0"
+                    Classes="sessionCircleBtn"
+                    Command="{Binding BackCommand}"
+                    AutomationProperties.Name="{l:MobileLangResource Back}">
+                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronLeft}"
+                              Size="20"
+                              Foreground="{arc:ArcDesignTokenResource Accent}" />
+            </Button>
+
+            <Button Name="ContextPill"
+                    Grid.Column="1"
+                    Classes="sessionPillBtn"
+                    Command="{Binding OpenSessionsCommand}"
+                    AutomationProperties.Name="{l:MobileLangResource SessionMenuSessions}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                    <Panel Grid.Column="0" Width="10" Height="10" VerticalAlignment="Center">
+                        <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding ShowSpinner}" VerticalAlignment="Center" />
+                        <Border Classes="statusDot"
+                                Classes.waiting="{Binding IsWaiting}"
+                                Classes.accent="{Binding IsWorking}"
+                                Classes.danger="{Binding IsError}"
+                                IsVisible="{Binding !ShowSpinner}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                    </Panel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="5">
+                            <TextBlock Name="HeaderTitle"
+                                       Grid.Column="0"
+                                       Text="{Binding Title}"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                       MaxLines="1"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                            <Border Grid.Column="1" Classes="guiTag" IsVisible="{Binding IsGui}">
+                                <TextBlock Text="{l:MobileLangResource GuiBadge}" />
+                            </Border>
+                        </Grid>
+                        <TextBlock Name="HeaderSubtitle"
+                                   Text="{Binding Subtitle}"
+                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                   FontSize="10.5"
+                                   Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                   MaxLines="1"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <arc:ArcGlyph Grid.Column="2"
+                                  Data="{x:Static arc:ArcIcons.ChevronDown}"
+                                  Size="12"
+                                  Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                  VerticalAlignment="Center" />
+                </Grid>
+            </Button>
+
+            <Panel Grid.Column="2" VerticalAlignment="Center">
+                <Button Name="MenuButton"
+                        Classes="sessionCircleBtn"
+                        Classes.active="{Binding IsPopoverOpen}"
+                        Command="{Binding ToggleMenuCommand}"
+                        AutomationProperties.Name="{l:MobileLangResource More}">
+                    <arc:ArcGlyph Data="{StaticResource MoreVerticalGlyph}"
+                                  Size="17"
+                                  Foreground="{Binding $parent[Button].Foreground}" />
+                </Button>
+                <Border Name="AttentionBadge"
+                        Classes="cornerBadge waiting"
+                        IsVisible="{Binding HasOtherAttention}"
+                        IsHitTestVisible="False"
+                        Margin="0,-2,-2,0">
+                    <TextBlock Text="{Binding OtherAttentionText}" />
+                </Border>
+            </Panel>
+        </Grid>
+    </Border>
+</UserControl>

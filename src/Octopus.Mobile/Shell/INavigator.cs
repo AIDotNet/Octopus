@@ -13,6 +13,12 @@ public interface INavigator
     void ShowHost(RemoteHost host);
     /// <summary>A session's terminal, or its GUI conversation when the host supports it (its details otherwise).</summary>
     void ShowSession(RemoteSession session);
+    /// <summary>Switches from the current session page directly to another session without stacking session pages.</summary>
+    void ReplaceSession(RemoteSession session)
+    {
+        Back();
+        ShowSession(session);
+    }
     /// <summary>A session's GUI conversation.</summary>
     void ShowConversation(RemoteSession session);
     /// <summary>Everything about a session and what can be done to it.</summary>

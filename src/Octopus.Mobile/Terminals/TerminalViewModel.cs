@@ -79,6 +79,13 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         // Closed from its own menu: the page leaves (the program on the host has ended).
         Actions = new SessionActionsViewModel(workspace, navigator, session, _ => navigator.Back());
         FontSize = DefaultFontSize;
+        WorkspaceMenu = new SessionWorkspaceViewModel(session, workspace, navigator, Actions, BackCommand)
+        {
+            ShowFontSizeControls = true,
+            SmallerTextCommand = SmallerTextCommand,
+            LargerTextCommand = LargerTextCommand,
+        };
+        SyncWorkspaceMenu();
         session.PropertyChanged += OnSessionChanged;
     }
 
@@ -86,8 +93,10 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
     public const double DefaultFontSize = 12, MinFontSize = 8, MaxFontSize = 20;
 
     public RemoteSession Session { get; }
-    /// <summary>The "⋯" menu and what it opens (design/ui/移动端功能扩展方案.html, ②).</summary>
+    /// <summary>The rename sheet, close dialog and notices.</summary>
     public SessionActionsViewModel Actions { get; }
+    /// <summary>The Scheme B capsule top bar and Scheme C top-right popover menu (files, changes, branches, sessions, actions).</summary>
+    public SessionWorkspaceViewModel WorkspaceMenu { get; }
     /// <summary>A smaller size fits more columns; while fitted the session follows the new grid.</summary>
     [ObservableProperty] public partial double FontSize { get; set; }
     public string Title => Session.Title;
@@ -138,26 +147,9 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Back() => _navigator.Back();
 
-    /// <summary>
-    /// The "⋯" menu: fit or give the size back and the text size first, then the project's files and uncommitted
-    /// changes when the host supports them, then what can be done to any session (rename, restart, another like it,
-    /// details, close).
-    /// </summary>
+    /// <summary>Opens the top-right workspace &amp; session popover menu.</summary>
     [RelayCommand]
-    private void OpenMenu()
-    {
-        var leading = new List<SessionMenuEntry>
-        {
-            IsFitted
-                ? new(MobileLangResources.Get(MobileLangResourceKind.ReturnSize), ReleaseCommand)
-                : new(MobileLangResources.Get(MobileLangResourceKind.FitToPhone), FitCommand),
-        };
-        if (FontSize < MaxFontSize) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.FontLarger), LargerTextCommand));
-        if (FontSize > MinFontSize) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.FontSmaller), SmallerTextCommand));
-        if (_workspace.SupportsFiles(Session.Project.Host)) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.FilesBrowse), BrowseFilesCommand));
-        if (_workspace.SupportsGit(Session.Project.Host)) leading.Add(new(MobileLangResources.Get(MobileLangResourceKind.ChangesView), ViewChangesCommand));
-        Actions.ShowMenu(Session, leading);
-    }
+    private void OpenMenu() => WorkspaceMenu.OpenMenuCommand.Execute(null);
 
     [RelayCommand]
     private void BrowseFiles() => _navigator.ShowFiles(Session.Project, RemoteFolders.WorkspacePathOf(Session));
@@ -298,6 +290,7 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         Session.PropertyChanged -= OnSessionChanged;
+        WorkspaceMenu.Dispose();
         _workspace.CloseTerminal(Session);
     }
 
@@ -328,6 +321,11 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         _ => MobileLangResourceKind.LinkOffline,
     });
 
+    partial void OnFontSizeChanged(double value)
+    {
+        if (WorkspaceMenu is not null) SyncWorkspaceMenu();
+    }
+
     partial void OnModeChanged(TerminalInputMode value)
     {
         OnPropertyChanged(nameof(IsViewing));
@@ -336,6 +334,22 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsFitted));
         OnPropertyChanged(nameof(SizeText));
         OnPropertyChanged(nameof(HasQuickReplies));
+        if (WorkspaceMenu is not null) SyncWorkspaceMenu();
+    }
+
+    private void SyncWorkspaceMenu()
+    {
+        WorkspaceMenu.PrimaryActionLabel = MobileLangResources.Get(IsFitted ? MobileLangResourceKind.ReturnSize : MobileLangResourceKind.FitToPhone);
+        WorkspaceMenu.PrimaryActionCommand = IsFitted ? ReleaseCommand : FitCommand;
+        WorkspaceMenu.FontSizeLabel = $"{(int)Math.Round(FontSize)}pt";
+        WorkspaceMenu.CanLargerText = FontSize < MaxFontSize;
+        WorkspaceMenu.CanSmallerText = FontSize > MinFontSize;
+        WorkspaceMenu.UpdateLiveStatus(
+            Session.Activity == SessionActivity.Working,
+            Session.Activity == SessionActivity.Waiting,
+            Session.Activity == SessionActivity.Error,
+            Session.Activity == SessionActivity.Working,
+            $"{Session.Columns}×{Session.Rows}");
     }
 
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs e)
@@ -350,9 +364,11 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
                 break;
             case nameof(RemoteSession.Columns) or nameof(RemoteSession.Rows) or nameof(RemoteSession.SizeOwner):
                 OnPropertyChanged(nameof(SizeText));
+                SyncWorkspaceMenu();
                 break;
             case nameof(RemoteSession.Activity):
                 RefreshQuickReplies();
+                SyncWorkspaceMenu();
                 break;
         }
     }

@@ -131,6 +131,13 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                 var taskBlock = WorkspaceManager.FormatTaskPrompt(task);
                 prompt = prompt is null ? taskBlock : $"{taskBlock}\n\n{prompt}";
             }
+            AgentSurface? requestedSurface = request.Surface switch
+            {
+                ItemSurfaces.Gui when definition.SupportsAcp => AgentSurface.Gui,
+                ItemSurfaces.Gui => throw new RemoteException(RemoteMethods.NotAllowed, $"The agent '{definition.Name}' does not support GUI conversations."),
+                ItemSurfaces.Terminal => AgentSurface.Terminal,
+                _ => null,
+            };
             item = new ProjectItem
             {
                 Kind = ProjectItemKind.Agent,
@@ -138,11 +145,13 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                 Title = definition.Name,
                 WorkspaceId = workspace?.Id,
                 WorkingDirectory = workspace?.Path,
+                Surface = requestedSurface,
                 Launch = new AgentLaunchOptions
                 {
                     Model = Blank(request.Model),
                     Effort = Blank(request.Effort),
                     Prompt = prompt,
+                    Surface = requestedSurface,
                 },
             };
         }
@@ -347,6 +356,10 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                 Efforts = [.. (capabilities.Effort?.Options ?? []).Select(option => new AgentChoiceMessage { Id = option.Id, Label = option.DisplayLabel })],
                 TakesPrompt = capabilities.Prompt is not null,
                 IsDefault = definition.Id == agents.DefaultAgentId,
+                SupportsAcp = definition.SupportsAcp,
+                DefaultSurface = definition.SupportsAcp && AgentSurfaceResolver.Resolve(definition, agents) == AgentSurface.Gui
+                    ? ItemSurfaces.Gui
+                    : ItemSurfaces.Terminal,
             });
         }
         return list;

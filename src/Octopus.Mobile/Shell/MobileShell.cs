@@ -97,6 +97,12 @@ public sealed class MobileShell : ContentControl, INavigator
         Push(new TerminalPage(new TerminalViewModel(session, _workspace, this)));
     }
 
+    public void ReplaceSession(RemoteSession session)
+    {
+        if (_stack is not null && _stack.Depth > 1) Back();
+        ShowSession(session);
+    }
+
     public void ShowConversation(RemoteSession session) => Push(new ConversationPage(new ConversationViewModel(session, _workspace, this)));
 
     public void ShowSessionDetails(RemoteSession session) => Push(new SessionDetailPage(new SessionDetailViewModel(session, _workspace, this)));

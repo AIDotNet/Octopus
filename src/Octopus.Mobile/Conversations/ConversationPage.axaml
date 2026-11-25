@@ -6,6 +6,7 @@
            xmlns:vm="using:Octopus.Mobile.Conversations"
            xmlns:ws="using:Octopus.Mobile.Workspace"
            xmlns:common="using:Octopus.Mobile.Common"
+           xmlns:ticker="using:Octopus.Ticker"
            x:Class="Octopus.Mobile.Conversations.ConversationPage"
            x:DataType="vm:ConversationViewModel"
            AvoidKeyboard="True">
@@ -232,7 +233,6 @@
         <!-- Scheme C: Single slot in the fixed 3-line sliding live ticker (pure text, zero card). -->
         <DataTemplate DataType="ws:ConversationTickerLine">
             <Grid IsVisible="{Binding IsVisible}"
-                  Opacity="{Binding RowOpacity}"
                   ColumnDefinitions="14,Auto,*,Auto"
                   ColumnSpacing="6"
                   Margin="0,1">
@@ -266,11 +266,7 @@
 
         <!-- Scheme C: Fixed 3-slot sliding live ticker container (mounted ONLY while streaming & collapsed). -->
         <DataTemplate DataType="ws:ConversationWorkTicker">
-            <StackPanel Margin="14,2,0,0" Spacing="1">
-                <ContentControl Content="{Binding Line0}" />
-                <ContentControl Content="{Binding Line1}" />
-                <ContentControl Content="{Binding Line2}" />
-            </StackPanel>
+            <ticker:WorkTickerViewport Margin="14,2,0,0" Spacing="1" />
         </DataTemplate>
 
         <!-- One pure-text step inside the expanded unified work area (zero card; lazy-mounts details on tap). -->
@@ -281,7 +277,7 @@
                         IsHitTestVisible="{Binding CanExpand}"
                         Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).ToggleWorkStepCommand}"
                         CommandParameter="{Binding}">
-                    <Grid ColumnDefinitions="14,Auto,*,Auto,Auto" ColumnSpacing="6">
+                    <Grid ColumnDefinitions="14,*,Auto,Auto" ColumnSpacing="6">
                         <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
                             <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" VerticalAlignment="Center" />
                             <TextBlock Classes="stepMark"
@@ -289,22 +285,26 @@
                                        IsVisible="{Binding !IsRunning}"
                                        Text="{Binding StatusMark}" />
                         </Panel>
-                        <TextBlock Grid.Column="1"
-                                   Classes="stepVerb"
-                                   Classes.failed="{Binding IsFailed}"
-                                   Text="{Binding Verb}"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="2"
-                                   Classes="stepTarget"
-                                   Classes.thought="{Binding IsThought}"
-                                   Classes.failed="{Binding IsFailed}"
-                                   Text="{Binding Target}"
-                                   VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <Grid Grid.Column="1" ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0"
+                                       Classes="stepVerb"
+                                       Classes.failed="{Binding IsFailed}"
+                                       IsVisible="{Binding HasVerb}"
+                                       Margin="0,0,6,0"
+                                       Text="{Binding Verb}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Classes="stepTarget"
+                                       Classes.thought="{Binding IsProse}"
+                                       Classes.failed="{Binding IsFailed}"
+                                       Text="{Binding Target}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                             <TextBlock Classes="diffAddedCount" Text="{Binding AddedText}" IsVisible="{Binding HasAdded}" />
                             <TextBlock Classes="diffRemovedCount" Text="{Binding RemovedText}" IsVisible="{Binding HasRemoved}" />
                         </StackPanel>
-                        <TextBlock Grid.Column="4"
+                        <TextBlock Grid.Column="3"
                                    IsVisible="{Binding HasMeta}"
                                    Text="{Binding MetaText}"
                                    FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
@@ -326,6 +326,14 @@
                                     <!-- Thought pure-text prose -->
                                     <TextBlock IsVisible="{Binding IsThought}"
                                                Text="{Binding ThoughtText}"
+                                               Classes="secondary"
+                                               FontSize="12.5"
+                                               LineHeight="18"
+                                               TextWrapping="Wrap" />
+
+                                    <!-- Intermediate text step prose (folded into work area) -->
+                                    <TextBlock IsVisible="{Binding IsText}"
+                                               Text="{Binding NoteText}"
                                                Classes="secondary"
                                                FontSize="12.5"
                                                LineHeight="18"
@@ -389,44 +397,17 @@
     </arcm:Page.DataTemplates>
 
     <arcm:Page.Header>
-        <arcm:Navbar Title="{Binding Title}"
-                     ShowBack="True"
-                     BackCommand="{Binding BackCommand}">
-            <arcm:Navbar.Trailing>
-                <arcm:IconButton Name="MenuButton"
-                                 Icon="{StaticResource MoreGlyph}"
-                                 Command="{Binding OpenMenuCommand}"
-                                 AutomationProperties.Name="{l:MobileLangResource More}" />
-            </arcm:Navbar.Trailing>
-        </arcm:Navbar>
+        <common:SessionTopBar Name="TopBar" DataContext="{Binding WorkspaceMenu}" />
     </arcm:Page.Header>
 
     <!--
         The composer sits inside the page content (not Page.Footer) so AvoidKeyboard shrinks the timeline and keeps the
         composer directly above the keyboard, matching TerminalPage.axaml (K-A).
     -->
-    <Grid RowDefinitions="Auto,*,Auto">
-        <!-- Location and live conversation status strip. -->
-        <Border Name="StatusStrip" Classes="strip" Grid.Row="0" Padding="12,5">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBlock Name="LocationText" Classes="secondary" Text="{Binding Location}" VerticalAlignment="Center" />
-                <Border Name="StatusPill" Grid.Column="1"
-                        Classes="pill"
-                        Classes.working="{Binding IsWorking}"
-                        Classes.waiting="{Binding IsWaiting}"
-                        Classes.error="{Binding IsError}"
-                        IsVisible="{Binding HasStatusPill}">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <arc:ArcSpinner IsVisible="{Binding ShowSpinner}" />
-                        <TextBlock Name="StatusText" Text="{Binding StatusText}" />
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </Border>
-
+    <Grid RowDefinitions="*,Auto">
         <!-- Timeline: pinned to the bottom until the person scrolls up. -->
         <ScrollViewer Name="TimelineScroll"
-                      Grid.Row="1"
+                      Grid.Row="0"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       BringIntoViewOnFocusChange="False">
@@ -800,7 +781,7 @@
         </ScrollViewer>
 
         <!-- Bottom composer: option chips + queued badge, prompt field, stop & send buttons. -->
-        <Border Name="ComposerBar" Grid.Row="2" Classes="bar" Padding="10,8">
+        <Border Name="ComposerBar" Grid.Row="1" Classes="bar" Padding="10,8">
             <StackPanel Spacing="8">
                 <ScrollViewer HorizontalScrollBarVisibility="Hidden"
                               VerticalScrollBarVisibility="Disabled"
@@ -882,7 +863,7 @@
     <arcm:Page.Overlay>
         <Panel>
             <arcm:ActionSheet Name="OptionSheet" CancelText="{l:MobileLangResource Cancel}" />
-            <common:SessionActionOverlays Name="Overlays" DataContext="{Binding Actions}" />
+            <common:SessionWorkspaceOverlay Name="WorkspaceOverlay" DataContext="{Binding WorkspaceMenu}" />
         </Panel>
     </arcm:Page.Overlay>
 </arcm:Page>

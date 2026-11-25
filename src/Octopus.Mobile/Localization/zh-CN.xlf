@@ -337,5 +337,29 @@
     <unit id="ConversationStepVerbOtherActive"><segment><source>Running</source><target state="translated">正在调用</target></segment></unit>
     <unit id="ConversationStepVerbOtherDone"><segment><source>Done</source><target state="translated">已调用</target></segment></unit>
     <unit id="ConversationStepRunning"><segment><source>Running</source><target state="translated">进行中</target></segment></unit>
+    <unit id="NewSessionLaunchGui"><segment><source>Launch as GUI</source><target state="translated">以 GUI 启动</target></segment></unit>
+    <unit id="NewSessionLaunchGuiHint"><segment><source>Structured ACP conversation with tool steps and approvals</source><target state="translated">使用 ACP 结构化对话、工具步骤与可视化审批</target></segment></unit>
+    <unit id="NewSessionLaunchGuiUnsupported"><segment><source>This agent or host only supports terminal mode</source><target state="translated">该智能体或主机仅支持终端模式</target></segment></unit>
+    <unit id="NewSessionStartGui"><segment><source>Start as GUI</source><target state="translated">以 GUI 启动</target></segment></unit>
+    <unit id="SessionMenuWorkspaceSection"><segment><source>Workspace</source><target state="translated">工作区</target></segment></unit>
+    <unit id="SessionMenuCurrentSection"><segment><source>Current session</source><target state="translated">当前会话</target></segment></unit>
+    <unit id="SessionMenuFiles"><segment><source>Project files</source><target state="translated">项目文件管理</target></segment></unit>
+    <unit id="SessionMenuChanges"><segment><source>Git changes</source><target state="translated">查看改动</target></segment></unit>
+    <unit id="SessionMenuBranches"><segment><source>Branches</source><target state="translated">分支查看</target></segment></unit>
+    <unit id="SessionMenuSessions"><segment><source>Sessions</source><target state="translated">Session 查看</target></segment></unit>
+    <unit id="SessionMenuFontSize"><segment><source>Text size</source><target state="translated">终端字号</target></segment></unit>
+    <unit id="SessionBranchesTitle"><segment><source>Branches &amp; workspaces</source><target state="translated">分支与工作区</target></segment></unit>
+    <unit id="SessionBranchesCount"><segment><source>{0} branches</source><target state="translated">{0} 分支</target></segment></unit>
+    <unit id="SessionBranchesWorkspacesHeader"><segment><source>Workspaces</source><target state="translated">项目工作区</target></segment></unit>
+    <unit id="SessionBranchesGitHeader"><segment><source>Repository branches</source><target state="translated">仓库分支</target></segment></unit>
+    <unit id="SessionBranchesCurrent"><segment><source>Current</source><target state="translated">当前</target></segment></unit>
+    <unit id="SessionBranchesLocal"><segment><source>Local</source><target state="translated">本地</target></segment></unit>
+    <unit id="SessionBranchesRemote"><segment><source>Remote</source><target state="translated">远程</target></segment></unit>
+    <unit id="SessionBranchesLoading"><segment><source>Loading branches…</source><target state="translated">正在读取分支…</target></segment></unit>
+    <unit id="SessionBranchesNotRepo"><segment><source>This project is not a git repository.</source><target state="translated">当前项目不是 Git 仓库。</target></segment></unit>
+    <unit id="SessionSessionsTitle"><segment><source>Project sessions</source><target state="translated">项目 Sessions</target></segment></unit>
+    <unit id="SessionSessionsCount"><segment><source>{0} sessions</source><target state="translated">{0} 个</target></segment></unit>
+    <unit id="SessionSessionsActive"><segment><source>Active</source><target state="translated">当前</target></segment></unit>
+    <unit id="SessionSessionsNew"><segment><source>New session</source><target state="translated">新建会话</target></segment></unit>
   </file>
 </xliff>

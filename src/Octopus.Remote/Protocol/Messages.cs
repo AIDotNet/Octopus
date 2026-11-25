@@ -87,6 +87,7 @@ public sealed class HelloMessage
 [JsonSerializable(typeof(AcpUpdateMessage))]
 [JsonSerializable(typeof(AcpEntryMessage))]
 [JsonSerializable(typeof(AcpToolMessage))]
+[JsonSerializable(typeof(AcpWorkNoteMessage))]
 [JsonSerializable(typeof(AcpPlanEntryMessage))]
 [JsonSerializable(typeof(AcpPermissionMessage))]
 [JsonSerializable(typeof(AcpOptionMessage))]

@@ -542,6 +542,18 @@
 
                         <StackPanel Spacing="10" IsVisible="{Binding IsAgent}">
                             <arcm:ListGroup>
+                                <arcm:ListItem Name="LaunchAsGuiRow"
+                                               Content="{l:MobileLangResource NewSessionLaunchGui}"
+                                               Subtitle="{Binding LaunchAsGuiSubtitle}">
+                                    <arcm:ListItem.Trailing>
+                                        <arcm:Switch Name="LaunchAsGuiSwitch"
+                                                     IsChecked="{Binding LaunchAsGui, Mode=TwoWay}"
+                                                     IsEnabled="{Binding CanLaunchAsGui}" />
+                                    </arcm:ListItem.Trailing>
+                                </arcm:ListItem>
+                            </arcm:ListGroup>
+
+                            <arcm:ListGroup>
                                 <arcm:ListItem Name="ModelRow"
                                                Content="{l:MobileLangResource NewSessionModel}"
                                                ShowChevron="True"
@@ -590,7 +602,7 @@
                                      HorizontalAlignment="Stretch"
                                      HorizontalContentAlignment="Center"
                                      Margin="16,6,16,0"
-                                     Content="{l:MobileLangResource NewSessionStart}"
+                                     Content="{Binding StartButtonText}"
                                      Command="{Binding CreateCommand}" />
                     </StackPanel>
                 </ScrollViewer>

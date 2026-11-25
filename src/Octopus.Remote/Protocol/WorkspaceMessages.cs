@@ -284,6 +284,8 @@ public sealed class CreateItemMessage
     public string? WorkspaceId { get; set; }
     /// <summary>When true and the target workspace has a linked task, prepend its context to the agent's initial prompt.</summary>
     public bool InjectTaskPrompt { get; set; }
+    /// <summary>Optional requested surface (<see cref="ItemSurfaces.Gui"/> or <see cref="ItemSurfaces.Terminal"/>); null keeps host default behavior.</summary>
+    public string? Surface { get; set; }
 }
 
 public sealed class ItemRefMessage
@@ -310,6 +312,10 @@ public sealed class AgentMessage
     public List<AgentChoiceMessage> Efforts { get; set; } = [];
     public bool TakesPrompt { get; set; }
     public bool IsDefault { get; set; }
+    /// <summary>True when this agent supports ACP GUI conversations on the host.</summary>
+    public bool SupportsAcp { get; set; }
+    /// <summary>Effective default surface configured on the host (<see cref="ItemSurfaces.Gui"/> or <see cref="ItemSurfaces.Terminal"/>).</summary>
+    public string? DefaultSurface { get; set; }
 }
 
 public sealed class AgentChoiceMessage

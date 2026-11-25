@@ -26,7 +26,7 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     [
         new()
         {
-            Id = "claude", Name = "Claude", TakesPrompt = true, IsDefault = true,
+            Id = "claude", Name = "Claude", TakesPrompt = true, IsDefault = true, SupportsAcp = true,
             Models = [new() { Id = "fable-5", Label = "Fable 5.2" }, new() { Id = "opus-5", Label = "Opus 5.5" }],
             Efforts = [new() { Id = "low", Label = "低" }, new() { Id = "high", Label = "高" }],
         },
@@ -146,8 +146,9 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
         if (request.Prompt == "fail") throw new RemoteException(RemoteMethods.StartFailed, "The agent is not installed on this computer.");
         Created.Enqueue(request);
         var title = request.Kind == ItemKinds.Agent ? request.Prompt ?? "Claude" : "zsh";
+        var surface = request.Kind == ItemKinds.Agent ? request.Surface : null;
         return Task.FromResult(AddItem(project, title, request.Kind == ItemKinds.Agent ? request.AgentId : null,
-            request.Prompt is null ? ItemActivities.Idle : ItemActivities.Working, request.Model, request.Effort, workspace));
+            request.Prompt is null ? ItemActivities.Idle : ItemActivities.Working, request.Model, request.Effort, workspace, surface));
     }
 
     public Task<WorkspaceOptionsMessage> GetWorkspaceOptionsAsync(string projectId)

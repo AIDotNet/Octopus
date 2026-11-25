@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Octopus.Mobile.Localization;
+using Octopus.Ticker;
 
 namespace Octopus.Mobile.Workspace;
 
@@ -55,11 +56,15 @@ public sealed partial class ConversationUserEntry(string id) : ConversationEntry
     public string AttachmentsText => string.Join("  ", Attachments);
 }
 
-/// <summary>One turn of the agent: unified Scheme C pure-text work area (thought, tools, plan) + Markdown answer.</summary>
+/// <summary>One intermediate assistant text segment folded into the mobile work area.</summary>
+public sealed record ConversationWorkNote(string Text, int BeforeToolIndex);
+
+/// <summary>One turn of the agent: unified Scheme C pure-text work area (thought, tools, plan, folded text) + Markdown answer.</summary>
 public sealed partial class ConversationAssistantEntry(string id) : ConversationEntry(id)
 {
     private readonly List<ConversationWorkStep> _workSteps = [];
     private readonly Dictionary<string, ConversationWorkStep> _toolStepsById = new(StringComparer.Ordinal);
+    private readonly List<ConversationWorkStep> _noteSteps = [];
     private ConversationWorkStep? _thoughtStep;
     private ConversationWorkStep? _planStep;
     private ObservableCollection<ConversationWorkStep>? _expandedWorkSteps;
@@ -89,6 +94,7 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasDuration), nameof(HasMeta), nameof(ShowStandaloneDuration))]
     public partial string? Duration { get; set; }
     public ObservableCollection<ConversationTool> Tools { get; } = [];
+    public IReadOnlyList<ConversationWorkNote> Notes { get; set; } = [];
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPlan), nameof(PlanText))]
     public partial IReadOnlyList<ConversationPlanItem> Plan { get; set; } = [];
 
@@ -184,12 +190,40 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
             _thoughtStep = null;
         }
 
-        // 2. Tool steps in chronological host order.
+        // 2. Tool steps and folded intermediate text notes in chronological host order.
+        var noteCursor = 0;
+        var noteStepIdx = 0;
+        void AppendNotesUpTo(int toolIndex)
+        {
+            while (noteCursor < Notes.Count && Notes[noteCursor].BeforeToolIndex <= toolIndex)
+            {
+                var note = Notes[noteCursor];
+                if (!string.IsNullOrWhiteSpace(note.Text))
+                {
+                    ConversationWorkStep noteStep;
+                    if (noteStepIdx < _noteSteps.Count)
+                    {
+                        noteStep = _noteSteps[noteStepIdx];
+                        noteStep.UpdateText(note.Text);
+                    }
+                    else
+                    {
+                        noteStep = ConversationWorkStep.CreateText(note.Text);
+                        _noteSteps.Add(noteStep);
+                    }
+                    noteStepIdx++;
+                    _workSteps.Add(noteStep);
+                }
+                noteCursor++;
+            }
+        }
+
         if (Tools.Count > 0)
         {
             var liveIds = _toolStepsById.Count > 0 ? new HashSet<string>(StringComparer.Ordinal) : null;
             for (var i = 0; i < Tools.Count; i++)
             {
+                AppendNotesUpTo(i);
                 var tool = Tools[i];
                 liveIds?.Add(tool.Id);
                 if (!_toolStepsById.TryGetValue(tool.Id, out var step))
@@ -214,6 +248,11 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
         else if (_toolStepsById.Count > 0)
         {
             _toolStepsById.Clear();
+        }
+        AppendNotesUpTo(int.MaxValue);
+        if (noteStepIdx < _noteSteps.Count)
+        {
+            _noteSteps.RemoveRange(noteStepIdx, _noteSteps.Count - noteStepIdx);
         }
 
         // 3. Plan step.
@@ -307,8 +346,13 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
                         default: other++; break;
                     }
                     break;
+                case ConversationWorkStepKind.Text:
+                    // Folded intermediate text is intentionally omitted from header counts and step totals.
+                    break;
             }
         }
+
+        var countedSteps = exec + search + read + edit + fetch + think + plan + other;
 
         string nextTitle;
         string nextCounts;
@@ -330,9 +374,12 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
         }
         else
         {
-            nextTitle = _workSteps.Count == 1
-                ? MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCompletedSingleStep)
-                : string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCompletedSteps), _workSteps.Count);
+            nextTitle = countedSteps switch
+            {
+                0 => MobileLangResources.Get(MobileLangResourceKind.ConversationWorkArea),
+                1 => MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCompletedSingleStep),
+                _ => string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkCompletedSteps), countedSteps),
+            };
             var parts = new List<string>(6);
             if (exec > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortExec), exec));
             if (search > 0) parts.Add(string.Format(MobileLangResources.Get(MobileLangResourceKind.ConversationWorkShortSearch), search));
@@ -375,6 +422,7 @@ public enum ConversationWorkStepKind
     Thought,
     Tool,
     Plan,
+    Text,
 }
 
 /// <summary>
@@ -387,6 +435,8 @@ public sealed partial class ConversationWorkStep : ObservableObject
 
     private string _thoughtText = "";
     private string _thoughtPreview = "";
+    private string _noteText = "";
+    private string _notePreview = "";
     private bool _isThoughtActive;
     private IReadOnlyList<ConversationPlanItem> _planItems = [];
     private string _planPreview = "";
@@ -397,6 +447,13 @@ public sealed partial class ConversationWorkStep : ObservableObject
     {
         var step = new ConversationWorkStep(ConversationWorkStepKind.Thought);
         step.UpdateThought(text, isActive);
+        return step;
+    }
+
+    public static ConversationWorkStep CreateText(string text)
+    {
+        var step = new ConversationWorkStep(ConversationWorkStepKind.Text);
+        step.UpdateText(text);
         return step;
     }
 
@@ -414,12 +471,15 @@ public sealed partial class ConversationWorkStep : ObservableObject
     public ConversationTool? Tool { get; private init; }
     public IReadOnlyList<ConversationPlanItem> PlanItems => _planItems;
     public string ThoughtText => _thoughtText;
+    public string NoteText => _noteText;
 
     [ObservableProperty] public partial bool IsExpanded { get; set; }
 
     public bool IsThought => StepKind == ConversationWorkStepKind.Thought;
     public bool IsTool => StepKind == ConversationWorkStepKind.Tool;
     public bool IsPlan => StepKind == ConversationWorkStepKind.Plan;
+    public bool IsText => StepKind == ConversationWorkStepKind.Text;
+    public bool IsProse => StepKind is ConversationWorkStepKind.Thought or ConversationWorkStepKind.Text;
 
     public bool IsRunning => StepKind switch
     {
@@ -436,13 +496,17 @@ public sealed partial class ConversationWorkStep : ObservableObject
     {
         ConversationWorkStepKind.Thought => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThink),
         ConversationWorkStepKind.Plan => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbPlan),
+        ConversationWorkStepKind.Text => "",
         _ => ResolveToolVerb(Tool?.Kind, active: false, done: false),
     };
+
+    public bool HasVerb => !string.IsNullOrEmpty(Verb);
 
     public string ActiveVerb => StepKind switch
     {
         ConversationWorkStepKind.Thought => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThinkActive),
         ConversationWorkStepKind.Plan => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbPlanActive),
+        ConversationWorkStepKind.Text => "",
         _ => ResolveToolVerb(Tool?.Kind, active: true, done: false),
     };
 
@@ -450,12 +514,14 @@ public sealed partial class ConversationWorkStep : ObservableObject
     {
         ConversationWorkStepKind.Thought => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThinkDone),
         ConversationWorkStepKind.Plan => MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbPlanDone),
+        ConversationWorkStepKind.Text => "",
         _ => ResolveToolVerb(Tool?.Kind, active: false, done: true),
     };
 
     public string Target => StepKind switch
     {
         ConversationWorkStepKind.Thought => _thoughtPreview,
+        ConversationWorkStepKind.Text => _notePreview,
         ConversationWorkStepKind.Plan => _planPreview,
         _ => ToSingleLine(Tool!.Title) ?? Tool.Kind,
     };
@@ -499,6 +565,7 @@ public sealed partial class ConversationWorkStep : ObservableObject
     public bool CanExpand => StepKind switch
     {
         ConversationWorkStepKind.Thought => !string.IsNullOrWhiteSpace(_thoughtText),
+        ConversationWorkStepKind.Text => !string.IsNullOrWhiteSpace(_noteText),
         ConversationWorkStepKind.Plan => _planItems.Count > 0,
         _ => Tool is not null && (Tool.HasDetails || !string.IsNullOrEmpty(Tool.Command)),
     };
@@ -536,6 +603,17 @@ public sealed partial class ConversationWorkStep : ObservableObject
             OnPropertyChanged(nameof(MetaText));
             OnPropertyChanged(nameof(HasMeta));
         }
+    }
+
+    internal void UpdateText(string text)
+    {
+        var trimmed = text.Trim();
+        if (_noteText == trimmed) return;
+        _noteText = trimmed;
+        _notePreview = BuildTextPreview(trimmed);
+        OnPropertyChanged(nameof(NoteText));
+        OnPropertyChanged(nameof(Target));
+        OnPropertyChanged(nameof(CanExpand));
     }
 
     internal void UpdatePlan(IReadOnlyList<ConversationPlanItem> items, string preview)
@@ -579,6 +657,15 @@ public sealed partial class ConversationWorkStep : ObservableObject
         var slice = text.AsSpan(lineStart, end - lineStart).Trim();
         if (slice.IsEmpty) slice = text.AsSpan(0, end).Trim();
         return slice.Length <= ThoughtPreviewMaxChars ? slice.ToString() : string.Concat(slice[..ThoughtPreviewMaxChars], "…");
+    }
+
+    private static string BuildTextPreview(string text)
+    {
+        var single = ToSingleLine(text);
+        if (string.IsNullOrEmpty(single)) return "";
+        return single.Length <= ThoughtPreviewMaxChars
+            ? single
+            : string.Concat(single.AsSpan(0, ThoughtPreviewMaxChars), "…");
     }
 
     private static string? ToSingleLine(string? text)
@@ -670,78 +757,151 @@ public sealed partial class ConversationTickerLine : ObservableObject
         if (StatText.Length > 0) { StatText = ""; OnPropertyChanged(nameof(HasStat)); }
     }
 
-    public void Clear() => IsVisible = false;
+    public void CopyFrom(ConversationTickerLine source)
+    {
+        IsVisible = source.IsVisible;
+        RowOpacity = source.RowOpacity;
+        if (IsRunning != source.IsRunning) { IsRunning = source.IsRunning; OnPropertyChanged(nameof(IsCompleted)); }
+        if (IsFailed != source.IsFailed) { IsFailed = source.IsFailed; OnPropertyChanged(nameof(IsCompleted)); }
+        IsThought = source.IsThought;
+        Verb = source.Verb;
+        Target = source.Target;
+        if (StatText != source.StatText) { StatText = source.StatText; OnPropertyChanged(nameof(HasStat)); }
+    }
+
+    public void Clear()
+    {
+        IsVisible = false;
+        if (IsRunning) { IsRunning = false; OnPropertyChanged(nameof(IsCompleted)); }
+    }
 }
 
 /// <summary>Fixed 3-slot sliding live ticker container for mobile (Scheme C), mounted only while streaming &amp; collapsed.</summary>
-public sealed class ConversationWorkTicker
+public sealed class ConversationWorkTicker : IWorkTickerSource
 {
+    private static readonly object PreparingKey = new();
+
+    private bool _hasSynced;
+    private int _prevCount;
+    private object? _prevKey0;
+    private object? _prevKey1;
+    private object? _prevKey2;
+
     public ConversationTickerLine Line0 { get; } = new();
     public ConversationTickerLine Line1 { get; } = new();
     public ConversationTickerLine Line2 { get; } = new();
 
+    internal ConversationTickerLine Exit0 { get; } = new();
+    internal ConversationTickerLine Exit1 { get; } = new();
+    internal ConversationTickerLine Exit2 { get; } = new();
+
+    public int VisibleCount => _prevCount;
+
+    object IWorkTickerSource.Line0 => Line0;
+    object IWorkTickerSource.Line1 => Line1;
+    object IWorkTickerSource.Line2 => Line2;
+    object IWorkTickerSource.Exit0 => Exit0;
+    object IWorkTickerSource.Exit1 => Exit1;
+    object IWorkTickerSource.Exit2 => Exit2;
+
+    public event Action<int, int>? Updated;
+
+    public void ClearExiting()
+    {
+        Exit0.Clear();
+        Exit1.Clear();
+        Exit2.Clear();
+    }
+
     public void Sync(IReadOnlyList<ConversationWorkStep> steps)
     {
-        if (steps.Count == 0)
+        ConversationWorkStep? s0 = null, s1 = null, s2 = null;
+        var count = 0;
+
+        var nonTextCount = 0;
+        var runningCount = 0;
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].StepKind == ConversationWorkStepKind.Text) continue;
+            nonTextCount++;
+            if (steps[i].IsRunning) runningCount++;
+        }
+
+        var preparing = nonTextCount == 0;
+
+        if (preparing)
+        {
+            count = 1;
+        }
+        else
+        {
+            void Push(ConversationWorkStep item)
+            {
+                if (count == 0) s0 = item;
+                else if (count == 1) s1 = item;
+                else s2 = item;
+                count++;
+            }
+
+            if (runningCount >= 3)
+            {
+                var skipped = runningCount - 3;
+                for (var i = 0; i < steps.Count && count < 3; i++)
+                {
+                    if (steps[i].StepKind == ConversationWorkStepKind.Text || !steps[i].IsRunning) continue;
+                    if (skipped > 0) { skipped--; continue; }
+                    Push(steps[i]);
+                }
+            }
+            else if (runningCount > 0)
+            {
+                var doneSlots = 3 - runningCount;
+                var totalDone = nonTextCount - runningCount;
+                var skipDone = Math.Max(0, totalDone - doneSlots);
+                for (var i = 0; i < steps.Count && count < doneSlots; i++)
+                {
+                    if (steps[i].StepKind == ConversationWorkStepKind.Text || steps[i].IsRunning) continue;
+                    if (skipDone > 0) { skipDone--; continue; }
+                    Push(steps[i]);
+                }
+                for (var i = 0; i < steps.Count && count < 3; i++)
+                {
+                    if (steps[i].StepKind != ConversationWorkStepKind.Text && steps[i].IsRunning) Push(steps[i]);
+                }
+            }
+            else
+            {
+                var skip = Math.Max(0, nonTextCount - 3);
+                for (var i = 0; i < steps.Count && count < 3; i++)
+                {
+                    if (steps[i].StepKind == ConversationWorkStepKind.Text) continue;
+                    if (skip > 0) { skip--; continue; }
+                    Push(steps[i]);
+                }
+            }
+        }
+
+        object? n0 = preparing ? PreparingKey : s0;
+        object? n1 = preparing ? null : s1;
+        object? n2 = preparing ? null : s2;
+
+        var shift = _hasSynced
+            ? WorkTickerShift.Compute(_prevCount, _prevKey0, _prevKey1, _prevKey2, count, n0, n1, n2)
+            : 0;
+        var prevCount = _prevCount;
+
+        if (shift > 0)
+        {
+            ShiftExiting(shift);
+        }
+
+        if (preparing)
         {
             Line0.SetPreparing();
             Line1.Clear();
             Line2.Clear();
-            return;
         }
-
-        ConversationWorkStep? s0 = null, s1 = null, s2 = null;
-        var count = 0;
-        void Push(ConversationWorkStep item)
-        {
-            if (count == 0) s0 = item;
-            else if (count == 1) s1 = item;
-            else s2 = item;
-            count++;
-        }
-
-        var runningCount = 0;
-        for (var i = 0; i < steps.Count; i++)
-        {
-            if (steps[i].IsRunning) runningCount++;
-        }
-
-        if (runningCount >= 3)
-        {
-            var skipped = runningCount - 3;
-            for (var i = 0; i < steps.Count && count < 3; i++)
-            {
-                if (!steps[i].IsRunning) continue;
-                if (skipped > 0) { skipped--; continue; }
-                Push(steps[i]);
-            }
-        }
-        else if (runningCount > 0)
-        {
-            var doneSlots = 3 - runningCount;
-            var totalDone = steps.Count - runningCount;
-            var skipDone = Math.Max(0, totalDone - doneSlots);
-            for (var i = 0; i < steps.Count && count < doneSlots; i++)
-            {
-                if (steps[i].IsRunning) continue;
-                if (skipDone > 0) { skipDone--; continue; }
-                Push(steps[i]);
-            }
-            for (var i = 0; i < steps.Count && count < 3; i++)
-            {
-                if (steps[i].IsRunning) Push(steps[i]);
-            }
-        }
-        else
-        {
-            var start = Math.Max(0, steps.Count - 3);
-            for (var i = start; i < steps.Count && count < 3; i++)
-            {
-                Push(steps[i]);
-            }
-        }
-
-        if (count == 1)
+        else if (count == 1)
         {
             Line0.SetFrom(s0!, 1.0);
             Line1.Clear();
@@ -758,6 +918,40 @@ public sealed class ConversationWorkTicker
             Line0.SetFrom(s0!, 0.38);
             Line1.SetFrom(s1!, 0.66);
             Line2.SetFrom(s2!, 1.0);
+        }
+
+        var wasSynced = _hasSynced;
+        _hasSynced = true;
+        _prevCount = count;
+        _prevKey0 = n0;
+        _prevKey1 = n1;
+        _prevKey2 = n2;
+
+        if (wasSynced && (shift > 0 || prevCount != count))
+        {
+            Updated?.Invoke(shift, count);
+        }
+    }
+
+    private void ShiftExiting(int shift)
+    {
+        if (shift == 1)
+        {
+            Exit2.CopyFrom(Exit1);
+            Exit1.CopyFrom(Exit0);
+            Exit0.CopyFrom(Line0);
+        }
+        else if (shift == 2)
+        {
+            Exit2.CopyFrom(Exit0);
+            Exit1.CopyFrom(Line0);
+            Exit0.CopyFrom(Line1);
+        }
+        else
+        {
+            Exit2.CopyFrom(Line0);
+            Exit1.CopyFrom(Line1);
+            Exit0.CopyFrom(Line2);
         }
     }
 }

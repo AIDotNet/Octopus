@@ -113,10 +113,20 @@ public sealed class AcpEntryMessage
     public List<string>? Attachments { get; set; }
     /// <summary>Assistant: its tool calls in order.</summary>
     public List<AcpToolMessage>? Tools { get; set; }
+    /// <summary>Assistant: intermediate text segments folded into the work area.</summary>
+    public List<AcpWorkNoteMessage>? Notes { get; set; }
     /// <summary>Assistant: its plan, when it made one.</summary>
     public List<AcpPlanEntryMessage>? Plan { get; set; }
     public AcpPermissionMessage? Permission { get; set; }
     public AcpQuestionMessage? Question { get; set; }
+}
+
+/// <summary>One intermediate assistant text segment folded into the work area.</summary>
+public sealed class AcpWorkNoteMessage
+{
+    public string Text { get; set; } = "";
+    /// <summary>Zero-based index in <see cref="AcpEntryMessage.Tools"/> before which this text appeared.</summary>
+    public int BeforeToolIndex { get; set; }
 }
 
 /// <summary>One tool call of a turn.</summary>

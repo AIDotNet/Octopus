@@ -65,31 +65,67 @@ public class SessionPagesTests
     {
         using var phone = new Phone();
         var (page, terminal, session) = OpenTerminal(phone, 0, 2);
-        var overlays = page.FindControl<SessionActionOverlays>("Overlays")!;
+        var overlay = page.FindControl<SessionWorkspaceOverlay>("WorkspaceOverlay")!;
 
         terminal.OpenMenuCommand.Execute(null);
         Phone.Pump();
-        Assert.True(overlays.IsMenuOpen);
-        Assert.Equal(["适应手机", "放大字号", "缩小字号", "浏览文件", "查看改动", "重命名", "重启程序", "用相同设置再开一个", "会话详情", "关闭会话"], overlays.MenuLabels);
+        Assert.True(overlay.IsPopoverOpen);
+        Assert.True(terminal.WorkspaceMenu.ShowFontSizeControls);
+        Assert.Equal("12pt", terminal.WorkspaceMenu.FontSizeLabel);
+        Assert.Equal(["项目文件管理", "查看改动", "分支查看", "Session 查看", "适应手机", "重命名", "重启程序", "用相同设置再开一个", "会话详情", "关闭会话"], terminal.WorkspaceMenu.VisibleMenuLabels());
 
         terminal.LargerTextCommand.Execute(null);
         Assert.Equal(TerminalViewModel.DefaultFontSize + 1, terminal.FontSize);
+        Assert.Equal("13pt", terminal.WorkspaceMenu.FontSizeLabel);
         Assert.Equal(TerminalViewModel.DefaultFontSize + 1, page.FindControl<Octopus.Terminal.Avalonia.TerminalControl>("Terminal")!.FontSize);
 
-        // Fitted: the first row gives the size back.
+        // Fitted: the primary session action gives the size back.
         terminal.FitCommand.Execute(null);
-        terminal.OpenMenuCommand.Execute(null);
-        Assert.Equal("交还尺寸", overlays.MenuLabels[0]);
+        Assert.Equal("交还尺寸", terminal.WorkspaceMenu.PrimaryActionLabel);
 
-        terminal.Actions.RestartCommand.Execute(null);
+        terminal.WorkspaceMenu.RestartCommand.Execute(null);
         Assert.True(Phone.Until(() => phone.Workspace.Restarted.Contains(session.Id)));
 
         // Closed from its own page: the page leaves and the session is gone.
-        terminal.Actions.BeginCloseCommand.Execute(null);
+        terminal.WorkspaceMenu.CloseSessionCommand.Execute(null);
         Assert.Equal("关闭“dotnet watch”？", terminal.Actions.CloseTitle);
         terminal.Actions.ConfirmCloseCommand.Execute(null);
         Assert.True(Phone.Until(() => phone.Shell.Top is HostPage));
         Assert.DoesNotContain(session, phone.Workspace.Hosts[0].Projects[0].Sessions);
+    }
+
+    [AvaloniaFact]
+    public void The_session_popover_opens_branches_and_switches_project_sessions()
+    {
+        using var phone = new Phone();
+        var (page, terminal, session) = OpenTerminal(phone, 0, 2);
+        var menu = terminal.WorkspaceMenu;
+
+        // Sibling session 0 is waiting, so the top-right menu button shows the attention count.
+        Assert.Equal(1, menu.OtherAttentionCount);
+        Assert.True(menu.HasOtherAttention);
+        Assert.Equal("1", menu.OtherAttentionText);
+
+        // Open Branches viewer from the popover menu: lists workspaces and loads repository branches.
+        menu.OpenBranchesCommand.Execute(null);
+        Assert.True(menu.IsBranchesSheetOpen);
+        Assert.NotEmpty(menu.WorkspaceBranches);
+        Assert.True(Phone.Until(() => !menu.IsLoadingBranches && menu.GitBranches.Count > 0));
+        menu.IsBranchesSheetOpen = false;
+
+        // Open Sessions viewer (also triggered by tapping the center Context Pill) and switch directly to sibling session 0.
+        menu.OpenSessionsCommand.Execute(null);
+        Assert.True(menu.IsSessionsSheetOpen);
+        Assert.Equal(3, menu.ProjectSessions.Count);
+        Assert.Same(session, menu.ProjectSessions.Single(item => item.IsCurrent).Session);
+
+        var depthBefore = phone.Shell.Stack!.Depth;
+        var target = menu.ProjectSessions[0];
+        Assert.False(target.IsCurrent);
+        target.SelectCommand.Execute(null);
+        Assert.True(Phone.Until(() => phone.Shell.Top is TerminalPage p && ReferenceEquals(((TerminalViewModel)p.DataContext!).Session, target.Session)));
+        // Switching sessions replaces the current session page instead of piling up the back stack.
+        Assert.Equal(depthBefore, phone.Shell.Stack.Depth);
     }
 
     [AvaloniaFact]
@@ -248,21 +284,21 @@ public class SessionPagesTests
         var (page, _, session) = OpenTerminal(phone, 0, 1);
         session.Title = string.Concat(Enumerable.Repeat("一个非常非常长的会话名称 ", 12));
 
-        var navbar = page.GetVisualDescendants().OfType<Navbar>().Single();
-        var back = navbar.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "PART_Back");
-        var title = navbar.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "PART_Title");
-        var menu = page.FindControl<Control>("MenuButton")!;
+        var topBar = page.FindControl<SessionTopBar>("TopBar")!;
+        var back = topBar.FindControl<Control>("BackButton")!;
+        var pill = topBar.FindControl<Control>("ContextPill")!;
+        var menu = topBar.FindControl<Control>("MenuButton")!;
 
         Rect BoundsOf(Control control) => new(control.TranslatePoint(default, phone.Window)!.Value, control.Bounds.Size);
-        // Wait for the page to finish sliding in and the new title to finish swapping in.
-        Phone.Until(() => Math.Abs(BoundsOf(navbar).X) < 0.5 && BoundsOf(title).Width > phone.Window.Width / 3);
-        var (backBounds, titleBounds, menuBounds) = (BoundsOf(back), BoundsOf(title), BoundsOf(menu));
+        // Wait for the page to finish sliding in and layout to settle.
+        Phone.Until(() => Math.Abs(BoundsOf(topBar).X) < 0.5 && BoundsOf(pill).Width > phone.Window.Width / 3);
+        var (backBounds, pillBounds, menuBounds) = (BoundsOf(back), BoundsOf(pill), BoundsOf(menu));
 
-        // Both buttons keep their place on screen, and the title sits between them.
+        // Both circular buttons keep their place on screen, and the center capsule sits cleanly between them.
         Assert.True(backBounds.Width > 0 && backBounds.X >= 0, $"back at {backBounds}");
         Assert.True(menuBounds.Width > 0 && menuBounds.Right <= phone.Window.Width + 0.5, $"menu at {menuBounds}");
-        Assert.True(titleBounds.X >= backBounds.Right - 0.5, $"title at {titleBounds}, back ends at {backBounds.Right}");
-        Assert.True(titleBounds.Right <= menuBounds.X + 0.5, $"title at {titleBounds}, menu starts at {menuBounds.X}");
+        Assert.True(pillBounds.X >= backBounds.Right - 0.5, $"pill at {pillBounds}, back ends at {backBounds.Right}");
+        Assert.True(pillBounds.Right <= menuBounds.X + 0.5, $"pill at {pillBounds}, menu starts at {menuBounds.X}");
 
         // And a tap on the menu reaches it.
         var hit = phone.Window.InputHitTest(menuBounds.Center) as Visual;

@@ -337,5 +337,29 @@
     <unit id="ConversationStepVerbOtherActive"><segment><source>Running</source></segment></unit>
     <unit id="ConversationStepVerbOtherDone"><segment><source>Done</source></segment></unit>
     <unit id="ConversationStepRunning"><segment><source>Running</source></segment></unit>
+    <unit id="NewSessionLaunchGui"><segment><source>Launch as GUI</source></segment></unit>
+    <unit id="NewSessionLaunchGuiHint"><segment><source>Structured ACP conversation with tool steps and approvals</source></segment></unit>
+    <unit id="NewSessionLaunchGuiUnsupported"><segment><source>This agent or host only supports terminal mode</source></segment></unit>
+    <unit id="NewSessionStartGui"><segment><source>Start as GUI</source></segment></unit>
+    <unit id="SessionMenuWorkspaceSection"><segment><source>Workspace</source></segment></unit>
+    <unit id="SessionMenuCurrentSection"><segment><source>Current session</source></segment></unit>
+    <unit id="SessionMenuFiles"><segment><source>Project files</source></segment></unit>
+    <unit id="SessionMenuChanges"><segment><source>Git changes</source></segment></unit>
+    <unit id="SessionMenuBranches"><segment><source>Branches</source></segment></unit>
+    <unit id="SessionMenuSessions"><segment><source>Sessions</source></segment></unit>
+    <unit id="SessionMenuFontSize"><segment><source>Text size</source></segment></unit>
+    <unit id="SessionBranchesTitle"><segment><source>Branches &amp; workspaces</source></segment></unit>
+    <unit id="SessionBranchesCount"><segment><source>{0} branches</source></segment></unit>
+    <unit id="SessionBranchesWorkspacesHeader"><segment><source>Workspaces</source></segment></unit>
+    <unit id="SessionBranchesGitHeader"><segment><source>Repository branches</source></segment></unit>
+    <unit id="SessionBranchesCurrent"><segment><source>Current</source></segment></unit>
+    <unit id="SessionBranchesLocal"><segment><source>Local</source></segment></unit>
+    <unit id="SessionBranchesRemote"><segment><source>Remote</source></segment></unit>
+    <unit id="SessionBranchesLoading"><segment><source>Loading branches…</source></segment></unit>
+    <unit id="SessionBranchesNotRepo"><segment><source>This project is not a git repository.</source></segment></unit>
+    <unit id="SessionSessionsTitle"><segment><source>Project sessions</source></segment></unit>
+    <unit id="SessionSessionsCount"><segment><source>{0} sessions</source></segment></unit>
+    <unit id="SessionSessionsActive"><segment><source>Active</source></segment></unit>
+    <unit id="SessionSessionsNew"><segment><source>New session</source></segment></unit>
   </file>
 </xliff>

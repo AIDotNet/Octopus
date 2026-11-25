@@ -198,6 +198,8 @@ public sealed class ConversationTimeline
                 entry.Duration = NullIfEmpty(message.Duration);
                 var plan = (message.Plan ?? []).Select(item => new ConversationPlanItem(item.Content, item.Status)).ToList();
                 if (!entry.Plan.SequenceEqual(plan)) entry.Plan = plan;
+                var notes = (message.Notes ?? []).Select(note => new ConversationWorkNote(note.Text, note.BeforeToolIndex)).ToList();
+                if (!entry.Notes.SequenceEqual(notes)) entry.Notes = notes;
                 var tools = entry.Tools.ToDictionary(tool => tool.Id, StringComparer.Ordinal);
                 Sync(entry.Tools, [.. (message.Tools ?? []).DistinctBy(tool => tool.Id).Select(tool => Fill(tools.GetValueOrDefault(tool.Id) ?? new ConversationTool(tool.Id), tool))]);
                 entry.SyncWorkArea();
