@@ -48,9 +48,12 @@ def rounded(master: Image.Image, size: int, inset: float = 0.0) -> Image.Image:
     return canvas
 
 
-def png_bytes(image: Image.Image) -> bytes:
+def png_bytes(image: Image.Image, quantize: bool = True) -> bytes:
+    out = image
+    if quantize:
+        out = image.quantize(colors=256, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.FLOYDSTEINBERG)
     buffer = io.BytesIO()
-    image.save(buffer, "PNG", optimize=True)
+    out.save(buffer, "PNG", optimize=True, compress_level=9)
     return buffer.getvalue()
 
 
@@ -96,8 +99,8 @@ def main() -> None:
         path.write_bytes(png_bytes(rounded(master, size)))
         mobile_icons.append(path)
 
-    # iOS applies the corner mask itself and expects an icon without transparency.
-    IOS_ICON.write_bytes(png_bytes(master.resize((1024, 1024), Image.LANCZOS)))
+    # iOS applies the corner mask itself and expects an opaque RGB PNG (keep standard RGB for Xcode actool/App Store).
+    IOS_ICON.write_bytes(png_bytes(master.resize((1024, 1024), Image.LANCZOS), quantize=False))
     mobile_icons.append(IOS_ICON)
 
     for file in sorted([*OUT.iterdir(), *mobile_icons]):
