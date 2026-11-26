@@ -52,16 +52,24 @@
                        IsVisible="{Binding HasBots}" VerticalAlignment="Center" />
         </Grid>
 
-        <!-- Always-at-top "+ New Bot" primary action -->
+        <!-- Always-at-top "+ New Bot" primary action + Import from link icon -->
         <Border Grid.Row="1" Padding="10,6,10,4">
-            <arc:Button x:Name="NewBotButton" Variant="Primary" Size="Small" HorizontalAlignment="Stretch"
-                        Command="{Binding NewBotCommand}"
-                        AutomationProperties.Name="{l:AppLangResource BotNewButton}">
-                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <lucide:LucideIcon Kind="Plus" Size="14" VerticalAlignment="Center" />
-                    <TextBlock Text="{l:AppLangResource BotNewButton}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                </StackPanel>
-            </arc:Button>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <arc:Button x:Name="NewBotButton" Variant="Primary" Size="Small" HorizontalAlignment="Stretch"
+                            Command="{Binding NewBotCommand}"
+                            AutomationProperties.Name="{l:AppLangResource BotNewButton}">
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <lucide:LucideIcon Kind="Plus" Size="14" VerticalAlignment="Center" />
+                        <TextBlock Text="{l:AppLangResource BotNewButton}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+                <arc:Button Grid.Column="1" Variant="Secondary" Size="Small" Padding="7,0" MinWidth="28"
+                            Command="{Binding ImportBotFromLinkCommand}"
+                            AutomationProperties.Name="{l:AppLangResource BotImportFromLinkButton}"
+                            arc:Tooltip.Tip="{l:AppLangResource BotImportFromLinkButton}">
+                    <lucide:LucideIcon Kind="Link2" Size="14" VerticalAlignment="Center" />
+                </arc:Button>
+            </Grid>
         </Border>
 
         <!-- Search box (shown when there is at least one bot) -->
@@ -135,19 +143,9 @@
                             <Grid Classes="bot-header" ColumnDefinitions="*,Auto">
                                 <Button Classes="row" Classes.selected="{Binding IsCurrent}" Height="32"
                                         Command="{Binding ToggleCommand}"
+                                        DataContextChanged="OnBotRowDataContextChanged"
                                         AutomationProperties.Name="{Binding Name}">
-                                    <Button.ContextMenu>
-                                        <ContextMenu>
-                                            <MenuItem Header="{l:AppLangResource BotMenuNewChat}" Command="{Binding NewChatCommand}" />
-                                            <MenuItem Header="{l:AppLangResource BotMenuEditSoul}" Command="{Binding EditSoulCommand}" />
-                                            <MenuItem Header="{l:AppLangResource BotMenuRevealFolder}" Command="{Binding RevealFolderCommand}" />
-                                            <Separator />
-                                            <MenuItem Header="{Binding PauseMenuLabel}" Command="{Binding TogglePauseCommand}" />
-                                            <MenuItem Header="{l:AppLangResource BotMenuRename}" Command="{Binding RenameCommand}" />
-                                            <MenuItem Header="{l:AppLangResource BotMenuDelete}" Command="{Binding DeleteCommand}" />
-                                        </ContextMenu>
-                                    </Button.ContextMenu>
-                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6" Margin="4,0,4,0">
+                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="6" Margin="4,0,4,0">
                                         <!-- Expand/collapse chevron -->
                                         <Panel Width="12" VerticalAlignment="Center">
                                             <lucide:LucideIcon Kind="ChevronDown" Size="12" IsVisible="{Binding IsExpanded}"
@@ -156,11 +154,18 @@
                                                                Foreground="{arc:ArcDesignTokenResource TextMuted}" />
                                         </Panel>
 
-                                        <!-- Circular Bot avatar + small agent accent dot -->
+                                        <!-- Bot avatar (image / icon / initial) + small agent accent dot -->
                                         <Grid Grid.Column="1" Width="22" Height="22" VerticalAlignment="Center">
-                                            <Border Width="22" Height="22" CornerRadius="11" Background="{Binding AvatarBrush}">
-                                                <TextBlock Text="{Binding Initial}" Foreground="White" FontSize="11" FontWeight="Bold"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <Border Width="22" Height="22" CornerRadius="6" Background="{Binding AvatarBrush}" ClipToBounds="True">
+                                                <Panel>
+                                                    <Image IsVisible="{Binding HasAvatarImage}" Source="{Binding AvatarImage}"
+                                                           Width="22" Height="22" Stretch="UniformToFill"
+                                                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                                    <lucide:LucideIcon IsVisible="{Binding HasAvatarIcon}" Kind="{Binding AvatarIcon}" Size="12" Foreground="White"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    <TextBlock IsVisible="{Binding ShowInitial}" Text="{Binding Initial}" Foreground="White" FontSize="11" FontWeight="Bold"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Panel>
                                             </Border>
                                             <Border Width="8" Height="8" CornerRadius="4" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                                     Margin="0,0,-1,-1" Background="{arc:ArcDesignTokenResource SurfaceMuted}" Padding="1">
@@ -188,6 +193,9 @@
                                         <arc:ArcSpinner Grid.Column="4" Width="11" Height="11" VerticalAlignment="Center"
                                                         IsVisible="{Binding ShowCollapsedWorking}"
                                                         Foreground="{arc:ArcDesignTokenResource Accent}" />
+                                        <Ellipse Grid.Column="5" Width="7" Height="7" VerticalAlignment="Center"
+                                                 IsVisible="{Binding ShowUnreadDot}"
+                                                 Fill="{arc:ArcDesignTokenResource Accent}" />
                                     </Grid>
                                 </Button>
 
@@ -215,16 +223,8 @@
                                                 <Button Classes="row" Classes.selected="{Binding IsSelected}"
                                                         Padding="6,5"
                                                         Command="{Binding OpenCommand}"
+                                                        DataContextChanged="OnChatRowDataContextChanged"
                                                         AutomationProperties.Name="{Binding Title}">
-                                                    <Button.ContextMenu>
-                                                        <ContextMenu>
-                                                            <MenuItem Header="{l:AppLangResource BotMenuRename}" Command="{Binding RenameCommand}" />
-                                                            <MenuItem Header="{l:AppLangResource BotChatClose}" IsVisible="{Binding !IsClosed}" Command="{Binding CloseChatCommand}" />
-                                                            <MenuItem Header="{l:AppLangResource BotChatReopen}" IsVisible="{Binding IsClosed}" Command="{Binding OpenCommand}" />
-                                                            <Separator IsVisible="{Binding CanDelete}" />
-                                                            <MenuItem Header="{l:AppLangResource BotChatDelete}" IsVisible="{Binding CanDelete}" Command="{Binding DeleteChatCommand}" />
-                                                        </ContextMenu>
-                                                    </Button.ContextMenu>
                                                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
                                                         <!-- Home / Chat icon badge -->
                                                         <Border Width="18" Height="18" CornerRadius="5" VerticalAlignment="Center"

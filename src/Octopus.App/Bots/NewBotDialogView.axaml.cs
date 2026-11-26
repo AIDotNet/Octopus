@@ -8,11 +8,7 @@ public partial class NewBotDialogView : UserControl
     public NewBotDialogView()
     {
         InitializeComponent();
-        AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(() =>
-        {
-            NameInput.Focus();
-            NameInput.SelectAll();
-        }, DispatcherPriority.Input);
+        AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(() => NameInput.Focus(), DispatcherPriority.Input);
     }
 
     public NewBotDialogView(NewBotDialogViewModel model) : this()

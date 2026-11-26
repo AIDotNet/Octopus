@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Octopus.App.Activity;
 using Octopus.App.Common;
 using Octopus.App.Localization;
@@ -13,6 +15,9 @@ using TKCode.Arc.Icons.Lucide;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Bots;
+
+/// <summary>Raised when the user clicks "Bot Settings..." from a Bot's context menu.</summary>
+public sealed record OpenBotSettingsRequested(string BotId);
 
 public sealed partial class BotQuickTemplateViewModel(
     BotTemplateDefinition template,
@@ -135,6 +140,9 @@ public sealed partial class BotTreeNodeViewModel : ObservableObject
 {
     private readonly Action<BotTreeNodeViewModel> _toggle;
     private readonly Action<BotTreeNodeViewModel> _newChat;
+    private readonly Action<BotTreeNodeViewModel> _openSettings;
+    private readonly Action<BotTreeNodeViewModel> _copyPath;
+    private readonly Action<BotTreeNodeViewModel> _toggleUnread;
     private readonly Action<BotTreeNodeViewModel> _editSoul;
     private readonly Action<BotTreeNodeViewModel> _revealFolder;
     private readonly Action<BotTreeNodeViewModel> _togglePause;
@@ -150,18 +158,28 @@ public sealed partial class BotTreeNodeViewModel : ObservableObject
         IReadOnlyList<BotChatRowViewModel> chats,
         Action<BotTreeNodeViewModel> toggle,
         Action<BotTreeNodeViewModel> newChat,
+        Action<BotTreeNodeViewModel> openSettings,
+        Action<BotTreeNodeViewModel> copyPath,
+        Action<BotTreeNodeViewModel> toggleUnread,
         Action<BotTreeNodeViewModel> editSoul,
         Action<BotTreeNodeViewModel> revealFolder,
         Action<BotTreeNodeViewModel> togglePause,
         Func<BotTreeNodeViewModel, Task> rename,
-        Func<BotTreeNodeViewModel, Task> delete)
+        Func<BotTreeNodeViewModel, Task> delete,
+        Bitmap? avatarImage = null)
     {
         BotId = bot.Id;
         Name = bot.Name;
         Initial = bot.Name.Length > 0 ? bot.Name[..1].ToUpperInvariant() : "B";
         AvatarBrush = SolidColorBrush.Parse(bot.Color);
+        AvatarImage = avatarImage;
+        HasAvatarImage = avatarImage is not null;
+        HasAvatarIcon = !HasAvatarImage && !string.IsNullOrWhiteSpace(bot.Icon);
+        ShowInitial = !HasAvatarImage && !HasAvatarIcon;
+        AvatarIcon = NewBotDialogViewModel.ParseIcon(bot.Icon, LucideIconKind.Bot);
         AgentAccent = NewBotDialogViewModel.AgentAccent(bot.AgentId);
         IsPaused = bot.IsPaused;
+        IsUnread = bot.IsUnread;
         IsCurrent = isCurrent;
         IsExpanded = isExpanded;
         NeedsCount = needsCount;
@@ -169,6 +187,9 @@ public sealed partial class BotTreeNodeViewModel : ObservableObject
         foreach (var c in chats) Chats.Add(c);
         _toggle = toggle;
         _newChat = newChat;
+        _openSettings = openSettings;
+        _copyPath = copyPath;
+        _toggleUnread = toggleUnread;
         _editSoul = editSoul;
         _revealFolder = revealFolder;
         _togglePause = togglePause;
@@ -180,23 +201,30 @@ public sealed partial class BotTreeNodeViewModel : ObservableObject
     public string Name { get; }
     public string Initial { get; }
     public IBrush AvatarBrush { get; }
+    public Bitmap? AvatarImage { get; }
+    public bool HasAvatarImage { get; }
+    public bool HasAvatarIcon { get; }
+    public bool ShowInitial { get; }
+    public LucideIconKind AvatarIcon { get; }
     public IBrush AgentAccent { get; }
     public bool IsPaused { get; }
+    public bool IsUnread { get; }
     public ObservableCollection<BotChatRowViewModel> Chats { get; } = [];
 
     [ObservableProperty] public partial bool IsCurrent { get; set; }
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowCollapsedNeeds), nameof(ShowCollapsedWorking))]
+    [NotifyPropertyChangedFor(nameof(ShowCollapsedNeeds), nameof(ShowCollapsedWorking), nameof(ShowUnreadDot))]
     public partial bool IsExpanded { get; set; }
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowCollapsedNeeds), nameof(ShowCollapsedWorking))]
+    [NotifyPropertyChangedFor(nameof(ShowCollapsedNeeds), nameof(ShowCollapsedWorking), nameof(ShowUnreadDot))]
     public partial int NeedsCount { get; set; }
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowCollapsedWorking))]
+    [NotifyPropertyChangedFor(nameof(ShowCollapsedWorking), nameof(ShowUnreadDot))]
     public partial bool IsWorking { get; set; }
 
     public bool ShowCollapsedNeeds => !IsExpanded && NeedsCount > 0;
     public bool ShowCollapsedWorking => !IsExpanded && NeedsCount == 0 && IsWorking;
+    public bool ShowUnreadDot => IsUnread && !ShowCollapsedNeeds && !ShowCollapsedWorking;
     public string NeedsBadgeText => NeedsCount > 99 ? "99+" : NeedsCount.ToString();
     public string PauseMenuLabel => AppLangResources.Get(IsPaused ? AppLangResourceKind.BotMenuResume : AppLangResourceKind.BotMenuPause);
 
@@ -205,6 +233,15 @@ public sealed partial class BotTreeNodeViewModel : ObservableObject
 
     [RelayCommand]
     private void NewChat() => _newChat(this);
+
+    [RelayCommand]
+    private void OpenSettings() => _openSettings(this);
+
+    [RelayCommand]
+    private void CopyPath() => _copyPath(this);
+
+    [RelayCommand]
+    private void ToggleUnread() => _toggleUnread(this);
 
     [RelayCommand]
     private void EditSoul() => _editSoul(this);
@@ -232,6 +269,7 @@ public sealed partial class BotPanelViewModel : ObservableObject
     private readonly IDialogService _dialogs;
     private readonly IFileOpener _files;
     private readonly IAppKeymap _keymap;
+    private readonly IProjectIconStore? _icons;
     private readonly IItemActivityService? _activity;
 
     public BotPanelViewModel(
@@ -239,12 +277,14 @@ public sealed partial class BotPanelViewModel : ObservableObject
         IDialogService dialogs,
         IFileOpener files,
         IAppKeymap keymap,
+        IProjectIconStore? icons = null,
         IItemActivityService? activity = null)
     {
         _bots = bots;
         _dialogs = dialogs;
         _files = files;
         _keymap = keymap;
+        _icons = icons;
         _activity = activity;
 
         _bots.Changed += (_, _) => UiContext.Run(Rebuild);
@@ -262,6 +302,9 @@ public sealed partial class BotPanelViewModel : ObservableObject
     public ObservableCollection<BotTreeNodeViewModel> BotNodes { get; } = [];
     public ObservableCollection<BotQuickTemplateViewModel> StarterTemplates { get; } = [];
 
+    /// <summary>Raised when a Bot's home path should be copied to the clipboard.</summary>
+    public event EventHandler<string>? CopyRequested;
+
     [ObservableProperty] public partial string SearchQuery { get; set; } = "";
     [ObservableProperty] public partial int BotCount { get; private set; }
     [ObservableProperty] public partial bool HasBots { get; private set; }
@@ -273,6 +316,29 @@ public sealed partial class BotPanelViewModel : ObservableObject
 
     [RelayCommand]
     public Task NewBotAsync() => OpenNewBotDialogAsync(null);
+
+    [RelayCommand]
+    public async Task ImportBotFromLinkAsync()
+    {
+        var link = await _dialogs.AskNameAsync(
+            AppLangResources.Get(AppLangResourceKind.BotImportFromLinkButton),
+            AppLangResources.Get(AppLangResourceKind.BotImportLinkPlaceholder),
+            null,
+            AppLangResources.Get(AppLangResourceKind.BotImportConfirm));
+        if (string.IsNullOrWhiteSpace(link)) return;
+        if (!BotShareCodec.TryDecodeString(link, out var payload, out _) || payload is null)
+        {
+            await _dialogs.ConfirmAsync(
+                AppLangResources.Get(AppLangResourceKind.BotImportTitle),
+                AppLangResources.Get(AppLangResourceKind.BotImportInvalidBody),
+                AppLangResources.Get(AppLangResourceKind.UpdateClose));
+            return;
+        }
+        if (await _dialogs.ConfirmBotImportAsync(payload))
+        {
+            _bots.ImportBot(payload);
+        }
+    }
 
     public async Task OpenNewBotDialogAsync(string? templateId)
     {
@@ -360,11 +426,15 @@ public sealed partial class BotPanelViewModel : ObservableObject
                 chats: chatVms,
                 toggle: OnToggleBot,
                 newChat: node => _bots.CreateChat(node.BotId),
+                openSettings: OnOpenSettings,
+                copyPath: OnCopyPath,
+                toggleUnread: node => _bots.SetBotUnread(node.BotId, !node.IsUnread),
                 editSoul: OnEditSoul,
                 revealFolder: OnRevealFolder,
                 togglePause: node => _bots.SetBotPaused(node.BotId, !node.IsPaused),
                 rename: RenameBotAsync,
-                delete: DeleteBotAsync));
+                delete: DeleteBotAsync,
+                avatarImage: _icons?.Load(bot.Image)));
         }
     }
 
@@ -380,6 +450,20 @@ public sealed partial class BotPanelViewModel : ObservableObject
             return;
         }
         _bots.SetBotExpanded(node.BotId, !node.IsExpanded);
+    }
+
+    private void OnOpenSettings(BotTreeNodeViewModel node)
+    {
+        _bots.SelectBot(node.BotId);
+        WeakReferenceMessenger.Default.Send(new OpenBotSettingsRequested(node.BotId));
+    }
+
+    private void OnCopyPath(BotTreeNodeViewModel node)
+    {
+        var bot = _bots.Bots.FirstOrDefault(b => b.Id == node.BotId);
+        if (bot is null) return;
+        var path = _bots.Home.EnsureHome(bot);
+        CopyRequested?.Invoke(this, path);
     }
 
     private void OnEditSoul(BotTreeNodeViewModel node)

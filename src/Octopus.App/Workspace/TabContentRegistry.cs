@@ -33,12 +33,23 @@ public sealed class TabContentRegistry(
 {
     private readonly Dictionary<string, Control> _controls = [];
     private readonly Dictionary<string, Task> _releasing = [];
+    /// <summary>
+    /// Agent conversations whose tab was closed but which keep running: the view model (and its session) is kept, the
+    /// view is let go. <see cref="GetOrCreate"/> puts a new view over it when the tab opens again.
+    /// </summary>
+    private readonly Dictionary<string, AgentGuiTabViewModel> _detached = [];
 
     public Control GetOrCreate(Project project, ProjectItem item)
     {
         if (_controls.TryGetValue(item.Id, out var existing))
         {
             return existing;
+        }
+        if (_detached.Remove(item.Id, out var detached))
+        {
+            var view = new AgentGuiTabView { DataContext = detached };
+            _controls[item.Id] = view;
+            return view;
         }
         var control = item.Kind switch
         {
@@ -105,7 +116,9 @@ public sealed class TabContentRegistry(
             () => services.GetService<IWorkspaceCommands>(),
             services.GetService<ISubagentService>(),
             services.GetService<IModelDiscovery>(),
-            services.GetService<Octopus.Platform.IFileOpener>());
+            services.GetService<Octopus.Platform.IFileOpener>(),
+            services.GetService<Octopus.App.Bots.IBotService>(),
+            services.GetService<Octopus.App.Collab.ICollabCoordinator>());
         return new AgentGuiTabView { DataContext = vm };
     }
 
@@ -126,13 +139,37 @@ public sealed class TabContentRegistry(
         return control;
     }
 
-    public ITabContent? Find(string itemId) => _controls.GetValueOrDefault(itemId) as ITabContent;
+    public ITabContent? Find(string itemId) =>
+        _controls.GetValueOrDefault(itemId) as ITabContent
+        ?? (_detached.TryGetValue(itemId, out var model) ? new DetachedAgent(model) : null);
+
+    public void Detach(string itemId)
+    {
+        // Only an agent conversation can live without its view. A terminal's control is what reads its session
+        // (title, exit, activity), so it is kept as it is: off screen, nothing of it is laid out or drawn.
+        if (_controls.GetValueOrDefault(itemId) is not AgentGuiTabView { DataContext: AgentGuiTabViewModel model } view)
+        {
+            return;
+        }
+        _controls.Remove(itemId);
+        view.DataContext = null;
+        _detached[itemId] = model;
+    }
 
     public Task ReleaseAsync(string itemId)
     {
         if (_releasing.TryGetValue(itemId, out var inProgress))
         {
             return inProgress;
+        }
+        if (_detached.Remove(itemId, out var model))
+        {
+            var ending = ReleaseDetachedAsync(itemId, model);
+            if (!ending.IsCompleted)
+            {
+                _releasing[itemId] = ending;
+            }
+            return ending;
         }
         if (!_controls.Remove(itemId, out var control))
         {
@@ -149,7 +186,7 @@ public sealed class TabContentRegistry(
 
     public async Task ReleaseAllAsync()
     {
-        foreach (var id in _controls.Keys.ToList())
+        foreach (var id in _controls.Keys.Concat(_detached.Keys).ToList())
         {
             _ = ReleaseAsync(id);
         }
@@ -160,7 +197,8 @@ public sealed class TabContentRegistry(
 
     public async Task<bool> AnyRunningChildAsync()
     {
-        var checks = _controls.Values.OfType<ITabContent>().Select(c => c.HasRunningChildAsync()).ToList();
+        var checks = _controls.Values.OfType<ITabContent>().Select(c => c.HasRunningChildAsync())
+            .Concat(_detached.Values.Select(m => m.HasRunningChildAsync())).ToList();
         if ((await Task.WhenAll(checks)).Any(running => running)) return true;
         // Sessions that never had a tab count too: quitting ends their programs just the same.
         return sessions is not null && await sessions.AnyRunningChildAsync();
@@ -170,6 +208,28 @@ public sealed class TabContentRegistry(
     {
         var checks = _controls.Values.OfType<ITabContent>().Select(c => c.HasUnsavedChangesAsync()).ToList();
         return (await Task.WhenAll(checks)).Any(unsaved => unsaved);
+    }
+
+    private async Task ReleaseDetachedAsync(string itemId, AgentGuiTabViewModel model)
+    {
+        try
+        {
+            await model.CloseAsync();
+            model.Dispose();
+        }
+        finally
+        {
+            _releasing.Remove(itemId);
+        }
+    }
+
+    /// <summary>What a closed agent tab answers for while it has no view: it runs, ends and restarts like the open one.</summary>
+    private sealed class DetachedAgent(AgentGuiTabViewModel model) : ITabContent
+    {
+        public Task<bool> HasRunningChildAsync() => model.HasRunningChildAsync();
+        public Task CloseAsync() => model.CloseAsync();
+        public Task RestartAsync() => model.RestartAsync();
+        public void FocusContent() { }
     }
 
     private async Task ReleaseCoreAsync(string itemId, Control control)

@@ -2,11 +2,13 @@ using System.Reflection;
 using Avalonia.Threading;
 using Octopus.Agents;
 using Octopus.App.Activity;
+using Octopus.App.Bots;
 using Octopus.App.Common;
 using Octopus.App.Services;
 using Octopus.App.Services.Workspaces;
 using Octopus.App.Workspace;
 using Octopus.Core.Agents;
+using Octopus.Core.Bots;
 using Octopus.Core.Projects;
 using Octopus.Core.SystemMetrics;
 using Octopus.Platform;
@@ -46,6 +48,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     private readonly IExecutableLocator? _locator;
     private readonly ILoginEnvironment? _login;
     private readonly IProjectIconStore? _icons;
+    private readonly IBotService? _bots;
     private readonly HostConversations _conversations;
 
     public HostWorkspace(IProjectService projects, IItemLaunchService launcher, ITerminalConnectionFactory factory, TerminalSessionRegistry sessions,
@@ -53,7 +56,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         Octopus.FileSystem.IFileTreeService files, Octopus.Git.IGitService git, PathComparer paths,
         IWorkspaceManager? workspaces = null, IGitHubTaskProvider? taskProvider = null,
         ILocalSystemMetricsCollector? metrics = null, IExecutableLocator? locator = null, ILoginEnvironment? login = null,
-        IProjectIconStore? icons = null)
+        IProjectIconStore? icons = null, IBotService? bots = null)
     {
         _files = files;
         _git = git;
@@ -64,6 +67,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         _locator = locator;
         _login = login;
         _icons = icons;
+        _bots = bots;
         _projects = projects;
         _launcher = launcher;
         _factory = factory;
@@ -77,6 +81,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         _conversations = new HostConversations(tabs);
         projects.Changed += OnProjectsChanged;
         activity.Changed += OnActivityChanged;
+        bots?.Changed += OnBotsChanged;
     }
 
     public event Action? Changed;
@@ -660,12 +665,21 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         return await RemoteGitDispatcher.CallAsync(_git, method, arguments).ConfigureAwait(false);
     }
 
-    private List<string> LocalRoots() =>
-    [
-        .. _projects.Projects
-            .Where(ProjectLocation.IsOnThisComputer)
-            .SelectMany(p => p.Workspaces.Select(w => w.Path).Prepend(p.Path)),
-    ];
+    private List<string> LocalRoots()
+    {
+        var roots = new List<string>(
+            _projects.Projects
+                .Where(ProjectLocation.IsOnThisComputer)
+                .SelectMany(p => p.Workspaces.Select(w => w.Path).Prepend(p.Path)));
+        if (_bots is not null)
+        {
+            foreach (var bot in _bots.Bots)
+            {
+                roots.Add(_bots.GetHomePath(bot));
+            }
+        }
+        return roots;
+    }
 
     /// <summary>The full path, when it is a project's folder or lies in one; anything else is refused (design/12 §5.4).</summary>
     private async Task<string> InsideProjectAsync(string path)
@@ -716,8 +730,11 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     {
         _projects.Changed -= OnProjectsChanged;
         _activity.Changed -= OnActivityChanged;
+        _bots?.Changed -= OnBotsChanged;
         _conversations.Dispose();
     }
+
+    private void OnBotsChanged(object? sender, BotChangedEventArgs e) => Changed?.Invoke();
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
@@ -737,6 +754,23 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         if (_projects.FindProjectOf(itemId) is { } project && _projects.FindItem(itemId) is { } item && IsSession(item))
         {
             ItemChanged?.Invoke(ToMessage(project, item));
+            return;
+        }
+        if (_bots is not null)
+        {
+            foreach (var bot in _bots.Bots)
+            {
+                if (bot.Chats.Any(c => c.Id == itemId))
+                {
+                    var backing = _bots.GetBackingProject(bot);
+                    if (backing.Items.FirstOrDefault(i => i.Id == itemId) is { } botItem)
+                    {
+                        ItemChanged?.Invoke(ToMessage(backing, botItem));
+                    }
+                    Changed?.Invoke();
+                    return;
+                }
+            }
         }
     }
 
@@ -752,10 +786,286 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         _projects.Projects.FirstOrDefault(p => p.Id == projectId && ProjectLocation.IsOnThisComputer(p))
         ?? throw new RemoteException(RemoteMethods.NotFound, "The project does not exist on the host.");
 
-    private (Project Project, ProjectItem Item) FindItem(string itemId) =>
-        _projects.FindProjectOf(itemId) is { } project && ProjectLocation.IsOnThisComputer(project) && _projects.FindItem(itemId) is { } item && IsSession(item)
-            ? (project, item)
-            : throw new RemoteException(RemoteMethods.NotFound, "The item does not exist on the host.");
+    private (Project Project, ProjectItem Item) FindItem(string itemId)
+    {
+        if (_projects.FindProjectOf(itemId) is { } project && ProjectLocation.IsOnThisComputer(project) && _projects.FindItem(itemId) is { } item && IsSession(item))
+        {
+            return (project, item);
+        }
+        if (_bots is not null)
+        {
+            foreach (var bot in _bots.Bots)
+            {
+                var chat = bot.Chats.FirstOrDefault(c => c.Id == itemId);
+                if (chat is null) continue;
+                var backing = _bots.GetBackingProject(bot);
+                var backingItem = backing.Items.FirstOrDefault(i => i.Id == itemId);
+                if (backingItem is null)
+                {
+                    _bots.OpenChat(bot.Id, chat.Id);
+                    backing = _bots.GetBackingProject(bot);
+                    backingItem = backing.Items.FirstOrDefault(i => i.Id == itemId);
+                }
+                if (backingItem is not null)
+                {
+                    return (backing, backingItem);
+                }
+            }
+        }
+        throw new RemoteException(RemoteMethods.NotFound, "The item does not exist on the host.");
+    }
+
+    // ---- Bots RPC bridge (BotMessages.cs) ----
+
+    public Task<IReadOnlyList<BotMessage>> ListBotsAsync() => OnUi<IReadOnlyList<BotMessage>>(() =>
+        _bots is null ? [] : [.. _bots.Bots.Select(ToBotMessage)]);
+
+    public Task<BotMessage> CreateBotAsync(CreateBotMessage request) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        var bot = bots.CreateBot(new NewBotRequest(
+            request.Name,
+            request.AgentId ?? "",
+            request.Color ?? "",
+            request.TemplateId,
+            request.Soul,
+            HostDeviceKey: "local"));
+        return ToBotMessage(bot);
+    });
+
+    public Task<BotMessage> ImportBotAsync(ImportBotMessage request) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        if (!BotShareCodec.TryDecodeString(request.ShareLink, out var payload, out var error) || payload is null)
+        {
+            throw new RemoteException(RemoteProtocol.InvalidParams, error ?? "Invalid octopus://bot/import link.");
+        }
+        var imported = bots.ImportBot(payload, hostDeviceKey: "local");
+        return ToBotMessage(imported);
+    });
+
+    public Task<BotMessage> UpdateBotAsync(UpdateBotMessage request) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        var bot = FindBot(bots, request.BotId);
+        if (!string.IsNullOrWhiteSpace(request.Name))
+        {
+            bots.RenameBot(bot.Id, request.Name);
+        }
+        if (request.IsPaused.HasValue)
+        {
+            bots.SetBotPaused(bot.Id, request.IsPaused.Value);
+        }
+        if (request.LookAroundEnabled.HasValue || request.TidyUpMemoryEnabled.HasValue || !string.IsNullOrWhiteSpace(request.AgentId))
+        {
+            bots.UpdateBotSettings(bot.Id, target =>
+            {
+                if (request.LookAroundEnabled.HasValue) target.LookAroundEnabled = request.LookAroundEnabled.Value;
+                if (request.TidyUpMemoryEnabled.HasValue) target.TidyUpMemoryEnabled = request.TidyUpMemoryEnabled.Value;
+                if (!string.IsNullOrWhiteSpace(request.AgentId)) target.AgentId = request.AgentId.Trim();
+            });
+        }
+        return ToBotMessage(FindBot(bots, bot.Id));
+    });
+
+    public Task DeleteBotAsync(string botId) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        FindBot(bots, botId);
+        bots.DeleteBot(botId);
+        return true;
+    });
+
+    public Task<BotChatMessage> CreateBotChatAsync(CreateBotChatMessage request) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        var bot = FindBot(bots, request.BotId);
+        var chat = bots.CreateChat(bot.Id, request.AgentId, request.Title, activate: false)
+            ?? throw new RemoteException(RemoteMethods.NotFound, "The bot does not exist on the host.");
+        return ToBotChatMessage(bot, chat);
+    });
+
+    public Task<BotChatMessage> OpenBotChatAsync(string botId, string chatId) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        var bot = FindBot(bots, botId);
+        if (bot.Chats.All(c => c.Id != chatId))
+        {
+            throw new RemoteException(RemoteMethods.NotFound, "The bot chat does not exist on the host.");
+        }
+        bots.OpenChat(bot.Id, chatId);
+        var updated = FindBot(bots, botId);
+        return ToBotChatMessage(updated, updated.Chats.First(c => c.Id == chatId));
+    });
+
+    public async Task CloseBotChatAsync(string botId, string chatId)
+    {
+        await OnUi(() =>
+        {
+            var bots = RequireBots();
+            var bot = FindBot(bots, botId);
+            if (bot.Chats.All(c => c.Id != chatId))
+            {
+                throw new RemoteException(RemoteMethods.NotFound, "The bot chat does not exist on the host.");
+            }
+            bots.CloseChat(bot.Id, chatId);
+            return true;
+        }).ConfigureAwait(false);
+        await _tabs.ReleaseAsync(chatId).ConfigureAwait(false);
+        await _sessions.CloseAsync(chatId).ConfigureAwait(false);
+    }
+
+    public Task RenameBotChatAsync(string botId, string chatId, string? title) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        var bot = FindBot(bots, botId);
+        if (bot.Chats.All(c => c.Id != chatId))
+        {
+            throw new RemoteException(RemoteMethods.NotFound, "The bot chat does not exist on the host.");
+        }
+        bots.RenameChat(bot.Id, chatId, title);
+        return true;
+    });
+
+    public async Task DeleteBotChatAsync(string botId, string chatId)
+    {
+        await OnUi(() =>
+        {
+            var bots = RequireBots();
+            var bot = FindBot(bots, botId);
+            var chat = bot.Chats.FirstOrDefault(c => c.Id == chatId)
+                ?? throw new RemoteException(RemoteMethods.NotFound, "The bot chat does not exist on the host.");
+            if (chat.Kind == BotChatKind.Home)
+            {
+                throw new RemoteException(RemoteMethods.NotAllowed, "Home Chat cannot be deleted.");
+            }
+            bots.DeleteChat(bot.Id, chatId);
+            return true;
+        }).ConfigureAwait(false);
+        await _tabs.ReleaseAsync(chatId).ConfigureAwait(false);
+        await _sessions.CloseAsync(chatId).ConfigureAwait(false);
+    }
+
+    public Task ResolveBotItemAsync(ResolveBotItemMessage request) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        FindBot(bots, request.BotId);
+        bots.ResolveWorkItem(request.BotId, request.ItemId, request.ChosenOption);
+        return true;
+    });
+
+    public Task ToggleBotConnectorAsync(ToggleBotConnectorMessage request) => OnUi(() =>
+    {
+        var bots = RequireBots();
+        FindBot(bots, request.BotId);
+        bots.SetConnectorEnabled(request.BotId, request.ConnectorId, request.Enabled);
+        return true;
+    });
+
+    private IBotService RequireBots() =>
+        _bots ?? throw new RemoteException(RemoteProtocol.MethodNotFound, "Bots are not supported by this host.");
+
+    private static BotDefinition FindBot(IBotService bots, string botId) =>
+        bots.Bots.FirstOrDefault(b => b.Id == botId)
+        ?? throw new RemoteException(RemoteMethods.NotFound, "The bot does not exist on the host.");
+
+    private BotMessage ToBotMessage(BotDefinition bot)
+    {
+        var home = _bots!.Home;
+        string? shareLink = null;
+        try
+        {
+            shareLink = BotShareCodec.Encode(BotShareCodec.BuildPayload(bot, home, includeMemory: false));
+        }
+        catch
+        {
+        }
+        return new BotMessage
+        {
+            Id = bot.Id,
+            Name = bot.Name,
+            Slug = bot.Slug,
+            AgentId = bot.AgentId,
+            Color = bot.Color,
+            Icon = bot.Icon,
+            Image = bot.Image,
+            SoulSummary = home.ReadSoulSummary(bot),
+            HomePath = home.GetHomePath(bot),
+            IsPaused = bot.IsPaused,
+            LookAroundEnabled = bot.LookAroundEnabled,
+            LookAroundIntervalHours = bot.LookAroundIntervalHours,
+            TidyUpMemoryEnabled = bot.TidyUpMemoryEnabled,
+            StaleAfterDays = bot.StaleAfterDays,
+            HomeChatId = bot.HomeChatId,
+            ShareLink = shareLink,
+            Chats = [.. bot.Chats.Select(c => ToBotChatMessage(bot, c))],
+            Connectors = [.. bot.Connectors.Select(c => new BotConnectorMessage
+            {
+                Id = c.Id,
+                AppId = c.AppId,
+                DisplayName = c.DisplayName,
+                Url = c.Url,
+                Transport = c.Transport,
+                AuthMode = c.AuthMode,
+                HasSecret = c.HasSecret,
+                Enabled = c.Enabled,
+            })],
+            Items = [.. bot.Items.Where(i => i.Status != BotWorkItemStatus.Canceled).Select(i => new BotWorkItemMessage
+            {
+                Id = i.Id,
+                Number = i.Number,
+                Title = i.Title,
+                Status = i.Status switch
+                {
+                    BotWorkItemStatus.Working => "working",
+                    BotWorkItemStatus.NeedsYou => "needsYou",
+                    BotWorkItemStatus.Done => "done",
+                    _ => "planned",
+                },
+                Question = i.Question,
+                Options = [.. i.Options],
+                ChatId = i.ChatId,
+                Meta = i.Meta,
+            })],
+        };
+    }
+
+    private BotChatMessage ToBotChatMessage(BotDefinition bot, BotChat chat)
+    {
+        var live = _activity.Of(chat.Id);
+        var activity = live switch
+        {
+            ItemActivity.Working => ItemActivities.Working,
+            ItemActivity.Waiting => ItemActivities.Waiting,
+            ItemActivity.Error => ItemActivities.Error,
+            _ => chat.Status switch
+            {
+                BotChatStatus.Working => ItemActivities.Working,
+                BotChatStatus.NeedsYou => ItemActivities.Waiting,
+                _ => ItemActivities.Idle,
+            },
+        };
+        return new BotChatMessage
+        {
+            Id = chat.Id,
+            BotId = bot.Id,
+            Kind = chat.Kind switch
+            {
+                BotChatKind.Home => "home",
+                BotChatKind.Automation => "automation",
+                BotChatKind.Connector => "connector",
+                _ => "chat",
+            },
+            Title = chat.DisplayTitle,
+            AgentId = chat.AgentId ?? bot.AgentId,
+            Subtitle = chat.Subtitle,
+            Activity = activity,
+            Surface = chat.Surface == AgentSurface.Terminal ? ItemSurfaces.Terminal : ItemSurfaces.Gui,
+            IsOpen = chat.IsOpen,
+            LastActivityAt = chat.LastActivityAt,
+            ClosedAt = chat.ClosedAt,
+        };
+    }
 
     private static ProjectMessage ToMessage(Project project)
     {

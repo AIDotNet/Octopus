@@ -36,6 +36,8 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
 
     public string GetManifestPath(BotDefinition bot) => Path.Combine(GetHomePath(bot), "bot.json");
 
+    public string GetMcpConfigPath(BotDefinition bot) => Path.Combine(GetHomePath(bot), ".mcp.json");
+
     /// <summary>Creates the bot's home directory and syncs Octopus-owned mirror files.</summary>
     public string EnsureHome(BotDefinition bot)
     {
@@ -83,6 +85,7 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
                 Name = bot.Name,
                 Slug = bot.Slug,
                 AgentId = bot.AgentId,
+                HostDeviceKey = bot.HostDeviceKey,
                 Color = bot.Color,
                 IsPaused = bot.IsPaused,
                 HomeChatId = bot.HomeChatId,
@@ -92,12 +95,133 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
             };
             var json = JsonSerializer.Serialize(manifest, OctopusJsonContext.FileTypeInfo<BotHomeManifest>());
             File.WriteAllText(GetManifestPath(bot), json, Encoding.UTF8);
+
+            SyncMcpConfig(bot);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // Disk errors on mirror files must not crash UI state transitions.
         }
     }
+
+    /// <summary>Synchronizes <c>~/.octopus/bots/&lt;slug&gt;/.mcp.json</c> for CLI agents (never writes plaintext secrets).</summary>
+    public void SyncMcpConfig(BotDefinition bot)
+    {
+        var mcpPath = GetMcpConfigPath(bot);
+        var doc = new BotMcpFileDocument();
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var conn in bot.Connectors)
+        {
+            if (!conn.Enabled || !BotConnectorRuntime.TryValidateHttpUrl(conn.Url, out var uri)) continue;
+            var baseName = BotCatalog.NormalizeMcpServerName(
+                string.Equals(conn.AppId, "custom-url", StringComparison.OrdinalIgnoreCase)
+                    ? conn.DisplayName
+                    : conn.AppId,
+                fallback: "connector");
+            var name = BotConnectorRuntime.EnsureUniqueName(baseName, usedNames);
+            var transport = string.Equals(conn.Transport, "sse", StringComparison.OrdinalIgnoreCase)
+                ? "sse"
+                : "http";
+            doc.McpServers[name] = new BotMcpServerEntry
+            {
+                Type = transport,
+                Url = uri.AbsoluteUri,
+            };
+        }
+
+        if (doc.McpServers.Count == 0)
+        {
+            if (File.Exists(mcpPath))
+            {
+                File.Delete(mcpPath);
+            }
+            return;
+        }
+
+        var json = JsonSerializer.Serialize(doc, OctopusJsonContext.FileTypeInfo<BotMcpFileDocument>());
+        File.WriteAllText(mcpPath, json, Encoding.UTF8);
+    }
+
+    public string GetSkillsDirectory(BotDefinition bot) => Path.Combine(GetHomePath(bot), "skills");
+
+    public string GetMemoryDirectory(BotDefinition bot) => Path.Combine(GetHomePath(bot), "memory");
+
+    public int CountMemoryFiles(BotDefinition bot)
+    {
+        var count = File.Exists(GetMemoryPath(bot)) ? 1 : 0;
+        var dir = GetMemoryDirectory(bot);
+        try
+        {
+            if (Directory.Exists(dir))
+            {
+                count += Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly).Count();
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+        return count;
+    }
+
+    public int CountSkillEntries(BotDefinition bot)
+    {
+        var dir = GetSkillsDirectory(bot);
+        try
+        {
+            if (!Directory.Exists(dir)) return 0;
+            return Directory.EnumerateFileSystemEntries(dir).Count();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
+    public int CountSoulLines(BotDefinition bot)
+    {
+        var soul = ReadSoul(bot);
+        if (string.IsNullOrWhiteSpace(soul)) return 0;
+        return soul.Split('\n').Count(l => !string.IsNullOrWhiteSpace(l));
+    }
+
+    /// <summary>Scans <c>SOUL.md</c> and optionally <c>MEMORY.md</c> for obvious secret/token patterns before sharing.</summary>
+    public IReadOnlyList<string> RunSecurityCheck(BotDefinition bot, bool includeMemory)
+    {
+        var findings = new List<string>();
+        ScanText("SOUL.md", ReadSoul(bot), findings);
+        if (includeMemory)
+        {
+            try
+            {
+                var memPath = GetMemoryPath(bot);
+                if (File.Exists(memPath))
+                {
+                    ScanText("MEMORY.md", File.ReadAllText(memPath, Encoding.UTF8), findings);
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+        return findings;
+    }
+
+    internal static void ScanTextForSecrets(string fileName, string content, List<string> findings)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return;
+        string[] prefixes = ["sk-", "ghp_", "gho_", "github_pat_", "xoxb-", "xoxp-", "AKIA", "-----BEGIN PRIVATE KEY-----"];
+        foreach (var prefix in prefixes)
+        {
+            if (content.Contains(prefix, StringComparison.Ordinal))
+            {
+                findings.Add($"{fileName}: {prefix}...");
+            }
+        }
+    }
+
+    private static void ScanText(string fileName, string content, List<string> findings) =>
+        ScanTextForSecrets(fileName, content, findings);
 
     public string ReadSoul(BotDefinition bot)
     {
@@ -186,12 +310,20 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
         if (bot.Connectors.Any(c => c.Enabled))
         {
             sb.AppendLine();
-            sb.AppendLine("## Connected Apps");
+            sb.AppendLine("## Connected Apps & MCP Servers");
             foreach (var conn in bot.Connectors.Where(c => c.Enabled))
             {
                 sb.Append("- ").Append(conn.DisplayName);
-                if (!string.IsNullOrWhiteSpace(conn.Url)) sb.Append(" (").Append(conn.Url).Append(')');
+                if (!string.IsNullOrWhiteSpace(conn.Url))
+                {
+                    sb.Append(" (`").Append(conn.Transport).Append("`: ").Append(conn.Url).Append(')');
+                }
                 sb.AppendLine();
+            }
+            if (bot.Connectors.Any(c => c.Enabled && BotConnectorRuntime.TryValidateHttpUrl(c.Url, out _)))
+            {
+                sb.AppendLine();
+                sb.AppendLine("Remote MCP endpoints are synced to `.mcp.json` and forwarded to ACP sessions automatically.");
             }
         }
         return sb.ToString();

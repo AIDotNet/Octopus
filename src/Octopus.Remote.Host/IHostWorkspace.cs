@@ -96,6 +96,22 @@ public interface IHostWorkspace
     Task<RemoteProcessRunResultMessage> RunProcessAsync(RemoteProcessRunMessage request, CancellationToken cancellationToken = default) =>
         throw new RemoteException(RemoteProtocol.MethodNotFound, "Remote process execution is not supported by this host.");
 
+    // Bots management & session lifecycle (BotMessages.cs).
+    Task<IReadOnlyList<BotMessage>> ListBotsAsync() => Task.FromResult<IReadOnlyList<BotMessage>>([]);
+    Task<BotMessage> CreateBotAsync(CreateBotMessage request) => throw NoBots();
+    Task<BotMessage> ImportBotAsync(ImportBotMessage request) => throw NoBots();
+    Task<BotMessage> UpdateBotAsync(UpdateBotMessage request) => throw NoBots();
+    Task DeleteBotAsync(string botId) => throw NoBots();
+    Task<BotChatMessage> CreateBotChatAsync(CreateBotChatMessage request) => throw NoBots();
+    Task<BotChatMessage> OpenBotChatAsync(string botId, string chatId) => throw NoBots();
+    Task CloseBotChatAsync(string botId, string chatId) => throw NoBots();
+    Task RenameBotChatAsync(string botId, string chatId, string? title) => throw NoBots();
+    Task DeleteBotChatAsync(string botId, string chatId) => throw NoBots();
+    Task ResolveBotItemAsync(ResolveBotItemMessage request) => throw NoBots();
+    Task ToggleBotConnectorAsync(ToggleBotConnectorMessage request) => throw NoBots();
+
+    private static RemoteException NoBots() => new(RemoteProtocol.MethodNotFound, "Bots are not supported by this host.");
+
     private static RemoteException NoConversations() => new(RemoteMethods.NotAllowed, "This host shows no GUI conversations.");
 
     /// <summary>Projects or their items were added, removed or reordered.</summary>

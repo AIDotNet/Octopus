@@ -1,11 +1,15 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Agents;
 using Octopus.App.Localization;
+using Octopus.App.Services;
 using Octopus.Core.Bots;
+using Octopus.Remote.Client;
 using Octopus.Storage;
+using TKCode.Arc;
 using TKCode.Arc.Icons.Lucide;
 using TKCode.Arc.Localization;
 
@@ -19,17 +23,6 @@ public sealed partial class BotColorOptionViewModel(string hex, bool isSelected,
 
     [RelayCommand]
     private void Pick() => select(Hex);
-}
-
-public sealed partial class BotAgentOptionViewModel(string id, string name, IBrush accent, bool isSelected, Action<string> select) : ObservableObject
-{
-    public string Id { get; } = id;
-    public string Name { get; } = name;
-    public IBrush Accent { get; } = accent;
-    [ObservableProperty] public partial bool IsSelected { get; set; } = isSelected;
-
-    [RelayCommand]
-    private void Pick() => select(Id);
 }
 
 public sealed partial class BotTemplateOptionViewModel(
@@ -49,17 +42,38 @@ public sealed partial class BotTemplateOptionViewModel(
     private void Pick() => select(Template);
 }
 
-/// <summary>ViewModel for the "New Bot" creation dialog: name & avatar, agent, starter template, and SOUL.md seed.</summary>
+/// <summary>ViewModel for the "New Bot" creation dialog: identity, SOUL.md summary, host computer, agent, and starter template.</summary>
 public sealed partial class NewBotDialogViewModel : ObservableObject
 {
+    private readonly IAgentCatalog _catalog;
+    private readonly IAgentScanner _scanner;
+    private readonly ISettingsStore _settings;
+    private readonly RemoteHostConnections? _remoteHosts;
+    private readonly IPickerService? _pickers;
+    private readonly IProjectIconStore? _icons;
+    private readonly string _draftId = Guid.NewGuid().ToString("N");
+    private readonly List<string> _createdImages = [];
+    private readonly bool _initialized;
     private BotTemplateDefinition _selectedTemplate;
 
     public NewBotDialogViewModel(
         IAgentCatalog catalog,
         IAgentScanner scanner,
         ISettingsStore settings,
-        string? initialTemplateId = null)
+        string? initialTemplateId = null,
+        IReadOnlyList<SelectOption>? hostOptions = null,
+        string? initialHostKey = null,
+        RemoteHostConnections? remoteHosts = null,
+        IPickerService? pickers = null,
+        IProjectIconStore? icons = null)
     {
+        _catalog = catalog;
+        _scanner = scanner;
+        _settings = settings;
+        _remoteHosts = remoteHosts;
+        _pickers = pickers;
+        _icons = icons;
+
         _selectedTemplate = BotCatalog.FindTemplate(initialTemplateId);
         SelectedColor = _selectedTemplate.Color;
         var isZh = IsChinese();
@@ -71,39 +85,22 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
             Colors.Add(new BotColorOptionViewModel(hex, string.Equals(hex, SelectedColor, StringComparison.OrdinalIgnoreCase), SelectColor));
         }
 
-        // Prefer installed & enabled agents, then fall back to built-in catalog agents.
-        var agentSettings = settings.Current.Agents;
-        var orderedIds = new List<string>();
-        foreach (var inst in scanner.Current.Installations)
+        // Host options (local computer + paired Octopus hosts + SSH hosts)
+        if (hostOptions is { Count: > 0 })
         {
-            if (catalog.Find(inst.AgentId) is not null && agentSettings.ProfileOf(inst.AgentId).Enabled && !orderedIds.Contains(inst.AgentId, StringComparer.OrdinalIgnoreCase))
-            {
-                orderedIds.Add(inst.AgentId);
-            }
+            HostOptions = hostOptions;
         }
-        foreach (var def in catalog.Definitions)
+        else
         {
-            if (agentSettings.ProfileOf(def.Id).Enabled && !orderedIds.Contains(def.Id, StringComparer.OrdinalIgnoreCase))
-            {
-                orderedIds.Add(def.Id);
-            }
+            HostOptions = [new SelectOption("local", AppLangResources.Get(AppLangResourceKind.NewProjectLocalMachine))];
         }
-        if (orderedIds.Count == 0 && catalog.Definitions.Count > 0)
-        {
-            orderedIds.Add(catalog.Definitions[0].Id);
-        }
+        SelectedHostKey = !string.IsNullOrWhiteSpace(initialHostKey)
+            && HostOptions.Any(h => string.Equals(h.Value?.ToString(), initialHostKey, StringComparison.Ordinal))
+                ? initialHostKey
+                : HostOptions[0].Value?.ToString() ?? "local";
 
-        SelectedAgentId = !string.IsNullOrWhiteSpace(agentSettings.DefaultAgentId)
-            && orderedIds.Contains(agentSettings.DefaultAgentId, StringComparer.OrdinalIgnoreCase)
-                ? agentSettings.DefaultAgentId
-                : orderedIds.FirstOrDefault() ?? "claude";
-
-        foreach (var id in orderedIds.Take(6))
-        {
-            var def = catalog.Find(id);
-            var displayName = def?.Name ?? id;
-            Agents.Add(new BotAgentOptionViewModel(id, displayName, AgentAccent(id), string.Equals(id, SelectedAgentId, StringComparison.OrdinalIgnoreCase), SelectAgent));
-        }
+        RebuildAgentOptions();
+        _initialized = true;
 
         foreach (var tpl in BotCatalog.Templates)
         {
@@ -117,8 +114,14 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
     }
 
     public ObservableCollection<BotColorOptionViewModel> Colors { get; } = [];
-    public ObservableCollection<BotAgentOptionViewModel> Agents { get; } = [];
     public ObservableCollection<BotTemplateOptionViewModel> Templates { get; } = [];
+    public IReadOnlyList<SelectOption> HostOptions { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAgents))]
+    public partial IReadOnlyList<SelectOption> AgentOptions { get; private set; } = [];
+
+    public bool HasAgents => AgentOptions.Count > 0;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvatarInitial))]
@@ -128,8 +131,99 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(AvatarBrush))]
     public partial string SelectedColor { get; set; } = "#5b5bd6";
 
-    [ObservableProperty] public partial string SelectedAgentId { get; set; } = "claude";
+    /// <summary>Thumbnail file name in the project icon store; null when the avatar uses the color + initial.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AvatarImage), nameof(HasAvatarImage))]
+    public partial string? SelectedImage { get; set; }
+
+    public Bitmap? AvatarImage => _icons?.Load(SelectedImage);
+    public bool HasAvatarImage => AvatarImage is not null;
+    public bool CanPickImage => _pickers is not null && _icons is not null;
+
+    [ObservableProperty] public partial string SelectedHostKey { get; set; } = "local";
+    [ObservableProperty] public partial string SelectedAgentId { get; set; } = "";
     [ObservableProperty] public partial string Soul { get; set; } = "";
+
+    partial void OnSelectedHostKeyChanged(string value)
+    {
+        if (_initialized)
+        {
+            RebuildAgentOptions();
+        }
+    }
+
+    private void RebuildAgentOptions()
+    {
+        var options = new List<SelectOption>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? preferredDefault = null;
+
+        if (SelectedHostKey.StartsWith("remote:", StringComparison.Ordinal) && _remoteHosts is not null)
+        {
+            var peerId = SelectedHostKey["remote:".Length..];
+            foreach (var agent in _remoteHosts.AgentsOf(peerId))
+            {
+                if (!seen.Add(agent.Id))
+                {
+                    continue;
+                }
+                options.Add(new SelectOption(agent.Id, agent.Name));
+                if (agent.IsDefault && preferredDefault is null)
+                {
+                    preferredDefault = agent.Id;
+                }
+            }
+        }
+
+        if (options.Count == 0)
+        {
+            var agentSettings = _settings.Current.Agents;
+            preferredDefault = agentSettings.DefaultAgentId;
+            foreach (var inst in _scanner.Current.Installations)
+            {
+                if (_catalog.Find(inst.AgentId) is { } def
+                    && agentSettings.ProfileOf(def.Id).Enabled
+                    && seen.Add(def.Id))
+                {
+                    options.Add(new SelectOption(def.Id, def.Name));
+                }
+            }
+
+            // SSH hosts are not scanned locally, so fall back to enabled catalog agents for them.
+            if (SelectedHostKey.StartsWith("ssh:", StringComparison.Ordinal))
+            {
+                foreach (var def in _catalog.Definitions)
+                {
+                    if (agentSettings.ProfileOf(def.Id).Enabled && seen.Add(def.Id))
+                    {
+                        options.Add(new SelectOption(def.Id, def.Name));
+                    }
+                }
+            }
+        }
+
+        AgentOptions = options;
+        SelectedAgentId = PickSelectedAgentId(options, SelectedAgentId, preferredDefault);
+    }
+
+    private static string PickSelectedAgentId(IReadOnlyList<SelectOption> options, string? currentId, string? preferredDefault)
+    {
+        if (options.Count == 0)
+        {
+            return "";
+        }
+        if (!string.IsNullOrWhiteSpace(currentId)
+            && options.FirstOrDefault(o => string.Equals(o.Value?.ToString(), currentId, StringComparison.OrdinalIgnoreCase)) is { Value: not null } existing)
+        {
+            return existing.Value.ToString()!;
+        }
+        if (!string.IsNullOrWhiteSpace(preferredDefault)
+            && options.FirstOrDefault(o => string.Equals(o.Value?.ToString(), preferredDefault, StringComparison.OrdinalIgnoreCase)) is { Value: not null } preferred)
+        {
+            return preferred.Value.ToString()!;
+        }
+        return options[0].Value?.ToString() ?? "";
+    }
 
     public IBrush AvatarBrush => SolidColorBrush.Parse(SelectedColor);
 
@@ -149,18 +243,42 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
         SelectedAgentId,
         SelectedColor,
         _selectedTemplate.Id,
-        string.IsNullOrWhiteSpace(Soul) ? null : Soul.Trim());
+        string.IsNullOrWhiteSpace(Soul) ? null : Soul.Trim(),
+        SelectedHostKey,
+        HasAvatarImage ? SelectedImage : null);
+
+    [RelayCommand]
+    private async Task PickImageAsync()
+    {
+        if (_pickers is null || _icons is null) return;
+        var path = await _pickers.PickImageAsync();
+        if (string.IsNullOrWhiteSpace(path)) return;
+        var fileName = await _icons.ImportAsync("bot-" + _draftId, path);
+        if (string.IsNullOrWhiteSpace(fileName)) return;
+        _createdImages.Add(fileName);
+        SelectedImage = fileName;
+    }
+
+    [RelayCommand]
+    private void ClearImage() => SelectedImage = null;
+
+    /// <summary>Deletes thumbnails imported while the dialog was open, except the one the new Bot keeps.</summary>
+    public void DiscardUnusedImages(string? keptImage)
+    {
+        if (_icons is null) return;
+        foreach (var file in _createdImages)
+        {
+            if (!string.Equals(file, keptImage, StringComparison.Ordinal))
+            {
+                _icons.Delete(file);
+            }
+        }
+    }
 
     private void SelectColor(string hex)
     {
         SelectedColor = hex;
         foreach (var c in Colors) c.IsSelected = string.Equals(c.Hex, hex, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private void SelectAgent(string id)
-    {
-        SelectedAgentId = id;
-        foreach (var a in Agents) a.IsSelected = string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase);
     }
 
     private void SelectTemplate(BotTemplateDefinition next)

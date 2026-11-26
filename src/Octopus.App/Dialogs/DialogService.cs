@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Threading;
@@ -560,7 +561,22 @@ public sealed class DialogService(
             var catalog = Composition.AppHost.Get<Octopus.Agents.IAgentCatalog>();
             var scanner = Composition.AppHost.Get<Octopus.Agents.IAgentScanner>();
             var settings = Composition.AppHost.Get<Octopus.Storage.ISettingsStore>();
-            var model = new Octopus.App.Bots.NewBotDialogViewModel(catalog, scanner, settings, initialTemplateId);
+            var hostOptions = new List<SelectOption>
+            {
+                new("local", AppLangResources.Get(AppLangResourceKind.NewProjectLocalMachine)),
+            };
+            var remoteRuntime = Composition.AppHost.Get<RemoteClientRuntime>();
+            foreach (var peer in remoteRuntime.Hosts.Peers)
+            {
+                hostOptions.Add(new SelectOption("remote:" + peer.Id, peer.Name));
+            }
+            sshHosts.Refresh();
+            foreach (var ssh in sshHosts.Current.Hosts)
+            {
+                hostOptions.Add(new SelectOption("ssh:" + ssh.Alias, ssh.Alias));
+            }
+            var initialHost = projects?.ActiveDeviceKey ?? "local";
+            var model = new Octopus.App.Bots.NewBotDialogViewModel(catalog, scanner, settings, initialTemplateId, hostOptions, initialHost, remoteRuntime, pickers, icons);
             var view = new Octopus.App.Bots.NewBotDialogView(model);
             var dialog = new Dialog
             {
@@ -574,8 +590,11 @@ public sealed class DialogService(
                     new DialogAction(AppLangResources.Get(AppLangResourceKind.BotDialogCreate), true, ButtonVariant.Primary),
                 ]),
             };
+            dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthMD)] = 520.0;
             var result = await dialog.ShowAsync(windows.Window);
-            return result is true ? model.BuildRequest() : null;
+            var request = result is true ? model.BuildRequest() : null;
+            model.DiscardUnusedImages(request?.Image);
+            return request;
         });
 
     public Task ShowConnectorCatalogAsync(Octopus.Core.Bots.BotDefinition bot, Octopus.App.Bots.IBotService bots) =>
@@ -600,6 +619,130 @@ public sealed class DialogService(
             };
             dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthLG)] = 740.0;
             await dialog.ShowAsync(windows.Window);
+        });
+
+    public Task<Octopus.App.Bots.BotAvatarChoice?> AskBotAvatarAsync(Octopus.Core.Bots.BotDefinition bot) =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return null;
+            }
+            var model = new Octopus.App.Bots.BotAvatarPickerViewModel(bot, pickers, icons);
+            var view = new Octopus.App.Bots.BotAvatarPickerView(model);
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Medium,
+                Title = AppLangResources.Get(AppLangResourceKind.BotAvatarPickerTitle),
+                Description = "",
+                Content = view,
+                Actions = Dialog.BuildActions(
+                [
+                    new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
+                    new DialogAction(AppLangResources.Get(AppLangResourceKind.Save), true, ButtonVariant.Primary),
+                ]),
+            };
+            dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthMD)] = 460.0;
+            var result = await dialog.ShowAsync(windows.Window);
+            var choice = result is true ? model.Choice : null;
+            model.DiscardUnused(choice?.Image);
+            return choice;
+        });
+
+    public Task ShowBotShareAsync(Octopus.Core.Bots.BotDefinition bot, Octopus.App.Bots.IBotService bots) =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return;
+            }
+            var model = new Octopus.App.Bots.BotShareDialogViewModel(bot, bots, icons);
+            var view = new Octopus.App.Bots.BotShareDialogView(model);
+            var cancelBtn = new TKCode.Arc.Button
+            {
+                Content = AppLangResources.Get(AppLangResourceKind.Cancel),
+                Variant = ButtonVariant.Secondary,
+                Size = ControlSize.Small,
+            };
+            var copyBundleBtn = new TKCode.Arc.Button
+            {
+                Content = AppLangResources.Get(AppLangResourceKind.BotShareCopyConfig),
+                Variant = ButtonVariant.Secondary,
+                Size = ControlSize.Small,
+            };
+            var copyLinkBtn = new TKCode.Arc.Button
+            {
+                Content = AppLangResources.Get(AppLangResourceKind.BotShareCopyLink),
+                Variant = ButtonVariant.Primary,
+                Size = ControlSize.Small,
+            };
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Spacing = 8,
+            };
+            actions.Children.Add(cancelBtn);
+            actions.Children.Add(copyBundleBtn);
+            actions.Children.Add(copyLinkBtn);
+
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Medium,
+                Title = AppLangResources.Get(AppLangResourceKind.BotSettingsShare),
+                Description = "",
+                Content = view,
+                Actions = actions,
+            };
+            dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthMD)] = 480.0;
+
+            cancelBtn.Click += (_, _) => dialog.Close(false);
+            copyBundleBtn.Click += async (_, _) =>
+            {
+                var bundle = model.BuildShareBundle();
+                if (TopLevel.GetTopLevel(windows.Window)?.Clipboard is { } clipboard)
+                {
+                    await clipboard.SetTextAsync(bundle);
+                }
+                model.MarkCopied();
+                copyBundleBtn.Content = AppLangResources.Get(AppLangResourceKind.BotShareCopied);
+            };
+            copyLinkBtn.Click += async (_, _) =>
+            {
+                var link = model.BuildShareLink();
+                if (TopLevel.GetTopLevel(windows.Window)?.Clipboard is { } clipboard)
+                {
+                    await clipboard.SetTextAsync(link);
+                }
+                model.MarkCopied();
+                copyLinkBtn.Content = AppLangResources.Get(AppLangResourceKind.BotShareCopyLinkCopied);
+            };
+            await dialog.ShowAsync(windows.Window);
+        });
+
+    public Task<bool> ConfirmBotImportAsync(Octopus.Core.Bots.BotSharePayload payload) =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return false;
+            }
+            var model = new Octopus.App.Bots.BotImportDialogViewModel(payload);
+            var view = new Octopus.App.Bots.BotImportDialogView(model);
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Medium,
+                Title = AppLangResources.Get(AppLangResourceKind.BotImportTitle),
+                Description = "",
+                Content = view,
+                Actions = Dialog.BuildActions(
+                [
+                    new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
+                    new DialogAction(AppLangResources.Get(AppLangResourceKind.BotImportConfirm), true, ButtonVariant.Primary),
+                ]),
+            };
+            dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthMD)] = 460.0;
+            return await dialog.ShowAsync(windows.Window) is true;
         });
 
     private static Task<T> OnUiAsync<T>(Func<Task<T>> action) =>

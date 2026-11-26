@@ -8,6 +8,7 @@ internal static class BotsModule
     public static void Register(IServiceCollection services)
     {
         services.AddSingleton<BotHomeManager>();
+        services.AddSingleton<BotConnectorRuntime>();
         services.AddSingleton<IBotService, BotService>();
         services.AddSingleton<BotPanelViewModel>();
         services.AddSingleton<BotRightPanelViewModel>();

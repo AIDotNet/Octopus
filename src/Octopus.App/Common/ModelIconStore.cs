@@ -66,10 +66,12 @@ internal sealed partial class ModelIconStore
         return _graphics.GetOrAdd(key, ParseGraphic);
     }
 
-    private ModelIconGraphic? ParseGraphic(string id)
+    private ModelIconGraphic? ParseGraphic(string id) =>
+        _rawIcons.TryGetValue(id, out var raw) ? ParseRawGraphic(raw) : null;
+
+    internal static ModelIconGraphic? ParseRawGraphic(RawIcon raw)
     {
-        if (!_rawIcons.TryGetValue(id, out var raw)
-            || raw.ViewBox is not { Length: 4 } vb
+        if (raw.ViewBox is not { Length: 4 } vb
             || vb[2] <= 0 || vb[3] <= 0
             || raw.Paths is not { Count: > 0 })
         {

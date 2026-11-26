@@ -94,6 +94,8 @@
         <AvaloniaResource Include="Assets/FileIcons/file-icons.json" />
         <!-- AI model and provider brand icons from @lobehub/icons (see Assets/ModelIcons/README.md). -->
         <AvaloniaResource Include="Assets/ModelIcons/model-icons.json" />
+        <!-- Bot connector product brand icons (see Assets/ConnectorIcons/README.md). -->
+        <AvaloniaResource Include="Assets/ConnectorIcons/connector-icons.json" />
         <!-- The window icon and the in-app logo (octopus.ico / .icns are for the exe and an .app bundle, not loaded at run time). -->
         <AvaloniaResource Include="Assets/Icon/*.png" />
     </ItemGroup>

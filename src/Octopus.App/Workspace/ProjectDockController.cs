@@ -25,6 +25,8 @@ public sealed class ProjectDockController : IDisposable
     private readonly HashSet<string> _approvedClose = [];
     /// <summary>The panes of diff tabs: they have no project item, so syncing with the items must leave them alone.</summary>
     private readonly HashSet<string> _diffKeys = [];
+    /// <summary>The items whose tab was closed while they keep running (<see cref="ProjectItem.TabClosed"/>): no pane.</summary>
+    private readonly HashSet<string> _hidden = [];
     private bool _syncing;
     private readonly Activity.IItemActivityService? _activity;
     /// <summary>
@@ -65,12 +67,17 @@ public sealed class ProjectDockController : IDisposable
             FloatingMode = DockFloatingMode.Disabled,
             EmptyDocumentContent = emptyContent,
             Workspace = new DockWorkspace { Root = new DockDocumentArea() },
-            PaneResolver = id => _project.Items.FirstOrDefault(i => i.Id == id) is { } item ? PaneOf(item) : null,
+            PaneResolver = id => _project.Items.FirstOrDefault(i => i.Id == id) is { TabClosed: false } item ? PaneOf(item) : null,
         };
 
         _loading = true;
         foreach (var item in project.Items)
         {
+            if (item.TabClosed)
+            {
+                _hidden.Add(item.Id);
+                continue;
+            }
             PaneOf(item);
         }
         if (project.DockLayout is { Length: > 0 } json)
@@ -234,7 +241,12 @@ public sealed class ProjectDockController : IDisposable
             CleanupPane(id, pane);
             _ = _registry.ReleaseAsync(id);
         }
+        foreach (var id in _hidden)
+        {
+            _ = _registry.ReleaseAsync(id);
+        }
         _panes.Clear();
+        _hidden.Clear();
         _paneCleanups.Clear();
     }
 
@@ -411,11 +423,22 @@ public sealed class ProjectDockController : IDisposable
         Dispatcher.UIThread.Post(() => _registry.Find(pane.Id)?.FocusContent(), DispatcherPriority.Input);
     }
 
-    /// <summary>A tab with a running program asks first: the close is cancelled, confirmed, then done again.</summary>
+    /// <summary>
+    /// A terminal or agent tab only hides: its item keeps running and keeps its sidebar row, where a click opens the tab
+    /// again. Ending it is the sidebar row's Close.
+    /// </summary>
+    private bool HidesOnClose(string paneId) =>
+        !_diffKeys.Contains(paneId)
+        && _project.Items.FirstOrDefault(i => i.Id == paneId) is { Kind: ProjectItemKind.Agent or ProjectItemKind.Terminal };
+
+    /// <summary>
+    /// A tab with a running program or unsaved edits asks first: the close is cancelled, confirmed, then done again. A
+    /// tab that only hides has nothing to ask.
+    /// </summary>
     private void OnPaneClosing(object? sender, DockPaneClosingEventArgs e)
     {
         var pane = e.Pane!;
-        if (_syncing || _approvedClose.Remove(pane.Id))
+        if (_syncing || _approvedClose.Remove(pane.Id) || HidesOnClose(pane.Id))
         {
             return;
         }
@@ -442,19 +465,38 @@ public sealed class ProjectDockController : IDisposable
         {
             return;
         }
+        if (_syncing)
+        {
+            // A close this controller made itself (SyncItems), which also deals with the content.
+            return;
+        }
         _panes.Remove(pane.Id);
         CleanupPane(pane.Id, pane);
+        if (HidesOnClose(pane.Id))
+        {
+            _registry.Detach(pane.Id);
+            _hidden.Add(pane.Id);
+            _syncing = true;
+            try
+            {
+                _projects.CloseItemTab(pane.Id);
+                // The dock put another tab in front; the project follows it.
+                if (Layout.ActivePane is { } front && front.Id != _project.ActiveItemId)
+                {
+                    _projects.ActivateItem(front.Id);
+                }
+            }
+            finally { _syncing = false; }
+            return;
+        }
         _ = _registry.ReleaseAsync(pane.Id);
         if (_diffKeys.Remove(pane.Id))
         {
             return;
         }
-        if (!_syncing)
-        {
-            _syncing = true;
-            try { _projects.RemoveItem(pane.Id); }
-            finally { _syncing = false; }
-        }
+        _syncing = true;
+        try { _projects.RemoveItem(pane.Id); }
+        finally { _syncing = false; }
     }
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
@@ -491,7 +533,7 @@ public sealed class ProjectDockController : IDisposable
     /// <param name="changed">The item the change was about, when it was one item.</param>
     private void SyncItems(ProjectItem? changed = null)
     {
-        foreach (var gone in _panes.Keys.Where(id => !_diffKeys.Contains(id) && _project.Items.All(i => i.Id != id)).ToList())
+        foreach (var gone in _panes.Keys.Where(id => !_diffKeys.Contains(id) && _project.Items.All(i => i.Id != id || i.TabClosed)).ToList())
         {
             var pane = _panes[gone];
             _syncing = true;
@@ -500,11 +542,27 @@ public sealed class ProjectDockController : IDisposable
             if (_panes.Remove(gone))
             {
                 CleanupPane(gone, pane);
-                _ = _registry.ReleaseAsync(gone);
+                if (_project.Items.Any(i => i.Id == gone))
+                {
+                    // Only its tab was closed: it keeps running without one.
+                    _registry.Detach(gone);
+                    _hidden.Add(gone);
+                }
+                else
+                {
+                    _ = _registry.ReleaseAsync(gone);
+                }
             }
         }
-        foreach (var item in _project.Items.Where(i => !_panes.ContainsKey(i.Id)).ToList())
+        // An item removed while its tab was closed: nothing in the dock showed it, but it still ran.
+        foreach (var gone in _hidden.Where(id => _project.Items.All(i => i.Id != id)).ToList())
         {
+            _hidden.Remove(gone);
+            _ = _registry.ReleaseAsync(gone);
+        }
+        foreach (var item in _project.Items.Where(i => !i.TabClosed && !_panes.ContainsKey(i.Id)).ToList())
+        {
+            _hidden.Remove(item.Id);
             // An item added without being made the active one (IProjectService.AddItem, activate: false): its tab opens,
             // and the tab that was in front stays there. The dock has no way to open a tab behind, so the front one is
             // activated again in the same step, without telling the project service about either change.

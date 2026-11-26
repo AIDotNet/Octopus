@@ -75,6 +75,7 @@ public sealed partial class RemoteHost : ObservableObject
     /// <summary>The system it runs ("macOS", "Windows"…), when the account's list says.</summary>
     public string? Platform { get; set; }
     public ObservableCollection<RemoteProject> Projects { get; } = [];
+    public ObservableCollection<RemoteBot> Bots { get; } = [];
     public IReadOnlyList<AgentOption> Agents { get; set; } = [];
 
     public bool IsOnline => Link != HostLink.Offline;

@@ -49,10 +49,29 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
     public EmptyStateViewModel EmptyState { get; }
 
     /// <summary>The dock layout of the current project or bot; null while there is none.</summary>
-    [ObservableProperty] public partial object? CurrentLayout { get; private set; }
-    [ObservableProperty] public partial bool HasProject { get; private set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
+    public partial object? CurrentLayout { get; private set; }
 
-    private bool IsBotMode => _bots?.IsBotMode == true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
+    public partial bool HasProject { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
+    public partial bool IsBotMode { get; private set; }
+
+    public bool ShowNoProjectEmpty => !HasProject && !IsBotMode;
+    public bool ShowNoBotEmpty => !HasProject && IsBotMode;
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private async Task NewBotAsync()
+    {
+        if (_bots is null) return;
+        var dialogs = Composition.AppHost.Get<IDialogService>();
+        var request = await dialogs.AskNewBotAsync();
+        if (request is not null) _bots.CreateBot(request);
+    }
 
     private ProjectDockController? CurrentController =>
         !IsBotMode && _projects.Current is { } project && _controllers.TryGetValue(project.Id, out var controller) ? controller : null;
@@ -103,6 +122,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
                 botController!.Dispose();
             }
         }
+
+        IsBotMode = _bots?.IsBotMode == true;
 
         if (IsBotMode && _bots is not null)
         {

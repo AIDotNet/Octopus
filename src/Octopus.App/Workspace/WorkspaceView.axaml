@@ -1,14 +1,38 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:vm="using:Octopus.App.Workspace"
              x:Class="Octopus.App.Workspace.WorkspaceView"
              x:DataType="vm:WorkspaceViewModel">
     <Grid Background="{arc:ArcDesignTokenResource Background}">
         <ContentControl Content="{Binding CurrentLayout}" IsVisible="{Binding HasProject}"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
-        <Panel IsVisible="{Binding !HasProject}">
+        <Panel IsVisible="{Binding ShowNoProjectEmpty}">
             <vm:NoProjectView DataContext="{Binding EmptyState}" />
         </Panel>
+        <!-- Dedicated Bot empty workspace (independent of Projects) -->
+        <StackPanel IsVisible="{Binding ShowNoBotEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Margin="24" MaxWidth="360" Spacing="10">
+            <Border Width="56" Height="56" CornerRadius="16" HorizontalAlignment="Center"
+                    Background="{arc:ArcDesignTokenResource AccentSubtle}">
+                <lucide:LucideIcon Kind="Bot" Size="28" Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <TextBlock Classes="body" Margin="0,6,0,0" HorizontalAlignment="Center"
+                       FontSize="{arc:ArcDesignTokenResource TypeLG}" FontWeight="SemiBold"
+                       Text="{l:AppLangResource BotEmptyTitle}" />
+            <TextBlock FontSize="{arc:ArcDesignTokenResource TypeSM}" TextWrapping="Wrap"
+                       TextAlignment="Center" Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                       Text="{l:AppLangResource BotEmptyDescription}" />
+            <arc:Button Margin="0,12,0,0" HorizontalAlignment="Center" Variant="Primary"
+                        Command="{Binding NewBotCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <lucide:LucideIcon Kind="Plus" Size="14" VerticalAlignment="Center" />
+                    <TextBlock Text="{l:AppLangResource BotNewButton}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                </StackPanel>
+            </arc:Button>
+        </StackPanel>
     </Grid>
 </UserControl>

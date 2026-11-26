@@ -1,0 +1,400 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Bots"
+           x:Class="Octopus.Mobile.Bots.BotDetailPage"
+           x:DataType="vm:BotDetailViewModel"
+           IsScrollable="True">
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{Binding BotName}"
+                     ShowBack="True"
+                     BackText="{l:MobileLangResource TabBots}"
+                     BackCommand="{Binding BackCommand}">
+            <arcm:Navbar.Trailing>
+                <arcm:IconButton Name="BotDetailNewChatButton"
+                                 Icon="{x:Static arc:ArcIcons.Plus}"
+                                 Command="{Binding OpenNewChatCommand}"
+                                 AutomationProperties.Name="{l:MobileLangResource BotsNewChatTitle}" />
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
+    </arcm:Page.Header>
+
+    <StackPanel Margin="0,8,0,28" Spacing="14">
+        <!-- Inline error banner -->
+        <Border Margin="16,0" Padding="12,8" CornerRadius="10"
+                Background="{arc:ArcDesignTokenResource DangerSubtle}"
+                IsVisible="{Binding HasError}">
+            <TextBlock Text="{Binding ErrorMessage}"
+                       Foreground="{arc:ArcDesignTokenResource Danger}"
+                       TextWrapping="Wrap"
+                       FontSize="{arc:ArcDesignTokenResource TypeSM}" />
+        </Border>
+
+        <!-- 4-way Segmented: 会话 | 主页 | 连接器 | 设置 -->
+        <arcm:Segmented Name="BotDetailTabs"
+                        Margin="16,0"
+                        ItemsSource="{Binding TabLabels}"
+                        SelectedIndex="{Binding SelectedTab, Mode=TwoWay}" />
+
+        <Panel>
+            <!-- ==================== Tab 0: 会话管理 (Active & Closed History) ==================== -->
+            <StackPanel Name="BotSessionsTab" Spacing="12" IsVisible="{Binding IsSessionsTab}">
+                <!-- Search + "+ New chat" -->
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="16,0">
+                    <arcm:TextField Name="BotChatSearchField"
+                                    Classes="hostSearch"
+                                    Grid.Column="0"
+                                    Text="{Binding ChatSearchQuery, Mode=TwoWay}"
+                                    PlaceholderText="{l:MobileLangResource BotsSessionsSearchPlaceholder}" />
+                    <arcm:Button Name="BotNewChatInlineButton"
+                                 Grid.Column="1"
+                                 Variant="Filled"
+                                 Content="{l:MobileLangResource BotsNewChatShort}"
+                                 Command="{Binding OpenNewChatCommand}" />
+                </Grid>
+
+                <!-- Filter chips: All / Active / Closed -->
+                <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="16,0">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Name="ChatFilterAllChip" Classes="chipBtn" Classes.active="{Binding IsChatFilterAll}"
+                                Command="{Binding SelectChatFilterAllCommand}">
+                            <TextBlock Text="{Binding FilterAllText}" />
+                        </Button>
+                        <Button Name="ChatFilterActiveChip" Classes="chipBtn" Classes.active="{Binding IsChatFilterActive}"
+                                Command="{Binding SelectChatFilterActiveCommand}">
+                            <TextBlock Text="{Binding FilterActiveText}" />
+                        </Button>
+                        <Button Name="ChatFilterClosedChip" Classes="chipBtn" Classes.active="{Binding IsChatFilterClosed}"
+                                Command="{Binding SelectChatFilterClosedCommand}">
+                            <TextBlock Text="{Binding FilterClosedText}" />
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Active chats group -->
+                <arcm:ListGroup Name="ActiveBotChatsGroup"
+                                Header="{Binding ActiveChatsHeader}"
+                                ItemsSource="{Binding ActiveChats}"
+                                IsVisible="{Binding HasActiveChats}">
+                    <arcm:ListGroup.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BotChatItemViewModel">
+                            <arcm:ListItem Command="{Binding OpenCommand}">
+                                <arcm:ListItem.Trailing>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <Border Classes="pill compact"
+                                                Classes.waiting="{Binding IsWaiting}"
+                                                Classes.working="{Binding IsWorking}"
+                                                IsVisible="{Binding HasStatus}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <arc:ArcSpinner IsVisible="{Binding IsWorking}" />
+                                                <TextBlock Text="{Binding StatusText}" />
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Classes="muted" Text="{Binding TimeText}" VerticalAlignment="Center" />
+                                        <Button Classes="inlineLinkBtn" Command="{Binding OpenMenuCommand}" Padding="4,2">
+                                            <TextBlock Text="···" FontWeight="Bold" />
+                                        </Button>
+                                    </StackPanel>
+                                </arcm:ListItem.Trailing>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,3">
+                                    <Border Grid.Column="0" Classes="badge" Background="{Binding AgentTint}">
+                                        <TextBlock Text="{Binding AgentInitial}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Classes="sessionTitle" Text="{Binding Title}" VerticalAlignment="Center" />
+                                            <Border Classes="guiTag" IsVisible="{Binding IsHome}">
+                                                <TextBlock Text="{l:MobileLangResource BotsHomeChatTag}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Classes="secondary" Text="{Binding Subtitle}" />
+                                    </StackPanel>
+                                </Grid>
+                            </arcm:ListItem>
+                        </DataTemplate>
+                    </arcm:ListGroup.ItemTemplate>
+                </arcm:ListGroup>
+
+                <!-- Closed chat history group -->
+                <arcm:ListGroup Name="ClosedBotChatsGroup"
+                                Header="{Binding ClosedChatsHeader}"
+                                ItemsSource="{Binding ClosedChats}"
+                                IsVisible="{Binding HasClosedChats}">
+                    <arcm:ListGroup.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BotChatItemViewModel">
+                            <arcm:ListItem Command="{Binding ReopenCommand}">
+                                <arcm:ListItem.Trailing>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <Button Classes="botOptionBtn" Command="{Binding ReopenCommand}">
+                                            <TextBlock Text="{l:MobileLangResource BotsSessionsReopen}" />
+                                        </Button>
+                                        <Button Classes="inlineLinkBtn" Command="{Binding OpenMenuCommand}" Padding="4,2">
+                                            <TextBlock Text="···" FontWeight="Bold" />
+                                        </Button>
+                                    </StackPanel>
+                                </arcm:ListItem.Trailing>
+                                <Border Classes="botChatRowClosed">
+                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,3">
+                                        <Border Grid.Column="0" Classes="badge" Background="{Binding AgentTint}">
+                                            <TextBlock Text="{Binding AgentInitial}" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Classes="sessionTitle" Text="{Binding Title}" />
+                                            <TextBlock Classes="secondary" Text="{Binding Subtitle}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </arcm:ListItem>
+                        </DataTemplate>
+                    </arcm:ListGroup.ItemTemplate>
+                </arcm:ListGroup>
+
+                <Border Classes="emptyCard" Margin="16,0" IsVisible="{Binding IsChatsEmpty}">
+                    <TextBlock Classes="muted" Text="{l:MobileLangResource BotsSessionsEmpty}" TextAlignment="Center" />
+                </Border>
+            </StackPanel>
+
+            <!-- ==================== Tab 1: 主页 (Work Items, Soul, Files) ==================== -->
+            <StackPanel Name="BotHomeTab" Spacing="14" IsVisible="{Binding IsHomeTab}">
+                <Border Classes="surfaceCard" Margin="16,0">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                        <Border Classes="badge large" Background="{Binding BotAvatarBrush}">
+                            <TextBlock Text="{Binding BotInitial}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Classes="detailTitle" Text="{Binding BotName}" />
+                            <TextBlock Classes="secondary" Text="{Binding BotSubtitle}" />
+                        </StackPanel>
+                        <arcm:Switch Grid.Column="2" IsChecked="{Binding IsBotEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <!-- Work items with 1-tap options -->
+                <StackPanel Spacing="8" Margin="16,0">
+                    <TextBlock Classes="sectionHeader" Text="{l:MobileLangResource BotsHomeWorkItemsHeader}" />
+                    <ItemsControl ItemsSource="{Binding WorkItems}" IsVisible="{Binding HasWorkItems}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BotWorkItemRowViewModel">
+                                <Border Classes="surfaceCard" Padding="12,10">
+                                    <StackPanel Spacing="7">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                                            <TextBlock Classes="muted" Text="{Binding NumberText}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Classes="sessionTitle" Text="{Binding Title}" VerticalAlignment="Center" />
+                                            <Border Grid.Column="2" Classes="pill compact"
+                                                    Classes.waiting="{Binding IsNeedsYou}"
+                                                    Classes.working="{Binding IsWorking}">
+                                                <TextBlock Text="{Binding StatusText}" />
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Classes="secondary" Text="{Binding Question}" TextWrapping="Wrap" IsVisible="{Binding HasQuestion}" />
+                                        <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding IsNeedsYou}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:BotWorkItemOptionViewModel">
+                                                    <Button Classes="botOptionBtn" Command="{Binding ChooseCommand}">
+                                                        <TextBlock Text="{Binding Label}" />
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Border Classes="emptyCard" IsVisible="{Binding HasNoWorkItems}">
+                        <TextBlock Classes="muted" Text="{l:MobileLangResource BotsHomeWorkItemsEmpty}" TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+
+                <!-- SOUL.md summary -->
+                <StackPanel Spacing="6" Margin="16,0" IsVisible="{Binding HasSoul}">
+                    <TextBlock Classes="sectionHeader" Text="{l:MobileLangResource BotsHomeSoulHeader}" />
+                    <Border Classes="surfaceCard" Padding="12,10">
+                        <TextBlock Classes="secondary" Text="{Binding SoulSummary}" TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+
+                <!-- Browse Bot home directory files -->
+                <arcm:ListGroup>
+                    <arcm:ListItem Icon="{x:Static arc:ArcIcons.Folder}"
+                                   Content="{l:MobileLangResource BotsHomeBrowseFiles}"
+                                   ShowChevron="True"
+                                   Command="{Binding BrowseFilesCommand}" />
+                </arcm:ListGroup>
+            </StackPanel>
+
+            <!-- ==================== Tab 2: 连接器 (Remote MCP) ==================== -->
+            <StackPanel Name="BotConnectorsTab" Spacing="12" IsVisible="{Binding IsConnectorsTab}">
+                <arcm:ListGroup Header="{l:MobileLangResource BotsConnectorsHeader}"
+                                Footer="{l:MobileLangResource BotsConnectorsHint}"
+                                ItemsSource="{Binding Connectors}"
+                                IsVisible="{Binding HasConnectors}">
+                    <arcm:ListGroup.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BotConnectorRowViewModel">
+                            <arcm:ListItem>
+                                <arcm:ListItem.Trailing>
+                                    <arcm:Switch IsChecked="{Binding IsEnabled, Mode=TwoWay}" />
+                                </arcm:ListItem.Trailing>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,3">
+                                    <Border Grid.Column="0" Classes="badge" Background="{Binding BadgeBrush}">
+                                        <TextBlock Text="{Binding BadgeText}" FontSize="11" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Classes="sessionTitle" Text="{Binding Name}" VerticalAlignment="Center" />
+                                            <Border Classes="guiTag">
+                                                <TextBlock Text="{Binding TransportBadge}" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Classes="preview" Text="{Binding Url}" />
+                                    </StackPanel>
+                                </Grid>
+                            </arcm:ListItem>
+                        </DataTemplate>
+                    </arcm:ListGroup.ItemTemplate>
+                </arcm:ListGroup>
+
+                <Border Classes="emptyCard" Margin="16,0" IsVisible="{Binding HasNoConnectors}">
+                    <TextBlock Classes="muted" Text="{l:MobileLangResource BotsConnectorsEmpty}" TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+
+            <!-- ==================== Tab 3: 设置 ==================== -->
+            <StackPanel Name="BotSettingsTab" Spacing="16" IsVisible="{Binding IsSettingsTab}">
+                <arcm:ListGroup>
+                    <arcm:ListItem Icon="{x:Static arc:ArcIcons.Sparkles}" Content="{l:MobileLangResource BotsSettingsAgent}">
+                        <arcm:ListItem.Trailing>
+                            <TextBlock Classes="secondary" Text="{Binding AgentName}" VerticalAlignment="Center" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Icon="{x:Static arc:ArcIcons.Monitor}" Content="{l:MobileLangResource BotsSettingsHost}">
+                        <arcm:ListItem.Trailing>
+                            <TextBlock Classes="secondary" Text="{Binding HostName}" VerticalAlignment="Center" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Content="{l:MobileLangResource BotsSettingsEnabled}">
+                        <arcm:ListItem.Trailing>
+                            <arcm:Switch IsChecked="{Binding IsBotEnabled, Mode=TwoWay}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                </arcm:ListGroup>
+
+                <arcm:ListGroup>
+                    <arcm:ListItem Content="{l:MobileLangResource BotsSettingsLookAround}">
+                        <arcm:ListItem.Trailing>
+                            <arcm:Switch IsChecked="{Binding LookAroundEnabled, Mode=TwoWay}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Content="{l:MobileLangResource BotsSettingsTidyMemory}">
+                        <arcm:ListItem.Trailing>
+                            <arcm:Switch IsChecked="{Binding TidyUpMemoryEnabled, Mode=TwoWay}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                </arcm:ListGroup>
+
+                <arcm:ListGroup>
+                    <arcm:ListItem Icon="{x:Static arc:ArcIcons.Folder}"
+                                   Content="{l:MobileLangResource BotsHomeBrowseFiles}"
+                                   ShowChevron="True"
+                                   Command="{Binding BrowseFilesCommand}" />
+                    <arcm:ListItem Icon="{x:Static arc:ArcIcons.ExternalLink}"
+                                   Content="{l:MobileLangResource BotsSettingsShareLink}"
+                                   Subtitle="{Binding ShareLinkText}"
+                                   IsVisible="{Binding HasShareLink}" />
+                </arcm:ListGroup>
+
+                <Border Margin="16,0">
+                    <arcm:Button Variant="Tinted"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Foreground="{arc:ArcDesignTokenResource Danger}"
+                                 Content="{l:MobileLangResource BotsSettingsDelete}"
+                                 Command="{Binding AskDeleteBotCommand}" />
+                </Border>
+            </StackPanel>
+        </Panel>
+    </StackPanel>
+
+    <arcm:Page.Overlay>
+        <Panel>
+            <!-- New sub-chat Sheet -->
+            <arcm:Sheet Name="NewBotChatSheet"
+                        IsOpen="{Binding IsNewChatOpen, Mode=TwoWay}"
+                        Title="{l:MobileLangResource BotsNewChatTitle}">
+                <StackPanel Margin="16,4,16,20" Spacing="12">
+                    <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewChatAgentLabel}" />
+                    <arcm:Segmented ItemsSource="{Binding AgentNames}"
+                                    SelectedIndex="{Binding SelectedAgentIndex, Mode=TwoWay}" />
+
+                    <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewChatTitleLabel}" />
+                    <arcm:TextField Text="{Binding NewChatTitle, Mode=TwoWay}"
+                                    PlaceholderText="{l:MobileLangResource BotsNewChatTitlePlaceholder}" />
+
+                    <arcm:Button Variant="Filled"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{l:MobileLangResource BotsNewChatStart}"
+                                 Command="{Binding ConfirmCreateChatCommand}" />
+                </StackPanel>
+            </arcm:Sheet>
+
+            <!-- Per-chat ActionSheet (Open / Rename / Close / Reopen / Delete) -->
+            <arcm:ActionSheet Name="BotChatMenuSheet"
+                              IsOpen="{Binding IsChatMenuOpen, Mode=TwoWay}"
+                              Title="{Binding MenuChatTitle}"
+                              CancelText="{l:MobileLangResource Cancel}">
+                <arcm:ActionSheetItem Content="{l:MobileLangResource BotsSessionsOpenChat}"
+                                      Command="{Binding OpenMenuChatCommand}" />
+                <arcm:ActionSheetItem Content="{l:MobileLangResource BotsSessionsRename}"
+                                      Command="{Binding StartRenameMenuChatCommand}" />
+                <arcm:ActionSheetItem Content="{l:MobileLangResource BotsSessionsCloseKeepHistory}"
+                                      Command="{Binding CloseMenuChatCommand}"
+                                      IsVisible="{Binding MenuChatIsOpen}" />
+                <arcm:ActionSheetItem Content="{l:MobileLangResource BotsSessionsReopen}"
+                                      Command="{Binding ReopenMenuChatCommand}"
+                                      IsVisible="{Binding MenuChatIsClosed}" />
+                <arcm:ActionSheetItem Content="{l:MobileLangResource BotsSessionsDelete}"
+                                      IsDestructive="True"
+                                      Command="{Binding DeleteMenuChatCommand}"
+                                      IsVisible="{Binding MenuChatCanDelete}" />
+            </arcm:ActionSheet>
+
+            <!-- Rename chat Sheet -->
+            <arcm:Sheet Name="RenameBotChatSheet"
+                        IsOpen="{Binding IsRenameOpen, Mode=TwoWay}"
+                        Title="{l:MobileLangResource BotsSessionsRenameTitle}">
+                <StackPanel Margin="16,4,16,20" Spacing="12">
+                    <arcm:TextField Text="{Binding RenameTitle, Mode=TwoWay}"
+                                    PlaceholderText="{l:MobileLangResource BotsSessionsRenamePlaceholder}" />
+                    <arcm:Button Variant="Filled"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{l:MobileLangResource Save}"
+                                 Command="{Binding ConfirmRenameChatCommand}" />
+                </StackPanel>
+            </arcm:Sheet>
+
+            <!-- Delete Bot confirmation ActionSheet -->
+            <arcm:ActionSheet Name="DeleteBotConfirmSheet"
+                              IsOpen="{Binding IsDeleteConfirmOpen, Mode=TwoWay}"
+                              Title="{Binding DeleteConfirmTitle}"
+                              CancelText="{l:MobileLangResource Cancel}">
+                <arcm:ActionSheetItem Content="{l:MobileLangResource BotsSettingsDelete}"
+                                      IsDestructive="True"
+                                      Command="{Binding ConfirmDeleteBotCommand}" />
+            </arcm:ActionSheet>
+        </Panel>
+    </arcm:Page.Overlay>
+</arcm:Page>

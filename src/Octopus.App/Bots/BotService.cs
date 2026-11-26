@@ -1,8 +1,8 @@
+using System.Text;
 using Octopus.Agents;
 using Octopus.App.Activity;
 using Octopus.App.Common;
 using Octopus.App.Localization;
-using Octopus.App.Services;
 using Octopus.Core.Agents;
 using Octopus.Core.Bots;
 using Octopus.Core.Projects;
@@ -16,7 +16,6 @@ public sealed class BotService : IBotService
     public const string BackingProjectPrefix = "bot:";
 
     private readonly IBotStore _store;
-    private readonly IProjectService _projects;
     private readonly IAgentCatalog _catalog;
     private readonly IAgentScanner _scanner;
     private readonly ISettingsStore _settings;
@@ -27,28 +26,26 @@ public sealed class BotService : IBotService
 
     public BotService(
         IBotStore store,
-        IProjectService projects,
         IAgentCatalog catalog,
         IAgentScanner scanner,
         ISettingsStore settings,
         PathComparer paths,
         BotHomeManager home,
-        IItemActivityService? activity = null)
+        IItemActivityService? activity = null,
+        BotConnectorRuntime? connectorRuntime = null)
     {
         _store = store;
-        _projects = projects;
         _catalog = catalog;
         _scanner = scanner;
         _settings = settings;
         _paths = paths;
         Home = home;
         _activity = activity;
-
-        // Clicking a project in the rail switches out of Bot mode back to Project mode.
-        _projects.Changed += OnProjectsChanged;
+        ConnectorRuntime = connectorRuntime ?? new BotConnectorRuntime();
     }
 
     public BotHomeManager Home { get; }
+    public BotConnectorRuntime ConnectorRuntime { get; }
 
     public IReadOnlyList<BotDefinition> Bots
     {
@@ -114,14 +111,6 @@ public sealed class BotService : IBotService
         }
     }
 
-    private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
-    {
-        if (e.Kind is ProjectChangeKind.CurrentProject or ProjectChangeKind.Device && IsBotMode)
-        {
-            SetBotMode(false);
-        }
-    }
-
     public void SetBotMode(bool enabled)
     {
         EnsureLoaded();
@@ -165,7 +154,9 @@ public sealed class BotService : IBotService
             Name = name,
             Slug = JsonBotStore.SanitizeSlug(null, name),
             AgentId = agentId,
+            HostDeviceKey = string.IsNullOrWhiteSpace(request.HostDeviceKey) ? "local" : request.HostDeviceKey.Trim(),
             Color = color,
+            Image = string.IsNullOrWhiteSpace(request.Image) ? null : request.Image.Trim(),
             TemplateId = request.TemplateId,
             Soul = string.IsNullOrWhiteSpace(request.Soul) ? null : request.Soul.Trim(),
             IsPaused = false,
@@ -269,12 +260,69 @@ public sealed class BotService : IBotService
         Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, updated));
     }
 
+    public void SetBotUnread(string botId, bool unread)
+    {
+        EnsureLoaded();
+        var bot = FindBot(botId);
+        if (bot is null || bot.IsUnread == unread) return;
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId) is { } target)
+            {
+                target.IsUnread = unread;
+            }
+        });
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, FindBot(botId)));
+    }
+
+    public void SetBotAppearance(string botId, string color, string? icon, string? image)
+    {
+        EnsureLoaded();
+        if (FindBot(botId) is null) return;
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId) is { } target)
+            {
+                if (!string.IsNullOrWhiteSpace(color)) target.Color = color.Trim();
+                target.Icon = string.IsNullOrWhiteSpace(icon) ? null : icon.Trim();
+                target.Image = string.IsNullOrWhiteSpace(image) ? null : image.Trim();
+            }
+        });
+        var updated = FindBot(botId)!;
+        Home.SyncManagedFiles(updated);
+        if (_backingProjects.TryGetValue(updated.Id, out var proj))
+        {
+            proj.Color = updated.Color;
+        }
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, updated));
+    }
+
+    public void UpdateBotSettings(string botId, Action<BotDefinition> mutate)
+    {
+        EnsureLoaded();
+        if (FindBot(botId) is null) return;
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId) is { } target)
+            {
+                mutate(target);
+            }
+        });
+        var updated = FindBot(botId)!;
+        Home.SyncManagedFiles(updated);
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, updated));
+    }
+
     public void DeleteBot(string botId)
     {
         EnsureLoaded();
         var removed = FindBot(botId);
         if (removed is null) return;
         _backingProjects.Remove(botId);
+        foreach (var conn in removed.Connectors)
+        {
+            _ = ConnectorRuntime.DeleteTokenAsync(removed.Id, conn.Id);
+        }
         _store.Update(d =>
         {
             d.Bots.RemoveAll(b => b.Id == botId);
@@ -355,6 +403,7 @@ public sealed class BotService : IBotService
         if (bot is null || chat is null) return;
 
         var wasClosed = !chat.IsOpen || chat.Status == BotChatStatus.Closed;
+        var wasUnread = bot.IsUnread;
         var modeChanged = !IsBotMode;
         var botChanged = _store.Current.ActiveBotId != bot.Id;
 
@@ -362,6 +411,7 @@ public sealed class BotService : IBotService
         {
             if (d.Bots.FirstOrDefault(b => b.Id == botId) is not { } target) return;
             if (target.Chats.FirstOrDefault(c => c.Id == chatId) is not { } targetChat) return;
+            target.IsUnread = false;
             targetChat.IsOpen = true;
             if (targetChat.Status == BotChatStatus.Closed) targetChat.Status = BotChatStatus.Idle;
             targetChat.ClosedAt = null;
@@ -385,6 +435,7 @@ public sealed class BotService : IBotService
 
         if (modeChanged) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Mode, updated, updatedChat, backingItem));
         if (botChanged) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.CurrentBot, updated, updatedChat, backingItem));
+        if (wasUnread) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, updated, updatedChat, backingItem));
         if (wasClosed) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Chats, updated, updatedChat, backingItem));
         Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.ActiveChat, updated, updatedChat, backingItem));
     }
@@ -487,6 +538,7 @@ public sealed class BotService : IBotService
             return existing;
         }
 
+        var resolvedUrl = BotCatalog.ResolveMcpUrl(app);
         var binding = new BotConnectorBinding
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -494,10 +546,82 @@ public sealed class BotService : IBotService
             DisplayName = app.Name,
             Category = app.CategoryId,
             Description = app.DescriptionZh,
+            Url = resolvedUrl,
+            Transport = app.Transport,
+            AuthMode = app.AuthMode,
+            VariableValue = app.UrlVariable?.DefaultValue,
             Enabled = true,
             StatusText = AppLangResources.Get(AppLangResourceKind.BotConnectorConnected),
             ConnectedAt = DateTimeOffset.UtcNow,
         };
+
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId) is { } target)
+            {
+                target.Connectors.Add(binding);
+            }
+        });
+
+        var updated = FindBot(botId)!;
+        Home.SyncManagedFiles(updated);
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Connectors, updated));
+        return binding;
+    }
+
+    public async Task<BotConnectorBinding?> AddConnectorWithConfigAsync(
+        string botId,
+        string appId,
+        string? variableValue = null,
+        string? bearerToken = null,
+        string? urlOverride = null,
+        CancellationToken ct = default)
+    {
+        EnsureLoaded();
+        var bot = FindBot(botId);
+        var app = BotCatalog.FindConnectorApp(appId);
+        if (bot is null || app is null) return null;
+
+        var existing = bot.Connectors.FirstOrDefault(c => string.Equals(c.AppId, app.Id, StringComparison.OrdinalIgnoreCase));
+        var resolvedUrl = !string.IsNullOrWhiteSpace(urlOverride)
+            ? urlOverride.Trim()
+            : BotCatalog.ResolveMcpUrl(app, variableValue);
+
+        if (existing is not null)
+        {
+            return await ConfigureConnectorAsync(
+                botId,
+                existing.Id,
+                resolvedUrl,
+                existing.Transport,
+                variableValue ?? existing.VariableValue,
+                bearerToken,
+                clearToken: false,
+                ct).ConfigureAwait(false);
+        }
+
+        var hasToken = !string.IsNullOrWhiteSpace(bearerToken);
+        var binding = new BotConnectorBinding
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            AppId = app.Id,
+            DisplayName = app.Name,
+            Category = app.CategoryId,
+            Description = app.DescriptionZh,
+            Url = resolvedUrl,
+            Transport = app.Transport,
+            AuthMode = hasToken ? "bearer" : app.AuthMode,
+            HasSecret = hasToken,
+            VariableValue = string.IsNullOrWhiteSpace(variableValue) ? app.UrlVariable?.DefaultValue : variableValue.Trim(),
+            Enabled = true,
+            StatusText = AppLangResources.Get(AppLangResourceKind.BotConnectorConnected),
+            ConnectedAt = DateTimeOffset.UtcNow,
+        };
+
+        if (hasToken)
+        {
+            await ConnectorRuntime.SetTokenAsync(botId, binding.Id, bearerToken, ct).ConfigureAwait(false);
+        }
 
         _store.Update(d =>
         {
@@ -529,6 +653,8 @@ public sealed class BotService : IBotService
             Category = "custom",
             Description = trimmedUrl,
             Url = trimmedUrl,
+            Transport = "http",
+            AuthMode = "none",
             Enabled = true,
             StatusText = AppLangResources.Get(AppLangResourceKind.BotConnectorConnected),
             ConnectedAt = DateTimeOffset.UtcNow,
@@ -546,6 +672,115 @@ public sealed class BotService : IBotService
         Home.SyncManagedFiles(updated);
         Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Connectors, updated));
         return binding;
+    }
+
+    public async Task<BotConnectorBinding?> AddCustomUrlConnectorAsync(
+        string botId,
+        string name,
+        string url,
+        string transport = "http",
+        string? bearerToken = null,
+        CancellationToken ct = default)
+    {
+        EnsureLoaded();
+        var bot = FindBot(botId);
+        var trimmedUrl = url.Trim();
+        if (bot is null || trimmedUrl.Length == 0) return null;
+
+        var displayName = string.IsNullOrWhiteSpace(name) ? trimmedUrl : name.Trim();
+        var normalizedTransport = string.Equals(transport, "sse", StringComparison.OrdinalIgnoreCase) ? "sse" : "http";
+        var hasToken = !string.IsNullOrWhiteSpace(bearerToken);
+        var binding = new BotConnectorBinding
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            AppId = "custom-url",
+            DisplayName = displayName,
+            Category = "custom",
+            Description = trimmedUrl,
+            Url = trimmedUrl,
+            Transport = normalizedTransport,
+            AuthMode = hasToken ? "bearer" : "none",
+            HasSecret = hasToken,
+            Enabled = true,
+            StatusText = AppLangResources.Get(AppLangResourceKind.BotConnectorConnected),
+            ConnectedAt = DateTimeOffset.UtcNow,
+        };
+
+        if (hasToken)
+        {
+            await ConnectorRuntime.SetTokenAsync(botId, binding.Id, bearerToken, ct).ConfigureAwait(false);
+        }
+
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId) is { } target)
+            {
+                target.Connectors.Add(binding);
+            }
+        });
+
+        var updated = FindBot(botId)!;
+        Home.SyncManagedFiles(updated);
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Connectors, updated));
+        return binding;
+    }
+
+    public async Task<BotConnectorBinding?> ConfigureConnectorAsync(
+        string botId,
+        string connectorId,
+        string? url,
+        string transport,
+        string? variableValue,
+        string? bearerToken,
+        bool clearToken = false,
+        CancellationToken ct = default)
+    {
+        EnsureLoaded();
+        var existing = FindBot(botId)?.Connectors.FirstOrDefault(c => c.Id == connectorId);
+        if (existing is null) return null;
+
+        if (clearToken)
+        {
+            await ConnectorRuntime.DeleteTokenAsync(botId, connectorId, ct).ConfigureAwait(false);
+        }
+        else if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            await ConnectorRuntime.SetTokenAsync(botId, connectorId, bearerToken, ct).ConfigureAwait(false);
+        }
+
+        var normalizedTransport = string.Equals(transport, "sse", StringComparison.OrdinalIgnoreCase) ? "sse" : "http";
+        var app = BotCatalog.FindConnectorApp(existing.AppId);
+        var trimmedVar = string.IsNullOrWhiteSpace(variableValue) ? null : variableValue.Trim();
+        var resolvedUrl = !string.IsNullOrWhiteSpace(url)
+            ? url.Trim()
+            : (app is not null ? BotCatalog.ResolveMcpUrl(app, trimmedVar) : existing.Url);
+
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId)?.Connectors.FirstOrDefault(c => c.Id == connectorId) is not { } target)
+            {
+                return;
+            }
+            target.Url = resolvedUrl;
+            target.Transport = normalizedTransport;
+            target.VariableValue = trimmedVar;
+            target.Enabled = true;
+            if (clearToken)
+            {
+                target.HasSecret = false;
+                target.AuthMode = app?.AuthMode ?? "none";
+            }
+            else if (!string.IsNullOrWhiteSpace(bearerToken))
+            {
+                target.HasSecret = true;
+                target.AuthMode = "bearer";
+            }
+        });
+
+        var updated = FindBot(botId)!;
+        Home.SyncManagedFiles(updated);
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Connectors, updated));
+        return updated.Connectors.FirstOrDefault(c => c.Id == connectorId);
     }
 
     public void SetConnectorEnabled(string botId, string connectorId, bool enabled)
@@ -568,6 +803,7 @@ public sealed class BotService : IBotService
     public void RemoveConnector(string botId, string connectorId)
     {
         EnsureLoaded();
+        _ = ConnectorRuntime.DeleteTokenAsync(botId, connectorId);
         _store.Update(d =>
         {
             if (d.Bots.FirstOrDefault(b => b.Id == botId) is { } target)
@@ -580,6 +816,124 @@ public sealed class BotService : IBotService
             Home.SyncManagedFiles(updated);
             Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Connectors, updated));
         }
+    }
+
+    public Task<IReadOnlyList<AcpMcpServerConfig>> BuildAcpMcpServersAsync(string botId, CancellationToken ct = default)
+    {
+        EnsureLoaded();
+        var bot = FindBot(botId);
+        if (bot is null) return Task.FromResult<IReadOnlyList<AcpMcpServerConfig>>([]);
+        return ConnectorRuntime.BuildAcpMcpServersAsync(bot, ct);
+    }
+
+    public BotDefinition ImportBot(BotSharePayload payload, string hostDeviceKey = "local")
+    {
+        EnsureLoaded();
+        var name = string.IsNullOrWhiteSpace(payload.Name)
+            ? AppLangResources.Get(AppLangResourceKind.BotDefaultName)
+            : payload.Name.Trim();
+        var agentId = ResolveAgentId(payload.AgentId);
+        var color = string.IsNullOrWhiteSpace(payload.Color)
+            ? BotCatalog.AvatarPalette[Bots.Count % BotCatalog.AvatarPalette.Count]
+            : payload.Color.Trim();
+
+        var botId = Guid.NewGuid().ToString("N");
+        var now = DateTimeOffset.UtcNow;
+        var homeChat = new BotChat
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Kind = BotChatKind.Home,
+            Title = "Home Chat",
+            AgentId = agentId,
+            Subtitle = AppLangResources.Format(AppLangResourceKind.BotHomeChatSubtitle, name),
+            Surface = ResolveSurface(agentId),
+            Status = BotChatStatus.Idle,
+            IsOpen = true,
+            CreatedAt = now,
+            LastActivityAt = now,
+        };
+
+        var connectors = new List<BotConnectorBinding>();
+        foreach (var dto in payload.Connectors)
+        {
+            var app = BotCatalog.FindConnectorApp(dto.AppId);
+            var resolvedUrl = !string.IsNullOrWhiteSpace(dto.Url)
+                ? dto.Url.Trim()
+                : (app is not null ? BotCatalog.ResolveMcpUrl(app, dto.VariableValue) : null);
+            connectors.Add(new BotConnectorBinding
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                AppId = string.IsNullOrWhiteSpace(dto.AppId) ? "custom-url" : dto.AppId.Trim(),
+                DisplayName = string.IsNullOrWhiteSpace(dto.DisplayName) ? (app?.Name ?? resolvedUrl ?? "MCP") : dto.DisplayName.Trim(),
+                Category = app?.CategoryId ?? "custom",
+                Description = app?.DescriptionZh ?? resolvedUrl,
+                Url = resolvedUrl,
+                Transport = string.Equals(dto.Transport, "sse", StringComparison.OrdinalIgnoreCase) ? "sse" : "http",
+                AuthMode = string.IsNullOrWhiteSpace(dto.AuthMode) ? (app?.AuthMode ?? "none") : dto.AuthMode.Trim(),
+                HasSecret = false,
+                VariableValue = string.IsNullOrWhiteSpace(dto.VariableValue) ? app?.UrlVariable?.DefaultValue : dto.VariableValue.Trim(),
+                Enabled = true,
+                StatusText = AppLangResources.Get(AppLangResourceKind.BotConnectorConnected),
+                ConnectedAt = now,
+            });
+        }
+
+        var bot = new BotDefinition
+        {
+            Id = botId,
+            Name = name,
+            Slug = JsonBotStore.SanitizeSlug(null, name),
+            AgentId = agentId,
+            HostDeviceKey = string.IsNullOrWhiteSpace(hostDeviceKey) ? "local" : hostDeviceKey.Trim(),
+            Color = color,
+            Icon = string.IsNullOrWhiteSpace(payload.Icon) ? null : payload.Icon.Trim(),
+            TemplateId = payload.TemplateId,
+            Soul = string.IsNullOrWhiteSpace(payload.SoulMarkdown) ? null : payload.SoulMarkdown.Trim(),
+            PermissionMode = string.IsNullOrWhiteSpace(payload.PermissionMode) ? "same_as_chat" : payload.PermissionMode.Trim(),
+            LookAroundEnabled = payload.LookAroundEnabled,
+            LookAroundIntervalHours = Math.Clamp(payload.LookAroundIntervalHours, 1, 24),
+            TidyUpMemoryEnabled = payload.TidyUpMemoryEnabled,
+            StaleAfterDays = Math.Clamp(payload.StaleAfterDays, 1, 90),
+            SetupNotes = string.IsNullOrWhiteSpace(payload.SetupNotes) ? null : payload.SetupNotes.Trim(),
+            IsPaused = false,
+            IsExpanded = true,
+            HomeChatId = homeChat.Id,
+            ActiveChatId = homeChat.Id,
+            Chats = [homeChat],
+            Connectors = connectors,
+            CreatedAt = now,
+        };
+
+        _store.Update(d =>
+        {
+            d.Bots.Insert(0, bot);
+            d.ActiveBotId = bot.Id;
+            d.ActiveChatId = homeChat.Id;
+            d.IsBotMode = true;
+        });
+
+        var persisted = FindBot(botId)!;
+        Home.EnsureHome(persisted);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(payload.SoulMarkdown))
+            {
+                File.WriteAllText(Home.GetSoulPath(persisted), payload.SoulMarkdown.Trim() + "\n", Encoding.UTF8);
+            }
+            if (!string.IsNullOrWhiteSpace(payload.MemoryMarkdown))
+            {
+                File.WriteAllText(Home.GetMemoryPath(persisted), payload.MemoryMarkdown.Trim() + "\n", Encoding.UTF8);
+            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+        Home.SyncManagedFiles(persisted);
+        EnsureBackingProject(persisted);
+
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, persisted, homeChat));
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Mode, persisted, homeChat));
+        return persisted;
     }
 
     public BotWorkItem? AddWorkItem(
@@ -766,15 +1120,20 @@ public sealed class BotService : IBotService
         var count = 0;
         foreach (var bot in _store.Current.Bots)
         {
-            count += bot.Items.Count(i => i.Status == BotWorkItemStatus.NeedsYou);
+            var botCount = bot.Items.Count(i => i.Status == BotWorkItemStatus.NeedsYou);
             foreach (var chat in bot.Chats)
             {
                 if (chat.Status == BotChatStatus.NeedsYou
                     || (_activity is not null && _activity.Of(chat.Id) == ItemActivity.Waiting))
                 {
-                    count++;
+                    botCount++;
                 }
             }
+            if (botCount == 0 && bot.IsUnread)
+            {
+                botCount = 1;
+            }
+            count += botCount;
         }
         return count;
     }

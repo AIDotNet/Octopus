@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Octopus.App.Appearance;
 using Octopus.App.Bots;
+using Octopus.App.Collab;
 using Octopus.App.Explorer;
 using Octopus.App.Plugins;
 using Octopus.App.Settings;
@@ -16,6 +17,7 @@ internal static class AppRegistration
     {
         services.AddSingleton<ThemeService>();
         ShellModule.Register(services);       // shell, sidebar, workspace, launcher, terminals, files, dialogs
+        CollabModule.Register(services);      // multi-agent collaboration bus, local MCP gateway, cross-session routing
         BotsModule.Register(services);        // bots: home directories, left bot tree panel, right bot panel
         SettingsModule.Register(services);    // settings pages
         ExplorerModule.Register(services);    // right panel: files and source control

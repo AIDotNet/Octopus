@@ -395,5 +395,85 @@
     <unit id="FileImageZoomFit"><segment><source>Fit</source><target state="translated">适应</target></segment></unit>
     <unit id="FilePreviewToggle"><segment><source>Toggle preview</source><target state="translated">切换预览</target></segment></unit>
     <unit id="FileOpenPreview"><segment><source>Open file</source><target state="translated">打开文件</target></segment></unit>
+    <unit id="TabBots"><segment><source>Bots</source><target state="translated">Bots</target></segment></unit>
+    <unit id="TabBotsBadge"><segment><source>Bots ({0})</source><target state="translated">Bots ({0})</target></segment></unit>
+    <unit id="BotsSearchPlaceholder"><segment><source>Search bots, chats, or computers...</source><target state="translated">搜索 Bot、会话或电脑...</target></segment></unit>
+    <unit id="BotsFilterAll"><segment><source>All {0}</source><target state="translated">全部 {0}</target></segment></unit>
+    <unit id="BotsFilterNeeds"><segment><source>Needs you {0}</source><target state="translated">需要你 {0}</target></segment></unit>
+    <unit id="BotsFilterWorking"><segment><source>Working {0}</source><target state="translated">工作中 {0}</target></segment></unit>
+    <unit id="BotsEmptyTitle"><segment><source>No Bots yet</source><target state="translated">还没有 Bot</target></segment></unit>
+    <unit id="BotsEmptyHint"><segment><source>Create an autonomous Bot on one of your computers to manage its chats, work items, and Remote MCP connectors from your phone.</source><target state="translated">在你的电脑上创建一个常驻 Bot，手机端随时管理它的多个子聊天、审批待办和开关远程 MCP 连接器。</target></segment></unit>
+    <unit id="BotsNewButton"><segment><source>New Bot</source><target state="translated">新建 Bot</target></segment></unit>
+    <unit id="BotsImportButton"><segment><source>Import link</source><target state="translated">链接导入</target></segment></unit>
+    <unit id="BotsNewChatShort"><segment><source>New chat</source><target state="translated">新聊天</target></segment></unit>
+    <unit id="BotsAllSessionsCount"><segment><source>Chats ({0})</source><target state="translated">全部会话 ({0})</target></segment></unit>
+    <unit id="BotsConnectorsCount"><segment><source>Apps {0}</source><target state="translated">连接器 {0}</target></segment></unit>
+    <unit id="BotsSettingsShort"><segment><source>Settings</source><target state="translated">设置</target></segment></unit>
+    <unit id="BotsStatusNeeds"><segment><source>Needs you {0}</source><target state="translated">需要你 {0}</target></segment></unit>
+    <unit id="BotsStatusWorking"><segment><source>Working</source><target state="translated">工作中</target></segment></unit>
+    <unit id="BotsStatusPaused"><segment><source>Paused</source><target state="translated">已暂停</target></segment></unit>
+    <unit id="BotsStatusOffline"><segment><source>Offline</source><target state="translated">离线</target></segment></unit>
+    <unit id="BotsActiveSessionsSubtitle"><segment><source>{0} · {1} active</source><target state="translated">{0} · {1} 活跃会话</target></segment></unit>
+    <unit id="BotsHomeChatTag"><segment><source>Home</source><target state="translated">主聊天</target></segment></unit>
+    <unit id="BotsTabSessions"><segment><source>Chats</source><target state="translated">会话</target></segment></unit>
+    <unit id="BotsTabHome"><segment><source>Home</source><target state="translated">主页</target></segment></unit>
+    <unit id="BotsTabConnectors"><segment><source>Connectors</source><target state="translated">连接器</target></segment></unit>
+    <unit id="BotsTabSettings"><segment><source>Settings</source><target state="translated">设置</target></segment></unit>
+    <unit id="BotsSessionsSearchPlaceholder"><segment><source>Search chats...</source><target state="translated">搜索聊天和工作者...</target></segment></unit>
+    <unit id="BotsSessionsFilterAll"><segment><source>All {0}</source><target state="translated">全部 {0}</target></segment></unit>
+    <unit id="BotsSessionsFilterActive"><segment><source>Active {0}</source><target state="translated">活跃 {0}</target></segment></unit>
+    <unit id="BotsSessionsFilterClosed"><segment><source>Closed {0}</source><target state="translated">已关闭 {0}</target></segment></unit>
+    <unit id="BotsSessionsActiveHeader"><segment><source>Active chats ({0})</source><target state="translated">活跃会话 ({0})</target></segment></unit>
+    <unit id="BotsSessionsClosedHeader"><segment><source>Closed history ({0})</source><target state="translated">已关闭的历史会话 ({0})</target></segment></unit>
+    <unit id="BotsSessionsEmpty"><segment><source>No matching chats</source><target state="translated">没有匹配的会话</target></segment></unit>
+    <unit id="BotsSessionsReopen"><segment><source>Reopen</source><target state="translated">重开</target></segment></unit>
+    <unit id="BotsSessionsOpenChat"><segment><source>Open chat</source><target state="translated">打开对话</target></segment></unit>
+    <unit id="BotsSessionsRename"><segment><source>Rename chat</source><target state="translated">重命名会话</target></segment></unit>
+    <unit id="BotsSessionsCloseKeepHistory"><segment><source>Close chat (keep history)</source><target state="translated">关闭会话（保留历史）</target></segment></unit>
+    <unit id="BotsSessionsDelete"><segment><source>Delete chat</source><target state="translated">永久删除会话</target></segment></unit>
+    <unit id="BotsSessionsRenameTitle"><segment><source>Rename chat</source><target state="translated">重命名会话</target></segment></unit>
+    <unit id="BotsSessionsRenamePlaceholder"><segment><source>Chat title</source><target state="translated">输入新会话名称</target></segment></unit>
+    <unit id="BotsNewChatTitle"><segment><source>New chat</source><target state="translated">新建子聊天</target></segment></unit>
+    <unit id="BotsNewChatAgentLabel"><segment><source>Agent</source><target state="translated">智能体</target></segment></unit>
+    <unit id="BotsNewChatTitleLabel"><segment><source>Title (optional)</source><target state="translated">会话标题（可选）</target></segment></unit>
+    <unit id="BotsNewChatTitlePlaceholder"><segment><source>Leave blank for default chat title</source><target state="translated">留空则使用默认聊天标题</target></segment></unit>
+    <unit id="BotsNewChatStart"><segment><source>Start chat</source><target state="translated">开始聊天</target></segment></unit>
+    <unit id="BotsNewBotTitle"><segment><source>New Bot</source><target state="translated">新建 Bot</target></segment></unit>
+    <unit id="BotsNewBotNameLabel"><segment><source>Name</source><target state="translated">名称</target></segment></unit>
+    <unit id="BotsNewBotNamePlaceholder"><segment><source>e.g. PR Reviewer, On-call</source><target state="translated">如：西瓜、PR 审查员</target></segment></unit>
+    <unit id="BotsNewBotHostLabel"><segment><source>Computer</source><target state="translated">运行电脑</target></segment></unit>
+    <unit id="BotsNewBotAgentLabel"><segment><source>Agent</source><target state="translated">默认智能体</target></segment></unit>
+    <unit id="BotsNewBotTemplateLabel"><segment><source>Starter template</source><target state="translated">起步模板</target></segment></unit>
+    <unit id="BotsNewBotSoulLabel"><segment><source>Role (optional)</source><target state="translated">职责说明（可选）</target></segment></unit>
+    <unit id="BotsNewBotSoulPlaceholder"><segment><source>What should this Bot look after?</source><target state="translated">它平时负责盯什么、做什么？</target></segment></unit>
+    <unit id="BotsNewBotCreate"><segment><source>Create Bot</source><target state="translated">创建 Bot</target></segment></unit>
+    <unit id="BotsImportTitle"><segment><source>Import Bot from link</source><target state="translated">从链接导入 Bot</target></segment></unit>
+    <unit id="BotsImportLinkLabel"><segment><source>Share link</source><target state="translated">分享链接</target></segment></unit>
+    <unit id="BotsImportLinkPlaceholder"><segment><source>Paste octopus://bot/import?data=... link</source><target state="translated">粘贴 octopus://bot/import?data=... 分享链接</target></segment></unit>
+    <unit id="BotsImportConfirm"><segment><source>Import Bot</source><target state="translated">确认导入</target></segment></unit>
+    <unit id="BotsHomeWorkItemsHeader"><segment><source>Work items</source><target state="translated">当前事项</target></segment></unit>
+    <unit id="BotsHomeWorkItemsEmpty"><segment><source>No work items yet. Items needing your decision will appear here.</source><target state="translated">还没有待办事项，需要你拍板的内容会显示在这里。</target></segment></unit>
+    <unit id="BotsHomeSoulHeader"><segment><source>Soul (SOUL.md)</source><target state="translated">灵魂摘要（SOUL.md）</target></segment></unit>
+    <unit id="BotsHomeBrowseFiles"><segment><source>Browse Bot files</source><target state="translated">浏览 Bot 文件（SOUL / MEMORY / .mcp.json）</target></segment></unit>
+    <unit id="BotsConnectorsHeader"><segment><source>Remote MCP connectors</source><target state="translated">远程 MCP 连接器</target></segment></unit>
+    <unit id="BotsConnectorsEmpty"><segment><source>No connectors configured on this Bot yet.</source><target state="translated">该 Bot 暂未配置连接器，可在桌面端连接器目录添加。</target></segment></unit>
+    <unit id="BotsConnectorsHint"><segment><source>Changes sync to .mcp.json and ACP chats on the host. Bearer tokens stay in the host keychain.</source><target state="translated">开关状态实时同步到宿主机 .mcp.json 与 ACP 会话，Bearer Token 仅保存在宿主机系统钥匙串中。</target></segment></unit>
+    <unit id="BotsSettingsAgent"><segment><source>Default agent</source><target state="translated">默认智能体</target></segment></unit>
+    <unit id="BotsSettingsHost"><segment><source>Computer</source><target state="translated">运行电脑</target></segment></unit>
+    <unit id="BotsSettingsEnabled"><segment><source>Enabled</source><target state="translated">已启用</target></segment></unit>
+    <unit id="BotsSettingsLookAround"><segment><source>Periodic look-around</source><target state="translated">定期巡视</target></segment></unit>
+    <unit id="BotsSettingsTidyMemory"><segment><source>Nightly memory maintenance</source><target state="translated">每晚记忆维护</target></segment></unit>
+    <unit id="BotsSettingsShareLink"><segment><source>Share link (octopus://)</source><target state="translated">分享链接（octopus://）</target></segment></unit>
+    <unit id="BotsSettingsDelete"><segment><source>Delete Bot</source><target state="translated">删除 Bot</target></segment></unit>
+    <unit id="BotsSettingsDeleteConfirm"><segment><source>Remove "{0}" from {1}?</source><target state="translated">确定从 {1} 删除「{0}」吗？</target></segment></unit>
+    <unit id="BotsNoOnlineHostHint"><segment><source>Connect an online computer first to create or import a Bot.</source><target state="translated">请先连接一台在线电脑，再创建或导入 Bot。</target></segment></unit>
+    <unit id="BotsTemplatePr"><segment><source>PR Reviewer</source><target state="translated">PR 审查员</target></segment></unit>
+    <unit id="BotsTemplateCi"><segment><source>On-call</source><target state="translated">巡检值班</target></segment></unit>
+    <unit id="BotsTemplateDaily"><segment><source>Daily Digest</source><target state="translated">日报助手</target></segment></unit>
+    <unit id="BotsTemplateBlank"><segment><source>Blank</source><target state="translated">空白</target></segment></unit>
+    <unit id="ScanQrCode"><segment><source>Scan QR code</source><target state="translated">扫描二维码</target></segment></unit>
+    <unit id="ScanQrToConnect"><segment><source>Scan QR code to connect</source><target state="translated">扫码连接电脑</target></segment></unit>
+    <unit id="ScanQrToConnectHint"><segment><source>Scan the pairing QR code on your computer to connect directly</source><target state="translated">扫描电脑上的配对二维码，免输地址直连</target></segment></unit>
+    <unit id="ScanRelayQrCode"><segment><source>Scan relay QR code</source><target state="translated">扫描中转配置二维码</target></segment></unit>
   </file>
 </xliff>

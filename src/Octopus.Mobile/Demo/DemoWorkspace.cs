@@ -78,6 +78,7 @@ public sealed partial class DemoWorkspace : IRemoteWorkspace
         };
 
         Hosts = localOnly ? [mac, mini] : [mac, station, mini, desk, linux, laptop];
+        SeedDemoBots(mac, station);
         OtherDevices = localOnly
             ? []
             : [new AccountDevice("phone", "Demo 的 iPhone", IsCurrent: true, IsOnline: true, DateTimeOffset.Now, "iOS"),

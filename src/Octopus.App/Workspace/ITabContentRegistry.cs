@@ -18,6 +18,11 @@ public interface ITabContentRegistry
     Control GetOrCreateDiff(DiffTabRequest request);
     ITabContent? Find(string itemId);
     /// <summary>
+    /// The item's tab was closed but the item keeps running: lets go of what only draws it and keeps what runs it.
+    /// <see cref="GetOrCreate"/> gives it a control again; <see cref="ReleaseAsync"/> still ends it.
+    /// </summary>
+    void Detach(string itemId);
+    /// <summary>
     /// Closes the content of the item (ends its process) and forgets it. A second call while the first one is still
     /// ending the process waits for the same end.
     /// </summary>

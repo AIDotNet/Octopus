@@ -1,12 +1,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:common="using:Octopus.App.Common"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:vm="using:Octopus.App.Bots"
              x:Class="Octopus.App.Bots.ConnectorCatalogView"
              x:DataType="vm:ConnectorCatalogViewModel">
-    <Grid ColumnDefinitions="196,*" MinWidth="660" Height="460">
+    <Grid ColumnDefinitions="196,*" Height="460" HorizontalAlignment="Stretch">
         <!-- Left category sidebar -->
         <Grid RowDefinitions="*,Auto" Margin="0,0,12,0">
             <Border BorderThickness="0,0,1,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" Padding="0,0,12,0">
@@ -60,22 +61,40 @@
                              Placeholder="{l:AppLangResource BotConnectorCatalogSearch}"
                              Text="{Binding SearchQuery, Mode=TwoWay}" />
 
-            <!-- Optional inline "+ Add by URL" form -->
+            <!-- Optional inline "+ Add by URL" form (HTTP / SSE + optional Bearer token + Test) -->
             <Border Grid.Row="1" IsVisible="{Binding IsAddingByUrl}" Margin="0,10,0,0" Padding="10"
                     CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
                     Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                     BorderBrush="{arc:ArcDesignTokenResource Border}" BorderThickness="1">
                 <StackPanel Spacing="8">
                     <TextBlock Classes="caption" Text="{l:AppLangResource BotConnectorCatalogAddByUrl}" />
-                    <TextBox Text="{Binding CustomUrlName, Mode=TwoWay}"
-                             PlaceholderText="{l:AppLangResource BotConnectorUrlNamePlaceholder}" />
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBox Text="{Binding CustomUrl, Mode=TwoWay}"
-                                 PlaceholderText="{l:AppLangResource BotConnectorUrlPlaceholder}" />
-                        <arc:Button Grid.Column="1" Variant="Primary" Size="Small"
+                    <Grid ColumnDefinitions="*,104" ColumnSpacing="8">
+                        <arc:Input Size="Small" IsLabelVisible="False"
+                                   Label="{l:AppLangResource BotConnectorUrlNamePlaceholder}"
+                                   Placeholder="{l:AppLangResource BotConnectorUrlNamePlaceholder}"
+                                   Text="{Binding CustomUrlName, Mode=TwoWay}" />
+                        <arc:Select Grid.Column="1" Size="Small" AutoScrollToSelectedItem="False"
+                                    ItemsSource="{Binding TransportOptions}"
+                                    SelectedValue="{Binding CustomTransport, Mode=TwoWay}" />
+                    </Grid>
+                    <arc:Input Size="Small" IsLabelVisible="False"
+                               Label="{l:AppLangResource BotConnectorUrlPlaceholder}"
+                               Placeholder="{l:AppLangResource BotConnectorUrlPlaceholder}"
+                               Text="{Binding CustomUrl, Mode=TwoWay}" />
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <arc:Input Size="Small" IsLabelVisible="False"
+                                   Label="{l:AppLangResource BotConnectorTokenLabel}"
+                                   Placeholder="{l:AppLangResource BotConnectorTokenPlaceholder}"
+                                   Text="{Binding CustomBearerToken, Mode=TwoWay}" />
+                        <arc:Button Grid.Column="1" Variant="Secondary" Size="Small"
+                                    IsLoading="{Binding IsTestingCustomUrl}"
+                                    Content="{l:AppLangResource BotConnectorTestButton}"
+                                    Command="{Binding TestCustomUrlCommand}" />
+                        <arc:Button Grid.Column="2" Variant="Primary" Size="Small"
                                     Content="{l:AppLangResource BotConnectorUrlConfirm}"
                                     Command="{Binding AddByUrlCommand}" />
                     </Grid>
+                    <TextBlock Classes="hint" IsVisible="{Binding HasCustomUrlTestStatus}" Text="{Binding CustomUrlTestStatus}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
@@ -107,12 +126,25 @@
                                                         Background="{arc:ArcDesignTokenResource Surface}"
                                                         BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
                                                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                                                        <Border Width="32" Height="32" CornerRadius="8" Background="{Binding BadgeBrush}" VerticalAlignment="Center">
-                                                            <TextBlock Text="{Binding BadgeText}" Foreground="White" FontSize="11" FontWeight="Bold"
-                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        </Border>
-                                                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                                                            <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding Name}" />
+                                                        <common:ConnectorIconView AppId="{Binding AppId}"
+                                                                                  Size="32"
+                                                                                  CornerRadius="8"
+                                                                                  IconPadding="6"
+                                                                                  TileBackground="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                                                  TileBorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                                                                  FallbackText="{Binding BadgeText}"
+                                                                                  FallbackBrush="{Binding BadgeBrush}"
+                                                                                  VerticalAlignment="Center" />
+                                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                                <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding Name}" VerticalAlignment="Center" />
+                                                                <Border IsVisible="{Binding HasEndpoint}" Padding="5,1" CornerRadius="999"
+                                                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
+                                                                        VerticalAlignment="Center">
+                                                                    <TextBlock Classes="hint" FontSize="10" Text="{Binding AuthBadgeText}" />
+                                                                </Border>
+                                                            </StackPanel>
                                                             <TextBlock Classes="hint" Text="{Binding Description}" TextTrimming="CharacterEllipsis" />
                                                         </StackPanel>
                                                         <arc:Button Grid.Column="2" Size="Small" VerticalAlignment="Center"

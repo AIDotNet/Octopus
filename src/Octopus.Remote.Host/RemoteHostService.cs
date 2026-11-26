@@ -252,6 +252,21 @@ public sealed class RemoteHostService : IAsyncDisposable
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Issues a fresh one-time pairing token inside the currently open pairing window (for example after one phone
+    /// scanned the QR code and the user wants to pair another device). Returns false when no window is open.
+    /// </summary>
+    public bool RefreshPairingToken()
+    {
+        lock (_gate)
+        {
+            if (_pairing is not { IsOpen: true } window) return false;
+            window.Token = RandomNumberGenerator.GetBytes(16);
+        }
+        Changed?.Invoke();
+        return true;
+    }
+
     /// <summary>The link a device follows to pair without comparing numbers; null while no window is open or its token was used.</summary>
     public PairingLink? CreatePairingLink(IEnumerable<string> addresses)
     {
@@ -475,6 +490,7 @@ public sealed class RemoteHostService : IAsyncDisposable
                 {
                     window.Token = null; // once
                     host._devices.Add(offer.Key, offer.Description);
+                    _ = Task.Run(() => host.Changed?.Invoke());
                     return AcceptDecision.Accept;
                 }
                 if (window.Attempts >= PairingWindow.MaxRequests) return AcceptDecision.Reject(HandshakeStatus.PairingClosed);

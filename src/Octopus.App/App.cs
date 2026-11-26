@@ -51,6 +51,16 @@ public class App : Application
             {
                 StartupTrace.LogException("app:initialize:signal-hub", e);
             }
+            try
+            {
+                // Initialize coordinator first so the MCP server has its handler attached before accepting connections.
+                _ = AppHost.Get<Collab.ICollabCoordinator>();
+                AppHost.Get<Collab.CollabMcpServer>().Start();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
+            {
+                StartupTrace.LogException("app:initialize:collab-mcp", e);
+            }
         }
         StartupTrace.Log("app:initialize:signal-hub");
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -146,7 +156,26 @@ public class App : Application
                 window.Topmost = true;
                 window.Topmost = wasTopmost;
             }
+
+            if (Bots.BotShareCodec.IsBotImportUri(uri))
+            {
+                _ = HandleBotImportUriAsync(uri);
+            }
         });
+    }
+
+    private static async Task HandleBotImportUriAsync(Uri uri)
+    {
+        if (!Bots.BotShareCodec.TryDecode(uri, out var payload, out _) || payload is null)
+        {
+            return;
+        }
+        var dialogs = AppHost.Get<IDialogService>();
+        if (!await dialogs.ConfirmBotImportAsync(payload))
+        {
+            return;
+        }
+        AppHost.Get<Bots.IBotService>().ImportBot(payload);
     }
 
     private static readonly TimeSpan ScanDelayWithCache = TimeSpan.FromSeconds(4);

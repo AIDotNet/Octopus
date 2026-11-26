@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Localization;
 using Octopus.Core.Bots;
+using TKCode.Arc;
 using TKCode.Arc.Icons.Lucide;
 using TKCode.Arc.Localization;
 
@@ -49,6 +50,14 @@ public sealed partial class ConnectorAppRowViewModel : ObservableObject
         BadgeBrush = SolidColorBrush.Parse(app.AccentColor);
         BadgeText = app.BadgeText;
         Icon = NewBotDialogViewModel.ParseIcon(app.IconName, LucideIconKind.Plug);
+        EndpointUrl = BotCatalog.ResolveMcpUrl(app);
+        HasEndpoint = !string.IsNullOrWhiteSpace(EndpointUrl);
+        AuthBadgeText = app.AuthMode switch
+        {
+            "none" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthNone),
+            "bearer" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthTokenNeeded),
+            _ => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthOAuth),
+        };
         IsAdded = isAdded;
         _toggle = toggle;
     }
@@ -60,6 +69,9 @@ public sealed partial class ConnectorAppRowViewModel : ObservableObject
     public IBrush BadgeBrush { get; }
     public string BadgeText { get; }
     public LucideIconKind Icon { get; }
+    public string? EndpointUrl { get; }
+    public bool HasEndpoint { get; }
+    public string AuthBadgeText { get; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActionLabel))]
@@ -102,12 +114,22 @@ public sealed partial class ConnectorCatalogViewModel : ObservableObject
 
     public ObservableCollection<ConnectorCategoryItemViewModel> Categories { get; } = [];
     public ObservableCollection<ConnectorCatalogGroupViewModel> Groups { get; } = [];
+    public IReadOnlyList<SelectOption> TransportOptions { get; } =
+    [
+        new("http", "HTTP"),
+        new("sse", "SSE"),
+    ];
 
     [ObservableProperty] public partial string SelectedCategoryId { get; set; } = "all";
     [ObservableProperty] public partial string SearchQuery { get; set; } = "";
     [ObservableProperty] public partial bool IsAddingByUrl { get; set; }
     [ObservableProperty] public partial string CustomUrlName { get; set; } = "";
     [ObservableProperty] public partial string CustomUrl { get; set; } = "";
+    [ObservableProperty] public partial string CustomTransport { get; set; } = "http";
+    [ObservableProperty] public partial string CustomBearerToken { get; set; } = "";
+    [ObservableProperty] public partial bool IsTestingCustomUrl { get; private set; }
+    [ObservableProperty] public partial string CustomUrlTestStatus { get; private set; } = "";
+    [ObservableProperty] public partial bool HasCustomUrlTestStatus { get; private set; }
     [ObservableProperty] public partial bool HasNoResults { get; private set; }
 
     partial void OnSearchQueryChanged(string value) => RebuildGroups();
@@ -116,12 +138,38 @@ public sealed partial class ConnectorCatalogViewModel : ObservableObject
     private void ToggleAddByUrl() => IsAddingByUrl = !IsAddingByUrl;
 
     [RelayCommand]
-    private void AddByUrl()
+    private async Task TestCustomUrlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(CustomUrl) || IsTestingCustomUrl) return;
+        IsTestingCustomUrl = true;
+        CustomUrlTestStatus = AppLangResources.Get(AppLangResourceKind.BotConnectorTesting);
+        HasCustomUrlTestStatus = true;
+        try
+        {
+            var result = await _bots.ConnectorRuntime.ProbeAsync(CustomUrl, CustomTransport, CustomBearerToken);
+            CustomUrlTestStatus = result.Status switch
+            {
+                ConnectorProbeStatus.Reachable => AppLangResources.Format(AppLangResourceKind.BotConnectorTestOk, result.Message),
+                ConnectorProbeStatus.AuthRequired => AppLangResources.Format(AppLangResourceKind.BotConnectorTestAuthRequired, result.Message),
+                _ => AppLangResources.Format(AppLangResourceKind.BotConnectorTestFailed, result.Message),
+            };
+        }
+        finally
+        {
+            IsTestingCustomUrl = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddByUrlAsync()
     {
         if (string.IsNullOrWhiteSpace(CustomUrl)) return;
-        _bots.AddCustomUrlConnector(_botId, CustomUrlName, CustomUrl);
+        await _bots.AddCustomUrlConnectorAsync(_botId, CustomUrlName, CustomUrl, CustomTransport, CustomBearerToken);
         CustomUrlName = "";
         CustomUrl = "";
+        CustomBearerToken = "";
+        CustomUrlTestStatus = "";
+        HasCustomUrlTestStatus = false;
         IsAddingByUrl = false;
     }
 

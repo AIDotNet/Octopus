@@ -63,6 +63,14 @@ public partial class BotRightPanelView : UserControl
         base.OnDetachedFromVisualTree(e);
     }
 
+    private void OnChatRowDataContextChanged(object? sender, EventArgs e)
+    {
+        if (sender is Control control && control.DataContext is BotChatRowViewModel row)
+        {
+            BotContextMenus.AttachChatMenu(control, row);
+        }
+    }
+
     private void OnTopBarPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && _window is not null)

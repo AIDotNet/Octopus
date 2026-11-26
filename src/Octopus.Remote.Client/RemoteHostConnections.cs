@@ -193,15 +193,63 @@ public class RemoteHostConnections : IDisposable
             : ParseAddress(target) is { } typed ? [typed] : [];
         if (addresses.Count == 0) throw new FormatException("Not an address or a pairing link.");
         var identity = await _identity().ConfigureAwait(false);
-        Exception? last = null;
-        foreach (var address in addresses)
+        var expected = link is null ? PeerExpectation.AnyForPairing : PeerExpectation.WithFingerprint(link.Fingerprint);
+        var options = new ConnectOptions { RequestPairing = true, Token = link?.Token ?? default, OnPending = onPending };
+
+        // Single address: dial directly without racing overhead.
+        if (addresses.Count == 1)
         {
-            IMessageTransport transport;
-            try { transport = await Dial(address, cancellationToken).ConfigureAwait(false); }
-            catch (Exception e) when (e is not OperationCanceledException) { last = e; continue; }
-            var expected = link is null ? PeerExpectation.AnyForPairing : PeerExpectation.WithFingerprint(link.Fingerprint);
-            var options = new ConnectOptions { RequestPairing = true, Token = link?.Token ?? default, OnPending = onPending };
+            var address = addresses[0];
+            var transport = await Dial(address, cancellationToken).ConfigureAwait(false);
             var client = await RemoteHostClient.ConnectAsync(transport, identity, Description, expected, _hello, options, cancellationToken).ConfigureAwait(false);
+            return CompletePairing(address, client);
+        }
+
+        // Multiple addresses (e.g. a QR pairing link carrying several LAN IPs + relay): stagger-race the dial step so
+        // an unreachable virtual NIC never stalls pairing behind a long TCP timeout, then run the handshake on the
+        // winning transport (keeping one-time token consumption strictly single-shot).
+        using var race = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var dialStagger = TimeSpan.FromMilliseconds(350);
+        var dialTasks = addresses.Select((address, index) => DialCandidateAsync(address, index, race.Token)).ToList();
+        Exception? last = null;
+        while (dialTasks.Count > 0)
+        {
+            var finished = await Task.WhenAny(dialTasks).ConfigureAwait(false);
+            dialTasks.Remove(finished);
+            if (!finished.IsCompletedSuccessfully)
+            {
+                var ex = finished.IsCanceled ? new OperationCanceledException(cancellationToken) : finished.Exception!.InnerException;
+                if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested) throw ex;
+                last = ex;
+                continue;
+            }
+            var (address, transport) = finished.Result;
+            race.Cancel();
+            foreach (var other in dialTasks)
+            {
+                _ = other.ContinueWith(static late =>
+                {
+                    if (late.IsCompletedSuccessfully) _ = late.Result.Transport.DisposeAsync().AsTask();
+                    else _ = late.Exception;
+                }, TaskScheduler.Default);
+            }
+            var client = await RemoteHostClient.ConnectAsync(transport, identity, Description, expected, _hello, options, cancellationToken).ConfigureAwait(false);
+            return CompletePairing(address, client);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new IOException(last?.Message ?? "The host cannot be reached.", last);
+
+        async Task<(Uri Address, IMessageTransport Transport)> DialCandidateAsync(Uri address, int index, CancellationToken token)
+        {
+            if (index > 0) await Task.Delay(dialStagger * index, token).ConfigureAwait(false);
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
+            limit.CancelAfter(ConnectLimit);
+            var transport = await Dial(address, limit.Token).ConfigureAwait(false);
+            return (address, transport);
+        }
+
+        PairedPeer CompletePairing(Uri address, RemoteHostClient client)
+        {
             // The way through the relay is not an address of the host's: it is tried for every host while a relay is set up.
             var peer = Hosts.Add(client.Host, client.HostDescription, address.Scheme == RelayScheme ? [] : [address.ToString()]);
             Link hostLink;
@@ -213,7 +261,6 @@ public class RemoteHostConnections : IDisposable
             Adopt(peer.Id, hostLink, client, address.Scheme == RelayScheme);
             return peer;
         }
-        throw new IOException(last?.Message ?? "The host cannot be reached.", last);
     }
 
     /// <summary>

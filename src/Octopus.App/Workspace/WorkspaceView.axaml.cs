@@ -43,7 +43,7 @@ public partial class WorkspaceView : UserControl
     {
         InitializeComponent();
         // Arc's internal DockTab already trims its title when the tab has a finite width.
-        if (typeof(DockLayout).Assembly.GetType("TKCode.Arc.DockTab") is { } tabType)
+        if (Type.GetType("TKCode.Arc.DockTab, TKCode.Arc.Dock") is { } tabType)
         {
             Styles.Add(new Style(selector => selector.OfType(tabType))
             {

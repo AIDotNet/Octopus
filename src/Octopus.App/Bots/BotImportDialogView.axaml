@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Bots"
+             x:Class="Octopus.App.Bots.BotImportDialogView"
+             x:DataType="vm:BotImportDialogViewModel">
+    <UserControl.Styles>
+        <Style Selector="Border.import-group">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPanel}" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.import-sep">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="Margin" Value="12,0" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="14" HorizontalAlignment="Stretch">
+        <!-- Avatar + name + agent -->
+        <StackPanel HorizontalAlignment="Center" Spacing="6" Margin="0,2,0,2">
+            <Border Width="56" Height="56" CornerRadius="14" HorizontalAlignment="Center"
+                    Background="{Binding AvatarBrush}">
+                <Panel>
+                    <lucide:LucideIcon IsVisible="{Binding HasAvatarIcon}" Kind="{Binding AvatarIcon}" Size="26" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding ShowInitial}" Text="{Binding Initial}" Foreground="White" FontSize="22" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Panel>
+            </Border>
+            <TextBlock Classes="body" FontSize="16" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Text="{Binding Name}" />
+            <TextBlock Classes="hint" HorizontalAlignment="Center" Text="{Binding AgentId}" />
+        </StackPanel>
+
+        <!-- Imported contents summary -->
+        <Border Classes="import-group">
+            <StackPanel>
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,9">
+                    <lucide:LucideIcon Kind="Smile" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotSettingsSoul}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="hint" Text="{Binding SoulSummaryText}" VerticalAlignment="Center" />
+                </Grid>
+                <Border Classes="import-sep" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,9">
+                    <lucide:LucideIcon Kind="Plug" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotImportConnectors}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="hint" MaxWidth="200" TextTrimming="CharacterEllipsis" Text="{Binding ConnectorsSummaryText}" VerticalAlignment="Center" />
+                </Grid>
+                <Border Classes="import-sep" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,9">
+                    <lucide:LucideIcon Kind="Clock" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotShareAutomations}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="hint" Text="{Binding AutomationsSummaryText}" VerticalAlignment="Center" />
+                </Grid>
+                <Border Classes="import-sep" />
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" Margin="12,9">
+                    <lucide:LucideIcon Kind="ShieldCheck" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotShareSecurityCheck}" VerticalAlignment="Center" />
+                    <lucide:LucideIcon Grid.Column="2" Kind="Check" Size="13" IsVisible="{Binding SecurityCheckClean}"
+                                       Foreground="{arc:ArcDesignTokenResource Success}" VerticalAlignment="Center" />
+                    <lucide:LucideIcon Grid.Column="2" Kind="TriangleAlert" Size="13" IsVisible="{Binding !SecurityCheckClean}"
+                                       Foreground="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="3" Classes="hint" Text="{Binding SecurityCheckText}" VerticalAlignment="Center" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Optional setup notes from sharer -->
+        <Border Classes="import-group" IsVisible="{Binding HasSetupNotes}" Padding="12,9">
+            <StackPanel Spacing="4">
+                <TextBlock Classes="caption" Text="{l:AppLangResource BotShareSetupNotes}" />
+                <TextBlock Classes="hint" Text="{Binding SetupNotes}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

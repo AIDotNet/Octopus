@@ -5,6 +5,7 @@ using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Bots;
 using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
@@ -14,14 +15,15 @@ using Octopus.Mobile.Workspace;
 namespace Octopus.Mobile.Hosts;
 
 /// <summary>
-/// Scheme A root dashboard: three bottom tabs (Activity inbox, Computers, Me / Account center).
-/// Aggregates cross-host waiting/working sessions into the Activity tab while keeping full host grouping and account management.
+/// Scheme A root dashboard: four bottom tabs (Activity inbox, Bots, Computers, Me / Account center).
+/// Aggregates cross-host waiting/working sessions into Activity and cross-host Bots with multi-chat session management into Bots.
 /// </summary>
 public sealed partial class HostsViewModel : ObservableObject, IDisposable
 {
     public const int TabActivity = 0;
-    public const int TabHosts = 1;
-    public const int TabAccount = 2;
+    public const int TabBots = 1;
+    public const int TabHosts = 2;
+    public const int TabAccount = 3;
 
     private readonly IRemoteWorkspace _workspace;
     private readonly IAccountSession _account;
@@ -40,6 +42,8 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         _navigator = navigator;
         _openBrowser = openBrowser ?? (_ => { });
         IsSignedIn = account.IsSignedIn;
+        Bots = new BotsTabViewModel(workspace, navigator);
+        Bots.SummaryChanged += OnBotsSummaryChanged;
         workspace.Hosts.CollectionChanged += OnHostsChanged;
         workspace.OtherDevices.CollectionChanged += OnOtherDevicesChanged;
         RebuildAll();
@@ -49,22 +53,32 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     /// <summary>The app's updater: the "Me" tab's update row binds to it.</summary>
     public MobileUpdater Updater { get; }
 
-    /// <summary>Active bottom tab: 0 = Activity, 1 = Computers, 2 = Me.</summary>
+    /// <summary>Cross-host Bots tab state (accordion session cards, 1-tap approvals, New Bot &amp; Link Import sheets).</summary>
+    public BotsTabViewModel Bots { get; }
+
+    /// <summary>Active bottom tab: 0 = Activity, 1 = Bots, 2 = Computers, 3 = Me.</summary>
     [ObservableProperty] public partial int SelectedTab { get; set; } = TabActivity;
 
     public bool IsActivityTab => SelectedTab == TabActivity;
+    public bool IsBotsTab => SelectedTab == TabBots;
     public bool IsHostsTab => SelectedTab == TabHosts;
     public bool IsAccountTab => SelectedTab == TabAccount;
 
-    /// <summary>Shows the dismissible update reminder banner on Activity &amp; Computers tabs; Me tab has its own full section.</summary>
+    /// <summary>Shows the dismissible update reminder banner on Activity, Bots &amp; Computers tabs; Me tab has its own full section.</summary>
     public bool ShowUpdateBanner => Updater.IsBannerVisible && !IsAccountTab;
 
     public string CurrentTabTitle => SelectedTab switch
     {
+        TabBots => MobileLangResources.Get(MobileLangResourceKind.TabBots),
         TabHosts => MobileLangResources.Get(MobileLangResourceKind.TabHosts),
         TabAccount => MobileLangResources.Get(MobileLangResourceKind.TabMe),
         _ => MobileLangResources.Get(MobileLangResourceKind.TabActivity),
     };
+
+    /// <summary>"Bots", with a pending count while any Bot work item or chat needs attention.</summary>
+    public string BotsTabLabel => Bots.TotalNeedsCount > 0
+        ? MobileLangResources.Format(MobileLangResourceKind.TabBotsBadge, Bots.TotalNeedsCount)
+        : MobileLangResources.Get(MobileLangResourceKind.TabBots);
 
     /// <summary>"Me", with a dot while a newer version waits in the update row.</summary>
     public string MeTabLabel => Updater.HasNews
@@ -146,6 +160,7 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     partial void OnSelectedTabChanged(int value)
     {
         OnPropertyChanged(nameof(IsActivityTab));
+        OnPropertyChanged(nameof(IsBotsTab));
         OnPropertyChanged(nameof(IsHostsTab));
         OnPropertyChanged(nameof(IsAccountTab));
         OnPropertyChanged(nameof(CurrentTabTitle));
@@ -223,9 +238,13 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         _workspace.Hosts.CollectionChanged -= OnHostsChanged;
         _workspace.OtherDevices.CollectionChanged -= OnOtherDevicesChanged;
         Updater.PropertyChanged -= OnUpdaterChanged;
+        Bots.SummaryChanged -= OnBotsSummaryChanged;
+        Bots.Dispose();
         UnwatchAll();
         ClearRows();
     }
+
+    private void OnBotsSummaryChanged() => OnPropertyChanged(nameof(BotsTabLabel));
 
     private void OnHostsChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildAll();
 

@@ -65,6 +65,8 @@ public static class TestApp
             services.Replace(ServiceDescriptor.Singleton<Octopus.Acp.Process.IAcpSessionFactory, FakeAcpSessionFactory>());
             services.AddSingleton(p => (FakeAcpSessionFactory)p.GetRequiredService<Octopus.Acp.Process.IAcpSessionFactory>());
             services.Replace(ServiceDescriptor.Singleton<IAgentScanner>(new FakeAgentScanner("claude", "opencode", "codex")));
+            services.Replace(ServiceDescriptor.Singleton<IAgentInstaller, FakeAgentInstaller>());
+            services.AddSingleton(p => (FakeAgentInstaller)p.GetRequiredService<IAgentInstaller>());
             services.Replace(ServiceDescriptor.Singleton<IModelDiscovery, FakeModelDiscovery>());
             services.AddSingleton(p => (FakeModelDiscovery)p.GetRequiredService<IModelDiscovery>());
             services.Replace(ServiceDescriptor.Singleton<Octopus.Agents.Sessions.IAgentSessionService, FakeAgentSessionService>());

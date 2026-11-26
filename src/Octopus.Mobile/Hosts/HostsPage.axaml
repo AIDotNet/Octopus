@@ -3,6 +3,7 @@
            xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
            xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
            xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:bots="using:Octopus.Mobile.Bots"
            xmlns:common="using:Octopus.Mobile.Common"
            xmlns:vm="using:Octopus.Mobile.Hosts"
            x:Class="Octopus.Mobile.Hosts.HostsPage"
@@ -114,6 +115,17 @@
             </arcm:Navbar.Leading>
             <arcm:Navbar.Trailing>
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <!-- Quick import link + create Bot on Bots tab -->
+                    <arcm:IconButton Name="NavImportBotButton"
+                                     Icon="{x:Static arc:ArcIcons.ExternalLink}"
+                                     Command="{Binding Bots.OpenImportBotCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource BotsImportButton}"
+                                     IsVisible="{Binding IsBotsTab}" />
+                    <arcm:IconButton Name="NavNewBotButton"
+                                     Icon="{x:Static arc:ArcIcons.Plus}"
+                                     Command="{Binding Bots.OpenNewBotCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource BotsNewButton}"
+                                     IsVisible="{Binding IsBotsTab}" />
                     <!-- Quick add computer on Computers tab -->
                     <arcm:IconButton Name="NavAddHostButton"
                                      Icon="{x:Static arc:ArcIcons.Plus}"
@@ -310,7 +322,231 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- ==================== Tab 1: Computers (电脑分组) ==================== -->
+        <!-- ==================== Tab 1: Bots (Scheme A: 跨电脑折叠会话卡) ==================== -->
+        <Panel IsVisible="{Binding IsBotsTab}">
+        <StackPanel Name="BotsTabContent" Spacing="12" DataContext="{Binding Bots}" x:DataType="bots:BotsTabViewModel">
+            <!-- Inline error banner -->
+            <Border Margin="16,0" Padding="12,8" CornerRadius="10"
+                    Background="{arc:ArcDesignTokenResource DangerSubtle}"
+                    IsVisible="{Binding HasError}">
+                <TextBlock Text="{Binding ErrorMessage}"
+                           Foreground="{arc:ArcDesignTokenResource Danger}"
+                           TextWrapping="Wrap"
+                           FontSize="{arc:ArcDesignTokenResource TypeSM}" />
+            </Border>
+
+            <!-- Search + filter chips when bots exist -->
+            <StackPanel Spacing="8" IsVisible="{Binding HasBots}">
+                <arcm:TextField Name="BotsSearchField"
+                                Classes="hostSearch"
+                                Margin="16,0"
+                                Text="{Binding SearchQuery, Mode=TwoWay}"
+                                PlaceholderText="{l:MobileLangResource BotsSearchPlaceholder}" />
+
+                <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="16,0">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Name="BotsFilterAllChip" Classes="chipBtn" Classes.active="{Binding IsFilterAll}"
+                                Command="{Binding SelectFilterAllCommand}">
+                            <TextBlock Text="{Binding FilterAllText}" />
+                        </Button>
+                        <Button Name="BotsFilterNeedsChip" Classes="chipBtn attention" Classes.active="{Binding IsFilterNeeds}"
+                                Command="{Binding SelectFilterNeedsCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Border Classes="statusDot warning" />
+                                <TextBlock Text="{Binding FilterNeedsText}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Name="BotsFilterWorkingChip" Classes="chipBtn" Classes.active="{Binding IsFilterWorking}"
+                                Command="{Binding SelectFilterWorkingCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <Border Classes="statusDot accent" />
+                                <TextBlock Text="{Binding FilterWorkingText}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+            </StackPanel>
+
+            <!-- Expandable Bot cards with inline 1-tap approvals & embedded active sessions -->
+            <ItemsControl Name="BotAccordionList" ItemsSource="{Binding VisibleBots}" IsVisible="{Binding HasVisibleBots}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="12" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="bots:BotAccordionCardViewModel">
+                        <Border Classes="projectCard"
+                                Classes.attention="{Binding HasAttention}"
+                                Margin="16,0">
+                            <StackPanel>
+                                <!-- Card header: avatar + name/host/active count + status pill + quick "+" + chevron -->
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                    <Button Grid.Column="0" Classes="cardHeaderBtn" Command="{Binding ToggleExpandedCommand}">
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
+                                            <Panel Grid.Column="0" Width="38" Height="38" VerticalAlignment="Center">
+                                                <Border Width="38" Height="38" CornerRadius="10" Background="{Binding AvatarBrush}">
+                                                    <TextBlock Text="{Binding Initial}" Foreground="White" FontSize="15" FontWeight="Bold"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <Border Classes="cornerBadge waiting" IsVisible="{Binding HasCornerBadge}">
+                                                    <TextBlock Text="{Binding CornerBadgeText}" />
+                                                </Border>
+                                            </Panel>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Classes="projectCardTitle" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Classes="projectCardPath" Text="{Binding SubtitleText}" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,10,0">
+                                        <Border Classes="pill compact"
+                                                Classes.waiting="{Binding StatusIsWaiting}"
+                                                Classes.working="{Binding StatusIsWorking}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <arc:ArcSpinner IsVisible="{Binding StatusIsWorking}" />
+                                                <TextBlock Text="{Binding StatusPillText}" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Button Classes="projectPlusBtn" Command="{Binding NewChatCommand}"
+                                                AutomationProperties.Name="{l:MobileLangResource BotsNewChatShort}">
+                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="14"
+                                                          Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Button>
+                                        <Button Classes="projectChevronBtn" Command="{Binding ToggleExpandedCommand}">
+                                            <Panel>
+                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronRight}" Size="15"
+                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                              IsVisible="{Binding !IsExpanded}" />
+                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronDown}" Size="15"
+                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                              IsVisible="{Binding IsExpanded}" />
+                                            </Panel>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Collapsible body: inline 1-tap approval items + active chats + card footer -->
+                                <StackPanel IsVisible="{Binding IsExpanded}">
+                                    <ItemsControl ItemsSource="{Binding PendingWorkItems}" IsVisible="{Binding HasPendingWorkItems}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="bots:BotWorkItemRowViewModel">
+                                                <Border Classes="botTodoStrip">
+                                                    <StackPanel Spacing="7">
+                                                        <TextBlock Classes="sessionTitle" Text="{Binding Question}" TextWrapping="Wrap" />
+                                                        <ItemsControl ItemsSource="{Binding Options}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate x:DataType="bots:BotWorkItemOptionViewModel">
+                                                                    <Button Classes="botOptionBtn" Command="{Binding ChooseCommand}">
+                                                                        <TextBlock Text="{Binding Label}" />
+                                                                    </Button>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Embedded active chats (Home Chat + parallel sub-chats) -->
+                                    <Border Classes="projectSessionList" IsVisible="{Binding HasActiveChats}">
+                                        <ItemsControl ItemsSource="{Binding ActiveChats}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="bots:BotChatItemViewModel">
+                                                    <arcm:ListItem Classes="cardSessionRow" ShowChevron="True" Command="{Binding OpenCommand}">
+                                                        <arcm:ListItem.Trailing>
+                                                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                                <Border Classes="pill compact"
+                                                                        Classes.waiting="{Binding IsWaiting}"
+                                                                        Classes.working="{Binding IsWorking}"
+                                                                        IsVisible="{Binding HasStatus}">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                        <arc:ArcSpinner IsVisible="{Binding IsWorking}" />
+                                                                        <TextBlock Text="{Binding StatusText}" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                                <TextBlock Classes="muted" Text="{Binding TimeText}" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </arcm:ListItem.Trailing>
+                                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,3">
+                                                            <Border Grid.Column="0" Classes="badge" Background="{Binding AgentTint}">
+                                                                <TextBlock Text="{Binding AgentInitial}" />
+                                                            </Border>
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <TextBlock Classes="sessionTitle" Text="{Binding Title}" VerticalAlignment="Center" />
+                                                                    <Border Classes="guiTag" IsVisible="{Binding IsHome}">
+                                                                        <TextBlock Text="{l:MobileLangResource BotsHomeChatTag}" />
+                                                                    </Border>
+                                                                </StackPanel>
+                                                                <TextBlock Classes="secondary" Text="{Binding Subtitle}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </arcm:ListItem>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+
+                                    <!-- Footer quick actions: All Sessions / Connectors / Settings / + New chat -->
+                                    <Border Classes="projectCardFooter">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                                <Button Classes="projectFooterBtn" Command="{Binding OpenSessionsCommand}">
+                                                    <TextBlock Text="{Binding AllSessionsButtonText}" />
+                                                </Button>
+                                                <Button Classes="projectFooterBtn" Command="{Binding OpenConnectorsCommand}">
+                                                    <TextBlock Text="{Binding ConnectorsButtonText}" />
+                                                </Button>
+                                                <Button Classes="projectFooterBtn" Command="{Binding OpenSettingsCommand}">
+                                                    <TextBlock Text="{l:MobileLangResource BotsSettingsShort}" />
+                                                </Button>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Classes="projectFooterBtn primary" Command="{Binding NewChatCommand}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="12" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{l:MobileLangResource BotsNewChatShort}" />
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Empty state when 0 Bots exist -->
+            <Border Name="BotsEmptyCard" Classes="surfaceCard" Margin="16,12" IsVisible="{Binding IsEmpty}">
+                <StackPanel Spacing="12" HorizontalAlignment="Stretch">
+                    <TextBlock Classes="detailTitle" Text="{l:MobileLangResource BotsEmptyTitle}" HorizontalAlignment="Center" />
+                    <TextBlock Classes="secondary" Text="{l:MobileLangResource BotsEmptyHint}" TextWrapping="Wrap" TextAlignment="Center" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <arcm:Button Grid.Column="0" Variant="Filled" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource BotsNewButton}" Command="{Binding OpenNewBotCommand}" />
+                        <arcm:Button Grid.Column="1" Variant="Tinted" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource BotsImportButton}" Command="{Binding OpenImportBotCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Filtered empty -->
+            <Border Classes="emptyCard" Margin="16,0" IsVisible="{Binding IsFilteredEmpty}">
+                <TextBlock Classes="muted" Text="{l:MobileLangResource BotsSessionsEmpty}" TextAlignment="Center" />
+            </Border>
+        </StackPanel>
+        </Panel>
+
+        <!-- ==================== Tab 2: Computers (电脑分组) ==================== -->
         <StackPanel Name="HostsTabContent" Spacing="18" IsVisible="{Binding IsHostsTab}">
             <arcm:ListGroup Name="OnlineGroup"
                             Header="{l:MobileLangResource HostsOnline}"
@@ -524,12 +760,15 @@
         </Panel>
     </StackPanel>
 
-    <!-- Scheme A bottom 3-tab navigation bar -->
+    <!-- Scheme A bottom 4-tab navigation bar (Activity | Bots | Computers | Me) -->
     <arcm:Page.Footer>
         <arcm:Tabbar Name="MainTabbar" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}">
             <arcm:TabbarItem Name="ActivityTab"
                              Icon="{x:Static arc:ArcIcons.Sparkles}"
                              Content="{Binding ActivityTabLabel}" />
+            <arcm:TabbarItem Name="BotsTab"
+                             Icon="{x:Static arc:ArcIcons.MessageSquare}"
+                             Content="{Binding BotsTabLabel}" />
             <arcm:TabbarItem Name="HostsTab"
                              Icon="{x:Static arc:ArcIcons.Monitor}"
                              Content="{l:MobileLangResource TabHosts}" />
@@ -559,6 +798,103 @@
                                       IsDestructive="True"
                                       Command="{Binding LeaveLocalCommand}" />
             </arcm:ActionSheet>
+
+            <!-- New Bot Sheet -->
+            <arcm:Sheet Name="NewBotSheet"
+                        DataContext="{Binding Bots}"
+                        x:DataType="bots:BotsTabViewModel"
+                        IsOpen="{Binding IsNewBotOpen, Mode=TwoWay}"
+                        MaxHeightFraction="0.88"
+                        Title="{l:MobileLangResource BotsNewBotTitle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="16,4,16,24" Spacing="12">
+                        <TextBlock Classes="secondary" IsVisible="{Binding HasNoOnlineHosts}"
+                                   Text="{l:MobileLangResource BotsNoOnlineHostHint}" TextWrapping="Wrap" />
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewBotNameLabel}" />
+                        <arcm:TextField Text="{Binding NewBotName, Mode=TwoWay}"
+                                        PlaceholderText="{l:MobileLangResource BotsNewBotNamePlaceholder}" />
+
+                        <StackPanel Spacing="6" IsVisible="{Binding HasOnlineHosts}">
+                            <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewBotHostLabel}" />
+                            <arcm:Segmented ItemsSource="{Binding OnlineHostNames}"
+                                            SelectedIndex="{Binding SelectedHostIndex, Mode=TwoWay}" />
+                        </StackPanel>
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewBotAgentLabel}" />
+                        <arcm:Segmented ItemsSource="{Binding AvailableAgentNames}"
+                                        SelectedIndex="{Binding SelectedAgentIndex, Mode=TwoWay}" />
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewBotTemplateLabel}" />
+                        <arcm:Segmented ItemsSource="{Binding TemplateLabels}"
+                                        SelectedIndex="{Binding SelectedTemplateIndex, Mode=TwoWay}" />
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewBotSoulLabel}" />
+                        <arcm:TextField Text="{Binding NewBotSoul, Mode=TwoWay}"
+                                        PlaceholderText="{l:MobileLangResource BotsNewBotSoulPlaceholder}" />
+
+                        <arcm:Button Variant="Filled"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource BotsNewBotCreate}"
+                                     Command="{Binding ConfirmCreateBotCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </arcm:Sheet>
+
+            <!-- Import Bot from octopus://bot/import Link Sheet -->
+            <arcm:Sheet Name="ImportBotSheet"
+                        DataContext="{Binding Bots}"
+                        x:DataType="bots:BotsTabViewModel"
+                        IsOpen="{Binding IsImportOpen, Mode=TwoWay}"
+                        Title="{l:MobileLangResource BotsImportTitle}">
+                <StackPanel Margin="16,4,16,24" Spacing="12">
+                    <StackPanel Spacing="6" IsVisible="{Binding HasOnlineHosts}">
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewBotHostLabel}" />
+                        <arcm:Segmented ItemsSource="{Binding OnlineHostNames}"
+                                        SelectedIndex="{Binding SelectedHostIndex, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsImportLinkLabel}" />
+                    <arcm:TextField Text="{Binding ImportLink, Mode=TwoWay}"
+                                    PlaceholderText="{l:MobileLangResource BotsImportLinkPlaceholder}" />
+
+                    <TextBlock Text="{Binding ErrorMessage}"
+                               Foreground="{arc:ArcDesignTokenResource Danger}"
+                               IsVisible="{Binding HasError}"
+                               TextWrapping="Wrap"
+                               FontSize="{arc:ArcDesignTokenResource TypeSM}" />
+
+                    <arcm:Button Variant="Filled"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{l:MobileLangResource BotsImportConfirm}"
+                                 Command="{Binding ConfirmImportBotCommand}" />
+                </StackPanel>
+            </arcm:Sheet>
+
+            <!-- Quick New Bot Chat Sheet -->
+            <arcm:Sheet Name="QuickNewBotChatSheet"
+                        DataContext="{Binding Bots}"
+                        x:DataType="bots:BotsTabViewModel"
+                        IsOpen="{Binding IsNewChatOpen, Mode=TwoWay}"
+                        Title="{Binding QuickChatSheetTitle}">
+                <StackPanel Margin="16,4,16,24" Spacing="12">
+                    <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewChatAgentLabel}" />
+                    <arcm:Segmented ItemsSource="{Binding QuickChatAgentNames}"
+                                    SelectedIndex="{Binding SelectedQuickChatAgentIndex, Mode=TwoWay}" />
+
+                    <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewChatTitleLabel}" />
+                    <arcm:TextField Text="{Binding QuickChatTitle, Mode=TwoWay}"
+                                    PlaceholderText="{l:MobileLangResource BotsNewChatTitlePlaceholder}" />
+
+                    <arcm:Button Variant="Filled"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{l:MobileLangResource BotsNewChatStart}"
+                                 Command="{Binding ConfirmQuickNewChatCommand}" />
+                </StackPanel>
+            </arcm:Sheet>
 
             <!-- In-app Markdown release-notes modal sheet -->
             <arcm:Sheet Name="UpdateNotesSheet"

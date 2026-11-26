@@ -83,7 +83,7 @@ public sealed class RemoteHostRuntime : IDisposable
             RemoteMethods.CapabilitySystemMetrics, RemoteMethods.CapabilitySystemSignal, RemoteMethods.CapabilityProcessRun,
             RemoteMethods.CapabilityProtocolV2, RemoteMethods.CapabilityCompression, RemoteMethods.CapabilityFileStream,
             RemoteMethods.CapabilitySessionResume, RemoteMethods.CapabilityTransportQuic, RemoteMethods.CapabilityTransportP2p,
-            RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons,
+            RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons, RemoteMethods.CapabilityBots,
         ],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         Transport = TransportNegotiation.CreateDefault(),
@@ -311,27 +311,89 @@ public sealed class RemoteHostRuntime : IDisposable
         Changed?.Invoke();
     }
 
-    /// <summary>Where a device of the local network reaches this host: one address per private IPv4 address of this computer; empty while not listening.</summary>
+    /// <summary>Where a device of the local network reaches this host: prioritized private IPv4 addresses of this computer; empty while not listening.</summary>
     public IReadOnlyList<string> LanAddresses()
     {
         if (_service?.LanPort is not { } port) return [];
-        var addresses = new List<string>();
+        var candidates = new List<LanCandidate>();
         try
         {
             foreach (var network in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (network.OperationalStatus != OperationalStatus.Up || network.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
-                foreach (var address in network.GetIPProperties().UnicastAddresses)
+                var properties = network.GetIPProperties();
+                var hasGateway = properties.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.Any.Equals(g.Address));
+                foreach (var address in properties.UnicastAddresses)
                 {
                     if (address.Address.AddressFamily == AddressFamily.InterNetwork && LocalNetwork.IsLocal(address.Address))
                     {
-                        addresses.Add($"ws://{address.Address}:{port}");
+                        candidates.Add(new LanCandidate(address.Address, network.Name, network.Description, network.NetworkInterfaceType, hasGateway));
                     }
                 }
             }
         }
         catch (NetworkInformationException) { }
-        return addresses.Count > 0 ? addresses : [$"ws://{IPAddress.Loopback}:{port}"];
+        var selected = SelectLanAddresses(candidates, port);
+        return selected.Count > 0 ? selected : [$"ws://{IPAddress.Loopback}:{port}"];
+    }
+
+    internal readonly record struct LanCandidate(IPAddress Address, string Name, string Description, NetworkInterfaceType InterfaceType, bool HasGateway);
+
+    /// <summary>
+    /// Ranks reachable physical LAN interfaces ahead of virtual bridges/tunnels (Docker, VMware, WSL, VPN) and drops
+    /// link-local or virtual-only addresses when real LAN interfaces are available, keeping pairing QR codes compact
+    /// and avoiding dead-NIC timeouts.
+    /// </summary>
+    internal static IReadOnlyList<string> SelectLanAddresses(IEnumerable<LanCandidate> candidates, int port, int maxAddresses = 4)
+    {
+        var list = candidates
+            .Where(c => c.Address.AddressFamily == AddressFamily.InterNetwork && LocalNetwork.IsLocal(c.Address) && !IPAddress.IsLoopback(c.Address))
+            .DistinctBy(c => c.Address)
+            .ToList();
+        if (list.Count == 0) return [];
+
+        static bool IsLinkLocal(IPAddress ip)
+        {
+            Span<byte> b = stackalloc byte[4];
+            return ip.TryWriteBytes(b, out _) && b[0] == 169 && b[1] == 254;
+        }
+
+        static bool IsVirtual(LanCandidate c)
+        {
+            if (c.InterfaceType is NetworkInterfaceType.Tunnel or NetworkInterfaceType.Loopback) return true;
+            var name = c.Name;
+            var desc = c.Description;
+            return ContainsAny(name, "docker", "br-", "veth", "virbr", "vmnet", "vbox", "utun", "awdl", "llw", "bridge", "tailscale", "wg", "tun", "tap", "wsl", "vethernet")
+                || ContainsAny(desc, "virtual", "vmware", "virtualbox", "hyper-v", "wsl", "docker", "loopback", "tunnel", "vpn", "wireguard", "tailscale", "zerotier");
+        }
+
+        static bool ContainsAny(string text, params ReadOnlySpan<string> needles)
+        {
+            foreach (var needle in needles)
+            {
+                if (text.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        static int Rank(LanCandidate c)
+        {
+            var score = 0;
+            if (!IsVirtual(c)) score += 100;
+            if (c.HasGateway) score += 50;
+            if (!IsLinkLocal(c.Address)) score += 25;
+            if (c.InterfaceType is NetworkInterfaceType.Wireless80211 or NetworkInterfaceType.Ethernet) score += 10;
+            return score;
+        }
+
+        var physical = list.Where(c => !IsVirtual(c) && !IsLinkLocal(c.Address)).ToList();
+        var pool = physical.Count > 0 ? physical : list;
+        return pool
+            .OrderByDescending(Rank)
+            .ThenBy(c => c.Address.ToString(), StringComparer.Ordinal)
+            .Take(maxAddresses)
+            .Select(c => $"ws://{c.Address}:{port}")
+            .ToList();
     }
 
     public void Dispose()

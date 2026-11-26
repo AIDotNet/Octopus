@@ -17,13 +17,15 @@ namespace Octopus.Storage;
     ReadCommentHandling = JsonCommentHandling.Skip,
     AllowTrailingCommas = true,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip,
-    Converters = [typeof(OctopusJsonContext.KindConverter), typeof(OctopusJsonContext.PluginSourceConverter), typeof(OctopusJsonContext.FileAccessConverter), typeof(OctopusJsonContext.TunnelKindConverter), typeof(OctopusJsonContext.AccountOriginConverter), typeof(OctopusJsonContext.WorkspaceTaskKindConverter), typeof(OctopusJsonContext.AgentSurfaceConverter), typeof(OctopusJsonContext.AcpAdapterPolicyConverter), typeof(OctopusJsonContext.BotChatKindConverter), typeof(OctopusJsonContext.BotChatStatusConverter), typeof(OctopusJsonContext.BotWorkItemStatusConverter)])]
+    Converters = [typeof(OctopusJsonContext.KindConverter), typeof(OctopusJsonContext.PluginSourceConverter), typeof(OctopusJsonContext.FileAccessConverter), typeof(OctopusJsonContext.TunnelKindConverter), typeof(OctopusJsonContext.AccountOriginConverter), typeof(OctopusJsonContext.WorkspaceTaskKindConverter), typeof(OctopusJsonContext.AgentSurfaceConverter), typeof(OctopusJsonContext.AcpAdapterPolicyConverter), typeof(OctopusJsonContext.CollabIsolationModeConverter), typeof(OctopusJsonContext.BotChatKindConverter), typeof(OctopusJsonContext.BotChatStatusConverter), typeof(OctopusJsonContext.BotWorkItemStatusConverter)])]
 [JsonSerializable(typeof(ProjectsDocument))]
 [JsonSerializable(typeof(AppSettingsModel))]
 [JsonSerializable(typeof(PluginsDocument))]
 [JsonSerializable(typeof(AccountsDocument))]
 [JsonSerializable(typeof(BotsDocument))]
 [JsonSerializable(typeof(BotHomeManifest))]
+[JsonSerializable(typeof(BotSharePayload))]
+[JsonSerializable(typeof(BotMcpFileDocument))]
 public sealed partial class OctopusJsonContext : JsonSerializerContext
 {
     /// <summary>Writes <see cref="ProjectItemKind"/> as a camelCase string.</summary>
@@ -42,6 +44,8 @@ public sealed partial class OctopusJsonContext : JsonSerializerContext
     public sealed class AgentSurfaceConverter() : JsonStringEnumConverter<AgentSurface>(JsonNamingPolicy.CamelCase);
 
     public sealed class AcpAdapterPolicyConverter() : JsonStringEnumConverter<AcpAdapterPolicy>(JsonNamingPolicy.CamelCase);
+
+    public sealed class CollabIsolationModeConverter() : JsonStringEnumConverter<CollabIsolationMode>(JsonNamingPolicy.CamelCase);
 
     public sealed class BotChatKindConverter() : JsonStringEnumConverter<BotChatKind>(JsonNamingPolicy.CamelCase);
 

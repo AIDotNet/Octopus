@@ -18,7 +18,7 @@ using Octopus.Storage;
 namespace Octopus.App.Shell;
 
 /// <summary>The main window: sidebar state, the settings overlay, and the keyboard shortcuts.</summary>
-public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSubagentPanelRequested>, IRecipient<FocusSubagentRequested>
+public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSubagentPanelRequested>, IRecipient<FocusSubagentRequested>, IRecipient<OpenBotSettingsRequested>
 {
     public const double MinPanelWidth = 200;
     public const double MaxPanelWidth = 420;
@@ -75,6 +75,10 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         };
         projects.Changed += (_, e) =>
         {
+            if (e.Kind == ProjectChangeKind.CurrentProject && _bots?.IsBotMode == true)
+            {
+                _bots.SetBotMode(false);
+            }
             if (e.Kind is ProjectChangeKind.Projects or ProjectChangeKind.CurrentProject or ProjectChangeKind.Active or ProjectChangeKind.Items or ProjectChangeKind.Workspaces or ProjectChangeKind.Device)
             {
                 ReadProject();
@@ -116,6 +120,7 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         PanelWidth = Math.Clamp(settings.Current.Sidebar.Width, MinPanelWidth, MaxPanelWidth);
         WeakReferenceMessenger.Default.Register<OpenSubagentPanelRequested>(this);
         WeakReferenceMessenger.Default.Register<FocusSubagentRequested>(this);
+        WeakReferenceMessenger.Default.Register<OpenBotSettingsRequested>(this);
     }
 
     public DeviceSwitcherViewModel DeviceSwitcher { get; }
@@ -194,6 +199,16 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
     public void Receive(OpenSubagentPanelRequested message)
     {
         UiContext.Run(() => OpenSubagentInRightPanel(message));
+    }
+
+    public void Receive(OpenBotSettingsRequested message)
+    {
+        UiContext.Run(() =>
+        {
+            IsBotMode = true;
+            IsRightPanelOpen = true;
+            BotRightPanel?.OpenSettingsFor(message.BotId);
+        });
     }
 
     public void Receive(FocusSubagentRequested message)
@@ -308,6 +323,14 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
     [RelayCommand]
     private void SplitRight() => _workspaceCommands.SplitRight();
 
+    public void CreateChatForCurrentBot()
+    {
+        if (_bots?.CurrentBot is { } bot)
+        {
+            _bots.CreateChat(bot.Id);
+        }
+    }
+
     /// <summary>Runs the command of a shortcut.</summary>
     public void Execute(AppCommand command)
     {
@@ -319,8 +342,14 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
                 _bots?.SetBotMode(true);
                 if (BotPanel is not null) _ = BotPanel.NewBotAsync();
                 break;
-            case AppCommand.NewTerminal: _opener.OpenTerminal(); break;
-            case AppCommand.NewDefaultAgent: _opener.OpenDefaultAgent(); break;
+            case AppCommand.NewTerminal:
+                if (IsBotMode) CreateChatForCurrentBot();
+                else _opener.OpenTerminal();
+                break;
+            case AppCommand.NewDefaultAgent:
+                if (IsBotMode) CreateChatForCurrentBot();
+                else _opener.OpenDefaultAgent();
+                break;
             case AppCommand.CloseTab: _workspaceCommands.CloseActiveTab(); break;
             case AppCommand.PreviousTab: _workspaceCommands.CycleTab(-1); break;
             case AppCommand.NextTab: _workspaceCommands.CycleTab(1); break;

@@ -1,0 +1,118 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Bots"
+             x:Class="Octopus.App.Bots.BotAvatarPickerView"
+             x:DataType="vm:BotAvatarPickerViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.avatar-swatch">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Ring"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="999"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^.selected">
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Foreground}" />
+            </Style>
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="16" HorizontalAlignment="Stretch">
+        <!-- Carousel: < [prev] [LARGE CENTER PREVIEW] [next] > -->
+        <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" VerticalAlignment="Center" Margin="0,4,0,0">
+            <arc:Button Classes="icon" Variant="Ghost" VerticalAlignment="Center" Command="{Binding PreviousCommand}">
+                <lucide:LucideIcon Kind="ChevronLeft" Size="16" />
+            </arc:Button>
+
+            <!-- Previous preview (faded) -->
+            <Button Grid.Column="1" Classes="row" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="0" Command="{Binding PreviousCommand}" Opacity="0.48">
+                <Border Width="62" Height="62" CornerRadius="16" Background="{Binding AvatarBrush}">
+                    <Panel>
+                        <TextBlock IsVisible="{Binding PrevIsInitial}" Text="{Binding Initial}" Foreground="White"
+                                   FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <lucide:LucideIcon IsVisible="{Binding !PrevIsInitial}" Kind="{Binding PrevIcon}" Size="26" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Panel>
+                </Border>
+            </Button>
+
+            <!-- Center active preview -->
+            <Border Grid.Column="2" Width="116" Height="116" CornerRadius="26" Margin="10,0"
+                    Background="{Binding AvatarBrush}" ClipToBounds="True">
+                <Panel>
+                    <Image IsVisible="{Binding HasPreviewImage}" Source="{Binding PreviewImage}"
+                           Width="116" Height="116" Stretch="UniformToFill"
+                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+                    <lucide:LucideIcon IsVisible="{Binding HasCenterIcon}" Kind="{Binding CenterIcon}" Size="48" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding ShowCenterInitial}" Text="{Binding Initial}" Foreground="White"
+                               FontSize="42" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Panel>
+            </Border>
+
+            <!-- Next preview (faded) -->
+            <Button Grid.Column="3" Classes="row" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="0" Command="{Binding NextCommand}" Opacity="0.48">
+                <Border Width="62" Height="62" CornerRadius="16" Background="{Binding AvatarBrush}">
+                    <Panel>
+                        <TextBlock IsVisible="{Binding NextIsInitial}" Text="{Binding Initial}" Foreground="White"
+                                   FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <lucide:LucideIcon IsVisible="{Binding !NextIsInitial}" Kind="{Binding NextIcon}" Size="26" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Panel>
+                </Border>
+            </Button>
+
+            <arc:Button Grid.Column="4" Classes="icon" Variant="Ghost" VerticalAlignment="Center" Command="{Binding NextCommand}">
+                <lucide:LucideIcon Kind="ChevronRight" Size="16" />
+            </arc:Button>
+        </Grid>
+
+        <!-- Color palette strip -->
+        <ItemsControl ItemsSource="{Binding Colors}" HorizontalAlignment="Center">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BotColorOptionViewModel">
+                    <Button Classes="avatar-swatch" Classes.selected="{Binding IsSelected}" Command="{Binding PickCommand}">
+                        <Ellipse Fill="{Binding Brush}" />
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Upload own image / reset -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+            <arc:Button Variant="Ghost" Size="Small" Command="{Binding UploadImageCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <lucide:LucideIcon Kind="ImagePlus" Size="14" VerticalAlignment="Center" />
+                    <TextBlock Text="{l:AppLangResource BotAvatarUploadHint}" VerticalAlignment="Center" />
+                </StackPanel>
+            </arc:Button>
+            <arc:Button Variant="Ghost" Size="Small" IsVisible="{Binding HasPreviewImage}"
+                        Content="{l:AppLangResource BotAvatarResetImage}" Command="{Binding ClearImageCommand}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

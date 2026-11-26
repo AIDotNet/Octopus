@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Bots"
+             x:Class="Octopus.App.Bots.BotShareDialogView"
+             x:DataType="vm:BotShareDialogViewModel">
+    <UserControl.Styles>
+        <Style Selector="Border.share-group">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPanel}" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.share-sep">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="Margin" Value="12,0" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="14" HorizontalAlignment="Stretch">
+        <!-- Centered avatar + name + subtitle -->
+        <StackPanel HorizontalAlignment="Center" Spacing="6" Margin="0,2,0,2">
+            <Border Width="60" Height="60" CornerRadius="16" HorizontalAlignment="Center"
+                    Background="{Binding AvatarBrush}" ClipToBounds="True">
+                <Panel>
+                    <Image IsVisible="{Binding HasAvatarImage}" Source="{Binding AvatarImage}"
+                           Width="60" Height="60" Stretch="UniformToFill"
+                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+                    <lucide:LucideIcon IsVisible="{Binding HasAvatarIcon}" Kind="{Binding AvatarIcon}" Size="28" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding ShowInitial}" Text="{Binding Initial}" Foreground="White" FontSize="24" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Panel>
+            </Border>
+            <TextBlock Classes="body" FontSize="16" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Text="{Binding Name}" />
+            <TextBlock Classes="hint" IsVisible="{Binding HasSubtitle}" MaxWidth="360"
+                       TextAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding Subtitle}" />
+        </StackPanel>
+
+        <!-- Group 1: Soul, Skills, Automations, Tools, Include memory -->
+        <Border Classes="share-group">
+            <StackPanel>
+                <Button Classes="row" Padding="12,9" Command="{Binding OpenSoulCommand}">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                        <lucide:LucideIcon Kind="Smile" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotSettingsSoul}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Classes="hint" Text="{Binding SoulSummaryText}" VerticalAlignment="Center" />
+                        <lucide:LucideIcon Grid.Column="3" Kind="ChevronRight" Size="14" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+                <Border Classes="share-sep" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,9">
+                    <lucide:LucideIcon Kind="BookOpen" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotSettingsSkills}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="hint" Text="{Binding SkillsSummaryText}" VerticalAlignment="Center" />
+                </Grid>
+                <Border Classes="share-sep" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,9">
+                    <lucide:LucideIcon Kind="Clock" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotShareAutomations}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="hint" Text="{Binding AutomationsSummaryText}" VerticalAlignment="Center" />
+                </Grid>
+                <Border Classes="share-sep" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,9">
+                    <lucide:LucideIcon Kind="Wrench" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotSettingsTools}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="hint" Text="{Binding ToolsSummaryText}" VerticalAlignment="Center" />
+                </Grid>
+                <Border Classes="share-sep" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,7">
+                    <lucide:LucideIcon Kind="Brain" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotShareIncludeMemory}" VerticalAlignment="Center" />
+                    <arc:Switch Grid.Column="2" IsChecked="{Binding IncludeMemory, Mode=TwoWay}" VerticalAlignment="Center" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Group 2: Setup notes + Security check -->
+        <Border Classes="share-group">
+            <StackPanel>
+                <Button Classes="row" Padding="12,9" Command="{Binding ToggleSetupNotesCommand}">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                        <lucide:LucideIcon Kind="FilePen" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotShareSetupNotes}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Classes="hint" MaxWidth="160" TextTrimming="CharacterEllipsis"
+                                   Text="{Binding SetupNotesActionText}" VerticalAlignment="Center" />
+                        <lucide:LucideIcon Grid.Column="3" Kind="ChevronRight" Size="14" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+                <Border IsVisible="{Binding IsEditingSetupNotes}" Padding="12,0,12,10">
+                    <arc:Input Size="Small" IsLabelVisible="False"
+                               Label="{l:AppLangResource BotShareSetupNotes}"
+                               Placeholder="{l:AppLangResource BotShareSetupNotesPlaceholder}"
+                               Text="{Binding SetupNotes, Mode=TwoWay}" />
+                </Border>
+                <Border Classes="share-sep" />
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8" Margin="12,9">
+                    <lucide:LucideIcon Kind="ShieldCheck" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotShareSecurityCheck}" VerticalAlignment="Center" />
+                    <lucide:LucideIcon Grid.Column="2" Kind="Check" Size="13" IsVisible="{Binding SecurityCheckClean}"
+                                       Foreground="{arc:ArcDesignTokenResource Success}" VerticalAlignment="Center" />
+                    <lucide:LucideIcon Grid.Column="2" Kind="TriangleAlert" Size="13" IsVisible="{Binding !SecurityCheckClean}"
+                                       Foreground="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="3" Classes="hint" Text="{Binding SecurityCheckText}" VerticalAlignment="Center" />
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Classes="hint" Text="{l:AppLangResource BotShareFooterHint}" />
+    </StackPanel>
+</UserControl>

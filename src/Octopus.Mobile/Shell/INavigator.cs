@@ -1,3 +1,4 @@
+using Octopus.Mobile.Bots;
 using Octopus.Mobile.Workspace;
 
 namespace Octopus.Mobile.Shell;
@@ -11,6 +12,8 @@ namespace Octopus.Mobile.Shell;
 public interface INavigator
 {
     void ShowHost(RemoteHost host);
+    /// <summary>Opens the dedicated workspace for a Bot (Chats/Sessions, Home, Connectors, Settings).</summary>
+    void ShowBot(RemoteBot bot, BotDetailTab initialTab = BotDetailTab.Sessions) { }
     /// <summary>A session's terminal, or its GUI conversation when the host supports it (its details otherwise).</summary>
     void ShowSession(RemoteSession session);
     /// <summary>Switches from the current session page directly to another session without stacking session pages.</summary>
@@ -41,10 +44,14 @@ public interface INavigator
     void ShowPairing(string hostName, PairingAttempt attempt);
     /// <summary>The page that takes a computer's address or a pairing link.</summary>
     void ShowAddHost();
+    /// <summary>Opens the add-host page pre-filled with a scanned/deep-linked target, optionally starting pairing right away.</summary>
+    void ShowAddHost(string? initialTarget, bool autoConnect = false) => ShowAddHost();
     /// <summary>Signing in from the host list of a phone used without an account.</summary>
     void ShowSignIn();
     /// <summary>The page that takes the address of a service of the person's own.</summary>
     void ShowCustomServer();
+    /// <summary>Opens the custom-server page pre-filled with a scanned/deep-linked <c>octopus://relay?…</c> setup link.</summary>
+    void ShowCustomServer(string? initialLink) => ShowCustomServer();
     /// <summary>Back to the first page, whatever is on top of it.</summary>
     void ShowFirst();
     /// <summary>Leaves the page on top.</summary>

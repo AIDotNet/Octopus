@@ -192,6 +192,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public bool SupportsProjectIcons =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityProjectIcons);
 
+    /// <summary>Both sides support Bots and Bot multi-chat session management (<c>bot/*</c>).</summary>
+    public bool SupportsBots =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityBots);
+
     /// <summary>Projects or their items changed on the host. Raised on the receiving thread.</summary>
     public event Action? WorkspaceChanged;
     /// <summary>One item's title or activity changed. Raised on the receiving thread.</summary>
@@ -234,6 +238,44 @@ public sealed class RemoteHostClient : IAsyncDisposable
 
     public async Task<IReadOnlyList<AgentMessage>> ListAgentsAsync(CancellationToken cancellationToken = default) =>
         (await CallAsync(RemoteMethods.AgentCatalog, new Nothing(), RemoteJsonContext.Default.Nothing, RemoteJsonContext.Default.AgentListMessage, cancellationToken).ConfigureAwait(false)).Agents;
+
+    // ---- Bots (BotMessages.cs) ----
+
+    public async Task<IReadOnlyList<BotMessage>> ListBotsAsync(CancellationToken cancellationToken = default) =>
+        (await CallAsync(RemoteMethods.BotList, new Nothing(), RemoteJsonContext.Default.Nothing, RemoteJsonContext.Default.BotListMessage, cancellationToken).ConfigureAwait(false)).Bots;
+
+    public Task<BotMessage> CreateBotAsync(CreateBotMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotCreate, request, RemoteJsonContext.Default.CreateBotMessage, RemoteJsonContext.Default.BotMessage, cancellationToken);
+
+    public Task<BotMessage> ImportBotAsync(string shareLink, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotImport, new ImportBotMessage { ShareLink = shareLink }, RemoteJsonContext.Default.ImportBotMessage, RemoteJsonContext.Default.BotMessage, cancellationToken);
+
+    public Task<BotMessage> UpdateBotAsync(UpdateBotMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotUpdate, request, RemoteJsonContext.Default.UpdateBotMessage, RemoteJsonContext.Default.BotMessage, cancellationToken);
+
+    public Task DeleteBotAsync(string botId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotDelete, new BotRefMessage { BotId = botId }, RemoteJsonContext.Default.BotRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task<BotChatMessage> CreateBotChatAsync(CreateBotChatMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotChatCreate, request, RemoteJsonContext.Default.CreateBotChatMessage, RemoteJsonContext.Default.BotChatMessage, cancellationToken);
+
+    public Task<BotChatMessage> OpenBotChatAsync(string botId, string chatId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotChatOpen, new BotChatRefMessage { BotId = botId, ChatId = chatId }, RemoteJsonContext.Default.BotChatRefMessage, RemoteJsonContext.Default.BotChatMessage, cancellationToken);
+
+    public Task CloseBotChatAsync(string botId, string chatId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotChatClose, new BotChatRefMessage { BotId = botId, ChatId = chatId }, RemoteJsonContext.Default.BotChatRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task RenameBotChatAsync(string botId, string chatId, string? title, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotChatRename, new RenameBotChatMessage { BotId = botId, ChatId = chatId, Title = title }, RemoteJsonContext.Default.RenameBotChatMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task DeleteBotChatAsync(string botId, string chatId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotChatDelete, new BotChatRefMessage { BotId = botId, ChatId = chatId }, RemoteJsonContext.Default.BotChatRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task ResolveBotItemAsync(string botId, string itemId, string? chosenOption, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotItemResolve, new ResolveBotItemMessage { BotId = botId, ItemId = itemId, ChosenOption = chosenOption }, RemoteJsonContext.Default.ResolveBotItemMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task ToggleBotConnectorAsync(string botId, string connectorId, bool enabled, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotConnectorToggle, new ToggleBotConnectorMessage { BotId = botId, ConnectorId = connectorId, Enabled = enabled }, RemoteJsonContext.Default.ToggleBotConnectorMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
     // ---- GUI conversations (AcpMessages.cs) ----
 

@@ -3,6 +3,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Bots;
 using Octopus.Mobile.Common;
 using Octopus.Mobile.Conversations;
 using Octopus.Mobile.Files;
@@ -56,16 +57,51 @@ public sealed class MobileShell : ContentControl, INavigator
             _topLevel.ScalingChanged += OnScalingChanged;
             _topLevel.BackRequested += OnBackRequested;
         }
+        MobileHost.DeepLinkReceived += OnDeepLinkReceived;
+        if (MobileHost.TakePendingDeepLink() is { } pending) HandleDeepLink(pending);
     }
 
     protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        MobileHost.DeepLinkReceived -= OnDeepLinkReceived;
         if (_topLevel is not null)
         {
             _topLevel.ScalingChanged -= OnScalingChanged;
             _topLevel.BackRequested -= OnBackRequested;
             _topLevel = null;
+        }
+    }
+
+    private void OnDeepLinkReceived(Uri uri)
+    {
+        if (Dispatcher.UIThread.CheckAccess()) HandleDeepLink(uri);
+        else Dispatcher.UIThread.Post(() => HandleDeepLink(uri));
+    }
+
+    internal void HandleDeepLink(Uri uri)
+    {
+        if (!string.Equals(uri.Scheme, "octopus", StringComparison.OrdinalIgnoreCase)) return;
+        if (string.Equals(uri.Host, "pair", StringComparison.OrdinalIgnoreCase))
+        {
+            if (Top is AddHostPage) Back();
+            ShowAddHost(uri.AbsoluteUri, autoConnect: true);
+        }
+        else if (string.Equals(uri.Host, "relay", StringComparison.OrdinalIgnoreCase))
+        {
+            if (Top is CustomServerPage) Back();
+            ShowCustomServer(uri.AbsoluteUri);
+        }
+        else if (string.Equals(uri.Host, "bot", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(uri.AbsolutePath.Trim('/'), "import", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowFirst();
+            if (_stack?.Root is HostsPage { DataContext: HostsViewModel hosts })
+            {
+                hosts.SelectedTab = HostsViewModel.TabBots;
+                hosts.Bots.OpenImportBotCommand.Execute(null);
+                hosts.Bots.ImportLink = uri.AbsoluteUri;
+            }
         }
     }
 
@@ -142,6 +178,9 @@ public sealed class MobileShell : ContentControl, INavigator
 
     public void ShowHost(RemoteHost host) => Push(new HostPage(new HostViewModel(host, _workspace, this)));
 
+    public void ShowBot(RemoteBot bot, BotDetailTab initialTab = BotDetailTab.Sessions) =>
+        Push(new BotDetailPage(new BotDetailViewModel(bot, _workspace, this, initialTab)));
+
     public void ShowSession(RemoteSession session)
     {
         // A GUI session opens its conversation when the host speaks acp.gui (G-A), or its details with an update note (G-0).
@@ -186,7 +225,10 @@ public sealed class MobileShell : ContentControl, INavigator
 
     public void ShowPairing(string hostName, PairingAttempt attempt) => Push(new PairingPage(new PairingViewModel(hostName, attempt, this)));
 
-    public void ShowAddHost() => Push(new AddHostPage(new AddHostViewModel(_workspace, _account, this)));
+    public void ShowAddHost() => ShowAddHost(null, autoConnect: false);
+
+    public void ShowAddHost(string? initialTarget, bool autoConnect = false) =>
+        Push(new AddHostPage(new AddHostViewModel(_workspace, _account, this, initialTarget, autoConnect)));
 
     public void ShowSignIn()
     {
@@ -195,7 +237,10 @@ public sealed class MobileShell : ContentControl, INavigator
         else Push(new WelcomePage(new WelcomeViewModel(_account, _workspace, this, _openBrowser, isOnTop: true)));
     }
 
-    public void ShowCustomServer() => Push(new CustomServerPage(new CustomServerViewModel(_account, this, _openBrowser)));
+    public void ShowCustomServer() => ShowCustomServer(null);
+
+    public void ShowCustomServer(string? initialLink) =>
+        Push(new CustomServerPage(new CustomServerViewModel(_account, this, _openBrowser, initialLink)));
 
     public void ShowFirst() => _stack?.PopToRoot();
 

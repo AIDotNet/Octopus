@@ -395,7 +395,8 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
     {
         var cancel = new CancellationTokenSource();
         var code = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        return new PairingAttempt(code.Task, AddAsync(target, code, cancel.Token), cancel.Cancel);
+        string? lastError = null;
+        return new PairingAttempt(code.Task, AddAsync(target, code, error => Volatile.Write(ref lastError, error), cancel.Token), cancel.Cancel, () => Volatile.Read(ref lastError));
     }
 
     public async Task<AccessOutcome> AccessWithPasswordAsync(RemoteHost host, string password, CancellationToken cancellationToken = default)
@@ -462,7 +463,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
 
     // The same pairing as the desktop's "add a host": to an address the person typed (then both sides show a number),
     // or by a pairing link (then the link's token stands for the number). No service has a part in it.
-    private async Task<PairingOutcome> AddAsync(string target, TaskCompletionSource<string> code, CancellationToken cancellationToken)
+    private async Task<PairingOutcome> AddAsync(string target, TaskCompletionSource<string> code, Action<string?> setError, CancellationToken cancellationToken)
     {
         await Task.Yield();
         // An address nothing answers at is given up on after a while. Once the computer answered, the person there
@@ -489,10 +490,12 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         }
         catch (OperationCanceledException)
         {
+            if (!cancellationToken.IsCancellationRequested) setError($"Timed out after {(int)ReachLimit.TotalSeconds}s");
             return cancellationToken.IsCancellationRequested ? PairingOutcome.Cancelled : PairingOutcome.Unreachable;
         }
         catch (Exception e) when (e is IOException or RemoteException or System.Net.WebSockets.WebSocketException or System.Net.Sockets.SocketException)
         {
+            setError(RelayHttp.DescribeError(e));
             return PairingOutcome.Unreachable;
         }
         finally
@@ -708,12 +711,14 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         {
             using var limit = new CancellationTokenSource(CallTimeout);
             var ct = limit.Token;
-            // Agents and projects are independent; then all projects' items are fetched in parallel (2 RTTs instead of 2 + N).
+            // Agents, projects, and (when supported) bots are independent; fetch in parallel.
             var agentsTask = client.ListAgentsAsync(ct);
             var projectsTask = client.ListProjectsAsync(ct);
-            await Task.WhenAll(agentsTask, projectsTask).ConfigureAwait(false);
+            var botsTask = client.SupportsBots ? client.ListBotsAsync(ct) : Task.FromResult<IReadOnlyList<BotMessage>>([]);
+            await Task.WhenAll(agentsTask, projectsTask, botsTask).ConfigureAwait(false);
             var agents = await agentsTask.ConfigureAwait(false);
             var projects = await projectsTask.ConfigureAwait(false);
+            var bots = await botsTask.ConfigureAwait(false);
             var itemPairs = await Task.WhenAll(projects.Select(async project =>
                 (project.Id, Items: await client.ListItemsAsync(project.Id, ct).ConfigureAwait(false)))).ConfigureAwait(false);
             var items = itemPairs.ToDictionary(p => p.Id, p => p.Items, StringComparer.Ordinal);
@@ -735,6 +740,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                     state.Host.Agents = mappedAgents;
                 }
                 Apply(state, client, projects, items);
+                ApplyBots(state.Host, bots);
             });
         }
         catch (Exception e) when (e is IOException or RemoteException or OperationCanceledException or ObjectDisposedException)

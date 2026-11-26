@@ -130,6 +130,60 @@ public class WorkspaceTests
         Assert.Null(AppHost.Get<ITabContentRegistry>().Find(item.Id));
     }
 
+    /// <summary>Closing a terminal's tab only hides it: it keeps its row and keeps running; activating it brings the same tab back.</summary>
+    [AvaloniaFact]
+    public void Closing_a_terminal_tab_keeps_the_item_running_and_activating_it_reopens_the_tab()
+    {
+        Open();
+        var project = AddProject();
+        var projects = AppHost.Get<IProjectService>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+        var other = AppHost.Get<IItemOpener>().OpenTerminal()!;
+        var item = AppHost.Get<IItemOpener>().OpenTerminal()!;
+        Dispatcher.UIThread.RunJobs();
+        var layout = (DockLayout)AppHost.Get<WorkspaceViewModel>().CurrentLayout!;
+        var content = registry.Find(item.Id);
+        Assert.NotNull(content);
+
+        Assert.True(layout.Close(layout.Workspace.FindPane(item.Id)!));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Null(layout.Workspace.FindPane(item.Id));
+        Assert.Contains(item, project.Items);
+        Assert.True(item.TabClosed);
+        Assert.Same(content, registry.Find(item.Id));
+        Assert.Equal(other.Id, project.ActiveItemId);
+
+        projects.ActivateItem(item.Id);
+        Dispatcher.UIThread.RunJobs();
+
+        var reopened = layout.Workspace.FindPane(item.Id);
+        Assert.NotNull(reopened);
+        Assert.Same(reopened, layout.ActivePane);
+        Assert.False(item.TabClosed);
+        Assert.Same(content, registry.Find(item.Id));
+    }
+
+    /// <summary>An item whose tab was closed still ends when it is removed (the sidebar row's Close).</summary>
+    [AvaloniaFact]
+    public void Removing_an_item_whose_tab_was_closed_ends_its_content()
+    {
+        Open();
+        var project = AddProject();
+        var item = AppHost.Get<IItemOpener>().OpenTerminal()!;
+        Dispatcher.UIThread.RunJobs();
+        var layout = (DockLayout)AppHost.Get<WorkspaceViewModel>().CurrentLayout!;
+        layout.Close(layout.Workspace.FindPane(item.Id)!);
+        Dispatcher.UIThread.RunJobs();
+        Assert.NotNull(AppHost.Get<ITabContentRegistry>().Find(item.Id));
+
+        AppHost.Get<IProjectService>().RemoveItem(item.Id);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(project.Items);
+        Assert.Null(AppHost.Get<ITabContentRegistry>().Find(item.Id));
+    }
+
     [AvaloniaFact]
     public void Split_right_puts_the_active_tab_in_a_second_group()
     {

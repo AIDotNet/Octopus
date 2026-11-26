@@ -61,7 +61,7 @@ public sealed class MobileRemote : IDisposable
             RemoteMethods.CapabilityUpload,
             RemoteMethods.CapabilityProtocolV2, RemoteMethods.CapabilityCompression, RemoteMethods.CapabilityFileStream,
             RemoteMethods.CapabilitySessionResume, RemoteMethods.CapabilityTransportQuic, RemoteMethods.CapabilityTransportP2p,
-            RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons],
+            RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons, RemoteMethods.CapabilityBots],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         Transport = TransportNegotiation.CreateDefault(),
     };

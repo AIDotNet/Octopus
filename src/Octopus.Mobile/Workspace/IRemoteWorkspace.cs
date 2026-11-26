@@ -153,7 +153,9 @@ public enum AccessOutcome
 /// <summary>One request to pair with a host.</summary>
 /// <param name="Code">The six digits both sides show, once the host answered; cancelled when it never did.</param>
 /// <param name="Completion">How it ended.</param>
-public sealed record PairingAttempt(Task<string> Code, Task<PairingOutcome> Completion, Action Cancel);
+/// <param name="Cancel">Cancels the pairing attempt.</param>
+/// <param name="ErrorDetail">Optional diagnostic detail recorded when the attempt could not reach the host.</param>
+public sealed record PairingAttempt(Task<string> Code, Task<PairingOutcome> Completion, Action Cancel, Func<string?>? ErrorDetail = null);
 
 public enum SignInOutcome
 {

@@ -84,6 +84,15 @@ public interface IDialogService
 
     /// <summary>Shows the "Add to &lt;BotName&gt;" connector catalog dialog.</summary>
     Task ShowConnectorCatalogAsync(Octopus.Core.Bots.BotDefinition bot, Octopus.App.Bots.IBotService bots);
+
+    /// <summary>Shows the Bot Avatar Picker dialog (icon carousel, palette, or custom image upload).</summary>
+    Task<Octopus.App.Bots.BotAvatarChoice?> AskBotAvatarAsync(Octopus.Core.Bots.BotDefinition bot);
+
+    /// <summary>Shows the Bot Share / Export modal (Soul/Skills/Automations summary, security check, copy link/bundle).</summary>
+    Task ShowBotShareAsync(Octopus.Core.Bots.BotDefinition bot, Octopus.App.Bots.IBotService bots);
+
+    /// <summary>Shows the Bot Import confirmation modal for a decoded <c>octopus://bot/import</c> payload.</summary>
+    Task<bool> ConfirmBotImportAsync(Octopus.Core.Bots.BotSharePayload payload);
 }
 
 /// <summary>What the project icon dialog returns: the color, a Lucide icon name (null: the initial) and a thumbnail file (null: none).</summary>

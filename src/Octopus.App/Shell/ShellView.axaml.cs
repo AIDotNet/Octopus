@@ -319,6 +319,12 @@ public partial class ShellView : UserControl
         {
             return;
         }
+        if (_model.IsBotMode)
+        {
+            _model.CreateChatForCurrentBot();
+            e.Handled = true;
+            return;
+        }
         _model.Launcher.SetTargetWorkspace(e.WorkspaceId, _model.Panel.IsGitProject);
         _model.Launcher.Refresh();
         // From the right half of the window the menu opens leftwards, so it stays inside the window.

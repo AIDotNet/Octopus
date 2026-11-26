@@ -97,6 +97,7 @@ internal sealed class HostConnection : IAsyncDisposable
         });
         RegisterFiles(json);
         RegisterConversations(json);
+        RegisterBots(json);
         _connection.Handle(RemoteMethods.SystemMetrics, json.SystemMetricsRequestMessage, json.SystemMetricsSnapshotMessage,
             (request, ct) => _workspace.GetSystemMetricsAsync(request, ct));
         _connection.Handle(RemoteMethods.SystemSignalProcess, json.SignalProcessMessage, json.SignalProcessResultMessage,
@@ -257,6 +258,52 @@ internal sealed class HostConnection : IAsyncDisposable
         _connection.Handle(RemoteMethods.AcpSetOption, json.AcpSetOptionMessage, json.Nothing, async (request, _) =>
         {
             await _workspace.SetConversationOptionAsync(request).ConfigureAwait(false);
+            return new Nothing();
+        });
+    }
+
+    private void RegisterBots(RemoteJsonContext json)
+    {
+        _connection.Handle(RemoteMethods.BotList, json.Nothing, json.BotListMessage,
+            async (_, _) => new BotListMessage { Bots = [.. await _workspace.ListBotsAsync().ConfigureAwait(false)] });
+        _connection.Handle(RemoteMethods.BotCreate, json.CreateBotMessage, json.BotMessage,
+            (request, _) => _workspace.CreateBotAsync(request));
+        _connection.Handle(RemoteMethods.BotImport, json.ImportBotMessage, json.BotMessage,
+            (request, _) => _workspace.ImportBotAsync(request));
+        _connection.Handle(RemoteMethods.BotUpdate, json.UpdateBotMessage, json.BotMessage,
+            (request, _) => _workspace.UpdateBotAsync(request));
+        _connection.Handle(RemoteMethods.BotDelete, json.BotRefMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.DeleteBotAsync(request.BotId).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.BotChatCreate, json.CreateBotChatMessage, json.BotChatMessage,
+            (request, _) => _workspace.CreateBotChatAsync(request));
+        _connection.Handle(RemoteMethods.BotChatOpen, json.BotChatRefMessage, json.BotChatMessage,
+            (request, _) => _workspace.OpenBotChatAsync(request.BotId, request.ChatId));
+        _connection.Handle(RemoteMethods.BotChatClose, json.BotChatRefMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.CloseBotChatAsync(request.BotId, request.ChatId).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.BotChatRename, json.RenameBotChatMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.RenameBotChatAsync(request.BotId, request.ChatId, request.Title).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.BotChatDelete, json.BotChatRefMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.DeleteBotChatAsync(request.BotId, request.ChatId).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.BotItemResolve, json.ResolveBotItemMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.ResolveBotItemAsync(request).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.BotConnectorToggle, json.ToggleBotConnectorMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.ToggleBotConnectorAsync(request).ConfigureAwait(false);
             return new Nothing();
         });
     }

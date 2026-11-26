@@ -32,6 +32,18 @@ public static class MobileHost
     /// </summary>
     public static Func<Avalonia.Controls.TopLevel?, Task<Terminals.PickedImage?>> PickImage { get; set; } = Terminals.ImagePicking.PickWithStorageAsync;
 
+    /// <summary>
+    /// Opens the platform's native QR code scanner and returns the decoded text, or null when cancelled.
+    /// Set by the iOS and Android platform heads (and by tests); null on heads without a camera (desktop preview).
+    /// </summary>
+    public static Func<Task<string?>>? ScanQrCode { get; set; }
+
+    private static readonly object DeepLinkGate = new();
+    private static Uri? s_pendingDeepLink;
+
+    /// <summary>Raised when an actionable <c>octopus://pair</c> or <c>octopus://relay</c> deep link arrives.</summary>
+    public static event Action<Uri>? DeepLinkReceived;
+
     /// <summary>True while the mobile app is backgrounded by the OS.</summary>
     public static bool IsBackgrounded => Volatile.Read(ref s_backgrounded) != 0;
     private static int s_backgrounded;
@@ -58,13 +70,40 @@ public static class MobileHost
         Foregrounded?.Invoke();
     }
 
-    /// <summary>Handles an incoming <c>octopus://</c> deep link (e.g. <c>octopus://auth-done</c> after browser approval).</summary>
+    /// <summary>
+    /// Handles an incoming <c>octopus://</c> deep link: <c>octopus://auth-done</c> after browser sign-in,
+    /// <c>octopus://pair?…</c> for direct LAN/relay pairing (for example scanned by the system camera), or
+    /// <c>octopus://relay?…</c> for self-hosted relay setup.
+    /// </summary>
     public static void HandleDeepLink(Uri uri)
     {
         if (!string.Equals(uri.Scheme, "octopus", StringComparison.OrdinalIgnoreCase)) return;
-        if (string.Equals(uri.Host, "auth-done", StringComparison.OrdinalIgnoreCase) && Account.IsSignedIn)
+        if (string.Equals(uri.Host, "auth-done", StringComparison.OrdinalIgnoreCase))
         {
-            _ = Workspace.RefreshAsync();
+            if (Account.IsSignedIn) _ = Workspace.RefreshAsync();
+            return;
+        }
+        if (string.Equals(uri.Host, "pair", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uri.Host, "relay", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uri.Host, "bot", StringComparison.OrdinalIgnoreCase))
+        {
+            Action<Uri>? handlers;
+            lock (DeepLinkGate)
+            {
+                handlers = DeepLinkReceived;
+                if (handlers is null) s_pendingDeepLink = uri;
+            }
+            handlers?.Invoke(uri);
+        }
+    }
+
+    internal static Uri? TakePendingDeepLink()
+    {
+        lock (DeepLinkGate)
+        {
+            var pending = s_pendingDeepLink;
+            s_pendingDeepLink = null;
+            return pending;
         }
     }
 }

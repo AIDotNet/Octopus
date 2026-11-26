@@ -66,6 +66,20 @@ public static class RemoteMethods
     public const string SystemSignalProcess = "system/signalProcess";
     public const string ProcessRun = "process/run";
 
+    // Bots management & multi-chat sessions.
+    public const string BotList = "bot/list";
+    public const string BotCreate = "bot/create";
+    public const string BotImport = "bot/import";
+    public const string BotUpdate = "bot/update";
+    public const string BotDelete = "bot/delete";
+    public const string BotChatCreate = "bot/chat/create";
+    public const string BotChatOpen = "bot/chat/open";
+    public const string BotChatClose = "bot/chat/close";
+    public const string BotChatRename = "bot/chat/rename";
+    public const string BotChatDelete = "bot/chat/delete";
+    public const string BotItemResolve = "bot/item/resolve";
+    public const string BotConnectorToggle = "bot/connector/toggle";
+
     /// <summary>Event: something under a watched folder changed.</summary>
     public const string FsChanged = "fs/changed";
     // A GUI conversation (AcpMessages.cs).
@@ -124,6 +138,8 @@ public static class RemoteMethods
     public const string CapabilityTransportMigrate = "transport.migrate";
     /// <summary>The host exposes custom project thumbnail images (<see cref="ProjectMessage.Image"/> and <see cref="ProjectIcon"/>).</summary>
     public const string CapabilityProjectIcons = "project.icons";
+    /// <summary>The host exposes Bots, Bot multi-chat session management, work items, and connectors (<c>bot/*</c>).</summary>
+    public const string CapabilityBots = "bots";
 
     /// <summary>Maximum byte size of a single project thumbnail returned by <see cref="ProjectIcon"/>.</summary>
     public const int ProjectIconMaxBytes = 512 * 1024;

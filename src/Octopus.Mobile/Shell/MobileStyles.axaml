@@ -1224,4 +1224,43 @@
     <Style Selector="Button.mdImageCard:pressed">
         <Setter Property="Opacity" Value="0.72" />
     </Style>
+
+    <!-- Bots accordion todo strip & inline option buttons -->
+    <Style Selector="Border.botTodoStrip">
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Margin" Value="10,0,10,8" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource WarningSubtle}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Warning}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.botOptionBtn">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeXS}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.botOptionBtn:pressed">
+        <Setter Property="Opacity" Value="0.72" />
+    </Style>
+    <Style Selector="Border.botChatRowClosed">
+        <Setter Property="Opacity" Value="0.68" />
+    </Style>
 </Styles>

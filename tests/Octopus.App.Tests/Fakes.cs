@@ -88,6 +88,45 @@ public sealed class FakeAgentScanner(params string[] installed) : IAgentScanner
     public AgentInstallation? Find(string agentId) => Current.Installations.FirstOrDefault(i => i.AgentId == agentId);
 }
 
+/// <summary>An installer that never runs a process: every agent with an install hint gets a plan.</summary>
+public sealed class FakeAgentInstaller : IAgentInstaller
+{
+    public List<AgentInstallPlan> Installed { get; } = [];
+    public List<AgentInstallPlan> InstalledElevated { get; } = [];
+    public AgentInstallResult Result { get; set; } = new(true, "");
+    public AgentInstallResult ElevatedResult { get; set; } = new(true, "");
+    public InstallElevation Elevation { get; set; } = InstallElevation.None;
+    public bool IsScript { get; set; }
+    public bool CanElevateInBackground { get; set; }
+    /// <summary>Called on a successful install, e.g. to make a fake scanner find the agent.</summary>
+    public Action<AgentInstallPlan>? OnInstalled { get; set; }
+
+    public Task<AgentInstallPlan?> PlanAsync(AgentDefinition definition, CancellationToken cancellationToken = default) =>
+        PlanAsync(definition.Id, definition.Detect.InstallHints, cancellationToken);
+
+    public Task<AgentInstallPlan?> PlanAsync(string id, IReadOnlyList<AgentInstallHint> hints, CancellationToken cancellationToken = default) =>
+        Task.FromResult(hints.FirstOrDefault() is { } hint
+            ? new AgentInstallPlan(id, hint, hint.Command.Split(' ')[0], "/bin/bash", ["-c", hint.Command]) { Elevation = Elevation, IsScript = IsScript }
+            : null);
+
+    public Task<AgentInstallResult> InstallAsync(AgentInstallPlan plan, CancellationToken cancellationToken = default)
+    {
+        Installed.Add(plan);
+        if (Result.Succeeded) OnInstalled?.Invoke(plan);
+        return Task.FromResult(Result);
+    }
+
+    public Task<AgentInstallResult> InstallElevatedAsync(AgentInstallPlan plan, CancellationToken cancellationToken = default)
+    {
+        InstalledElevated.Add(plan);
+        if (ElevatedResult.Succeeded) OnInstalled?.Invoke(plan);
+        return Task.FromResult(ElevatedResult);
+    }
+
+    public AgentCommand BuildTerminalCommand(AgentInstallPlan plan, bool elevated) =>
+        new("/bin/bash", ["-c", (elevated ? "sudo " : "") + plan.CommandLine], new Dictionary<string, string>());
+}
+
 public sealed class FakeDialogService : IDialogService
 {
     public bool Answer { get; set; } = true;
@@ -233,6 +272,32 @@ public sealed class FakeDialogService : IDialogService
         ConnectorCatalogShown++;
         LastConnectorCatalogBotId = bot.Id;
         return Task.CompletedTask;
+    }
+
+    public Octopus.App.Bots.BotAvatarChoice? NextBotAvatar { get; set; }
+
+    public Task<Octopus.App.Bots.BotAvatarChoice?> AskBotAvatarAsync(Octopus.Core.Bots.BotDefinition bot)
+    {
+        var next = NextBotAvatar;
+        NextBotAvatar = null;
+        return Task.FromResult(next);
+    }
+
+    public int BotShareShown { get; private set; }
+
+    public Task ShowBotShareAsync(Octopus.Core.Bots.BotDefinition bot, Octopus.App.Bots.IBotService bots)
+    {
+        BotShareShown++;
+        return Task.CompletedTask;
+    }
+
+    public bool ConfirmBotImportAnswer { get; set; } = true;
+    public Octopus.Core.Bots.BotSharePayload? LastBotImportPayload { get; private set; }
+
+    public Task<bool> ConfirmBotImportAsync(Octopus.Core.Bots.BotSharePayload payload)
+    {
+        LastBotImportPayload = payload;
+        return Task.FromResult(ConfirmBotImportAnswer);
     }
 
     public Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false)
