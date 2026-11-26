@@ -67,7 +67,7 @@ public sealed partial class ConversationUserEntry(string id) : ConversationEntry
         ? Octopus.Mobile.Localization.MobileLangResources.Format(Octopus.Mobile.Localization.MobileLangResourceKind.SessionOriginFromDevice, device)
         : null;
     /// <summary>What to show: the message without the bus's envelope and instructions to the agent.</summary>
-    public string DisplayText => _collab?.Body ?? Text;
+    public string DisplayText => _collab is { } envelope ? (envelope.Body.Length > 0 ? envelope.Body : envelope.Header) : Text;
     /// <summary>The names of the attached files and images.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAttachments), nameof(AttachmentsText))]
@@ -1235,4 +1235,46 @@ public sealed partial class ConversationComposer : ObservableObject
     // The chosen one's label; the first one's when the host names none (it uses its default).
     private static string LabelOf(IReadOnlyList<ConversationOption> options, string? id) =>
         options.FirstOrDefault(option => option.Id == id)?.Label ?? id ?? options.FirstOrDefault()?.Label ?? "";
+}
+
+/// <summary>One task in the session-level workflow task list, mirrored from the host's <c>WorkflowTasks</c>.</summary>
+public sealed partial class ConversationWorkflowTask(string id) : ObservableObject
+{
+    public string Id { get; } = id;
+    public string DisplayId => Id.StartsWith('#') ? Id : $"#{Id}";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveForm))]
+    public partial string Title { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCompleted), nameof(IsInProgress), nameof(IsFailed), nameof(IsPending), nameof(HasActiveForm))]
+    public partial string Status { get; set; } = "pending";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveForm))]
+    public partial string? ActiveForm { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasOwner))]
+    public partial string? Owner { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBlockedBy), nameof(BlockedByText))]
+    public partial IReadOnlyList<string> BlockedBy { get; set; } = [];
+
+    public bool IsCompleted => Status == "completed";
+    public bool IsInProgress => Status == "in_progress";
+    public bool IsFailed => Status == "failed";
+    public bool IsPending => !IsCompleted && !IsInProgress && !IsFailed;
+    public bool HasOwner => !string.IsNullOrWhiteSpace(Owner);
+    public bool HasBlockedBy => BlockedBy.Count > 0;
+    public string BlockedByText => BlockedBy.Count == 0
+        ? ""
+        : string.Format(
+            MobileLangResources.Get(MobileLangResourceKind.ConversationTaskBlockedBy),
+            string.Join(", ", BlockedBy.Select(b => b.StartsWith('#') ? b : $"#{b}")));
+    public bool HasActiveForm => IsInProgress
+        && !string.IsNullOrWhiteSpace(ActiveForm)
+        && !string.Equals(ActiveForm.Trim(), Title.Trim(), StringComparison.Ordinal);
 }

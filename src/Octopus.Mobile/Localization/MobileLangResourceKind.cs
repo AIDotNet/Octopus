@@ -566,4 +566,9 @@ public enum MobileLangResourceKind
     VoiceErrorServerOff,
     VoiceErrorQuota,
     VoicePrivacyOctopus,
+    ConversationTaskList,
+    ConversationTaskInProgress,
+    ConversationTaskCompletedAll,
+    ConversationTaskBlockedBy,
+    ConversationTaskToggle,
 }

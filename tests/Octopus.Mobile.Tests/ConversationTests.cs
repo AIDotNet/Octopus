@@ -8,6 +8,7 @@ using Octopus.Mobile.Common;
 using Octopus.Mobile.Conversations;
 using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
+using Octopus.Mobile.Localization;
 using Octopus.Mobile.Sessions;
 using Octopus.Mobile.Workspace;
 using Octopus.Remote.Protocol;
@@ -1075,5 +1076,96 @@ public class ConversationTests
         var mdViewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
         Assert.True(Phone.Until(() => !mdViewer.IsLoading && mdViewer.ShowMarkdownPreview));
         Assert.Equal("design.md", mdViewer.Title);
+    }
+
+    [AvaloniaFact]
+    public void Workflow_task_list_syncs_explicit_tasks_falls_back_to_plan_and_toggles_tray()
+    {
+        using var phone = new Phone();
+        var (page, vm, session) = OpenDemoConversation(phone);
+
+        // Demo history has no explicit snapshot.Tasks, so fallback mirrors the latest turn's Plan (1/3).
+        Assert.True(vm.HasTasks);
+        Assert.Equal(3, vm.Tasks.Count);
+        Assert.Equal("1/3", vm.TaskRatioText);
+        Assert.True(vm.HasRunningTasks);
+        Assert.False(vm.IsTaskListExpanded);
+        Assert.Contains("#2", vm.TaskTrayHeadline);
+
+        var tray = page.FindControl<Border>("TaskListTray")!;
+        var body = page.FindControl<Border>("TaskListBody")!;
+        Assert.True(tray.IsVisible);
+        Assert.False(body.IsVisible);
+
+        // Explicit snapshot.Tasks replaces fallback and preserves task object identity across updates.
+        vm.Conversation!.Timeline.ApplySnapshot(new AcpSnapshotMessage
+        {
+            ItemId = session.Id,
+            Sequence = 100,
+            State = AcpStates.Working,
+            Tasks =
+            [
+                new() { Id = "1", Title = "Add git APIs", Status = "completed" },
+                new() { Id = "2", Title = "Register assets", Status = "completed" },
+                new() { Id = "3", Title = "Update ViewModel", Status = "in_progress", ActiveForm = "Updating ViewModel" },
+                new() { Id = "4", Title = "Update UI", Status = "pending", BlockedBy = ["3"] },
+            ],
+        });
+        Phone.Pump();
+
+        Assert.Equal(4, vm.Tasks.Count);
+        Assert.Equal("2/4", vm.TaskRatioText);
+        Assert.Equal(50d, vm.TaskProgressPercent);
+        Assert.Equal("#3 Updating ViewModel", vm.TaskTrayHeadline);
+        var task3 = vm.Tasks[2];
+        Assert.True(task3.HasActiveForm);
+        Assert.True(vm.Tasks[3].HasBlockedBy);
+        Assert.Contains("#3", vm.Tasks[3].BlockedByText);
+
+        // Tapping toggle expands the tray; headline switches to the task list title.
+        vm.ToggleTaskListCommand.Execute(null);
+        Phone.Pump();
+        Assert.True(vm.IsTaskListExpanded);
+        Assert.True(body.IsVisible);
+        Assert.Equal(MobileLangResources.Get(MobileLangResourceKind.ConversationTaskList), vm.TaskTrayHeadline);
+
+        // Incremental task update mutates existing task objects in place.
+        vm.Conversation.Timeline.Apply(new AcpUpdateMessage
+        {
+            ItemId = session.Id,
+            Sequence = 101,
+            Tasks =
+            [
+                new() { Id = "1", Title = "Add git APIs", Status = "completed" },
+                new() { Id = "2", Title = "Register assets", Status = "completed" },
+                new() { Id = "3", Title = "Update ViewModel", Status = "completed" },
+                new() { Id = "4", Title = "Update UI", Status = "completed" },
+            ],
+        });
+        Phone.Pump();
+
+        Assert.Same(task3, vm.Tasks[2]);
+        Assert.Equal("4/4", vm.TaskRatioText);
+        Assert.True(vm.IsAllTasksCompleted);
+        Assert.False(vm.HasRunningTasks);
+
+        // Collapsing while all tasks are completed shows the completed-all summary.
+        vm.CollapseTaskList();
+        Phone.Pump();
+        Assert.False(vm.IsTaskListExpanded);
+        Assert.False(body.IsVisible);
+        Assert.Equal(MobileLangResources.Get(MobileLangResourceKind.ConversationTaskCompletedAll), vm.TaskTrayHeadline);
+
+        // Empty list clears the tray.
+        vm.Conversation.Timeline.Apply(new AcpUpdateMessage
+        {
+            ItemId = session.Id,
+            Sequence = 102,
+            Tasks = [],
+        });
+        Phone.Pump();
+
+        Assert.False(vm.HasTasks);
+        Assert.False(tray.IsVisible);
     }
 }

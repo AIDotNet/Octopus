@@ -546,5 +546,10 @@
     <unit id="VoiceErrorServerOff"><segment><source>Your Octopus server has no speech recognition set up.</source><target state="translated">你的 Octopus 服务器没有开启语音识别。</target></segment></unit>
     <unit id="VoiceErrorQuota"><segment><source>Today's voice allowance of your account is used up, or too many dictations are under way.</source><target state="translated">今天的语音识别额度已用完，或同时进行的识别太多。</target></segment></unit>
     <unit id="VoicePrivacyOctopus"><segment><source>Only while you hold the button, the audio goes to your Octopus server over an encrypted connection, and from there to its recognition service. Neither keeps it.</source><target state="translated">只在按住期间录音，音频经加密连接发送到你的 Octopus 服务器，再由服务器转给它使用的识别服务，都不保存音频。</target></segment></unit>
+    <unit id="ConversationTaskList"><segment><source>Task List</source><target state="translated">任务清单</target></segment></unit>
+    <unit id="ConversationTaskInProgress"><segment><source>In progress</source><target state="translated">进行中</target></segment></unit>
+    <unit id="ConversationTaskCompletedAll"><segment><source>All tasks completed</source><target state="translated">全部任务已完成</target></segment></unit>
+    <unit id="ConversationTaskBlockedBy"><segment><source>Blocked by {0}</source><target state="translated">等待 {0}</target></segment></unit>
+    <unit id="ConversationTaskToggle"><segment><source>Toggle task list</source><target state="translated">展开或收起任务清单</target></segment></unit>
   </file>
 </xliff>

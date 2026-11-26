@@ -160,6 +160,8 @@ public sealed class HelloMessage
 [JsonSerializable(typeof(AcpToolMessage))]
 [JsonSerializable(typeof(AcpWorkNoteMessage))]
 [JsonSerializable(typeof(AcpPlanEntryMessage))]
+[JsonSerializable(typeof(AcpWorkflowTaskMessage))]
+[JsonSerializable(typeof(List<AcpWorkflowTaskMessage>))]
 [JsonSerializable(typeof(AcpPermissionMessage))]
 [JsonSerializable(typeof(AcpOptionMessage))]
 [JsonSerializable(typeof(AcpQuestionMessage))]

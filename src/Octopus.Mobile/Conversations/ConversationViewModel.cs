@@ -27,6 +27,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private readonly INavigator _navigator;
     private readonly Action<Uri> _openBrowser;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly HashSet<ConversationWorkflowTask> _watchedTasks = [];
     private RemoteConversation? _conversation;
     private DispatcherTimer? _statusPhraseTimer;
     private string? _openError;
@@ -78,6 +79,14 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
 
     /// <summary>The timeline entries in chronological order.</summary>
     [ObservableProperty] public partial ObservableCollection<ConversationEntry> Entries { get; private set; } = [];
+
+    /// <summary>The session-level workflow task list shown in the docked tray above the composer.</summary>
+    [ObservableProperty] public partial ObservableCollection<ConversationWorkflowTask> Tasks { get; private set; } = [];
+
+    /// <summary>Whether the docked task list tray above the composer is expanded (collapsed by default on mobile).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TaskTrayHeadline))]
+    public partial bool IsTaskListExpanded { get; set; }
 
     /// <summary>The model, mode, and effort choices offered by the host.</summary>
     [ObservableProperty] public partial ConversationComposer Composer { get; private set; } = new();
@@ -147,6 +156,31 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     public bool CanSend => IsLoaded && !IsSending && !string.IsNullOrWhiteSpace(PromptText);
     public bool CanOpenFiles => _workspace.SupportsFiles(Session.Project.Host);
     public string WorkingDirectory => RemoteFolders.WorkspacePathOf(Session) ?? Session.Project.Path;
+
+    public bool HasTasks => Tasks.Count > 0;
+    public bool HasRunningTasks => Tasks.Any(t => t.IsInProgress);
+    public bool HasFailedTasks => !HasRunningTasks && Tasks.Any(t => t.IsFailed);
+    public bool IsAllTasksCompleted => Tasks.Count > 0 && Tasks.All(t => t.IsCompleted);
+    public bool IsTasksIdlePending => HasTasks && !HasRunningTasks && !HasFailedTasks && !IsAllTasksCompleted;
+    public double TaskProgressPercent => Tasks.Count == 0 ? 0d : Tasks.Count(t => t.IsCompleted) * 100d / Tasks.Count;
+    public string TaskRatioText => $"{Tasks.Count(t => t.IsCompleted)}/{Tasks.Count}";
+
+    public string TaskTrayHeadline
+    {
+        get
+        {
+            if (IsTaskListExpanded || Tasks.Count == 0) return Text(MobileLangResourceKind.ConversationTaskList);
+            if (Tasks.FirstOrDefault(t => t.IsInProgress) is { } active)
+            {
+                var label = string.IsNullOrWhiteSpace(active.ActiveForm) ? active.Title : active.ActiveForm!;
+                return $"{active.DisplayId} {label}";
+            }
+            if (IsAllTasksCompleted) return Text(MobileLangResourceKind.ConversationTaskCompletedAll);
+            if (Tasks.FirstOrDefault(t => t.IsFailed) is { } failed) return $"{failed.DisplayId} {failed.Title}";
+            if (Tasks.FirstOrDefault(t => !t.IsCompleted) is { } next) return $"{next.DisplayId} {next.Title}";
+            return Text(MobileLangResourceKind.ConversationTaskList);
+        }
+    }
 
     /// <summary>Raised when the person taps a model, mode, or effort chip; the page shows an <c>ActionSheet</c>.</summary>
     public event Action<ConversationOptionKind, string, IReadOnlyList<ConversationOption>, string?>? OptionPickerRequested;
@@ -523,6 +557,17 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     }
 
     [RelayCommand]
+    private void ToggleTaskList()
+    {
+        if (HasTasks) IsTaskListExpanded = !IsTaskListExpanded;
+    }
+
+    internal void CollapseTaskList()
+    {
+        if (IsTaskListExpanded) IsTaskListExpanded = false;
+    }
+
+    [RelayCommand]
     private void OpenModelPicker() => RequestPicker(ConversationOptionKind.Model, MobileLangResourceKind.ConversationModel);
 
     [RelayCommand]
@@ -603,12 +648,16 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _conversation = conversation;
         _openError = null;
         Entries = conversation.Entries;
+        Tasks = conversation.Tasks;
         Composer = conversation.Composer;
         conversation.PropertyChanged += OnConversationChanged;
         conversation.Entries.CollectionChanged += OnEntriesChanged;
+        conversation.Tasks.CollectionChanged += OnTasksChanged;
         conversation.Composer.PropertyChanged += OnComposerChanged;
+        WatchTasks();
         OnPropertyChanged(nameof(Conversation));
         NotifyState();
+        NotifyTaskState();
         ScrollToBottomRequested?.Invoke();
     }
 
@@ -617,7 +666,9 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         if (_conversation is null) return;
         _conversation.PropertyChanged -= OnConversationChanged;
         _conversation.Entries.CollectionChanged -= OnEntriesChanged;
+        _conversation.Tasks.CollectionChanged -= OnTasksChanged;
         _conversation.Composer.PropertyChanged -= OnComposerChanged;
+        ClearWatchedTasks();
         _conversation.Dispose();
         _conversation = null;
     }
@@ -642,6 +693,47 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     {
         OnPropertyChanged(nameof(IsEmpty));
         TimelineChanged?.Invoke();
+    }
+
+    private void OnTasksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        WatchTasks();
+        if (!HasTasks && IsTaskListExpanded) IsTaskListExpanded = false;
+        NotifyTaskState();
+    }
+
+    private void OnTaskPropertyChanged(object? sender, PropertyChangedEventArgs e) => NotifyTaskState();
+
+    private void WatchTasks()
+    {
+        var current = Tasks.ToHashSet();
+        foreach (var gone in _watchedTasks.Where(t => !current.Contains(t)).ToList())
+        {
+            gone.PropertyChanged -= OnTaskPropertyChanged;
+            _watchedTasks.Remove(gone);
+        }
+        foreach (var task in current)
+        {
+            if (_watchedTasks.Add(task)) task.PropertyChanged += OnTaskPropertyChanged;
+        }
+    }
+
+    private void ClearWatchedTasks()
+    {
+        foreach (var task in _watchedTasks) task.PropertyChanged -= OnTaskPropertyChanged;
+        _watchedTasks.Clear();
+    }
+
+    private void NotifyTaskState()
+    {
+        OnPropertyChanged(nameof(HasTasks));
+        OnPropertyChanged(nameof(HasRunningTasks));
+        OnPropertyChanged(nameof(HasFailedTasks));
+        OnPropertyChanged(nameof(IsAllTasksCompleted));
+        OnPropertyChanged(nameof(IsTasksIdlePending));
+        OnPropertyChanged(nameof(TaskProgressPercent));
+        OnPropertyChanged(nameof(TaskRatioText));
+        OnPropertyChanged(nameof(TaskTrayHeadline));
     }
 
     private void OnComposerChanged(object? sender, PropertyChangedEventArgs e) =>

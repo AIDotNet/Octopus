@@ -436,6 +436,7 @@ internal sealed class HostConnection : IAsyncDisposable
                         ErrorText = update.ErrorText,
                         QueuedCount = update.QueuedCount,
                         Composer = update.Composer,
+                        Tasks = update.Tasks,
                     };
                     await owner._connection.NotifyAsync(RemoteMethods.AcpUpdate, numbered, RemoteJsonContext.Default.AcpUpdateMessage).ConfigureAwait(false);
                 }

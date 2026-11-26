@@ -72,6 +72,8 @@ public sealed class AcpSnapshotMessage
     /// <summary>Prompts queued while a turn runs.</summary>
     public int QueuedCount { get; set; }
     public AcpComposerMessage Composer { get; set; } = new();
+    /// <summary>Session-level workflow task list (<c>TodoWrite</c>, <c>TaskCreate</c>/<c>TaskUpdate</c>, <c>update_steps</c>, or ACP <c>plan</c>).</summary>
+    public List<AcpWorkflowTaskMessage>? Tasks { get; set; }
 }
 
 /// <summary>What changed since the last update. Entries are sent whole whenever anything in them changed.</summary>
@@ -90,6 +92,8 @@ public sealed class AcpUpdateMessage
     public int? QueuedCount { get; set; }
     /// <summary>Set when the choices or the chosen values changed.</summary>
     public AcpComposerMessage? Composer { get; set; }
+    /// <summary>Set when the session-level task list changed (empty list means cleared; null means unchanged).</summary>
+    public List<AcpWorkflowTaskMessage>? Tasks { get; set; }
 }
 
 /// <summary>One entry of the timeline. Only the fields of its <see cref="Kind"/> are set.</summary>
@@ -158,6 +162,21 @@ public sealed class AcpPlanEntryMessage
     public string Content { get; set; } = "";
     /// <summary><c>pending</c>, <c>in_progress</c> or <c>completed</c>.</summary>
     public string Status { get; set; } = "pending";
+}
+
+/// <summary>One task in the session-level workflow task list.</summary>
+public sealed class AcpWorkflowTaskMessage
+{
+    public string Id { get; set; } = "";
+    public string Title { get; set; } = "";
+    /// <summary><c>pending</c>, <c>in_progress</c>, <c>completed</c> or <c>failed</c>.</summary>
+    public string Status { get; set; } = "pending";
+    /// <summary>Optional live gerund/progress text shown while <c>in_progress</c>.</summary>
+    public string? ActiveForm { get; set; }
+    /// <summary>Optional subagent owner name.</summary>
+    public string? Owner { get; set; }
+    /// <summary>Optional prerequisite task ids blocking this task.</summary>
+    public List<string>? BlockedBy { get; set; }
 }
 
 /// <summary>A permission card.</summary>

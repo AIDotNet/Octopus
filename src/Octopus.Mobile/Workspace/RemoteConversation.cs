@@ -26,6 +26,9 @@ public abstract partial class RemoteConversation : ObservableObject, IDisposable
     /// <summary>The latest entries in order, oldest first.</summary>
     public ObservableCollection<ConversationEntry> Entries { get; } = [];
 
+    /// <summary>The session-level workflow task list, mirrored from the host (or derived from the latest turn plan on older hosts).</summary>
+    public ObservableCollection<ConversationWorkflowTask> Tasks { get; } = [];
+
     [ObservableProperty] public partial ConversationState State { get; internal set; }
     /// <summary>A line about what it is doing (starting the agent, installing an adapter…); null when there is nothing to say.</summary>
     [ObservableProperty] public partial string? StatusDetail { get; internal set; }

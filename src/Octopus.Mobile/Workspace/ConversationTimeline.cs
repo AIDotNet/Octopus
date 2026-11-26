@@ -29,6 +29,8 @@ public sealed class ConversationTimeline
     private readonly RemoteConversation _target;
     // Updates that came before the snapshot they follow (the event and the attach's answer reach the UI thread in either order).
     private readonly List<AcpUpdateMessage> _early = [];
+    // True once the host sends explicit session-level tasks; false falls back to the latest turn's Plan for older hosts.
+    private bool _hasExplicitTasks;
 
     internal ConversationTimeline(RemoteConversation target) => _target = target;
 
@@ -56,6 +58,16 @@ public sealed class ConversationTimeline
         ApplyComposer(target.Composer, snapshot.Composer);
         var known = target.Entries.GroupBy(entry => entry.Id, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         Sync(target.Entries, [.. snapshot.Entries.Select(message => Upsert(known.GetValueOrDefault(message.Id), message))]);
+        if (snapshot.Tasks is { } tasks)
+        {
+            _hasExplicitTasks = true;
+            ApplyTasks(target.Tasks, tasks);
+        }
+        else
+        {
+            _hasExplicitTasks = false;
+            SyncFallbackTasks(target);
+        }
 
         var early = _early.Where(update => update.Sequence > Sequence).OrderBy(update => update.Sequence).ToList();
         _early.Clear();
@@ -117,6 +129,15 @@ public sealed class ConversationTimeline
         if (update.ErrorText is not null) target.ErrorText = NullIfEmpty(update.ErrorText);
         if (update.QueuedCount is { } queued) target.QueuedCount = queued;
         if (update.Composer is { } composer) ApplyComposer(target.Composer, composer);
+        if (update.Tasks is { } tasks)
+        {
+            _hasExplicitTasks = true;
+            ApplyTasks(target.Tasks, tasks);
+        }
+        else if (!_hasExplicitTasks && (update.Upserts.Count > 0 || update.Removed.Count > 0))
+        {
+            SyncFallbackTasks(target);
+        }
         return ConversationUpdateResult.Applied;
     }
 
@@ -124,6 +145,7 @@ public sealed class ConversationTimeline
     public void Reset()
     {
         HasSnapshot = false;
+        _hasExplicitTasks = false;
         _early.Clear();
     }
 
@@ -238,6 +260,63 @@ public sealed class ConversationTimeline
         var efforts = Options(message.Efforts);
         if (!composer.Efforts.SequenceEqual(efforts)) composer.Efforts = efforts;
         composer.Effort = message.Effort;
+    }
+
+    private static void ApplyTasks(ObservableCollection<ConversationWorkflowTask> target, IReadOnlyList<AcpWorkflowTaskMessage> incoming)
+    {
+        if (incoming.Count == 0)
+        {
+            if (target.Count > 0) target.Clear();
+            return;
+        }
+        var known = target.GroupBy(t => t.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var next = new List<ConversationWorkflowTask>(incoming.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < incoming.Count; i++)
+        {
+            var msg = incoming[i];
+            var id = string.IsNullOrWhiteSpace(msg.Id) ? (i + 1).ToString() : msg.Id;
+            if (!seen.Add(id)) continue;
+            var task = known.GetValueOrDefault(id) ?? new ConversationWorkflowTask(id);
+            task.Title = msg.Title;
+            task.Status = string.IsNullOrWhiteSpace(msg.Status) ? "pending" : msg.Status;
+            task.ActiveForm = NullIfEmpty(msg.ActiveForm);
+            task.Owner = NullIfEmpty(msg.Owner);
+            var blockedBy = msg.BlockedBy ?? [];
+            if (!task.BlockedBy.SequenceEqual(blockedBy)) task.BlockedBy = [.. blockedBy];
+            next.Add(task);
+        }
+        Sync(target, next);
+    }
+
+    // Older hosts only send per-turn Plan entries; mirror the latest non-empty Plan so the task tray still works.
+    private static void SyncFallbackTasks(RemoteConversation target)
+    {
+        ConversationAssistantEntry? latest = null;
+        for (var i = target.Entries.Count - 1; i >= 0; i--)
+        {
+            if (target.Entries[i] is ConversationAssistantEntry { HasPlan: true } assistant)
+            {
+                latest = assistant;
+                break;
+            }
+        }
+        if (latest is null)
+        {
+            if (target.Tasks.Count > 0) target.Tasks.Clear();
+            return;
+        }
+        var mapped = new List<AcpWorkflowTaskMessage>(latest.Plan.Count);
+        for (var i = 0; i < latest.Plan.Count; i++)
+        {
+            mapped.Add(new AcpWorkflowTaskMessage
+            {
+                Id = (i + 1).ToString(),
+                Title = latest.Plan[i].Content,
+                Status = latest.Plan[i].Status,
+            });
+        }
+        ApplyTasks(target.Tasks, mapped);
     }
 
     // ---- helpers ----

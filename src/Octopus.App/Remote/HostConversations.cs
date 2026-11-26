@@ -251,6 +251,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
         private readonly HostConversations _owner;
         private readonly List<Attachment> _attachments = [];
         private readonly Dictionary<AgentTimelineItem, ItemWatcher> _watched = [];
+        private readonly HashSet<WorkflowTaskViewModel> _watchedTasks = [];
         private readonly HashSet<AgentTimelineItem> _dirty = [];
 
         // What the devices were last told: the ids in order and each entry's byte size + content hash
@@ -260,6 +261,8 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
         private (string State, string? StatusDetail, string? ErrorText, int QueuedCount) _sentHeader;
         private ulong _sentComposerHash;
         private int _sentComposerLength;
+        private ulong _sentTasksHash;
+        private int _sentTasksLength;
         private bool _structureChanged;
         private bool _scheduled;
         private int _generation;
@@ -292,6 +295,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
         public void Stop()
         {
             Model.Timeline.CollectionChanged -= OnTimelineChanged;
+            Model.WorkflowTasks.CollectionChanged -= OnWorkflowTasksChanged;
             Model.PropertyChanged -= OnModelChanged;
             Model.Composer.PropertyChanged -= OnComposerChanged;
             Model.Composer.ModelChoices.CollectionChanged -= OnComposerChoicesChanged;
@@ -300,6 +304,8 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             Model.Composer.EffortChoices.CollectionChanged -= OnComposerChoicesChanged;
             foreach (var watcher in _watched.Values) watcher.Dispose();
             _watched.Clear();
+            foreach (var task in _watchedTasks) task.PropertyChanged -= OnWorkflowTaskChanged;
+            _watchedTasks.Clear();
             _dirty.Clear();
             _sent.Clear();
             _attachments.Clear();
@@ -311,6 +317,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
         private void Start()
         {
             Model.Timeline.CollectionChanged += OnTimelineChanged;
+            Model.WorkflowTasks.CollectionChanged += OnWorkflowTasksChanged;
             Model.PropertyChanged += OnModelChanged;
             Model.Composer.PropertyChanged += OnComposerChanged;
             Model.Composer.ModelChoices.CollectionChanged += OnComposerChoicesChanged;
@@ -318,6 +325,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             Model.Composer.PermissionChoices.CollectionChanged += OnComposerChoicesChanged;
             Model.Composer.EffortChoices.CollectionChanged += OnComposerChoicesChanged;
             WatchItems();
+            WatchWorkflowTasks();
             // What is there now is what the first snapshot shows; updates are measured against it.
             _sent.Clear();
             var order = new List<string>();
@@ -331,6 +339,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             _sentOrder = order;
             _sentHeader = HeaderNow();
             (_sentComposerLength, _sentComposerHash) = Fingerprint(ComposerNow());
+            (_sentTasksLength, _sentTasksHash) = Fingerprint(TasksNow());
             _dirty.Clear();
             _structureChanged = false;
         }
@@ -338,6 +347,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
         private AcpSnapshotMessage BuildSnapshot()
         {
             var (state, statusDetail, errorText, queued) = _sentHeader;
+            var tasks = TasksNow();
             var snapshot = new AcpSnapshotMessage
             {
                 ItemId = ItemId,
@@ -347,6 +357,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
                 AgentName = Model.AgentName,
                 QueuedCount = queued,
                 Composer = ComposerNow(),
+                Tasks = tasks.Count > 0 ? tasks : null,
             };
             // The latest entries, as many as the limit and one message allow; older ones are only counted.
             var budget = MessageBudget;
@@ -488,6 +499,28 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
 
         private void OnComposerChoicesChanged(object? sender, NotifyCollectionChangedEventArgs e) => Schedule();
 
+        private void OnWorkflowTasksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            WatchWorkflowTasks();
+            Schedule();
+        }
+
+        private void OnWorkflowTaskChanged(object? sender, PropertyChangedEventArgs e) => Schedule();
+
+        private void WatchWorkflowTasks()
+        {
+            var current = Model.WorkflowTasks.ToHashSet();
+            foreach (var gone in _watchedTasks.Where(t => !current.Contains(t)).ToList())
+            {
+                gone.PropertyChanged -= OnWorkflowTaskChanged;
+                _watchedTasks.Remove(gone);
+            }
+            foreach (var task in current)
+            {
+                if (_watchedTasks.Add(task)) task.PropertyChanged += OnWorkflowTaskChanged;
+            }
+        }
+
         private void Schedule()
         {
             if (_scheduled || _attachments.Count == 0) return;
@@ -562,6 +595,16 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
                 _sentComposerHash = composerHash;
             }
 
+            var tasks = TasksNow();
+            var (tasksLen, tasksHash) = Fingerprint(tasks);
+            if (tasksLen != _sentTasksLength || tasksHash != _sentTasksHash)
+            {
+                update.Tasks = tasks;
+                changed = true;
+                _sentTasksLength = tasksLen;
+                _sentTasksHash = tasksHash;
+            }
+
             if (!changed) return;
             foreach (var part in Split(update))
             {
@@ -623,6 +666,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             part.ErrorText = whole.ErrorText;
             part.QueuedCount = whole.QueuedCount;
             part.Composer = whole.Composer;
+            part.Tasks = whole.Tasks;
             return part;
         }
 
@@ -672,6 +716,17 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             return message;
         }
 
+        private List<AcpWorkflowTaskMessage> TasksNow() =>
+            [.. Model.WorkflowTasks.Select(t => new AcpWorkflowTaskMessage
+            {
+                Id = t.Id,
+                Title = t.Title,
+                Status = t.Status,
+                ActiveForm = Blank(t.ActiveForm),
+                Owner = Blank(t.Owner),
+                BlockedBy = t.BlockedBy.Count > 0 ? [.. t.BlockedBy] : null,
+            })];
+
         private static AcpOptionMessage Option(ComposerChoiceItem choice) => new() { Id = choice.Id, Label = choice.Label, Detail = Blank(choice.Description) };
 
         private sealed class Attachment(Conversation owner, Action<AcpUpdateMessage> updated, AcpSnapshotMessage snapshot) : IAcpAttachment
@@ -706,6 +761,12 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
     private static (int ByteLength, ulong Hash) Fingerprint(AcpComposerMessage composer)
     {
         var utf8 = JsonSerializer.SerializeToUtf8Bytes(composer, RemoteJsonContext.Default.AcpComposerMessage);
+        return (utf8.Length, HashFnv1a64(utf8));
+    }
+
+    private static (int ByteLength, ulong Hash) Fingerprint(List<AcpWorkflowTaskMessage> tasks)
+    {
+        var utf8 = JsonSerializer.SerializeToUtf8Bytes(tasks, RemoteJsonContext.Default.ListAcpWorkflowTaskMessage);
         return (utf8.Length, HashFnv1a64(utf8));
     }
 

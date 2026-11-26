@@ -31,6 +31,7 @@ public partial class ConversationPage : Page, IClosablePage
         viewModel.ScrollToBottomRequested += ScrollToBottomOnEntry;
         TimelineScroll.ScrollChanged += OnTimelineScrollChanged;
         PromptField.AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
+        PromptField.GotFocus += OnPromptGotFocus;
         HoldToTalkBar.PointerPressed += OnHoldPressed;
         HoldToTalkBar.PointerMoved += OnHoldMoved;
         HoldToTalkBar.PointerReleased += OnHoldReleased;
@@ -51,6 +52,7 @@ public partial class ConversationPage : Page, IClosablePage
         _viewModel.ScrollToBottomRequested -= ScrollToBottomOnEntry;
         TimelineScroll.ScrollChanged -= OnTimelineScrollChanged;
         PromptField.RemoveHandler(KeyDownEvent, OnPromptKeyDown);
+        PromptField.GotFocus -= OnPromptGotFocus;
         HoldToTalkBar.PointerPressed -= OnHoldPressed;
         HoldToTalkBar.PointerMoved -= OnHoldMoved;
         HoldToTalkBar.PointerReleased -= OnHoldReleased;
@@ -178,6 +180,8 @@ public partial class ConversationPage : Page, IClosablePage
         origin.Y - at.Y < TargetRise ? VoiceZone.Fill
         : at.X < width / 2 ? VoiceZone.Cancel
         : VoiceZone.Send;
+
+    private void OnPromptGotFocus(object? sender, FocusChangedEventArgs e) => _viewModel.CollapseTaskList();
 
     private void OnPromptKeyDown(object? sender, KeyEventArgs e)
     {

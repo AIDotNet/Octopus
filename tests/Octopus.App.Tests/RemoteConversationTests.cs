@@ -518,6 +518,65 @@ public class RemoteConversationTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task Workflow_tasks_sync_in_updates_and_fresh_snapshots()
+    {
+        var fakes = AppHost.Get<FakeAcpSessionFactory>();
+        fakes.ConfigureNext = session =>
+        {
+            session.PromptHandler = (s, _, _, _) =>
+            {
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "tc-todo",
+                    Name = "TodoWrite",
+                    Kind = "other",
+                    Status = "completed",
+                    WorkflowAction = "todo_write",
+                    WorkflowTasks =
+                    [
+                        new AcpPlanEntry { Id = "1", Content = "Inspect protocol", Status = "completed" },
+                        new AcpPlanEntry { Id = "2", Content = "Add mobile tray", Status = "in_progress", ActiveForm = "Building mobile tray", BlockedBy = ["1"] },
+                    ],
+                }));
+                return Task.FromResult(new AcpPromptResult { StopReason = "end_turn" });
+            };
+        };
+        await using var host = new HostSide();
+        using var device = DeviceIdentity.Create();
+        host.Devices.Add(device.PublicKey, Phone);
+        var project = host.Projects.AddProject(Directory.CreateTempSubdirectory("octopus-acp-tasks-").FullName);
+        var item = AddGuiAgent(host, project);
+        try
+        {
+            await using var client = await Connect(host, device);
+            var mirror = new Mirror(client, item.Id);
+            mirror.Begin(await Wait(client.AttachConversationAsync(item.Id)));
+            await Until(() => mirror.State == AcpStates.Ready, "the conversation becomes ready");
+
+            await Wait(client.SendPromptAsync(item.Id, "Plan the work"));
+            await Until(() => mirror.Updates.Any(u => u.Tasks is { Count: 2 }), "the device receives workflow tasks in an update");
+
+            var sentTasks = mirror.Updates.Last(u => u.Tasks is not null).Tasks!;
+            Assert.Equal("1", sentTasks[0].Id);
+            Assert.Equal("completed", sentTasks[0].Status);
+            Assert.Equal("2", sentTasks[1].Id);
+            Assert.Equal("in_progress", sentTasks[1].Status);
+            Assert.Equal("Building mobile tray", sentTasks[1].ActiveForm);
+            Assert.Equal(["1"], sentTasks[1].BlockedBy);
+
+            var snapshot = await Wait(client.AttachConversationAsync(item.Id));
+            Assert.NotNull(snapshot.Tasks);
+            Assert.Equal(2, snapshot.Tasks!.Count);
+            Assert.Equal("Add mobile tray", snapshot.Tasks[1].Title);
+        }
+        finally
+        {
+            fakes.ConfigureNext = null;
+            await host.Tabs.ReleaseAsync(item.Id);
+        }
+    }
+
     [Fact]
     public void Long_texts_keep_their_end_and_are_marked_as_cut()
     {

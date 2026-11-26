@@ -86,6 +86,7 @@ public sealed partial class WorkflowTaskViewModel : ObservableObject
     [ObservableProperty] public partial string? Owner { get; set; }
     [ObservableProperty] public partial string? LinkedSubagentId { get; set; }
     [ObservableProperty] public partial string BlockedByText { get; set; } = "";
+    public IReadOnlyList<string> BlockedBy { get; private set; } = [];
 
     public bool IsCompleted => Status == "completed";
     public bool IsInProgress => Status == "in_progress";
@@ -124,6 +125,7 @@ public sealed partial class WorkflowTaskViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(linkedSubagentId)) LinkedSubagentId = linkedSubagentId;
         if (entry.BlockedBy.Count > 0)
         {
+            BlockedBy = entry.BlockedBy.ToList();
             var refs = string.Join(", ", entry.BlockedBy.Select(b => b.StartsWith('#') ? b : $"#{b}"));
             BlockedByText = AppLangResources.Format(AppLangResourceKind.AgentGuiTaskBlockedBy, refs);
         }

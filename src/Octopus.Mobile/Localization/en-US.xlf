@@ -546,5 +546,10 @@
     <unit id="VoiceErrorServerOff"><segment><source>Your Octopus server has no speech recognition set up.</source></segment></unit>
     <unit id="VoiceErrorQuota"><segment><source>Today's voice allowance of your account is used up, or too many dictations are under way.</source></segment></unit>
     <unit id="VoicePrivacyOctopus"><segment><source>Only while you hold the button, the audio goes to your Octopus server over an encrypted connection, and from there to its recognition service. Neither keeps it.</source></segment></unit>
+    <unit id="ConversationTaskList"><segment><source>Task List</source></segment></unit>
+    <unit id="ConversationTaskInProgress"><segment><source>In progress</source></segment></unit>
+    <unit id="ConversationTaskCompletedAll"><segment><source>All tasks completed</source></segment></unit>
+    <unit id="ConversationTaskBlockedBy"><segment><source>Blocked by {0}</source></segment></unit>
+    <unit id="ConversationTaskToggle"><segment><source>Toggle task list</source></segment></unit>
   </file>
 </xliff>
