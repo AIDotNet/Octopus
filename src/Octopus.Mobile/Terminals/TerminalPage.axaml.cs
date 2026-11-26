@@ -23,6 +23,7 @@ public partial class TerminalPage : Page, ITerminalSurface, IClosablePage
 
     private readonly TerminalViewModel _viewModel;
     private readonly DispatcherTimer _replies;
+    private bool _attached;
 
     public TerminalPage(TerminalViewModel viewModel)
     {
@@ -30,7 +31,10 @@ public partial class TerminalPage : Page, ITerminalSurface, IClosablePage
         InitializeComponent();
         DataContext = viewModel;
         _replies = new DispatcherTimer { Interval = ReplyRefresh };
-        _replies.Tick += (_, _) => viewModel.RefreshQuickReplies();
+        _replies.Tick += (_, _) =>
+        {
+            if (!MobileHost.IsBackgrounded) viewModel.RefreshQuickReplies();
+        };
         // Before the terminal sees it: text typed while Ctrl is armed becomes a control character.
         AddHandler(TextInputEvent, OnTextTyped, RoutingStrategies.Tunnel);
         Terminal.IsMirror = viewModel.IsMirror;
@@ -56,6 +60,9 @@ public partial class TerminalPage : Page, ITerminalSurface, IClosablePage
     /// <summary>The page left the stack: the connection to the session ends (the program on the host keeps running).</summary>
     public void OnClosed()
     {
+        _attached = false;
+        MobileHost.Backgrounded -= OnBackgrounded;
+        MobileHost.Foregrounded -= OnForegrounded;
         _replies.Stop();
         _viewModel.Dispose();
         _ = Terminal.CloseAsync();
@@ -64,15 +71,29 @@ public partial class TerminalPage : Page, ITerminalSurface, IClosablePage
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        _replies.Start();
+        _attached = true;
+        MobileHost.Backgrounded += OnBackgrounded;
+        MobileHost.Foregrounded += OnForegrounded;
+        if (!MobileHost.IsBackgrounded) _replies.Start();
     }
 
     // A page that another one covers is taken out of the tree: nothing to read until it is back.
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        _attached = false;
+        MobileHost.Backgrounded -= OnBackgrounded;
+        MobileHost.Foregrounded -= OnForegrounded;
         _replies.Stop();
     }
+
+    private void OnBackgrounded() => Dispatcher.UIThread.Post(_replies.Stop);
+
+    private void OnForegrounded() => Dispatcher.UIThread.Post(() =>
+    {
+        if (!_attached || MobileHost.IsBackgrounded) return;
+        _replies.Start();
+    });
 
     private void OnTextTyped(object? sender, TextInputEventArgs e)
     {

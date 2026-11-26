@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Octopus.Mobile.Workspace;
@@ -135,7 +136,7 @@ public sealed record CreateBranchWorkspaceRequest(
     string? TaskBody = null);
 
 /// <summary>A project on a host: a folder there, with its branch workspaces, terminals and agents.</summary>
-public sealed class RemoteProject(RemoteHost host, string id, string name, string path)
+public sealed partial class RemoteProject(RemoteHost host, string id, string name, string path) : ObservableObject
 {
     public RemoteHost Host { get; } = host;
     public string Id { get; } = id;
@@ -143,9 +144,13 @@ public sealed class RemoteProject(RemoteHost host, string id, string name, strin
     /// <summary>The folder on the host, as the host shows it.</summary>
     public string Path { get; } = path;
     /// <summary>Project accent color as <c>#RRGGBB</c>, synced from the desktop rail when set.</summary>
-    public string? Color { get; set; }
-    /// <summary>Optional icon name synced from the desktop rail.</summary>
-    public string? Icon { get; set; }
+    [ObservableProperty] public partial string? Color { get; set; }
+    /// <summary>Optional Lucide or pixel icon name (<c>pixel:&lt;id&gt;</c>) synced from the desktop rail.</summary>
+    [ObservableProperty] public partial string? Icon { get; set; }
+    /// <summary>Versioned file name of the project's custom picture thumbnail on the host; null when using an icon or initial.</summary>
+    [ObservableProperty] public partial string? ImageKey { get; set; }
+    /// <summary>Decoded custom picture thumbnail cached locally for <see cref="ImageKey"/>; null when none or not yet loaded.</summary>
+    [ObservableProperty] public partial Bitmap? ImageBitmap { get; set; }
     public bool IsGitRepository { get; set; }
     public string? DefaultBranch { get; set; }
     public ObservableCollection<RemoteBranchWorkspace> Workspaces { get; } = [];

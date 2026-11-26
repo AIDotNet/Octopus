@@ -61,9 +61,11 @@ public sealed partial class SessionWorkspaceViewModel : ObservableObject, IDispo
     [ObservableProperty] public partial string? StatusOverride { get; private set; }
 
     // Page-specific popover entries (Reload for ConversationPage, Fit/Release + Font size for TerminalPage).
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPrimaryAction))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPrimaryAction))]
     public partial string? PrimaryActionLabel { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPrimaryAction))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPrimaryAction))]
     public partial ICommand? PrimaryActionCommand { get; set; }
     public bool HasPrimaryAction => !string.IsNullOrEmpty(PrimaryActionLabel) && PrimaryActionCommand is not null;
 

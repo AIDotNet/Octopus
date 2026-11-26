@@ -37,11 +37,8 @@ public partial class SessionWorkspaceOverlay : UserControl
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        if (_page is not null)
-        {
-            _page.PropertyChanged -= OnPagePropertyChanged;
-            _page = null;
-        }
+        _page?.PropertyChanged -= OnPagePropertyChanged;
+        _page = null;
     }
 
     private void OnPagePropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)

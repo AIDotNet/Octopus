@@ -1,9 +1,8 @@
 using System.ComponentModel;
 using Avalonia.Controls;
+using Octopus.Mobile.Shell;
 using Page = TKCode.Arc.Mobile.Page;
 using TextField = TKCode.Arc.Mobile.TextField;
-using Octopus.Mobile.Shell;
-using TKCode.Arc.Mobile;
 
 namespace Octopus.Mobile.Account;
 

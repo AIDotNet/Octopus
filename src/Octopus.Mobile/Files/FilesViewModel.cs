@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Workspace;
@@ -135,7 +136,11 @@ public sealed partial class FileRowViewModel(RemoteFileEntry entry, Action<FileR
     public string Name => entry.Name;
     public string Path => entry.Path;
     public bool IsDirectory => entry.IsDirectory;
-    public Geometry Icon => entry.IsDirectory ? ArcIcons.Folder : ArcIcons.FileText;
+    public Geometry Icon => entry.IsDirectory
+        ? ArcIcons.Folder
+        : MobileFileLinks.IsImageExtension(entry.Name)
+            ? ArcIcons.Image
+            : ArcIcons.FileText;
 
     [RelayCommand]
     private void Open() => open(this);

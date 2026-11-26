@@ -3,6 +3,7 @@
            xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
            xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
            xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:common="using:Octopus.Mobile.Common"
            xmlns:vm="using:Octopus.Mobile.Hosts"
            x:Class="Octopus.Mobile.Hosts.HostsPage"
            x:DataType="vm:HostsViewModel"
@@ -50,23 +51,11 @@
             </arcm:ListItem>
         </DataTemplate>
 
-        <!-- Cross-host session row in the Activity inbox: direct jump to TerminalPage. -->
+        <!-- Cross-host session row in the Activity inbox: full-width title + project-first context with compact status pill. -->
         <DataTemplate x:Key="ActivitySessionRow" x:DataType="vm:ActivitySessionRowViewModel">
             <arcm:ListItem ShowChevron="True" Command="{Binding OpenCommand}">
-                <arcm:ListItem.Trailing>
-                    <Border Classes="pill"
-                            Classes.waiting="{Binding IsWaiting}"
-                            Classes.working="{Binding IsWorking}"
-                            Classes.error="{Binding IsError}"
-                            IsVisible="{Binding HasStatus}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <arc:ArcSpinner IsVisible="{Binding IsWorking}" />
-                            <TextBlock Text="{Binding StatusText}" />
-                        </StackPanel>
-                    </Border>
-                </arcm:ListItem.Trailing>
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12" Margin="0,4">
-                    <Panel Grid.Column="0">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11" Margin="0,5">
+                    <Panel Grid.Column="0" VerticalAlignment="Top" Margin="0,2,0,0">
                         <Border Classes="badge" Background="{Binding Tint}" IsVisible="{Binding IsAgent}">
                             <TextBlock Text="{Binding Initial}" />
                         </Border>
@@ -76,14 +65,33 @@
                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Panel>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                            <Border Classes="wsPill" IsVisible="{Binding HasWorkspaceTask}">
-                                <TextBlock Text="{Binding WorkspaceTaskKey}" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="3">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                            <TextBlock Grid.Column="0"
+                                       Classes="sessionTitle"
+                                       Text="{Binding Title}"
+                                       VerticalAlignment="Center" />
+                            <Border Grid.Column="1" Classes="wsPill" IsVisible="{Binding HasWorkspaceTask}">
+                                <TextBlock Text="{Binding WorkspaceTaskKey}" MaxWidth="82" TextTrimming="CharacterEllipsis" />
                             </Border>
-                        </StackPanel>
-                        <TextBlock Classes="secondary" Text="{Binding ContextLine}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0"
+                                       Classes="secondary"
+                                       Text="{Binding ContextLine}"
+                                       VerticalAlignment="Center" />
+                            <Border Grid.Column="1"
+                                    Classes="pill compact"
+                                    Classes.waiting="{Binding IsWaiting}"
+                                    Classes.working="{Binding IsWorking}"
+                                    Classes.error="{Binding IsError}"
+                                    IsVisible="{Binding HasStatus}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <arc:ArcSpinner IsVisible="{Binding IsWorking}" />
+                                    <TextBlock Text="{Binding StatusText}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
                         <TextBlock Classes="preview" Text="{Binding Preview}" IsVisible="{Binding HasPreview}" />
                     </StackPanel>
                 </Grid>
@@ -132,7 +140,100 @@
         </arcm:Navbar>
     </arcm:Page.Header>
 
-    <Panel Margin="0,4,0,24">
+    <StackPanel Margin="0,4,0,24" Spacing="14">
+        <!-- Update reminder banner shown on Activity & Computers tabs when an update is available, downloading, ready or failed. -->
+        <Border Name="UpdateReminderBanner"
+                Classes="updateBanner"
+                Classes.ready="{Binding Updater.IsReady}"
+                Classes.error="{Binding Updater.IsFailed}"
+                Margin="16,4,16,0"
+                IsVisible="{Binding ShowUpdateBanner}">
+            <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="11">
+                    <Border Grid.Column="0"
+                            Classes="updateIconBadge"
+                            Classes.ready="{Binding Updater.IsReady}"
+                            Classes.error="{Binding Updater.IsFailed}">
+                        <Panel>
+                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ArrowUp}" Size="16"
+                                          Foreground="{arc:ArcDesignTokenResource Accent}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          IsVisible="{Binding Updater.IsAvailable}" />
+                            <arc:ArcSpinner Width="15" Height="15"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            IsVisible="{Binding Updater.IsDownloading}" />
+                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Check}" Size="16"
+                                          Foreground="{arc:ArcDesignTokenResource Success}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          IsVisible="{Binding Updater.IsReady}" />
+                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.RefreshCw}" Size="15"
+                                          Foreground="{arc:ArcDesignTokenResource Danger}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          IsVisible="{Binding Updater.IsFailed}" />
+                        </Panel>
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Name="UpdateBannerTitle"
+                                   Text="{Binding Updater.BannerTitle}"
+                                   FontSize="{arc:ArcDesignTokenResource TypeBase}"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Name="UpdateBannerSubtitle"
+                                   Classes="secondary"
+                                   Text="{Binding Updater.BannerSubtitle}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Name="UpdateBannerDismissButton"
+                            Grid.Column="2"
+                            Classes="bannerCloseBtn"
+                            Command="{Binding Updater.DismissBannerCommand}"
+                            IsVisible="{Binding Updater.CanDismissBanner}"
+                            AutomationProperties.Name="{l:MobileLangResource UpdateDismiss}">
+                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.X}" Size="15"
+                                      Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                    </Button>
+                </Grid>
+
+                <!-- Visual progress bar while downloading -->
+                <ProgressBar Name="UpdateBannerProgress"
+                             Classes="updateProgress"
+                             Minimum="0"
+                             Maximum="100"
+                             Value="{Binding Updater.ProgressPercent}"
+                             IsVisible="{Binding Updater.IsDownloading}" />
+
+                <!-- Actions: What's new (Markdown sheet) + Update / Install / Cancel -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <arcm:Button Name="UpdateBannerNotesButton"
+                                 Grid.Column="0"
+                                 Variant="Tinted"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{l:MobileLangResource UpdateNotes}"
+                                 Command="{Binding Updater.OpenNotesCommand}"
+                                 IsVisible="{Binding Updater.HasOffer}" />
+                    <Panel Grid.Column="1">
+                        <arcm:Button Name="UpdateBannerPrimaryButton"
+                                     Variant="Filled"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{Binding Updater.PrimaryModalActionText}"
+                                     Command="{Binding Updater.ActCommand}"
+                                     IsVisible="{Binding Updater.HasPrimaryModalAction}" />
+                        <arcm:Button Name="UpdateBannerCancelButton"
+                                     Variant="Tinted"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Foreground="{arc:ArcDesignTokenResource Danger}"
+                                     Content="{l:MobileLangResource Cancel}"
+                                     Command="{Binding Updater.CancelDownloadCommand}"
+                                     IsVisible="{Binding Updater.IsDownloading}" />
+                    </Panel>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <Panel>
         <!-- ==================== Tab 0: Activity (动态收件箱) ==================== -->
         <StackPanel Name="ActivityTabContent" Spacing="18" IsVisible="{Binding IsActivityTab}">
             <!-- Cloud relay upgrade banner when in local-only mode -->
@@ -347,31 +448,58 @@
             </arcm:ListGroup>
 
             <!-- App version and updates (Android only: a platform without an updater shows no group) -->
-            <arcm:ListGroup Name="MeAboutGroup"
-                            Header="{l:MobileLangResource MeSectionAbout}"
-                            IsVisible="{Binding Updater.IsSupported}">
-                <arcm:ListItem Name="MeUpdateRow"
-                               Icon="{x:Static arc:ArcIcons.RefreshCw}"
-                               Content="{l:MobileLangResource UpdateRowTitle}"
-                               Subtitle="{Binding Updater.StatusText}"
-                               ShowChevron="{Binding !Updater.IsBusy}"
-                               Command="{Binding Updater.ActCommand}">
-                    <arcm:ListItem.Trailing>
-                        <Panel>
-                            <arc:ArcSpinner IsVisible="{Binding Updater.IsBusy}" VerticalAlignment="Center" />
-                            <Border Classes="pill action" IsVisible="{Binding !!Updater.ActionText}">
-                                <TextBlock Text="{Binding Updater.ActionText}" />
-                            </Border>
-                        </Panel>
-                    </arcm:ListItem.Trailing>
-                </arcm:ListItem>
-                <arcm:ListItem Name="MeUpdateNotesRow"
-                               Icon="{x:Static arc:ArcIcons.FileText}"
-                               Content="{l:MobileLangResource UpdateNotes}"
-                               ShowChevron="True"
-                               Command="{Binding Updater.OpenNotesCommand}"
-                               IsVisible="{Binding Updater.HasNews}" />
-            </arcm:ListGroup>
+            <StackPanel Spacing="10" IsVisible="{Binding Updater.IsSupported}">
+                <arcm:ListGroup Name="MeAboutGroup"
+                                Header="{l:MobileLangResource MeSectionAbout}"
+                                IsVisible="{Binding Updater.IsSupported}">
+                    <arcm:ListItem Name="MeUpdateRow"
+                                   Icon="{x:Static arc:ArcIcons.RefreshCw}"
+                                   Content="{l:MobileLangResource UpdateRowTitle}"
+                                   Subtitle="{Binding Updater.StatusText}"
+                                   ShowChevron="{Binding !Updater.IsBusy}"
+                                   Command="{Binding Updater.ActCommand}">
+                        <arcm:ListItem.Trailing>
+                            <Panel>
+                                <arc:ArcSpinner IsVisible="{Binding Updater.IsBusy}" VerticalAlignment="Center" />
+                                <Border Classes="pill action" IsVisible="{Binding !!Updater.ActionText}">
+                                    <TextBlock Text="{Binding Updater.ActionText}" />
+                                </Border>
+                            </Panel>
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Name="MeUpdateNotesRow"
+                                   Icon="{x:Static arc:ArcIcons.FileText}"
+                                   Content="{l:MobileLangResource UpdateNotes}"
+                                   Subtitle="{Binding Updater.OfferedMetaText}"
+                                   ShowChevron="True"
+                                   Command="{Binding Updater.OpenNotesCommand}"
+                                   IsVisible="{Binding Updater.HasNews}" />
+                </arcm:ListGroup>
+
+                <!-- Live download progress & cancel card inside Me tab while downloading -->
+                <Border Name="MeUpdateProgressCard"
+                        Classes="surfaceCard"
+                        Padding="14,12"
+                        Margin="16,0"
+                        IsVisible="{Binding Updater.IsDownloading}">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBlock Classes="secondary"
+                                       Text="{Binding Updater.ProgressDetailText}"
+                                       VerticalAlignment="Center" />
+                            <Button Name="MeCancelDownloadButton"
+                                    Classes="inlineLinkBtn"
+                                    Foreground="{arc:ArcDesignTokenResource Danger}"
+                                    Content="{l:MobileLangResource Cancel}"
+                                    Command="{Binding Updater.CancelDownloadCommand}" />
+                        </Grid>
+                        <ProgressBar Classes="updateProgress"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="{Binding Updater.ProgressPercent}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
 
             <!-- Sign out / Leave local-only mode -->
             <Panel Margin="16,0">
@@ -393,7 +521,8 @@
                              IsVisible="{Binding IsSignedOut}" />
             </Panel>
         </StackPanel>
-    </Panel>
+        </Panel>
+    </StackPanel>
 
     <!-- Scheme A bottom 3-tab navigation bar -->
     <arcm:Page.Footer>
@@ -430,6 +559,117 @@
                                       IsDestructive="True"
                                       Command="{Binding LeaveLocalCommand}" />
             </arcm:ActionSheet>
+
+            <!-- In-app Markdown release-notes modal sheet -->
+            <arcm:Sheet Name="UpdateNotesSheet"
+                        IsOpen="{Binding Updater.IsNotesOpen, Mode=TwoWay}"
+                        MaxHeightFraction="0.86"
+                        Title="{Binding Updater.NotesModalTitle}">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <!-- Version transition + release metadata + browser fallback link -->
+                    <Border Grid.Row="0"
+                            Margin="16,2,16,10"
+                            Padding="12,10"
+                            CornerRadius="12"
+                            Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
+                                <TextBlock Name="NotesVersionTransition"
+                                           Text="{Binding Updater.VersionTransitionText}"
+                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                           FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Name="NotesMetaText"
+                                           Classes="secondary"
+                                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                           Text="{Binding Updater.OfferedMetaText}"
+                                           IsVisible="{Binding !!Updater.OfferedMetaText}" />
+                            </StackPanel>
+                            <Button Name="NotesOpenBrowserButton"
+                                    Grid.Column="1"
+                                    Classes="inlineLinkBtn"
+                                    Command="{Binding Updater.OpenNotesInBrowserCommand}"
+                                    IsVisible="{Binding Updater.HasNotesUrl}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="{l:MobileLangResource UpdateOpenInBrowser}" />
+                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ExternalLink}" Size="12"
+                                                  Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                  VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Scrollable Markdown content -->
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="16,2,16,16" Spacing="10">
+                            <common:MobileMarkdownView Name="UpdateNotesMarkdown"
+                                                       Markdown="{Binding Updater.OfferedNotes}"
+                                                       LinkCommand="{Binding Updater.OpenLinkCommand}"
+                                                       IsVisible="{Binding Updater.HasOfferedNotes}" />
+                            <Border Name="UpdateNotesEmptyCard"
+                                    Classes="emptyCard"
+                                    IsVisible="{Binding !Updater.HasOfferedNotes}">
+                                <TextBlock Classes="secondary"
+                                           Text="{l:MobileLangResource UpdateNotesEmpty}"
+                                           TextWrapping="Wrap" />
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Sticky footer with live progress or primary update/install action -->
+                    <Border Grid.Row="2" Classes="sheetFooter">
+                        <StackPanel Spacing="10">
+                            <StackPanel Spacing="6" IsVisible="{Binding Updater.IsDownloading}">
+                                <TextBlock Classes="secondary"
+                                           Text="{Binding Updater.ProgressDetailText}" />
+                                <ProgressBar Classes="updateProgress"
+                                             Minimum="0"
+                                             Maximum="100"
+                                             Value="{Binding Updater.ProgressPercent}" />
+                            </StackPanel>
+
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10" IsVisible="{Binding Updater.IsDownloading}">
+                                <arcm:Button Name="NotesLaterWhileDownloadingButton"
+                                             Grid.Column="0"
+                                             Variant="Tinted"
+                                             HorizontalAlignment="Stretch"
+                                             HorizontalContentAlignment="Center"
+                                             Content="{l:MobileLangResource UpdateLater}"
+                                             Command="{Binding Updater.CloseNotesCommand}" />
+                                <arcm:Button Name="NotesCancelDownloadButton"
+                                             Grid.Column="1"
+                                             Variant="Tinted"
+                                             HorizontalAlignment="Stretch"
+                                             HorizontalContentAlignment="Center"
+                                             Foreground="{arc:ArcDesignTokenResource Danger}"
+                                             Content="{l:MobileLangResource Cancel}"
+                                             Command="{Binding Updater.CancelDownloadCommand}" />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10" IsVisible="{Binding Updater.HasPrimaryModalAction}">
+                                <arcm:Button Name="NotesLaterButton"
+                                             Grid.Column="0"
+                                             Variant="Tinted"
+                                             HorizontalAlignment="Stretch"
+                                             HorizontalContentAlignment="Center"
+                                             Content="{l:MobileLangResource UpdateLater}"
+                                             Command="{Binding Updater.CloseNotesCommand}" />
+                                <arcm:Button Name="NotesPrimaryActionButton"
+                                             Grid.Column="1"
+                                             Variant="Filled"
+                                             HorizontalAlignment="Stretch"
+                                             HorizontalContentAlignment="Center"
+                                             Content="{Binding Updater.PrimaryModalActionText}"
+                                             Command="{Binding Updater.ActCommand}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </arcm:Sheet>
         </Panel>
     </arcm:Page.Overlay>
 </arcm:Page>

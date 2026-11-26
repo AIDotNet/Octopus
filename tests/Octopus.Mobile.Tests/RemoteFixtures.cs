@@ -35,6 +35,7 @@ internal sealed class Computer : IAsyncDisposable
         if (advertiseFiles) capabilities.Add(RemoteMethods.CapabilityFiles);
         if (advertiseGit) capabilities.Add(RemoteMethods.CapabilityGit);
         if (advertiseAcpGui) capabilities.Add(RemoteMethods.CapabilityAcpGui);
+        capabilities.Add(RemoteMethods.CapabilityProjectIcons);
         Service = new RemoteHostService(identity, () => new DeviceDescription(name, DeviceKind.Desktop), new PairedPeerStore(null), Workspace,
             new HelloMessage { AppVersion = "1.0", Capabilities = capabilities });
         if (relay is null || tokens is null) return;

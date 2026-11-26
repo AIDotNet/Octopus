@@ -108,6 +108,12 @@ public partial interface IRemoteWorkspace
 
     /// <summary>Reads the computers again (the account's, when signed in) and connects to the paired ones that are there. Cheap enough to call whenever the list is looked at.</summary>
     Task RefreshAsync();
+
+    /// <summary>Called when the mobile app moves to the background so periodic network activity can quiet down.</summary>
+    void OnAppBackgrounded() { }
+
+    /// <summary>Called when the mobile app returns to the foreground: probes active links, evicts half-open sockets, and refreshes state.</summary>
+    void OnAppForegrounded() { }
 }
 
 public enum PairingOutcome

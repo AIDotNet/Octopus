@@ -1,7 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Octopus.Mobile.Account;
 using Octopus.Mobile.Hosts;
-using Octopus.Remote.Protocol;
 using Octopus.Remote.Security;
 using Octopus.Remote.Tests;
 using Xunit;

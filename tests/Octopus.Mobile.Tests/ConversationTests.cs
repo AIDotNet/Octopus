@@ -277,14 +277,23 @@ public class ConversationTests
         Assert.Equal(5, turn.WorkStepCount);
         Assert.True(turn.HasWorkFailures);
         Assert.True(turn.ShowLiveTicker);
+        Assert.True(turn.ShowLiveStatus);
+        var initialPhrase = turn.LiveStatusText;
+        Assert.False(string.IsNullOrWhiteSpace(initialPhrase));
+        turn.AdvanceLiveStatus();
+        Assert.NotEqual(initialPhrase, turn.LiveStatusText);
         Assert.NotNull(turn.LiveTicker);
         Assert.True(turn.LiveTicker!.Line0.IsVisible);
         Assert.True(turn.LiveTicker.Line1.IsVisible);
         Assert.True(turn.LiveTicker.Line2.IsVisible);
+        Assert.True(turn.LiveTicker.Line3.IsVisible);
+        Assert.True(turn.LiveTicker.Line4.IsVisible);
         Assert.True(turn.LiveTicker.Line0.RowOpacity < turn.LiveTicker.Line1.RowOpacity);
         Assert.True(turn.LiveTicker.Line1.RowOpacity < turn.LiveTicker.Line2.RowOpacity);
-        Assert.True(turn.LiveTicker.Line2.IsRunning);
-        Assert.Equal("dotnet test", turn.LiveTicker.Line2.Target);
+        Assert.True(turn.LiveTicker.Line2.RowOpacity < turn.LiveTicker.Line3.RowOpacity);
+        Assert.True(turn.LiveTicker.Line3.RowOpacity < turn.LiveTicker.Line4.RowOpacity);
+        Assert.True(turn.LiveTicker.Line4.IsRunning);
+        Assert.Equal("dotnet test", turn.LiveTicker.Line4.Target);
 
         // Manually expand while streaming -> ticker hides, steps materialize.
         turn.IsWorkExpanded = true;
@@ -322,6 +331,7 @@ public class ConversationTests
         Assert.False(turn.IsWorkExpanded);
         Assert.Null(turn.ExpandedWorkSteps);
         Assert.False(turn.ShowLiveTicker);
+        Assert.False(turn.ShowLiveStatus);
         Assert.Null(turn.LiveTicker);
         Assert.Equal("All done.", turn.Text);
     }
@@ -398,7 +408,9 @@ public class ConversationTests
                     [
                         new() { Id = "t1", Title = "File A.cs", Kind = "edit", Status = "completed" },
                         new() { Id = "t2", Title = "File B.cs", Kind = "edit", Status = "completed" },
-                        new() { Id = "t3", Title = "File C.cs", Kind = "edit", Status = "in_progress" },
+                        new() { Id = "t3", Title = "File C.cs", Kind = "edit", Status = "completed" },
+                        new() { Id = "t4", Title = "File D.cs", Kind = "edit", Status = "completed" },
+                        new() { Id = "t5", Title = "File E.cs", Kind = "edit", Status = "in_progress" },
                     ],
                 },
             ],
@@ -440,10 +452,10 @@ public class ConversationTests
             var rowH = viewport.MeasuredRowHeight;
             Assert.True(rowH > 8);
             var stepY = rowH + viewport.Spacing;
-            var threeRowHeight = 3 * rowH + 2 * viewport.Spacing;
-            Assert.Equal(threeRowHeight, viewport.Bounds.Height, 1.0);
+            var fiveRowHeight = 5 * rowH + 4 * viewport.Spacing;
+            Assert.Equal(fiveRowHeight, viewport.Bounds.Height, 1.0);
 
-            // In-place completion of t3 must NOT trigger a slide animation.
+            // In-place completion of t5 must NOT trigger a slide animation.
             timeline.Apply(new AcpUpdateMessage
             {
                 Sequence = 2,
@@ -460,13 +472,15 @@ public class ConversationTests
                             new() { Id = "t1", Title = "File A.cs", Kind = "edit", Status = "completed" },
                             new() { Id = "t2", Title = "File B.cs", Kind = "edit", Status = "completed" },
                             new() { Id = "t3", Title = "File C.cs", Kind = "edit", Status = "completed" },
+                            new() { Id = "t4", Title = "File D.cs", Kind = "edit", Status = "completed" },
+                            new() { Id = "t5", Title = "File E.cs", Kind = "edit", Status = "completed" },
                         ],
                     },
                 ],
             });
             Assert.False(viewport.IsRunning);
 
-            // New tool t4 arrives -> slides upward identically to desktop, keeping height constant.
+            // New tool t6 arrives -> slides upward identically to desktop, keeping 5-row height constant.
             timeline.Apply(new AcpUpdateMessage
             {
                 Sequence = 3,
@@ -483,7 +497,9 @@ public class ConversationTests
                             new() { Id = "t1", Title = "File A.cs", Kind = "edit", Status = "completed" },
                             new() { Id = "t2", Title = "File B.cs", Kind = "edit", Status = "completed" },
                             new() { Id = "t3", Title = "File C.cs", Kind = "edit", Status = "completed" },
-                            new() { Id = "t4", Title = "File D.cs", Kind = "edit", Status = "in_progress" },
+                            new() { Id = "t4", Title = "File D.cs", Kind = "edit", Status = "completed" },
+                            new() { Id = "t5", Title = "File E.cs", Kind = "edit", Status = "completed" },
+                            new() { Id = "t6", Title = "File F.cs", Kind = "edit", Status = "in_progress" },
                         ],
                     },
                 ],
@@ -507,10 +523,19 @@ public class ConversationTests
             Assert.Contains(line0Ys, y => y > 0.5 && y < stepY - 0.5);
             Assert.Contains(exit0Ys, y => y < -0.5 && y > -stepY + 0.5);
             Assert.False(viewport.IsExitVisible(0));
-            Assert.Equal(threeRowHeight, viewport.Bounds.Height, 1.0);
-            Assert.Equal(0.38, viewport.GetSlotOpacity(0), 0.02);
-            Assert.Equal(0.66, viewport.GetSlotOpacity(1), 0.02);
-            Assert.Equal(1.0, viewport.GetSlotOpacity(2), 0.02);
+            Assert.Equal(fiveRowHeight, viewport.Bounds.Height, 1.0);
+            Assert.Equal(0.28, viewport.GetSlotOpacity(0), 0.02);
+            Assert.Equal(0.40, viewport.GetSlotOpacity(1), 0.02);
+            Assert.Equal(0.56, viewport.GetSlotOpacity(2), 0.02);
+            Assert.Equal(0.76, viewport.GetSlotOpacity(3), 0.02);
+            Assert.Equal(1.00, viewport.GetSlotOpacity(4), 0.02);
+
+            // Spinner on the newly entered 5th row spins on mobile too.
+            var activeSpinner = viewport.GetVisualDescendants()
+                .OfType<TKCode.Arc.Primitives.ArcSpinner>()
+                .First(s => s.IsVisible && s.IsEffectivelyVisible);
+            var startAngle = activeSpinner.Angle;
+            Assert.True(StepUntil(() => activeSpinner.IsSpinning && Math.Abs(activeSpinner.Angle - startAngle) > 1.0, milliseconds: 1500));
 
             // Reduced/Off motion jumps immediately on mobile too.
             ArcMotion.SetLevel(window, ArcMotionLevel.Off);
@@ -531,7 +556,9 @@ public class ConversationTests
                             new() { Id = "t2", Title = "File B.cs", Kind = "edit", Status = "completed" },
                             new() { Id = "t3", Title = "File C.cs", Kind = "edit", Status = "completed" },
                             new() { Id = "t4", Title = "File D.cs", Kind = "edit", Status = "completed" },
-                            new() { Id = "t5", Title = "File E.cs", Kind = "edit", Status = "in_progress" },
+                            new() { Id = "t5", Title = "File E.cs", Kind = "edit", Status = "completed" },
+                            new() { Id = "t6", Title = "File F.cs", Kind = "edit", Status = "completed" },
+                            new() { Id = "t7", Title = "File G.cs", Kind = "edit", Status = "in_progress" },
                         ],
                     },
                 ],
@@ -539,7 +566,7 @@ public class ConversationTests
             Assert.False(viewport.IsRunning);
             Assert.False(viewport.IsExitVisible(0));
             Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
-            Assert.Equal("File E.cs", turn.LiveTicker.Line2.Target);
+            Assert.Equal("File G.cs", turn.LiveTicker.Line4.Target);
         }
         finally
         {
@@ -929,5 +956,124 @@ public class ConversationTests
         Assert.True(details.ShowGuiNotice);
         Assert.True(page.FindControl<Control>("GuiNotice")!.IsVisible);
         Assert.False(page.FindControl<Control>("OpenConversationRow")!.IsVisible);
+    }
+
+    [Fact]
+    public void Mobile_markdown_renders_gfm_tables_strips_html_comments_and_resolves_file_links()
+    {
+        const string markdown = """
+            <!-- GOAL_COMPLETE -->
+            具体到每一类载荷的线上真实字节数对比如下：
+
+            | 传输场景 | 老版本 (v1) 线上体积 | 当前协议 (v2) 线上体积 | 核心缩减机制 |
+            |:---|:---:|---:|---|
+            | 1. 终端断线重连<br>（如暂离 30 秒） | **~250 KB** | ~1 KB - 4 KB | `session.resume`（跳过全量 `Snapshot`） |
+            | 2. 源码读写 | ~1.33 MB | ~150 KB | 查看 [Startup.cs](src/Startup.cs#L10-L20) |
+
+            ![架构图](assets/logo.png)
+            """;
+
+        var blocks = MobileMarkdownParser.Parse(markdown);
+
+        Assert.DoesNotContain(blocks, b => b.RawText.Contains("GOAL_COMPLETE", StringComparison.Ordinal));
+        var tableBlock = Assert.Single(blocks, b => b.Kind == MarkdownBlockKind.Table);
+        var table = tableBlock.Table!;
+        Assert.Equal(4, table.Headers.Count);
+        Assert.Equal(
+            [MarkdownColumnAlignment.Left, MarkdownColumnAlignment.Center, MarkdownColumnAlignment.Right, MarkdownColumnAlignment.Left],
+            table.Alignments);
+        Assert.Equal(2, table.Rows.Count);
+        Assert.Equal("传输场景", table.Headers[0].RawText);
+        // <br> inside table cells becomes a real line break, and inline code / bold / links are parsed into inlines.
+        Assert.Contains("\n", table.Rows[0][0].RawText);
+        Assert.DoesNotContain("<br>", table.Rows[0][0].RawText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(table.Rows[0][1].Inlines, i => i is { Kind: MarkdownInlineKind.Bold, Text: "~250 KB" });
+        Assert.Contains(table.Rows[0][3].Inlines, i => i is { Kind: MarkdownInlineKind.Code, Text: "session.resume" });
+        Assert.Contains(table.Rows[1][3].Inlines, i => i is { Kind: MarkdownInlineKind.Link, Text: "Startup.cs", Url: "src/Startup.cs#L10-L20" });
+
+        var image = Assert.Single(blocks, b => b.Kind == MarkdownBlockKind.Image);
+        Assert.Equal("架构图", image.Marker);
+        Assert.Equal("assets/logo.png", image.RawText);
+
+        // MobileFileLinks path resolution handles Unix/Windows roots, file:// URLs, line anchors, and rejects unsafe schemes.
+        Assert.Equal("/repo/app/src/Startup.cs", MobileFileLinks.ResolveRemotePath("src/Startup.cs#L10-L20", "/repo/app"));
+        Assert.Equal("/repo/app/assets/logo.png", MobileFileLinks.ResolveRemotePath("./assets/logo.png:12:4", "/repo/app"));
+        Assert.Equal("/repo/app/README.md", MobileFileLinks.ResolveRemotePath("file:///repo/app/README.md#L1", "/repo/app"));
+        Assert.Equal(@"C:\code\Octopus\src\App.cs", MobileFileLinks.ResolveRemotePath("src/App.cs:42", @"C:\code\Octopus"));
+        Assert.Null(MobileFileLinks.ResolveRemotePath("javascript:alert(1)", "/repo/app"));
+    }
+
+    [AvaloniaFact]
+    public void Conversation_page_renders_markdown_table_and_opens_files_images_attachments_and_web_links()
+    {
+        using var phone = new Phone();
+        var (page, vm, session) = OpenDemoConversation(phone);
+
+        // Inject a rich assistant turn with a GFM table, file link, image, tool path, and user attachment into the timeline.
+        vm.Conversation!.Timeline.ApplySnapshot(new AcpSnapshotMessage
+        {
+            ItemId = session.Id,
+            Sequence = 99,
+            State = AcpStates.Ready,
+            Entries =
+            [
+                new()
+                {
+                    Id = "u-attach",
+                    Kind = AcpEntryKinds.User,
+                    Text = "看看这份设计文档",
+                    Attachments = ["docs/design.md"],
+                },
+                new()
+                {
+                    Id = "a-table",
+                    Kind = AcpEntryKinds.Assistant,
+                    Text = "| 项目 | 说明 |\n|---|---|\n| 入口 | 查看 [Startup](src/Startup.cs#L5) 与 [文档](https://octopus.example/docs) |\n\n![Logo](assets/logo.png)\n\n<!-- GOAL_COMPLETE -->",
+                    Tools =
+                    [
+                        new() { Id = "t-read", Title = "读取 TokenIssuer.cs", Kind = "read", Status = "completed", Path = "src/Auth/TokenIssuer.cs" },
+                    ],
+                },
+            ],
+        });
+        Phone.Pump();
+
+        // The assistant message renders through MobileMarkdownView with a real table card in the visual tree.
+        var mdView = page.GetVisualDescendants().OfType<MobileMarkdownView>().First(v => v.Name == "AssistantMarkdown");
+        Assert.Contains(mdView.Blocks, b => b.Kind == MarkdownBlockKind.Table);
+        Assert.Contains(mdView.Blocks, b => b.Kind == MarkdownBlockKind.Image);
+        Assert.Contains(mdView.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("mdTableCard"));
+
+        // 1) Web link opens browser.
+        vm.OpenLinkCommand.Execute("https://octopus.example/docs");
+        Assert.Equal("https://octopus.example/docs", phone.Opened?.ToString());
+
+        // 2) File link with #L5 opens FileViewerPage showing Startup.cs.
+        vm.OpenLinkCommand.Execute("src/Startup.cs#L5");
+        var codeViewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
+        Assert.True(Phone.Until(() => !codeViewer.IsLoading && codeViewer.Lines.Count > 0));
+        Assert.Equal("Startup.cs", codeViewer.Title);
+        phone.Shell.Back();
+
+        // 3) Image link opens FileViewerPage with decoded image preview.
+        vm.OpenLinkCommand.Execute("assets/logo.png");
+        var imgViewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
+        Assert.True(Phone.Until(() => !imgViewer.IsLoading && imgViewer.ShowImage));
+        Assert.Equal("logo.png", imgViewer.Title);
+        phone.Shell.Back();
+
+        // 4) Tool step file path and user attachment chip both open in FileViewerPage.
+        var assistant = vm.Entries.OfType<ConversationAssistantEntry>().Single();
+        vm.OpenFileCommand.Execute(assistant.Tools[0].Path);
+        var toolViewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
+        Assert.True(Phone.Until(() => !toolViewer.IsLoading && toolViewer.Lines.Count > 0));
+        Assert.Equal("TokenIssuer.cs", toolViewer.Title);
+        phone.Shell.Back();
+
+        var user = vm.Entries.OfType<ConversationUserEntry>().Single();
+        vm.OpenFileCommand.Execute(user.Attachments[0]);
+        var mdViewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
+        Assert.True(Phone.Until(() => !mdViewer.IsLoading && mdViewer.ShowMarkdownPreview));
+        Assert.Equal("design.md", mdViewer.Title);
     }
 }

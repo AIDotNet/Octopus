@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Workspace;
 using Octopus.Remote.Client;
@@ -13,6 +14,9 @@ internal sealed partial class RemoteWorkspace
     // UI thread only: the conversations pages show, and the connections whose acp/update events are listened to.
     private readonly List<HostConversation> _conversations = [];
     private readonly Dictionary<RemoteHostClient, (string HostId, Action<AcpUpdateMessage> Listener)> _acpListeners = new(ReferenceEqualityComparer.Instance);
+    // Coalesces bursts of acp/update frames (e.g. after returning from mobile background) into bounded UI drains.
+    private readonly ConcurrentQueue<(RemoteHostClient Client, AcpUpdateMessage Update)> _pendingAcpUpdates = new();
+    private int _acpDrainScheduled;
     private bool _followsConversationHosts;
 
     public bool SupportsConversations(RemoteHost host) => _connections.ClientOf(host.Id)?.SupportsAcpGui == true;
@@ -55,7 +59,9 @@ internal sealed partial class RemoteWorkspace
     {
         try
         {
-            var snapshot = await client.AttachConversationAsync(conversation.Session.Id, cancellationToken).ConfigureAwait(false);
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            limit.CancelAfter(CallTimeout);
+            var snapshot = await client.AttachConversationAsync(conversation.Session.Id, limit.Token).ConfigureAwait(false);
             var result = await UiAsync(() =>
             {
                 // The page left, or the connection was replaced while the answer was on its way: that one counts.
@@ -64,11 +70,30 @@ internal sealed partial class RemoteWorkspace
             }).ConfigureAwait(false);
             if (result == ConversationUpdateResult.Gap) ReattachSoon(conversation);
         }
+        catch (OperationCanceledException e) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new IOException("The conversation did not answer in time.", e);
+        }
         catch (RemoteException e)
         {
             throw new IOException(e.Message, e);
         }
     }
+
+    /// <summary>After returning from background, reattach any open conversation that was left connecting, errored, or on a stale client.</summary>
+    private void ReattachOpenConversationsIfNeeded() => Ui(() =>
+    {
+        foreach (var conversation in _conversations.ToList())
+        {
+            if (conversation.IsDisposed || conversation.Attaching) continue;
+            var currentClient = _connections.ClientOf(conversation.Session.Project.Host.Id);
+            if (currentClient is null) continue;
+            if (!ReferenceEquals(conversation.Client, currentClient) || conversation.State is ConversationState.Error or ConversationState.Connecting)
+            {
+                ReattachSoon(conversation);
+            }
+        }
+    });
 
     // In the background: what goes wrong shows in the conversation's state line.
     private void ReattachSoon(HostConversation conversation) => Ui(() =>
@@ -129,12 +154,36 @@ internal sealed partial class RemoteWorkspace
     // ---- events ----
 
     // Each connection's acp/update events, routed by item to the conversations of that host.
+    // Queued and drained on the UI thread in batches so bursts after background wakeups never freeze the UI.
     private void Listen(string hostId, RemoteHostClient client)
     {
         if (_acpListeners.ContainsKey(client)) return;
-        Action<AcpUpdateMessage> listener = update => Ui(() => OnAcpUpdate(client, update));
+        Action<AcpUpdateMessage> listener = update =>
+        {
+            _pendingAcpUpdates.Enqueue((client, update));
+            if (Interlocked.Exchange(ref _acpDrainScheduled, 1) == 0)
+            {
+                Ui(DrainAcpUpdates);
+            }
+        };
         _acpListeners[client] = (hostId, listener);
         client.AcpUpdated += listener;
+    }
+
+    private void DrainAcpUpdates()
+    {
+        const int maxPerTick = 64;
+        var processed = 0;
+        while (processed < maxPerTick && _pendingAcpUpdates.TryDequeue(out var item))
+        {
+            OnAcpUpdate(item.Client, item.Update);
+            processed++;
+        }
+        Volatile.Write(ref _acpDrainScheduled, 0);
+        if (!_pendingAcpUpdates.IsEmpty && Interlocked.Exchange(ref _acpDrainScheduled, 1) == 0)
+        {
+            Ui(DrainAcpUpdates);
+        }
     }
 
     private void OnAcpUpdate(RemoteHostClient client, AcpUpdateMessage update)

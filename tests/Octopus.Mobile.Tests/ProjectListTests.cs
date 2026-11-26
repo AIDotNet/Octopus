@@ -1,10 +1,8 @@
-using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Workspace;
-using Octopus.Remote.Protocol;
 using Octopus.Remote.Tests;
 using Xunit;
 

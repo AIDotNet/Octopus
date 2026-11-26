@@ -21,15 +21,18 @@ public class TerminalImageTests
     {
         var pixels = new byte[width * height * 4];
         for (var y = 0; y < height; y++)
-        for (var x = 0; x < width; x++)
         {
-            var at = (y * width + x) * 4;
-            var left = x < width / 2;
-            // Bgra, premultiplied.
-            pixels[at] = left ? (byte)0 : alpha;
-            pixels[at + 2] = left ? alpha : (byte)0;
-            pixels[at + 3] = alpha;
+            for (var x = 0; x < width; x++)
+            {
+                var at = (y * width + x) * 4;
+                var left = x < width / 2;
+                // Bgra, premultiplied.
+                pixels[at] = left ? (byte)0 : alpha;
+                pixels[at + 2] = left ? alpha : (byte)0;
+                pixels[at + 3] = alpha;
+            }
         }
+
         var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
         try
         {

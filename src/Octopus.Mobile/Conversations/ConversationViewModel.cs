@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using Avalonia;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Mobile.Common;
@@ -21,17 +23,20 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
 {
     private readonly IRemoteWorkspace _workspace;
     private readonly INavigator _navigator;
+    private readonly Action<Uri> _openBrowser;
     private readonly CancellationTokenSource _lifetime = new();
     private RemoteConversation? _conversation;
+    private DispatcherTimer? _statusPhraseTimer;
     private string? _openError;
     private bool _isOpening;
     private bool _disposed;
 
-    public ConversationViewModel(RemoteSession session, IRemoteWorkspace workspace, INavigator navigator)
+    public ConversationViewModel(RemoteSession session, IRemoteWorkspace workspace, INavigator navigator, Action<Uri>? openBrowser = null)
     {
         Session = session;
         _workspace = workspace;
         _navigator = navigator;
+        _openBrowser = openBrowser ?? MobileHost.OpenBrowser;
         // Closed from its own menu: the page leaves (the session on the host has ended).
         Actions = new SessionActionsViewModel(workspace, navigator, session, _ => navigator.Back());
         WorkspaceMenu = new SessionWorkspaceViewModel(session, workspace, navigator, Actions, BackCommand)
@@ -40,6 +45,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
             PrimaryActionCommand = ReloadCommand,
         };
         session.PropertyChanged += OnSessionChanged;
+        MobileHost.Backgrounded += OnAppBackgrounded;
+        MobileHost.Foregrounded += OnAppForegrounded;
         _ = OpenAsync();
     }
 
@@ -61,10 +68,12 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     [ObservableProperty] public partial ConversationComposer Composer { get; private set; } = new();
 
     /// <summary>What the person is typing in the composer.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(CanSend))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSend))]
     public partial string PromptText { get; set; } = "";
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(CanSend))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSend))]
     public partial bool IsSending { get; private set; }
 
     public string Title => Session.Title;
@@ -106,6 +115,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     public bool ShowComposerTopRow => Composer.HasChoices || HasQueued;
     public bool CanStop => IsLoaded && (IsWorking || IsWaiting);
     public bool CanSend => IsLoaded && !IsSending && !string.IsNullOrWhiteSpace(PromptText);
+    public bool CanOpenFiles => _workspace.SupportsFiles(Session.Project.Host);
+    public string WorkingDirectory => RemoteFolders.WorkspacePathOf(Session) ?? Session.Project.Path;
 
     /// <summary>Raised when the person taps a model, mode, or effort chip; the page shows an <c>ActionSheet</c>.</summary>
     public event Action<ConversationOptionKind, string, IReadOnlyList<ConversationOption>, string?>? OptionPickerRequested;
@@ -122,6 +133,28 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     /// <summary>Opens the top-right workspace &amp; session popover menu.</summary>
     [RelayCommand]
     private void OpenMenu() => WorkspaceMenu.OpenMenuCommand.Execute(null);
+
+    /// <summary>Opens a clicked Markdown link or image: web URLs in the system browser, project/file paths in the in-app preview.</summary>
+    [RelayCommand]
+    private void OpenLink(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target)) return;
+        if (MobileFileLinks.IsWebUrl(target) && Uri.TryCreate(target.Trim(), UriKind.Absolute, out var uri))
+        {
+            _openBrowser(uri);
+            return;
+        }
+        OpenFile(target);
+    }
+
+    /// <summary>Opens a file or image path (from Markdown, tool steps, or attachments) in the mobile file/image preview page.</summary>
+    [RelayCommand]
+    private void OpenFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        if (MobileFileLinks.ResolveRemotePath(path, WorkingDirectory) is not { } resolved) return;
+        _navigator.ShowFile(Session.Project, resolved);
+    }
 
     [RelayCommand]
     private async Task ReloadAsync()
@@ -213,7 +246,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private static void ToggleChoice(ConversationChoice? choice)
     {
-        if (choice is not null) choice.IsSelected = !choice.IsSelected;
+        choice?.IsSelected = !choice.IsSelected;
     }
 
     [RelayCommand]
@@ -259,7 +292,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private static void ToggleThought(ConversationAssistantEntry? entry)
     {
-        if (entry is not null) entry.IsThoughtExpanded = !entry.IsThoughtExpanded;
+        entry?.IsThoughtExpanded = !entry.IsThoughtExpanded;
     }
 
     [RelayCommand]
@@ -298,6 +331,9 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     {
         if (_disposed) return;
         _disposed = true;
+        MobileHost.Backgrounded -= OnAppBackgrounded;
+        MobileHost.Foregrounded -= OnAppForegrounded;
+        StopStatusPhraseTimer();
         _lifetime.Cancel();
         _lifetime.Dispose();
         Session.PropertyChanged -= OnSessionChanged;
@@ -425,6 +461,52 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(CanStop));
         OnPropertyChanged(nameof(CanSend));
         WorkspaceMenu.UpdateLiveStatus(IsWorking, IsWaiting, IsError, ShowSpinner, HasStatusPill ? StatusText : null);
+        EnsureStatusPhraseTimer();
+    }
+
+    private void OnAppBackgrounded() => Dispatcher.UIThread.Post(StopStatusPhraseTimer);
+
+    private void OnAppForegrounded() => Dispatcher.UIThread.Post(EnsureStatusPhraseTimer);
+
+    private void EnsureStatusPhraseTimer()
+    {
+        if (_disposed || Application.Current is null || !Dispatcher.UIThread.CheckAccess()) return;
+        var need = IsWorking && !MobileHost.IsBackgrounded;
+        if (need && _statusPhraseTimer is null)
+        {
+            _statusPhraseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+            _statusPhraseTimer.Tick += OnStatusPhraseTick;
+            _statusPhraseTimer.Start();
+        }
+        else if (!need && _statusPhraseTimer is not null)
+        {
+            StopStatusPhraseTimer();
+        }
+    }
+
+    private void StopStatusPhraseTimer()
+    {
+        if (_statusPhraseTimer is null) return;
+        _statusPhraseTimer.Stop();
+        _statusPhraseTimer.Tick -= OnStatusPhraseTick;
+        _statusPhraseTimer = null;
+    }
+
+    private void OnStatusPhraseTick(object? sender, EventArgs e)
+    {
+        if (_disposed || !IsWorking)
+        {
+            StopStatusPhraseTimer();
+            return;
+        }
+        for (var i = Entries.Count - 1; i >= 0; i--)
+        {
+            if (Entries[i] is ConversationAssistantEntry { IsStreaming: true } active)
+            {
+                active.AdvanceLiveStatus();
+                break;
+            }
+        }
     }
 
     private static string LinkName(HostLink link) => Text(link switch

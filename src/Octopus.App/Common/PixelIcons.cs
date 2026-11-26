@@ -96,11 +96,11 @@ public static class PixelIcons
     /// <summary>The categories, in the order the icon picker shows them.</summary>
     public static IReadOnlyList<string> Categories { get; } = ["fun", "nature", "life", "work", "dev", "brands", "letters", "other"];
 
-    private static readonly Lazy<(IReadOnlyList<PixelIcon> All, Dictionary<string, PixelIcon> ById)> s_icons = new(Load);
+    private static readonly Lazy<(IReadOnlyList<PixelIcon> All, Dictionary<string, PixelIcon> ById)> Icons = new(Load);
 
-    public static IReadOnlyList<PixelIcon> All => s_icons.Value.All;
+    public static IReadOnlyList<PixelIcon> All => Icons.Value.All;
 
-    public static PixelIcon? Find(string? id) => id is not null && s_icons.Value.ById.TryGetValue(id, out var icon) ? icon : null;
+    public static PixelIcon? Find(string? id) => id is not null && Icons.Value.ById.TryGetValue(id, out var icon) ? icon : null;
 
     /// <summary>The pixel icon a stored value names ("pixel:t-rex"); null for anything else.</summary>
     public static PixelIcon? Parse(string? stored) =>
@@ -115,7 +115,8 @@ public static class PixelIcons
         var byId = new Dictionary<string, PixelIcon>(StringComparer.Ordinal);
         try
         {
-            using var stream = AssetLoader.Open(new Uri("avares://Octopus/Assets/PixelIcons/pixel-icons.json"));
+            var assemblyName = typeof(PixelIcons).Assembly.GetName().Name ?? "Octopus";
+            using var stream = AssetLoader.Open(new Uri($"avares://{assemblyName}/Assets/PixelIcons/pixel-icons.json"));
             using var document = JsonDocument.Parse(stream);
             foreach (var entry in document.RootElement.GetProperty("icons").EnumerateArray())
             {

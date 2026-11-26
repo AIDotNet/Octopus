@@ -17,6 +17,10 @@
     <ItemGroup>
         <!-- The logo of the welcome page: the desktop app's transparent in-app logo, not a second copy of it. -->
         <AvaloniaResource Include="../Octopus.App/Assets/Icon/logo.png" Link="Assets/logo.png" />
+        <!-- Built-in pixel icons shared with desktop so project squares render identically on mobile. -->
+        <AvaloniaResource Include="../Octopus.App/Assets/PixelIcons/pixel-icons.json" Link="Assets/PixelIcons/pixel-icons.json" />
+        <Compile Include="../Octopus.App/Common/PixelIcons.cs" Link="Common/PixelIcons.cs" />
+        <Compile Include="../Octopus.App/Common/PixelIconView.cs" Link="Common/PixelIconView.cs" />
         <!-- Shared clipped spring-animated 3-line work ticker so desktop and mobile motion stay identical. -->
         <Compile Include="../Octopus.App/AgentGui/WorkTickerViewport.cs" Link="Conversations/WorkTickerViewport.cs" />
     </ItemGroup>
@@ -26,6 +30,7 @@
         <PackageReference Include="Avalonia.Fonts.Inter" />
         <PackageReference Include="TKCode.Arc.Mobile" />
         <PackageReference Include="TKCode.Arc.Fonts" />
+        <PackageReference Include="TKCode.Arc.Icons.Lucide" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
     </ItemGroup>
 

@@ -979,7 +979,7 @@ public sealed partial class NewSessionViewModel : ObservableObject, IDisposable
         try
         {
             var injectTaskPrompt = ShowInjectTaskPrompt && InjectTaskPrompt;
-            string? targetWorkspaceId = SelectedWorkspaceChoice?.Workspace?.Id;
+            var targetWorkspaceId = SelectedWorkspaceChoice?.Workspace?.Id;
             if (IsCreatingWorkspace)
             {
                 var branchRequest = BuildCreateWorkspaceRequest();
@@ -1232,7 +1232,7 @@ public sealed partial class NewSessionViewModel : ObservableObject, IDisposable
         bool createBranch;
         string branchName;
         string? baseRef = null;
-        bool isRemote = false;
+        var isRemote = false;
 
         if (IsNewBranchMode)
         {

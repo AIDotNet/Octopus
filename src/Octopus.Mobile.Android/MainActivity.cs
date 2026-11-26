@@ -1,4 +1,3 @@
-using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
@@ -54,24 +53,23 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
         {
             return;
         }
+        // Always subscribe to AttachedToVisualTree so if Android recreates MainActivity with a new TopLevel,
+        // keyboard inset tracking re-binds cleanly instead of holding a stale TopLevel reference.
+        view.AttachedToVisualTree += (_, _) => AttachAndroidKeyboardInset(view);
         if (Avalonia.Controls.TopLevel.GetTopLevel(view) is not null)
         {
             AttachAndroidKeyboardInset(view);
-            return;
-        }
-        view.AttachedToVisualTree += OnAttached;
-        void OnAttached(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
-        {
-            view.AttachedToVisualTree -= OnAttached;
-            AttachAndroidKeyboardInset(view);
         }
     }
+
+    private static Avalonia.Controls.TopLevel? s_insetTopLevel;
 
     private static void AttachAndroidKeyboardInset(Avalonia.Controls.Control view)
     {
         var topLevel = Avalonia.Controls.TopLevel.GetTopLevel(view);
         var pane = topLevel?.InputPane;
-        if (topLevel is null || pane is null) return;
+        if (topLevel is null || pane is null || ReferenceEquals(s_insetTopLevel, topLevel)) return;
+        s_insetTopLevel = topLevel;
 
         var source = new TKCode.Arc.Mobile.KeyboardInsetSource();
         TKCode.Arc.Mobile.Page.SetKeyboardInsetSource(view, source);
@@ -123,11 +121,23 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
 
 [Activity(Label = "Octopus", MainLauncher = true, Icon = "@mipmap/octopus", Theme = "@style/Theme.AppCompat.DayNight.NoActionBar",
     LaunchMode = LaunchMode.SingleTask,
-    ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize,
+    ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density | ConfigChanges.FontScale | ConfigChanges.Keyboard | ConfigChanges.KeyboardHidden,
     WindowSoftInputMode = global::Android.Views.SoftInput.AdjustResize)]
 [IntentFilter([Intent.ActionView], Categories = [Intent.CategoryDefault, Intent.CategoryBrowsable], DataScheme = "octopus")]
 public sealed class MainActivity : AvaloniaMainActivity
 {
+    protected override void OnResume()
+    {
+        base.OnResume();
+        MobileHost.NotifyForegrounded();
+    }
+
+    protected override void OnStop()
+    {
+        base.OnStop();
+        MobileHost.NotifyBackgrounded();
+    }
+
     protected override void OnNewIntent(Intent? intent)
     {
         base.OnNewIntent(intent);

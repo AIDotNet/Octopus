@@ -999,4 +999,229 @@
         <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
         <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
     </Style>
+
+    <!-- Crisp session row title and compact status pill so long titles never collide or overflow. -->
+    <Style Selector="TextBlock.sessionTitle">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="Border.pill.compact">
+        <Setter Property="Padding" Value="7,2" />
+    </Style>
+    <Style Selector="Border.pill.compact TextBlock">
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <!-- Mobile update reminder banner & progress bar (HostsPage dashboard & Me tab). -->
+    <Style Selector="Border.updateBanner">
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="14,12" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BoxShadow" Value="0 2 10 0 #0F000000" />
+    </Style>
+    <Style Selector="Border.updateBanner.ready">
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Success}" />
+    </Style>
+    <Style Selector="Border.updateBanner.error">
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Danger}" />
+    </Style>
+    <Style Selector="Border.updateIconBadge">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+    </Style>
+    <Style Selector="Border.updateIconBadge.ready">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SuccessSubtle}" />
+    </Style>
+    <Style Selector="Border.updateIconBadge.error">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource DangerSubtle}" />
+    </Style>
+    <Style Selector="Button.bannerCloseBtn">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.bannerCloseBtn:pressed">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+    </Style>
+    <Style Selector="ProgressBar.updateProgress">
+        <Setter Property="Height" Value="6" />
+        <Setter Property="MinHeight" Value="6" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        ClipToBounds="True">
+                    <Panel>
+                        <Border Name="PART_Indicator"
+                                Background="{TemplateBinding Foreground}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                HorizontalAlignment="Left" />
+                    </Panel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Border.sheetFooter">
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="16,12,16,14" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+    </Style>
+
+    <!-- NativeAOT-safe Markdown renderer styles (MobileMarkdownView). -->
+    <Style Selector="TextBlock.mdH1">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="LineHeight" Value="24" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="TextBlock.mdH2">
+        <Setter Property="FontSize" Value="15.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="22" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="Border.mdHeadingRule">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Border}" />
+    </Style>
+    <Style Selector="TextBlock.mdH3">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="TextBlock.mdH4">
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+    </Style>
+    <Style Selector="TextBlock.mdBody">
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="LineHeight" Value="21" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="TextBlock.mdMarker">
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="21" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+    </Style>
+    <Style Selector="Border.mdQuote">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="CornerRadius" Value="0,8,8,0" />
+        <Setter Property="Padding" Value="10,7" />
+    </Style>
+    <Style Selector="TextBlock.mdQuoteText">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+    </Style>
+    <Style Selector="Border.mdCodeBlock">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="10,8" />
+    </Style>
+    <Style Selector="TextBlock.mdCodeLang">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+    </Style>
+    <Style Selector="TextBlock.mdCodeText">
+        <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="LineHeight" Value="18" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="Border.mdDivider">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="Margin" Value="0,4" />
+    </Style>
+    <Style Selector="Border.mdTableCard">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.mdTableHeaderCell">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="Padding" Value="10,8" />
+    </Style>
+    <Style Selector="Border.mdTableCell">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="Padding" Value="10,8" />
+    </Style>
+    <Style Selector="Border.mdTableCell.alt">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="Opacity" Value="0.92" />
+    </Style>
+    <Style Selector="TextBlock.mdTableHeaderText">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="18" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="TextBlock.mdTableCellText">
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="LineHeight" Value="18" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+    <Style Selector="Button.mdImageCard">
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.mdImageCard:pressed">
+        <Setter Property="Opacity" Value="0.72" />
+    </Style>
 </Styles>

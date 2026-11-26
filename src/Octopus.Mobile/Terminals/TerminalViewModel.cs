@@ -274,7 +274,7 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
     /// <summary>Reads the choices of the agent's question from the screen while it waits; none otherwise.</summary>
     public void RefreshQuickReplies()
     {
-        IReadOnlyList<QuickReply> found = Session.Activity == SessionActivity.Waiting && _surface is not null
+        var found = Session.Activity == SessionActivity.Waiting && _surface is not null
             ? Terminals.QuickReplies.Parse(_surface.ReadTailText())
             : [];
         // Esc closes the question without choosing: always the last row when there are choices.

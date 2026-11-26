@@ -22,10 +22,15 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
 {
     /// <summary>How long a computer named by its address has to answer before it counts as out of reach.</summary>
     private static readonly TimeSpan ReachLimit = TimeSpan.FromSeconds(15);
+    /// <summary>Maximum time a remote workspace RPC waits before failing rather than stalling on a dead socket.</summary>
+    private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(15);
 
     private readonly RelaySession _session;
     private readonly RemoteHostConnections _connections;
     private readonly MobileSettings _settings;
+    private readonly MobileProjectIconCache _iconCache;
+    // In-flight icon downloads keyed by "{hostId}\0{projectId}\0{imageKey}" so rapid workspace reloads never double-fetch.
+    private readonly HashSet<string> _loadingIcons = new(StringComparer.Ordinal);
     // UI thread only.
     private readonly Dictionary<string, HostState> _states = new(StringComparer.Ordinal);
     private int _refreshing;
@@ -47,9 +52,9 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         public int Loads;
     }
 
-    public RemoteWorkspace(RelaySession session, RemoteHostConnections connections, MobileSettings settings)
+    public RemoteWorkspace(RelaySession session, RemoteHostConnections connections, MobileSettings settings, MobileProjectIconCache? iconCache = null)
     {
-        (_session, _connections, _settings) = (session, connections, settings);
+        (_session, _connections, _settings, _iconCache) = (session, connections, settings, iconCache ?? new MobileProjectIconCache(null));
         connections.StateChanged += OnStateChanged;
         connections.WorkspaceChanged += OnWorkspaceChanged;
         connections.ItemChanged += OnItemChanged;
@@ -61,6 +66,33 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
     public ObservableCollection<AccountDevice> OtherDevices { get; } = [];
     public bool MirrorsTerminals => true;
     public bool HasPairedHosts => _connections.Hosts.Peers.Count > 0;
+
+    public void OnAppBackgrounded()
+    {
+        // Nothing destructive on pause: connections stay alive for short app switches and are probed on resume.
+    }
+
+    public void OnAppForegrounded()
+    {
+        if (_disposed) return;
+        _ = ResumeAfterBackgroundAsync();
+    }
+
+    private async Task ResumeAfterBackgroundAsync()
+    {
+        try
+        {
+            await _connections.ProbeAndReconnectAsync().ConfigureAwait(false);
+            if (_disposed) return;
+            await RefreshAsync().ConfigureAwait(false);
+            if (_disposed) return;
+            ReattachOpenConversationsIfNeeded();
+        }
+        catch (Exception)
+        {
+            // Background resume recovery is best-effort and must never crash the app.
+        }
+    }
 
     public async Task RefreshAsync()
     {
@@ -288,10 +320,15 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
             {
                 Color = message.Color,
                 Icon = message.Icon,
+                ImageKey = message.Image,
                 IsGitRepository = message.IsGitRepository,
                 DefaultBranch = message.DefaultBranch,
             };
             host.Projects.Add(project);
+            if (_connections.ClientOf(host.Id) is { } client)
+            {
+                SyncProjectImage(host.Id, client, project, message.Image);
+            }
             return project;
         }).ConfigureAwait(false);
     }
@@ -303,8 +340,12 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
     {
         try
         {
-            var client = _connections.ClientOf(host.Id) ?? await _connections.ConnectAsync(host.Id).ConfigureAwait(false);
-            await call(client).ConfigureAwait(false);
+            var client = _connections.ClientOf(host.Id) ?? await _connections.ConnectAsync(host.Id).WaitAsync(CallTimeout).ConfigureAwait(false);
+            await call(client).WaitAsync(CallTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException e)
+        {
+            throw new IOException("The computer did not answer in time.", e);
         }
         catch (RemoteException e)
         {
@@ -665,14 +706,16 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         var load = Interlocked.Increment(ref state.Loads);
         try
         {
+            using var limit = new CancellationTokenSource(CallTimeout);
+            var ct = limit.Token;
             // Agents and projects are independent; then all projects' items are fetched in parallel (2 RTTs instead of 2 + N).
-            var agentsTask = client.ListAgentsAsync();
-            var projectsTask = client.ListProjectsAsync();
+            var agentsTask = client.ListAgentsAsync(ct);
+            var projectsTask = client.ListProjectsAsync(ct);
             await Task.WhenAll(agentsTask, projectsTask).ConfigureAwait(false);
             var agents = await agentsTask.ConfigureAwait(false);
             var projects = await projectsTask.ConfigureAwait(false);
             var itemPairs = await Task.WhenAll(projects.Select(async project =>
-                (project.Id, Items: await client.ListItemsAsync(project.Id).ConfigureAwait(false)))).ConfigureAwait(false);
+                (project.Id, Items: await client.ListItemsAsync(project.Id, ct).ConfigureAwait(false)))).ConfigureAwait(false);
             var items = itemPairs.ToDictionary(p => p.Id, p => p.Items, StringComparer.Ordinal);
             Ui(() =>
             {
@@ -691,25 +734,28 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                     state.Agents = agents.ToDictionary(agent => agent.Id, StringComparer.Ordinal);
                     state.Host.Agents = mappedAgents;
                 }
-                Apply(state, projects, items);
+                Apply(state, client, projects, items);
             });
         }
-        catch (Exception e) when (e is IOException or RemoteException)
+        catch (Exception e) when (e is IOException or RemoteException or OperationCanceledException or ObjectDisposedException)
         {
         }
     }
 
     // The host's projects and items into the page's: what is still there keeps its object (a page may be showing it).
-    private void Apply(HostState state, IReadOnlyList<ProjectMessage> projects, Dictionary<string, IReadOnlyList<ItemMessage>> items)
+    private void Apply(HostState state, RemoteHostClient client, IReadOnlyList<ProjectMessage> projects, Dictionary<string, IReadOnlyList<ItemMessage>> items)
     {
         var host = state.Host;
         var target = new List<RemoteProject>(projects.Count);
+        var activeImages = new HashSet<string>(StringComparer.Ordinal);
         foreach (var message in projects)
         {
             var project = host.Projects.FirstOrDefault(known => known.Id == message.Id && known.Name == message.Name && known.Path == message.Path)
                 ?? new RemoteProject(host, message.Id, message.Name, message.Path);
             project.Color = message.Color;
             project.Icon = message.Icon;
+            if (!string.IsNullOrWhiteSpace(message.Image)) activeImages.Add(message.Image);
+            SyncProjectImage(host.Id, client, project, message.Image);
             project.IsGitRepository = message.IsGitRepository;
             project.DefaultBranch = message.DefaultBranch;
             var workspaces = (message.Workspaces ?? []).Select(MapWorkspace).ToList();
@@ -728,6 +774,70 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
             target.Add(project);
         }
         Replace(host.Projects, target);
+        _ = Task.Run(() => _iconCache.Prune(host.Id, activeImages));
+    }
+
+    /// <summary>
+    /// Syncs a project's custom thumbnail image using <paramref name="imageKey"/> as an immutable cache key:
+    /// unchanged images stay in memory, disk cache hits avoid any RPC, and only missing/changed keys fetch from the host.
+    /// </summary>
+    private void SyncProjectImage(string hostId, RemoteHostClient client, RemoteProject project, string? imageKey)
+    {
+        var normalized = string.IsNullOrWhiteSpace(imageKey) ? null : imageKey;
+        if (normalized is null)
+        {
+            project.ImageKey = null;
+            project.ImageBitmap = null;
+            return;
+        }
+        if (string.Equals(project.ImageKey, normalized, StringComparison.Ordinal) && project.ImageBitmap is not null)
+        {
+            // Unchanged and already decoded in memory: nothing to reload or fetch.
+            return;
+        }
+        project.ImageKey = normalized;
+        if (_iconCache.TryLoad(hostId, normalized) is { } cached)
+        {
+            // Disk/memory cache hit: no network request needed.
+            project.ImageBitmap = cached;
+            return;
+        }
+        project.ImageBitmap = null;
+        if (!client.SupportsProjectIcons) return;
+
+        var inflightKey = $"{hostId}\0{project.Id}\0{normalized}";
+        if (!_loadingIcons.Add(inflightKey)) return;
+        _ = FetchProjectIconAsync(hostId, client, project, normalized, inflightKey);
+    }
+
+    private async Task FetchProjectIconAsync(string hostId, RemoteHostClient client, RemoteProject project, string expectedKey, string inflightKey)
+    {
+        try
+        {
+            using var limit = new CancellationTokenSource(CallTimeout);
+            var response = await client.GetProjectIconAsync(project.Id, limit.Token).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(response.Image) || string.IsNullOrWhiteSpace(response.Data)) return;
+            var bytes = Convert.FromBase64String(response.Data);
+            var bitmap = _iconCache.SaveAndLoad(hostId, response.Image, bytes);
+            if (bitmap is null) return;
+            Ui(() =>
+            {
+                if (_disposed) return;
+                if (string.Equals(project.ImageKey, response.Image, StringComparison.Ordinal)
+                    || string.Equals(project.ImageKey, expectedKey, StringComparison.Ordinal))
+                {
+                    project.ImageKey = response.Image;
+                    project.ImageBitmap = bitmap;
+                }
+            });
+        }
+        catch (Exception e) when (e is IOException or RemoteException or FormatException or OperationCanceledException or ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            Ui(() => _loadingIcons.Remove(inflightKey));
+        }
     }
 
     private static void Replace<T>(ObservableCollection<T> collection, List<T> target) where T : class

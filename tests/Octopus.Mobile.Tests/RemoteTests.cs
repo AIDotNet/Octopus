@@ -1,13 +1,8 @@
-using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Octopus.Mobile.Account;
 using Octopus.Mobile.Hosts;
-using Octopus.Mobile.Remote;
-using Octopus.Mobile.Shell;
 using Octopus.Mobile.Terminals;
 using Octopus.Mobile.Workspace;
-using Octopus.Remote.Client;
-using Octopus.Remote.Host;
 using Octopus.Remote.Protocol;
 using Octopus.Remote.Relay;
 using Octopus.Remote.Security;
@@ -458,5 +453,61 @@ public class RemoteTests
         Assert.Null(phone.Opened); // browser was never opened
         var hosts = phone.Model<HostsViewModel>();
         Assert.True(Phone.Until(() => hosts.Unpaired.Any(row => row.Host.Id == studio.Identity.Id)), "host discovered on self-hosted relay");
+    }
+
+    [AvaloniaFact]
+    public async Task Background_and_foreground_resume_probes_connections_and_recovers_without_hanging()
+    {
+        await using var relay = new FakeRelay();
+        await using var studio = await Computer.StartAsync(relay);
+        var project = studio.Workspace.AddProject("Octopus", "/home/ada/code/Octopus");
+        var gui = studio.Workspace.AddItem(project, "后台恢复测试", "claude", surface: ItemSurfaces.Gui);
+        using var phone = new RealPhone(relay);
+        phone.SignIn(relay);
+        phone.Pair(studio);
+
+        var host = phone.Remote.Workspace.Hosts.Single(h => h.Id == studio.Identity.Id);
+        Assert.True(Phone.Until(() => host.Projects.Count == 1 && host.Projects[0].Sessions.Count == 1));
+        var session = host.Projects[0].Sessions[0];
+        phone.Shell.ShowSession(session);
+        Assert.True(Phone.Until(() => phone.Shell.Top is Octopus.Mobile.Conversations.ConversationPage));
+        var convVm = phone.Model<Octopus.Mobile.Conversations.ConversationViewModel>();
+        Assert.True(Phone.Until(() => convVm.IsLoaded));
+
+        var bgCount = 0;
+        var fgCount = 0;
+        void OnBg() => bgCount++;
+        void OnFg() => fgCount++;
+        MobileHost.Backgrounded += OnBg;
+        MobileHost.Foregrounded += OnFg;
+        try
+        {
+            MobileHost.NotifyBackgrounded();
+            phone.Remote.Workspace.OnAppBackgrounded();
+            Assert.True(MobileHost.IsBackgrounded);
+            Assert.Equal(1, bgCount);
+
+            // Simulate the active client transport dropping while the phone was suspended in the background.
+            var dropped = phone.Remote.Connections.ClientOf(host.Id);
+            Assert.NotNull(dropped);
+            await dropped!.DisposeAsync();
+
+            // Resuming to the foreground wakes reconnect/probe immediately without hanging, and the conversation reattaches cleanly.
+            MobileHost.NotifyForegrounded();
+            phone.Remote.Workspace.OnAppForegrounded();
+            Assert.False(MobileHost.IsBackgrounded);
+            Assert.Equal(1, fgCount);
+
+            Assert.True(Phone.Until(() => studio.Service.Connections.Count == 1 && host.IsOnline, 10_000),
+                $"host did not recover after foreground resume: link={host.Link}, conns={studio.Service.Connections.Count}");
+            Assert.True(Phone.Until(() => convVm.IsLoaded && !convVm.HasError, 10_000),
+                $"conversation did not stay healthy after resume: error={convVm.ErrorText}");
+        }
+        finally
+        {
+            MobileHost.Backgrounded -= OnBg;
+            MobileHost.Foregrounded -= OnFg;
+            MobileHost.NotifyForegrounded();
+        }
     }
 }

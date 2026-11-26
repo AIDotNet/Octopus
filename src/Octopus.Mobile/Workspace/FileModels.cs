@@ -18,6 +18,16 @@ public enum RemoteFileContentKind
 /// <param name="Size">The file's size in bytes.</param>
 public sealed record RemoteFileContent(RemoteFileContentKind Kind, string Text, long Size);
 
+public enum RemoteFileBytesKind
+{
+    Ok,
+    /// <summary>More bytes than the phone reads; <see cref="RemoteFileBytes.Size"/> says how many.</summary>
+    TooLarge,
+}
+
+/// <summary>Raw bytes of a remote file (used for image previews and binary detection).</summary>
+public sealed record RemoteFileBytes(RemoteFileBytesKind Kind, byte[] Data, long Size);
+
 /// <summary>What a change did to a file; the same order as the host's git service (<c>Octopus.Git.GitChangeKind</c>).</summary>
 public enum RemoteChangeKind
 {

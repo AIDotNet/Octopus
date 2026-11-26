@@ -1,7 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Octopus.Mobile.Terminals;
 using Octopus.Mobile.Workspace;
-using TKCode.Terminal.Core;
 using Xunit;
 
 namespace Octopus.Mobile.Tests;

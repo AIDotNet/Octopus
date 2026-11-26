@@ -1,8 +1,6 @@
 using Avalonia;
 using Avalonia.iOS;
-using Foundation;
 using Octopus.Mobile.Remote;
-using UIKit;
 
 namespace Octopus.Mobile.iOS;
 
@@ -10,8 +8,15 @@ namespace Octopus.Mobile.iOS;
 [Register("AppDelegate")]
 public partial class AppDelegate : AvaloniaAppDelegate<MobileApp>
 {
-    protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
-        base.CustomizeAppBuilder(builder).UseOctopusMobile();
+    private NSObject? _didEnterBackgroundObserver;
+    private NSObject? _willEnterForegroundObserver;
+
+    protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
+    {
+        _didEnterBackgroundObserver ??= UIApplication.Notifications.ObserveDidEnterBackground((_, _) => MobileHost.NotifyBackgrounded());
+        _willEnterForegroundObserver ??= UIApplication.Notifications.ObserveWillEnterForeground((_, _) => MobileHost.NotifyForegrounded());
+        return base.CustomizeAppBuilder(builder).UseOctopusMobile();
+    }
 }
 
 public static class Program

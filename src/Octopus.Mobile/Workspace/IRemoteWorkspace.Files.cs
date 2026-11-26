@@ -24,6 +24,13 @@ public partial interface IRemoteWorkspace
     Task<RemoteFileContent> ReadTextFileAsync(RemoteProject project, string path, long maxBytes, CancellationToken cancellationToken = default) =>
         throw new IOException("Reading files is not supported.");
 
+    /// <summary>
+    /// Reads raw bytes of a file of the project (for image previews). A file of more than <paramref name="maxBytes"/>
+    /// returns <see cref="RemoteFileBytesKind.TooLarge"/> with its reported size.
+    /// </summary>
+    Task<RemoteFileBytes> ReadFileBytesAsync(RemoteProject project, string path, long maxBytes, CancellationToken cancellationToken = default) =>
+        throw new IOException("Reading files is not supported.");
+
     /// <summary>The uncommitted changes of the repository a folder is in: <paramref name="workspacePath"/>, or the project's own folder when null.</summary>
     Task<RemoteChanges> GetChangesAsync(RemoteProject project, string? workspacePath, CancellationToken cancellationToken = default) =>
         throw new IOException("Reviewing changes is not supported.");

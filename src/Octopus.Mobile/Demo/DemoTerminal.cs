@@ -100,7 +100,7 @@ internal static class DemoScreens
         "",
         $" {Accent}❯ 1. 是{Reset}",
         "   2. 是，本次会话不再询问",
-        $"   3. 否，告诉它怎么改 {Dim}(esc){Reset}") ;
+        $"   3. 否，告诉它怎么改 {Dim}(esc){Reset}");
 
     /// <summary>An agent in the middle of a turn.</summary>
     public static string Working(string folder, string doing, string detail) => Lines(

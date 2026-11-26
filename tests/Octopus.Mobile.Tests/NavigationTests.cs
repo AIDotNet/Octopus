@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Octopus.Mobile.Account;
 using Octopus.Mobile.Hosts;
@@ -453,8 +454,75 @@ public class NavigationTests
 
         // Dismissing the bottom sheet cancels the pending device-code sign-in.
         welcome.IsCodeSheetOpen = false;
+        Assert.False(welcome.IsCodeSheetOpen);
         Assert.False(welcome.SignIn.HasCode);
         Assert.True(welcome.IsChoosing);
         Assert.True(welcome.SignInCommand.CanExecute(null));
+    }
+
+    [AvaloniaFact]
+    public void System_back_gesture_dismisses_nested_overlays_pops_pages_and_exits_only_at_root()
+    {
+        using var phone = new Phone();
+        var topLevel = TopLevel.GetTopLevel(phone.Shell)!;
+
+        bool RaiseSystemBack()
+        {
+            var args = new RoutedEventArgs(TopLevel.BackRequestedEvent);
+            topLevel.RaiseEvent(args);
+            Phone.Settle();
+            return args.Handled;
+        }
+
+        // At root with no open overlays: leave unhandled so Android can background/exit the app.
+        Assert.False(RaiseSystemBack());
+        phone.Top<HostsPage>();
+
+        // Open HostPage -> NewSheet -> ModelSheet (nested ActionSheet on top of Sheet).
+        var hosts = (HostsViewModel)phone.Top<HostsPage>().DataContext!;
+        hosts.Online[0].OpenCommand.Execute(null);
+        Phone.Settle();
+        var hostPage = phone.Top<HostPage>();
+        var host = (HostViewModel)hostPage.DataContext!;
+        host.OpenNewSessionCommand.Execute(null);
+        Phone.Settle();
+        host.NewSession.OpenModelMenuCommand.Execute(null);
+        Phone.Settle();
+        Assert.True(host.NewSession.IsOpen);
+        Assert.True(host.NewSession.IsModelMenuOpen);
+
+        // First back closes the topmost ModelSheet while keeping NewSheet open.
+        Assert.True(RaiseSystemBack());
+        Assert.False(host.NewSession.IsModelMenuOpen);
+        Assert.True(host.NewSession.IsOpen);
+        phone.Top<HostPage>();
+
+        // Second back closes NewSheet while staying on HostPage.
+        Assert.True(RaiseSystemBack());
+        Assert.False(host.NewSession.IsOpen);
+        phone.Top<HostPage>();
+
+        // Push TerminalPage and open the workspace popover overlay.
+        host.Sections[0].Sessions[0].OpenCommand.Execute(null);
+        Phone.Settle();
+        var terminalPage = phone.Top<TerminalPage>();
+        var terminal = (TerminalViewModel)terminalPage.DataContext!;
+        terminal.WorkspaceMenu.ToggleMenuCommand.Execute(null);
+        Phone.Pump();
+        Assert.True(terminal.WorkspaceMenu.IsPopoverOpen);
+
+        // Back closes the popover first, then pops TerminalPage -> HostPage -> HostsPage.
+        Assert.True(RaiseSystemBack());
+        Assert.False(terminal.WorkspaceMenu.IsPopoverOpen);
+        phone.Top<TerminalPage>();
+
+        Assert.True(RaiseSystemBack());
+        phone.Top<HostPage>();
+
+        Assert.True(RaiseSystemBack());
+        phone.Top<HostsPage>();
+
+        // Back at root again: unhandled so the OS handles exit.
+        Assert.False(RaiseSystemBack());
     }
 }

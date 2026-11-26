@@ -2,6 +2,7 @@
            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
            xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
            xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:common="using:Octopus.Mobile.Common"
            xmlns:l="using:Octopus.Mobile.Localization"
            xmlns:vm="using:Octopus.Mobile.Files"
            x:Class="Octopus.Mobile.Files.FileViewerPage"
@@ -9,6 +10,7 @@
            IsScrollable="False">
     <arcm:Page.Resources>
         <StreamGeometry x:Key="WrapGlyph">M3 6h18 M3 12h15a3 3 0 1 1 0 6h-4 M16 16l-2 2 2 2 M3 18h7</StreamGeometry>
+        <StreamGeometry x:Key="EyeGlyph">M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z</StreamGeometry>
     </arcm:Page.Resources>
 
     <arcm:Page.Header>
@@ -16,28 +18,94 @@
                      ShowBack="True"
                      BackCommand="{Binding BackCommand}">
             <arcm:Navbar.Trailing>
-                <arcm:IconButton Name="WrapButton"
-                                 Classes="toggled"
-                                 Classes.active="{Binding IsWrapped}"
-                                 Icon="{StaticResource WrapGlyph}"
-                                 Command="{Binding ToggleWrapCommand}"
-                                 AutomationProperties.Name="{l:MobileLangResource WrapLines}" />
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <arcm:IconButton Name="PreviewToggleButton"
+                                     Classes="toggled"
+                                     Classes.active="{Binding IsMarkdownPreview}"
+                                     Icon="{StaticResource EyeGlyph}"
+                                     Command="{Binding TogglePreviewCommand}"
+                                     IsVisible="{Binding ShowPreviewToggle}"
+                                     AutomationProperties.Name="{l:MobileLangResource FilePreviewToggle}" />
+                    <arcm:IconButton Name="WrapButton"
+                                     Classes="toggled"
+                                     Classes.active="{Binding IsWrapped}"
+                                     Icon="{StaticResource WrapGlyph}"
+                                     Command="{Binding ToggleWrapCommand}"
+                                     IsVisible="{Binding ShowWrapButton}"
+                                     AutomationProperties.Name="{l:MobileLangResource WrapLines}" />
+                </StackPanel>
             </arcm:Navbar.Trailing>
         </arcm:Navbar>
     </arcm:Page.Header>
 
     <Grid RowDefinitions="Auto,*,Auto">
-        <!-- Where the file lives, read-only, and its line count once read. -->
+        <!-- Where the file lives, read-only, and its line count or image dimensions once read. -->
         <Border Classes="strip" Grid.Row="0" Padding="14,5">
             <TextBlock Name="SubtitleText" Classes="secondary" Text="{Binding Subtitle}" />
         </Border>
 
         <Panel Grid.Row="1">
+            <!-- Image preview: fit-to-screen or zoomed with two-axis pan + floating zoom bar. -->
+            <Grid Name="ImagePreviewHost" IsVisible="{Binding ShowImage}" RowDefinitions="*,Auto">
+                <Panel Grid.Row="0" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                    <Image Name="ImagePreviewFit"
+                           Source="{Binding ImageBitmap}"
+                           Stretch="Uniform"
+                           Margin="12"
+                           IsVisible="{Binding ShowImageFit}" />
+                    <ScrollViewer Name="ImagePreviewScroll"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{Binding ShowImageZoomed}">
+                        <Image Name="ImagePreviewZoomed"
+                               Source="{Binding ImageBitmap}"
+                               Width="{Binding DisplayImageWidth}"
+                               Height="{Binding DisplayImageHeight}"
+                               Stretch="Uniform"
+                               Margin="12"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                    </ScrollViewer>
+                </Panel>
+                <Border Grid.Row="1" Classes="bar" Padding="12,8">
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <arcm:Button Name="ZoomOutButton"
+                                     Variant="Tinted"
+                                     Content="−"
+                                     Command="{Binding ZoomOutCommand}"
+                                     IsEnabled="{Binding CanZoomOut}"
+                                     AutomationProperties.Name="{l:MobileLangResource FileImageZoomOut}" />
+                        <arcm:Button Name="ZoomFitButton"
+                                     Variant="Tinted"
+                                     Content="{Binding ZoomLabel}"
+                                     Command="{Binding ResetZoomCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource FileImageZoomFit}" />
+                        <arcm:Button Name="ZoomInButton"
+                                     Variant="Tinted"
+                                     Content="+"
+                                     Command="{Binding ZoomInCommand}"
+                                     IsEnabled="{Binding CanZoomIn}"
+                                     AutomationProperties.Name="{l:MobileLangResource FileImageZoomIn}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Rendered Markdown preview for .md files with clickable links and tables. -->
+            <ScrollViewer Name="MarkdownPreviewScroll"
+                          IsVisible="{Binding ShowMarkdownPreview}"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <common:MobileMarkdownView Name="MarkdownPreview"
+                                           Margin="16,12,16,24"
+                                           Markdown="{Binding MarkdownText}"
+                                           LinkTargetCommand="{Binding OpenLinkCommand}" />
+            </ScrollViewer>
+
             <!-- Virtualized line list so multi-thousand-line files stay responsive on the phone. -->
             <ListBox Name="CodeLines"
                      Classes="codeList"
                      ItemsSource="{Binding Lines}"
-                     IsVisible="{Binding !HasMessage}"
+                     IsVisible="{Binding ShowCodeLines}"
                      ScrollViewer.HorizontalScrollBarVisibility="{Binding HorizontalScroll}"
                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemsPanel>

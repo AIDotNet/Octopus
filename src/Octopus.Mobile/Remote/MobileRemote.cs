@@ -36,7 +36,7 @@ public sealed class MobileRemote : IDisposable
             () => new DeviceDescription(deviceName, DeviceKind.Phone),
             Hello,
             _session);
-        _workspace = new RemoteWorkspace(_session, _connections, settings);
+        _workspace = new RemoteWorkspace(_session, _connections, settings, new MobileProjectIconCache(store.DataDirectory));
         Account = new RelayAccountSession(_session, settings, deviceName);
     }
 
@@ -49,14 +49,21 @@ public sealed class MobileRemote : IDisposable
     /// <summary>What this app says about itself to a host.</summary>
     public static HelloMessage Hello { get; } = new()
     {
+        Protocol = RemoteProtocol.Version,
+        MinProtocol = RemoteProtocol.Version,
+        MaxProtocol = RemoteProtocol.LatestVersion,
         AppVersion = typeof(MobileRemote).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "",
         Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityBrowse,
             RemoteMethods.CapabilityAcpGui,
             // Looking at the projects' files and their uncommitted changes (Files/).
             RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit,
             // Pictures for a terminal session's program (Terminals/).
-            RemoteMethods.CapabilityUpload],
+            RemoteMethods.CapabilityUpload,
+            RemoteMethods.CapabilityProtocolV2, RemoteMethods.CapabilityCompression, RemoteMethods.CapabilityFileStream,
+            RemoteMethods.CapabilitySessionResume, RemoteMethods.CapabilityTransportQuic, RemoteMethods.CapabilityTransportP2p,
+            RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+        Transport = TransportNegotiation.CreateDefault(),
     };
 
     /// <summary>

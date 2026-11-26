@@ -361,5 +361,39 @@
     <unit id="SessionSessionsCount"><segment><source>{0} sessions</source><target state="translated">{0} 个</target></segment></unit>
     <unit id="SessionSessionsActive"><segment><source>Active</source><target state="translated">当前</target></segment></unit>
     <unit id="SessionSessionsNew"><segment><source>New session</source><target state="translated">新建会话</target></segment></unit>
+    <unit id="ConversationWorkingPhrase01"><segment><source>Untangling the clues with all eight arms…</source><target state="translated">八只触手正在翻阅线索…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase02"><segment><source>Connecting the dots…</source><target state="translated">正在把零散的拼图拼在一起…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase03"><segment><source>Brewing a thoughtful answer…</source><target state="translated">灵感蓄力中，马上就好…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase04"><segment><source>Double-checking the finer details…</source><target state="translated">正在仔细推敲细节…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase05"><segment><source>Following the code breadcrumbs…</source><target state="translated">顺着代码的脉络往下摸索…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase06"><segment><source>Take a sip of water — almost there…</source><target state="translated">喝口水，答案正在路上…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase07"><segment><source>Weighing the cleanest approach…</source><target state="translated">正在权衡更优雅的解法…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase08"><segment><source>Neurons firing at full speed…</source><target state="translated">神经元高速运转中…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase09"><segment><source>Sorting out the tricky bits…</source><target state="translated">正在把复杂问题拆解顺溜…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase10"><segment><source>Polishing the response…</source><target state="translated">正在认真组织语言…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase11"><segment><source>Cooking up a fresh result…</source><target state="translated">马上端上热乎的结论…</target></segment></unit>
+    <unit id="ConversationWorkingPhrase12"><segment><source>Quietly doing the heavy lifting…</source><target state="translated">正在幕后加紧搬砖中…</target></segment></unit>
+    <unit id="UpdateKindRelease"><segment><source>Release</source><target state="translated">正式版</target></segment></unit>
+    <unit id="UpdateKindPreview"><segment><source>Preview</source><target state="translated">预览版</target></segment></unit>
+    <unit id="UpdateNotesTitle"><segment><source>What's new in {0}</source><target state="translated">{0} 更新说明</target></segment></unit>
+    <unit id="UpdateNotesEmpty"><segment><source>No detailed release notes were provided for this version.</source><target state="translated">该版本暂无详细更新说明。</target></segment></unit>
+    <unit id="UpdateOpenInBrowser"><segment><source>Open in browser</source><target state="translated">在浏览器中查看</target></segment></unit>
+    <unit id="UpdateBannerHintAvailable"><segment><source>New improvements and fixes are ready to install.</source><target state="translated">包含新功能与问题修复，可查看说明或立即更新。</target></segment></unit>
+    <unit id="UpdateDownloadingTitle"><segment><source>Downloading {0}</source><target state="translated">正在下载 {0}</target></segment></unit>
+    <unit id="UpdateReadyTitle"><segment><source>{0} is ready</source><target state="translated">{0} 已就绪</target></segment></unit>
+    <unit id="UpdateReadyHint"><segment><source>Verified and ready to install.</source><target state="translated">安装包已校验完成，点按立即安装。</target></segment></unit>
+    <unit id="UpdateFailedTitle"><segment><source>Update failed</source><target state="translated">更新失败</target></segment></unit>
+    <unit id="UpdateActionDownloadNow"><segment><source>Update now</source><target state="translated">立即更新</target></segment></unit>
+    <unit id="UpdateActionInstallNow"><segment><source>Install now</source><target state="translated">立即安装</target></segment></unit>
+    <unit id="UpdateActionRetry"><segment><source>Retry</source><target state="translated">重试</target></segment></unit>
+    <unit id="UpdateLater"><segment><source>Later</source><target state="translated">稍后</target></segment></unit>
+    <unit id="UpdateDismiss"><segment><source>Dismiss</source><target state="translated">忽略</target></segment></unit>
+    <unit id="UpdateProgressSize"><segment><source>{0} / {1} MB</source><target state="translated">{0} / {1} MB</target></segment></unit>
+    <unit id="FileImageInvalid"><segment><source>This image could not be decoded.</source><target state="translated">无法解析这张图片。</target></segment></unit>
+    <unit id="FileImageZoomIn"><segment><source>Zoom in</source><target state="translated">放大</target></segment></unit>
+    <unit id="FileImageZoomOut"><segment><source>Zoom out</source><target state="translated">缩小</target></segment></unit>
+    <unit id="FileImageZoomFit"><segment><source>Fit</source><target state="translated">适应</target></segment></unit>
+    <unit id="FilePreviewToggle"><segment><source>Toggle preview</source><target state="translated">切换预览</target></segment></unit>
+    <unit id="FileOpenPreview"><segment><source>Open file</source><target state="translated">打开文件</target></segment></unit>
   </file>
 </xliff>

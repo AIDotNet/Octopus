@@ -32,6 +32,32 @@ public static class MobileHost
     /// </summary>
     public static Func<Avalonia.Controls.TopLevel?, Task<Terminals.PickedImage?>> PickImage { get; set; } = Terminals.ImagePicking.PickWithStorageAsync;
 
+    /// <summary>True while the mobile app is backgrounded by the OS.</summary>
+    public static bool IsBackgrounded => Volatile.Read(ref s_backgrounded) != 0;
+    private static int s_backgrounded;
+
+    /// <summary>Raised when the mobile app moves to the background (timers can pause).</summary>
+    public static event Action? Backgrounded;
+
+    /// <summary>Raised when the mobile app returns to the foreground (timers resume and connections are probed).</summary>
+    public static event Action? Foregrounded;
+
+    /// <summary>Signals that the OS moved the app to the background; idempotent when already backgrounded.</summary>
+    public static void NotifyBackgrounded()
+    {
+        if (Interlocked.Exchange(ref s_backgrounded, 1) != 0) return;
+        Workspace.OnAppBackgrounded();
+        Backgrounded?.Invoke();
+    }
+
+    /// <summary>Signals that the app returned to the foreground; probes stale connections and resumes timers.</summary>
+    public static void NotifyForegrounded()
+    {
+        if (Interlocked.Exchange(ref s_backgrounded, 0) == 0) return;
+        Workspace.OnAppForegrounded();
+        Foregrounded?.Invoke();
+    }
+
     /// <summary>Handles an incoming <c>octopus://</c> deep link (e.g. <c>octopus://auth-done</c> after browser approval).</summary>
     public static void HandleDeepLink(Uri uri)
     {
@@ -80,6 +106,11 @@ public class MobileApp : Application
             activatable.Activated += (_, e) =>
             {
                 if (e is ProtocolActivatedEventArgs { Uri: { } uri }) MobileHost.HandleDeepLink(uri);
+                else if (e.Kind == ActivationKind.Background) MobileHost.NotifyForegrounded();
+            };
+            activatable.Deactivated += (_, e) =>
+            {
+                if (e.Kind == ActivationKind.Background) MobileHost.NotifyBackgrounded();
             };
         }
         // Once per start and quietly: a newer version shows in the "Me" tab; nothing downloads without a tap.

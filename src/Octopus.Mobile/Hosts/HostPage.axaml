@@ -37,9 +37,9 @@
                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Panel>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5" HorizontalAlignment="Left">
-                            <TextBlock Grid.Column="0" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Classes="sessionTitle" Text="{Binding Title}" VerticalAlignment="Center" />
                             <Border Grid.Column="1" Classes="guiTag" IsVisible="{Binding IsGui}">
                                 <TextBlock Text="{l:MobileLangResource GuiBadge}" />
                             </Border>
@@ -172,9 +172,12 @@
                                             Command="{Binding ToggleExpandedCommand}">
                                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
                                             <Panel Grid.Column="0" Width="38" Height="38" VerticalAlignment="Center">
-                                                <Border Classes="projectBadge" Background="{Binding ProjectBrush}">
-                                                    <TextBlock Text="{Binding Initial}" />
-                                                </Border>
+                                                <common:ProjectBadgeView Project="{Binding Project}"
+                                                                         BadgeSize="38"
+                                                                         BadgeCornerRadius="10"
+                                                                         IconSize="18"
+                                                                         PixelSize="22"
+                                                                         InitialFontSize="15" />
                                                 <Border Classes="cornerBadge"
                                                         Classes.waiting="{Binding CornerIsWaiting}"
                                                         Classes.error="{Binding CornerIsError}"
@@ -411,6 +414,15 @@
                             <arcm:ListGroup.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ProjectChoiceViewModel">
                                     <arcm:ListItem Content="{Binding Name}" Subtitle="{Binding Path}" Command="{Binding ChooseCommand}">
+                                        <arcm:ListItem.Leading>
+                                            <common:ProjectBadgeView Project="{Binding Project}"
+                                                                     BadgeSize="28"
+                                                                     BadgeCornerRadius="7"
+                                                                     IconSize="14"
+                                                                     PixelSize="16"
+                                                                     InitialFontSize="12"
+                                                                     VerticalAlignment="Center" />
+                                        </arcm:ListItem.Leading>
                                         <arcm:ListItem.Trailing>
                                             <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Check}" Size="18"
                                                           Foreground="{arc:ArcDesignTokenResource Accent}"

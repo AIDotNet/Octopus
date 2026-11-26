@@ -53,6 +53,14 @@ internal sealed partial class RemoteWorkspace
 
     public async Task<RemoteFileContent> ReadTextFileAsync(RemoteProject project, string path, long maxBytes, CancellationToken cancellationToken = default)
     {
+        var raw = await ReadFileBytesAsync(project, path, maxBytes, cancellationToken).ConfigureAwait(false);
+        return raw.Kind == RemoteFileBytesKind.TooLarge
+            ? new RemoteFileContent(RemoteFileContentKind.TooLarge, "", raw.Size)
+            : TextOf(raw.Data);
+    }
+
+    public async Task<RemoteFileBytes> ReadFileBytesAsync(RemoteProject project, string path, long maxBytes, CancellationToken cancellationToken = default)
+    {
         byte[] bytes = [];
         try
         {
@@ -62,9 +70,9 @@ internal sealed partial class RemoteWorkspace
         catch (InvalidDataException e)
         {
             // The client stops at the first piece that tells the file is bigger: its size comes along.
-            return new RemoteFileContent(RemoteFileContentKind.TooLarge, "", e.Data["size"] is long size ? size : maxBytes + 1);
+            return new RemoteFileBytes(RemoteFileBytesKind.TooLarge, [], e.Data["size"] is long size ? size : maxBytes + 1);
         }
-        return TextOf(bytes);
+        return new RemoteFileBytes(RemoteFileBytesKind.Ok, bytes, bytes.Length);
     }
 
     /// <summary>Text when the bytes are text (UTF-8, a byte order mark dropped); binary when they have a NUL byte early on.</summary>
@@ -146,9 +154,13 @@ internal sealed partial class RemoteWorkspace
     {
         try
         {
-            var client = _connections.ClientOf(host.Id) ?? await _connections.ConnectAsync(host.Id).ConfigureAwait(false);
+            var client = _connections.ClientOf(host.Id) ?? await _connections.ConnectAsync(host.Id).WaitAsync(CallTimeout).ConfigureAwait(false);
             if (!RemoteHello.Shared(client.OwnHello, client.HostHello).Contains(capability)) throw new IOException(MobileLangResources.Get(unsupported));
-            await call(client).ConfigureAwait(false);
+            await call(client).WaitAsync(CallTimeout).ConfigureAwait(false);
+        }
+        catch (TimeoutException e)
+        {
+            throw new IOException("The computer did not answer in time.", e);
         }
         catch (Exception e) when (e is RemoteException or JsonException or ObjectDisposedException or System.Net.WebSockets.WebSocketException)
         {

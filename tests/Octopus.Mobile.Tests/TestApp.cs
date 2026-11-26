@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
-using Avalonia.Skia;
 using Avalonia.Threading;
 using Octopus.Mobile.Demo;
 using Octopus.Mobile.Shell;

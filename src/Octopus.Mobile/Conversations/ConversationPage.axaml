@@ -45,7 +45,7 @@
             <Setter Property="Opacity" Value="0.65" />
         </Style>
 
-        <!-- Scheme C 3-line sliding ticker typography (zero card). -->
+        <!-- Scheme C 5-line sliding ticker typography (zero card). -->
         <Style Selector="TextBlock.tickerVerb">
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="FontWeight" Value="Medium" />
@@ -54,18 +54,16 @@
         <Style Selector="TextBlock.tickerVerb.failed">
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
         </Style>
-        <Style Selector="TextBlock.tickerTarget">
+        <Style Selector="ticker|TickerTargetText.tickerTarget">
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
-            <Setter Property="MaxLines" Value="1" />
-            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
-        <Style Selector="TextBlock.tickerTarget:not(.thought)">
+        <Style Selector="ticker|TickerTargetText.tickerTarget:not(.thought)">
             <Setter Property="FontFamily" Value="{arc:ArcDesignTokenResource MonoFontFamily}" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
         </Style>
-        <Style Selector="TextBlock.tickerTarget.failed">
+        <Style Selector="ticker|TickerTargetText.tickerTarget.failed">
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
         </Style>
 
@@ -230,7 +228,7 @@
     </arcm:Page.Styles>
 
     <arcm:Page.DataTemplates>
-        <!-- Scheme C: Single slot in the fixed 3-line sliding live ticker (pure text, zero card). -->
+        <!-- Scheme C: Single slot in the fixed 5-line sliding live ticker (pure text, zero card). -->
         <DataTemplate DataType="ws:ConversationTickerLine">
             <Grid IsVisible="{Binding IsVisible}"
                   ColumnDefinitions="14,Auto,*,Auto"
@@ -248,12 +246,14 @@
                            Classes.failed="{Binding IsFailed}"
                            Text="{Binding Verb}"
                            VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2"
-                           Classes="tickerTarget"
-                           Classes.thought="{Binding IsThought}"
-                           Classes.failed="{Binding IsFailed}"
-                           Text="{Binding Target}"
-                           VerticalAlignment="Center" />
+                <ticker:TickerTargetText Grid.Column="2"
+                                         Classes="tickerTarget"
+                                         Classes.thought="{Binding IsThought}"
+                                         Classes.failed="{Binding IsFailed}"
+                                         Text="{Binding Target}"
+                                         StepKey="{Binding StepKey}"
+                                         AnimateUpdates="{Binding IsActiveThought}"
+                                         VerticalAlignment="Center" />
                 <TextBlock Grid.Column="3"
                            IsVisible="{Binding HasStat}"
                            Text="{Binding StatText}"
@@ -264,7 +264,7 @@
             </Grid>
         </DataTemplate>
 
-        <!-- Scheme C: Fixed 3-slot sliding live ticker container (mounted ONLY while streaming & collapsed). -->
+        <!-- Scheme C: Fixed 5-slot sliding live ticker container (mounted ONLY while streaming & collapsed). -->
         <DataTemplate DataType="ws:ConversationWorkTicker">
             <ticker:WorkTickerViewport Margin="14,2,0,0" Spacing="1" />
         </DataTemplate>
@@ -358,8 +358,31 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
-                                    <!-- Tool pure-text command, diff & output -->
+                                    <!-- Tool pure-text command, file link, diff & output -->
                                     <StackPanel IsVisible="{Binding IsTool}" Spacing="4">
+                                        <Button Classes="plainHit"
+                                                Padding="0,2"
+                                                IsVisible="{Binding HasPath}"
+                                                Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).OpenFileCommand}"
+                                                CommandParameter="{Binding FilePath}">
+                                            <Border Classes="attachChip" HorizontalAlignment="Left">
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.FileText}" Size="12"
+                                                                  Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                                  VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding FilePath}"
+                                                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                               FontSize="11.5"
+                                                               Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="240"
+                                                               VerticalAlignment="Center" />
+                                                    <arc:ArcGlyph Data="{StaticResource ChevronRightGlyph}" Size="10"
+                                                                  Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                                  VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Button>
                                         <TextBlock IsVisible="{Binding HasCommand}"
                                                    Classes="monoOutput"
                                                    Text="{Binding CommandText}"
@@ -469,17 +492,22 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="x:String">
-                                            <Border Classes="attachChip">
-                                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                                    <arc:ArcGlyph Data="{StaticResource ClipGlyph}" Size="12"
-                                                                  Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                                  VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding}"
-                                                               Classes="secondary"
-                                                               FontSize="11.5"
-                                                               VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </Border>
+                                            <Button Classes="plainHit"
+                                                    HorizontalAlignment="Left"
+                                                    Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).OpenFileCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Border Classes="attachChip">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <arc:ArcGlyph Data="{StaticResource ClipGlyph}" Size="12"
+                                                                      Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                                      VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding}"
+                                                                   Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                                   FontSize="11.5"
+                                                                   VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -489,7 +517,7 @@
                         <!-- Assistant turn (Scheme C): One unified zero-card pure-text Work Area + clean Markdown body. -->
                         <DataTemplate DataType="ws:ConversationAssistantEntry">
                             <StackPanel Spacing="8">
-                                <!-- Single Unified Pure-Text Work Area (collapsed to 1 line on finish; fixed 3-line ticker while running) -->
+                                <!-- Single Unified Pure-Text Work Area (collapsed to 1 line on finish; fixed 5-line ticker while running) -->
                                 <StackPanel IsVisible="{Binding HasWorkArea}" Spacing="2">
                                     <Button Classes="plainHit"
                                             Padding="0,4"
@@ -536,7 +564,7 @@
                                         </Grid>
                                     </Button>
 
-                                    <!-- Scheme C fixed 3-line sliding pure-text ticker (null & unmounted on finish or expand) -->
+                                    <!-- Scheme C fixed 5-line sliding pure-text ticker (null & unmounted on finish or expand) -->
                                     <ContentControl Content="{Binding LiveTicker}" />
 
                                     <!-- Lazy-mounted pure-text step log (null & unmounted when collapsed) -->
@@ -555,63 +583,27 @@
                                     </Border>
                                 </StackPanel>
 
-                                <!-- Clean Markdown body blocks directly below the unified work area. -->
-                                <ItemsControl ItemsSource="{Binding Blocks}" IsVisible="{Binding HasText}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Spacing="6" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="ws:ConversationTextBlock">
-                                            <Panel>
-                                                <TextBlock Text="{Binding Text}"
-                                                           FontSize="14"
-                                                           LineHeight="21"
-                                                           TextWrapping="Wrap"
-                                                           IsVisible="{Binding IsParagraph}" />
-                                                <TextBlock Text="{Binding Text}"
-                                                           FontSize="15"
-                                                           FontWeight="SemiBold"
-                                                           LineHeight="22"
-                                                           Margin="0,4,0,0"
-                                                           TextWrapping="Wrap"
-                                                           IsVisible="{Binding IsHeading}" />
-                                                <Grid ColumnDefinitions="Auto,*"
-                                                      ColumnSpacing="6"
-                                                      Margin="4,0,0,0"
-                                                      IsVisible="{Binding IsListItem}">
-                                                    <TextBlock Text="{Binding Marker}"
-                                                               Classes="secondary"
-                                                               FontSize="14"
-                                                               FontWeight="SemiBold"
-                                                               LineHeight="21" />
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{Binding Text}"
-                                                               FontSize="14"
-                                                               LineHeight="21"
-                                                               TextWrapping="Wrap" />
-                                                </Grid>
-                                                <Border BorderThickness="2,0,0,0"
-                                                        BorderBrush="{arc:ArcDesignTokenResource Accent}"
-                                                        Padding="10,2,0,2"
-                                                        IsVisible="{Binding IsQuote}">
-                                                    <TextBlock Text="{Binding Text}"
-                                                               Classes="secondary"
-                                                               FontSize="13.5"
-                                                               LineHeight="20"
-                                                               TextWrapping="Wrap" />
-                                                </Border>
-                                                <Border Classes="codeBlock" IsVisible="{Binding IsCode}">
-                                                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                                                                  VerticalScrollBarVisibility="Disabled">
-                                                        <TextBlock Classes="codeText" Text="{Binding Text}" />
-                                                    </ScrollViewer>
-                                                </Border>
-                                            </Panel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <!-- Rich NativeAOT-safe Markdown body (tables, inline code/links, images, code blocks) below the unified work area. -->
+                                <common:MobileMarkdownView Name="AssistantMarkdown"
+                                                           Markdown="{Binding Text}"
+                                                           LinkTargetCommand="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).OpenLinkCommand}"
+                                                           IsVisible="{Binding HasText}" />
+
+                                <!-- Reassuring live loading status & rotating i18n whimsical phrases at the bottom while working. -->
+                                <Border IsVisible="{Binding ShowLiveStatus}"
+                                        HorizontalAlignment="Left"
+                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                        CornerRadius="6"
+                                        Padding="8,4"
+                                        Margin="0,2,0,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <arc:ArcSpinner Width="11" Height="11" VerticalAlignment="Center" />
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                   Text="{Binding LiveStatusText}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
 
                                 <!-- Lightweight pure-text error line (zero card). -->
                                 <Border BorderThickness="2,0,0,0"

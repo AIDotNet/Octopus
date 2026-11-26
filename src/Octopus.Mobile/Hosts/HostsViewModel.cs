@@ -56,6 +56,9 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     public bool IsHostsTab => SelectedTab == TabHosts;
     public bool IsAccountTab => SelectedTab == TabAccount;
 
+    /// <summary>Shows the dismissible update reminder banner on Activity &amp; Computers tabs; Me tab has its own full section.</summary>
+    public bool ShowUpdateBanner => Updater.IsBannerVisible && !IsAccountTab;
+
     public string CurrentTabTitle => SelectedTab switch
     {
         TabHosts => MobileLangResources.Get(MobileLangResourceKind.TabHosts),
@@ -146,6 +149,7 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsHostsTab));
         OnPropertyChanged(nameof(IsAccountTab));
         OnPropertyChanged(nameof(CurrentTabTitle));
+        OnPropertyChanged(nameof(ShowUpdateBanner));
     }
 
     partial void OnIsEmptyChanged(bool value)
@@ -238,6 +242,7 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     private void OnUpdaterChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(MobileUpdater.HasNews) or nameof(MobileUpdater.State)) OnPropertyChanged(nameof(MeTabLabel));
+        if (e.PropertyName is nameof(MobileUpdater.IsBannerVisible) or nameof(MobileUpdater.State)) OnPropertyChanged(nameof(ShowUpdateBanner));
     }
 
     private void OnActivityStructureChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -391,8 +396,8 @@ public sealed partial class ActivitySessionRowViewModel : ObservableObject, IDis
     public IBrush? Tint { get; }
     public string Title => Session.Title;
     public string ContextLine => Session.WorkspaceBranch is { Length: > 0 } branch
-        ? $"{Session.Project.Host.Name} · {Session.Project.Name} ({branch})"
-        : $"{Session.Project.Host.Name} · {Session.Project.Name}";
+        ? $"{Session.Project.Name} ({branch}) · {Session.Project.Host.Name}"
+        : $"{Session.Project.Name} · {Session.Project.Host.Name}";
     public string? Preview => Session.Preview;
     public bool HasPreview => !string.IsNullOrEmpty(Session.Preview);
     public string? WorkspaceTaskKey => Session.WorkspaceTaskKey;

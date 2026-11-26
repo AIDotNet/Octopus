@@ -49,7 +49,8 @@ public sealed partial class ConversationUserEntry(string id) : ConversationEntry
 {
     [ObservableProperty] public partial string Text { get; set; } = "";
     /// <summary>The names of the attached files and images.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasAttachments), nameof(AttachmentsText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAttachments), nameof(AttachmentsText))]
     public partial IReadOnlyList<string> Attachments { get; set; } = [];
 
     public bool HasAttachments => Attachments.Count > 0;
@@ -72,30 +73,53 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
     private bool _wasStreaming;
     private string _workHeaderTitle = "";
     private string _workHeaderCounts = "";
+    private static readonly MobileLangResourceKind[] WorkingPhrases =
+    [
+        MobileLangResourceKind.ConversationWorkingPhrase01,
+        MobileLangResourceKind.ConversationWorkingPhrase02,
+        MobileLangResourceKind.ConversationWorkingPhrase03,
+        MobileLangResourceKind.ConversationWorkingPhrase04,
+        MobileLangResourceKind.ConversationWorkingPhrase05,
+        MobileLangResourceKind.ConversationWorkingPhrase06,
+        MobileLangResourceKind.ConversationWorkingPhrase07,
+        MobileLangResourceKind.ConversationWorkingPhrase08,
+        MobileLangResourceKind.ConversationWorkingPhrase09,
+        MobileLangResourceKind.ConversationWorkingPhrase10,
+        MobileLangResourceKind.ConversationWorkingPhrase11,
+        MobileLangResourceKind.ConversationWorkingPhrase12,
+    ];
+
+    private int _phraseIndex = Random.Shared.Next(WorkingPhrases.Length);
     private string _workHeaderFailedText = "";
 
     /// <summary>The answer as Markdown, as the host has it so far.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasText))]
     public partial string Text { get; set; } = "";
     /// <summary>The answer cut into blocks for the page; follows <see cref="Text"/>.</summary>
     [ObservableProperty] public partial IReadOnlyList<ConversationTextBlock> Blocks { get; private set; } = [];
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasThought))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasThought))]
     public partial string? Thought { get; set; }
     /// <summary>The thought is shown in full; folded otherwise.</summary>
     [ObservableProperty] public partial bool IsThoughtExpanded { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasMeta), nameof(HasWorkArea), nameof(ShowStandaloneDuration))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMeta), nameof(HasWorkArea), nameof(ShowStandaloneDuration), nameof(ShowLiveStatus))]
     public partial bool IsStreaming { get; set; }
     /// <summary>True when the user manually tapped the unified work area header to inspect individual pure-text steps.</summary>
     [ObservableProperty] public partial bool IsWorkExpanded { get; set; }
     /// <summary>Why the turn failed.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasError))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasError))]
     public partial string? ErrorText { get; set; }
     /// <summary>How long the turn took, as the host words it ("12s").</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasDuration), nameof(HasMeta), nameof(ShowStandaloneDuration))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDuration), nameof(HasMeta), nameof(ShowStandaloneDuration))]
     public partial string? Duration { get; set; }
     public ObservableCollection<ConversationTool> Tools { get; } = [];
     public IReadOnlyList<ConversationWorkNote> Notes { get; set; } = [];
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPlan), nameof(PlanText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPlan), nameof(PlanText))]
     public partial IReadOnlyList<ConversationPlanItem> Plan { get; set; } = [];
 
     public bool HasText => Text.Length > 0;
@@ -115,9 +139,18 @@ public sealed partial class ConversationAssistantEntry(string id) : Conversation
     /// <summary>Lazy UI collection: null when collapsed so zero step controls exist until tapped.</summary>
     public ObservableCollection<ConversationWorkStep>? ExpandedWorkSteps => _expandedWorkSteps;
 
-    /// <summary>Fixed 3-line sliding live ticker (Scheme C): non-null ONLY while streaming and collapsed.</summary>
+    /// <summary>Fixed 5-line sliding live ticker (Scheme C): non-null ONLY while streaming and collapsed.</summary>
     public bool ShowLiveTicker => IsStreaming && !IsWorkExpanded && (!HasText || HasAnyRunningTool());
     public ConversationWorkTicker? LiveTicker => ShowLiveTicker ? _ticker : null;
+    public bool ShowLiveStatus => IsStreaming;
+    public string LiveStatusText => MobileLangResources.Get(WorkingPhrases[_phraseIndex]);
+
+    public void AdvanceLiveStatus()
+    {
+        if (!IsStreaming) return;
+        _phraseIndex = (_phraseIndex + 1) % WorkingPhrases.Length;
+        OnPropertyChanged(nameof(LiveStatusText));
+    }
 
     public string WorkHeaderTitle => _workHeaderTitle;
     public string WorkHeaderCounts => _workHeaderCounts;
@@ -532,6 +565,8 @@ public sealed partial class ConversationWorkStep : ObservableObject
     public string RemovedText => Tool?.RemovedText ?? "";
     public bool HasCommand => Tool is { Command.Length: > 0 };
     public string CommandText => Tool?.Command is { Length: > 0 } cmd ? $"$ {cmd}" : "";
+    public bool HasPath => Tool is { Path.Length: > 0 };
+    public string FilePath => Tool?.Path ?? "";
 
     public string TickerStatText
     {
@@ -567,7 +602,7 @@ public sealed partial class ConversationWorkStep : ObservableObject
         ConversationWorkStepKind.Thought => !string.IsNullOrWhiteSpace(_thoughtText),
         ConversationWorkStepKind.Text => !string.IsNullOrWhiteSpace(_noteText),
         ConversationWorkStepKind.Plan => _planItems.Count > 0,
-        _ => Tool is not null && (Tool.HasDetails || !string.IsNullOrEmpty(Tool.Command)),
+        _ => Tool is not null && (Tool.HasDetails || !string.IsNullOrEmpty(Tool.Command) || !string.IsNullOrEmpty(Tool.Path)),
     };
 
     /// <summary>Lazy detail binding: null when collapsed so Avalonia creates zero detail controls.</summary>
@@ -641,6 +676,8 @@ public sealed partial class ConversationWorkStep : ObservableObject
         OnPropertyChanged(nameof(RemovedText));
         OnPropertyChanged(nameof(HasCommand));
         OnPropertyChanged(nameof(CommandText));
+        OnPropertyChanged(nameof(HasPath));
+        OnPropertyChanged(nameof(FilePath));
         OnPropertyChanged(nameof(MetaText));
         OnPropertyChanged(nameof(HasMeta));
         OnPropertyChanged(nameof(CanExpand));
@@ -715,7 +752,7 @@ public sealed partial class ConversationWorkStep : ObservableObject
     };
 }
 
-/// <summary>One fixed slot inside the mobile Scheme C 3-line sliding live ticker (mutated in place).</summary>
+/// <summary>One fixed slot inside the mobile Scheme C 5-line sliding live ticker (mutated in place).</summary>
 public sealed partial class ConversationTickerLine : ObservableObject
 {
     [ObservableProperty] public partial bool IsVisible { get; set; }
@@ -723,35 +760,44 @@ public sealed partial class ConversationTickerLine : ObservableObject
     [ObservableProperty] public partial bool IsRunning { get; set; }
     [ObservableProperty] public partial bool IsFailed { get; set; }
     [ObservableProperty] public partial bool IsThought { get; set; }
+    [ObservableProperty] public partial object? StepKey { get; set; }
     [ObservableProperty] public partial string Verb { get; set; } = "";
     [ObservableProperty] public partial string Target { get; set; } = "";
     [ObservableProperty] public partial string StatText { get; set; } = "";
 
     public bool IsCompleted => !IsRunning && !IsFailed;
+    public bool IsActiveThought => IsThought && IsRunning;
     public bool HasStat => !string.IsNullOrEmpty(StatText);
 
     public void SetFrom(ConversationWorkStep step, double opacity)
     {
         var running = step.IsRunning;
         var failed = step.IsFailed;
+        var thought = step.IsThought;
+        var activeThoughtChanged = IsActiveThought != (thought && running);
         IsVisible = true;
         RowOpacity = opacity;
         if (IsRunning != running) { IsRunning = running; OnPropertyChanged(nameof(IsCompleted)); }
         if (IsFailed != failed) { IsFailed = failed; OnPropertyChanged(nameof(IsCompleted)); }
-        IsThought = step.IsThought;
+        if (IsThought != thought) IsThought = thought;
+        if (activeThoughtChanged) OnPropertyChanged(nameof(IsActiveThought));
+        StepKey = step;
         Verb = running ? step.ActiveVerb : step.DoneVerb;
         Target = step.Target;
         var stat = step.TickerStatText;
         if (StatText != stat) { StatText = stat; OnPropertyChanged(nameof(HasStat)); }
     }
 
-    public void SetPreparing()
+    public void SetPreparing(object preparingKey)
     {
+        var activeThoughtChanged = !IsActiveThought;
         IsVisible = true;
         RowOpacity = 1.0;
         if (!IsRunning) { IsRunning = true; OnPropertyChanged(nameof(IsCompleted)); }
         if (IsFailed) { IsFailed = false; OnPropertyChanged(nameof(IsCompleted)); }
-        IsThought = true;
+        if (!IsThought) IsThought = true;
+        if (activeThoughtChanged) OnPropertyChanged(nameof(IsActiveThought));
+        StepKey = preparingKey;
         Verb = MobileLangResources.Get(MobileLangResourceKind.ConversationStepVerbThinkActive);
         Target = MobileLangResources.Get(MobileLangResourceKind.ConversationWorkPreparing);
         if (StatText.Length > 0) { StatText = ""; OnPropertyChanged(nameof(HasStat)); }
@@ -759,11 +805,14 @@ public sealed partial class ConversationTickerLine : ObservableObject
 
     public void CopyFrom(ConversationTickerLine source)
     {
+        var activeThoughtChanged = IsActiveThought != source.IsActiveThought;
         IsVisible = source.IsVisible;
         RowOpacity = source.RowOpacity;
         if (IsRunning != source.IsRunning) { IsRunning = source.IsRunning; OnPropertyChanged(nameof(IsCompleted)); }
         if (IsFailed != source.IsFailed) { IsFailed = source.IsFailed; OnPropertyChanged(nameof(IsCompleted)); }
-        IsThought = source.IsThought;
+        if (IsThought != source.IsThought) IsThought = source.IsThought;
+        if (activeThoughtChanged) OnPropertyChanged(nameof(IsActiveThought));
+        StepKey = source.StepKey;
         Verb = source.Verb;
         Target = source.Target;
         if (StatText != source.StatText) { StatText = source.StatText; OnPropertyChanged(nameof(HasStat)); }
@@ -772,50 +821,64 @@ public sealed partial class ConversationTickerLine : ObservableObject
     public void Clear()
     {
         IsVisible = false;
+        var activeThoughtChanged = IsActiveThought;
         if (IsRunning) { IsRunning = false; OnPropertyChanged(nameof(IsCompleted)); }
+        if (activeThoughtChanged) OnPropertyChanged(nameof(IsActiveThought));
+        StepKey = null;
     }
 }
 
-/// <summary>Fixed 3-slot sliding live ticker container for mobile (Scheme C), mounted only while streaming &amp; collapsed.</summary>
+/// <summary>Fixed 5-slot sliding live ticker container for mobile (Scheme C), mounted only while streaming &amp; collapsed.</summary>
 public sealed class ConversationWorkTicker : IWorkTickerSource
 {
+    public const int MaxLines = WorkTickerViewport.MaxVisibleRows;
+
     private static readonly object PreparingKey = new();
+
+    private readonly ConversationTickerLine[] _lines = CreateSlots(MaxLines);
+    private readonly ConversationTickerLine[] _exits = CreateSlots(MaxLines);
+    private readonly object?[] _prevKeys = new object?[MaxLines];
+    private readonly object?[] _nextKeys = new object?[MaxLines];
+    private readonly ConversationWorkStep?[] _selected = new ConversationWorkStep?[MaxLines];
 
     private bool _hasSynced;
     private int _prevCount;
-    private object? _prevKey0;
-    private object? _prevKey1;
-    private object? _prevKey2;
 
-    public ConversationTickerLine Line0 { get; } = new();
-    public ConversationTickerLine Line1 { get; } = new();
-    public ConversationTickerLine Line2 { get; } = new();
+    private static ConversationTickerLine[] CreateSlots(int count)
+    {
+        var slots = new ConversationTickerLine[count];
+        for (var i = 0; i < count; i++) slots[i] = new ConversationTickerLine();
+        return slots;
+    }
 
-    internal ConversationTickerLine Exit0 { get; } = new();
-    internal ConversationTickerLine Exit1 { get; } = new();
-    internal ConversationTickerLine Exit2 { get; } = new();
+    public ConversationTickerLine Line0 => _lines[0];
+    public ConversationTickerLine Line1 => _lines[1];
+    public ConversationTickerLine Line2 => _lines[2];
+    public ConversationTickerLine Line3 => _lines[3];
+    public ConversationTickerLine Line4 => _lines[4];
+
+    internal ConversationTickerLine Exit0 => _exits[0];
+    internal ConversationTickerLine Exit1 => _exits[1];
+    internal ConversationTickerLine Exit2 => _exits[2];
+    internal ConversationTickerLine Exit3 => _exits[3];
+    internal ConversationTickerLine Exit4 => _exits[4];
 
     public int VisibleCount => _prevCount;
 
-    object IWorkTickerSource.Line0 => Line0;
-    object IWorkTickerSource.Line1 => Line1;
-    object IWorkTickerSource.Line2 => Line2;
-    object IWorkTickerSource.Exit0 => Exit0;
-    object IWorkTickerSource.Exit1 => Exit1;
-    object IWorkTickerSource.Exit2 => Exit2;
+    object IWorkTickerSource.GetLine(int index) => _lines[index];
+    object IWorkTickerSource.GetExit(int index) => _exits[index];
 
     public event Action<int, int>? Updated;
 
     public void ClearExiting()
     {
-        Exit0.Clear();
-        Exit1.Clear();
-        Exit2.Clear();
+        for (var i = 0; i < _exits.Length; i++) _exits[i].Clear();
     }
 
     public void Sync(IReadOnlyList<ConversationWorkStep> steps)
     {
-        ConversationWorkStep? s0 = null, s1 = null, s2 = null;
+        Array.Clear(_selected);
+        Array.Clear(_nextKeys);
         var count = 0;
 
         var nonTextCount = 0;
@@ -832,21 +895,21 @@ public sealed class ConversationWorkTicker : IWorkTickerSource
         if (preparing)
         {
             count = 1;
+            _nextKeys[0] = PreparingKey;
         }
         else
         {
             void Push(ConversationWorkStep item)
             {
-                if (count == 0) s0 = item;
-                else if (count == 1) s1 = item;
-                else s2 = item;
+                _selected[count] = item;
+                _nextKeys[count] = item;
                 count++;
             }
 
-            if (runningCount >= 3)
+            if (runningCount >= MaxLines)
             {
-                var skipped = runningCount - 3;
-                for (var i = 0; i < steps.Count && count < 3; i++)
+                var skipped = runningCount - MaxLines;
+                for (var i = 0; i < steps.Count && count < MaxLines; i++)
                 {
                     if (steps[i].StepKind == ConversationWorkStepKind.Text || !steps[i].IsRunning) continue;
                     if (skipped > 0) { skipped--; continue; }
@@ -855,7 +918,7 @@ public sealed class ConversationWorkTicker : IWorkTickerSource
             }
             else if (runningCount > 0)
             {
-                var doneSlots = 3 - runningCount;
+                var doneSlots = MaxLines - runningCount;
                 var totalDone = nonTextCount - runningCount;
                 var skipDone = Math.Max(0, totalDone - doneSlots);
                 for (var i = 0; i < steps.Count && count < doneSlots; i++)
@@ -864,15 +927,15 @@ public sealed class ConversationWorkTicker : IWorkTickerSource
                     if (skipDone > 0) { skipDone--; continue; }
                     Push(steps[i]);
                 }
-                for (var i = 0; i < steps.Count && count < 3; i++)
+                for (var i = 0; i < steps.Count && count < MaxLines; i++)
                 {
                     if (steps[i].StepKind != ConversationWorkStepKind.Text && steps[i].IsRunning) Push(steps[i]);
                 }
             }
             else
             {
-                var skip = Math.Max(0, nonTextCount - 3);
-                for (var i = 0; i < steps.Count && count < 3; i++)
+                var skip = Math.Max(0, nonTextCount - MaxLines);
+                for (var i = 0; i < steps.Count && count < MaxLines; i++)
                 {
                     if (steps[i].StepKind == ConversationWorkStepKind.Text) continue;
                     if (skip > 0) { skip--; continue; }
@@ -881,12 +944,8 @@ public sealed class ConversationWorkTicker : IWorkTickerSource
             }
         }
 
-        object? n0 = preparing ? PreparingKey : s0;
-        object? n1 = preparing ? null : s1;
-        object? n2 = preparing ? null : s2;
-
         var shift = _hasSynced
-            ? WorkTickerShift.Compute(_prevCount, _prevKey0, _prevKey1, _prevKey2, count, n0, n1, n2)
+            ? WorkTickerShift.Compute(_prevKeys, _prevCount, _nextKeys, count)
             : 0;
         var prevCount = _prevCount;
 
@@ -897,35 +956,22 @@ public sealed class ConversationWorkTicker : IWorkTickerSource
 
         if (preparing)
         {
-            Line0.SetPreparing();
-            Line1.Clear();
-            Line2.Clear();
-        }
-        else if (count == 1)
-        {
-            Line0.SetFrom(s0!, 1.0);
-            Line1.Clear();
-            Line2.Clear();
-        }
-        else if (count == 2)
-        {
-            Line0.SetFrom(s0!, 0.65);
-            Line1.SetFrom(s1!, 1.0);
-            Line2.Clear();
+            _lines[0].SetPreparing(PreparingKey);
+            for (var i = 1; i < MaxLines; i++) _lines[i].Clear();
         }
         else
         {
-            Line0.SetFrom(s0!, 0.38);
-            Line1.SetFrom(s1!, 0.66);
-            Line2.SetFrom(s2!, 1.0);
+            for (var i = 0; i < count; i++)
+            {
+                _lines[i].SetFrom(_selected[i]!, WorkTickerViewport.ComputeRowOpacity(i, count));
+            }
+            for (var i = count; i < MaxLines; i++) _lines[i].Clear();
         }
 
         var wasSynced = _hasSynced;
         _hasSynced = true;
         _prevCount = count;
-        _prevKey0 = n0;
-        _prevKey1 = n1;
-        _prevKey2 = n2;
+        Array.Copy(_nextKeys, _prevKeys, MaxLines);
 
         if (wasSynced && (shift > 0 || prevCount != count))
         {
@@ -935,23 +981,14 @@ public sealed class ConversationWorkTicker : IWorkTickerSource
 
     private void ShiftExiting(int shift)
     {
-        if (shift == 1)
+        var clamped = Math.Clamp(shift, 1, MaxLines);
+        for (var dst = MaxLines - 1; dst >= clamped; dst--)
         {
-            Exit2.CopyFrom(Exit1);
-            Exit1.CopyFrom(Exit0);
-            Exit0.CopyFrom(Line0);
+            _exits[dst].CopyFrom(_exits[dst - clamped]);
         }
-        else if (shift == 2)
+        for (var i = 0; i < clamped; i++)
         {
-            Exit2.CopyFrom(Exit0);
-            Exit1.CopyFrom(Line0);
-            Exit0.CopyFrom(Line1);
-        }
-        else
-        {
-            Exit2.CopyFrom(Line0);
-            Exit1.CopyFrom(Line1);
-            Exit0.CopyFrom(Line2);
+            _exits[clamped - 1 - i].CopyFrom(_lines[i]);
         }
     }
 }
@@ -962,23 +999,30 @@ public sealed partial class ConversationTool(string id) : ObservableObject
     public string Id { get; } = id;
     [ObservableProperty] public partial string Title { get; set; } = "";
     /// <summary>ACP's kind: <c>read</c>, <c>edit</c>, <c>delete</c>, <c>move</c>, <c>search</c>, <c>execute</c>, <c>think</c>, <c>fetch</c>, <c>other</c>.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsEdit), nameof(IsExecute), nameof(IsRead), nameof(IsSearch), nameof(IsOther))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEdit), nameof(IsExecute), nameof(IsRead), nameof(IsSearch), nameof(IsOther))]
     public partial string Kind { get; set; } = "other";
     /// <summary><c>pending</c>, <c>in_progress</c>, <c>completed</c> or <c>failed</c>.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFailed), nameof(IsCompleted))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRunning), nameof(IsFailed), nameof(IsCompleted))]
     public partial string Status { get; set; } = "in_progress";
     [ObservableProperty] public partial string? Command { get; set; }
     [ObservableProperty] public partial string? Path { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasCounts), nameof(HasAdded), nameof(AddedText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCounts), nameof(HasAdded), nameof(AddedText))]
     public partial int Added { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasCounts), nameof(HasRemoved), nameof(RemovedText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCounts), nameof(HasRemoved), nameof(RemovedText))]
     public partial int Removed { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasExitCode), nameof(ExitCodeText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasExitCode), nameof(ExitCodeText))]
     public partial int? ExitCode { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasOutput), nameof(HasDetails))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasOutput), nameof(HasDetails))]
     public partial string? Output { get; set; }
     /// <summary>The diff of an edit, one line each.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasDiff), nameof(HasDetails))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDiff), nameof(HasDetails))]
     public partial IReadOnlyList<ConversationDiffLine> Diff { get; set; } = [];
     /// <summary>The diff or the output is shown.</summary>
     [ObservableProperty] public partial bool IsExpanded { get; set; }
@@ -1029,17 +1073,22 @@ public sealed partial class ConversationPermissionEntry(string id) : Conversatio
 {
     [ObservableProperty] public partial string Title { get; set; } = "";
     /// <summary>What exactly it wants to do (a command, a path).</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasDetail))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDetail))]
     public partial string? Detail { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasWarning))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasWarning))]
     public partial string? Warning { get; set; }
     [ObservableProperty] public partial IReadOnlyList<ConversationPermissionOption> Options { get; set; } = [];
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsOpen), nameof(ResolvedText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOpen), nameof(ResolvedText))]
     public partial bool IsResolved { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ResolvedText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ResolvedText))]
     public partial string? ResolvedSummary { get; set; }
     /// <summary>An answer was sent and the host has not closed the card yet: the buttons wait.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsOpen))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOpen))]
     public partial bool IsAnswering { get; set; }
 
     public bool HasDetail => !string.IsNullOrEmpty(Detail);
@@ -1062,11 +1111,14 @@ public sealed partial class ConversationQuestionEntry(string id) : ConversationE
 {
     [ObservableProperty] public partial string Title { get; set; } = "";
     [ObservableProperty] public partial IReadOnlyList<ConversationQuestionField> Fields { get; set; } = [];
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsOpen), nameof(ResolvedText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOpen), nameof(ResolvedText))]
     public partial bool IsResolved { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ResolvedText))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ResolvedText))]
     public partial string? ResolvedSummary { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsOpen))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOpen))]
     public partial bool IsAnswering { get; set; }
 
     public bool IsOpen => !IsResolved && !IsAnswering;
@@ -1125,17 +1177,23 @@ public sealed partial class ConversationChoice(string id, string label, string? 
 /// <summary>What can be chosen above the input: model, mode (permissions) and effort, each with the current value.</summary>
 public sealed partial class ConversationComposer : ObservableObject
 {
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasModels), nameof(ModelLabel), nameof(HasChoices))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModels), nameof(ModelLabel), nameof(HasChoices))]
     public partial IReadOnlyList<ConversationOption> Models { get; set; } = [];
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ModelLabel))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ModelLabel))]
     public partial string? Model { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasModes), nameof(ModeLabel), nameof(HasChoices))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModes), nameof(ModeLabel), nameof(HasChoices))]
     public partial IReadOnlyList<ConversationOption> Modes { get; set; } = [];
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ModeLabel))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ModeLabel))]
     public partial string? Mode { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasEfforts), nameof(EffortLabel), nameof(HasChoices))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasEfforts), nameof(EffortLabel), nameof(HasChoices))]
     public partial IReadOnlyList<ConversationOption> Efforts { get; set; } = [];
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(EffortLabel))]
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EffortLabel))]
     public partial string? Effort { get; set; }
 
     public bool HasModels => Models.Count > 0;

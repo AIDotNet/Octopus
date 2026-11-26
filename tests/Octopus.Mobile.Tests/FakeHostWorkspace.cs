@@ -19,7 +19,11 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     private readonly List<ItemMessage> _items = [];
     private readonly Dictionary<string, WorkspaceOptionsMessage> _workspaceOptions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FakeTerminal> _terminals = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, byte[]> _projectIcons = new(StringComparer.Ordinal);
     private int _nextId;
+    private int _iconRequests;
+
+    public int IconRequestCount => Volatile.Read(ref _iconRequests);
 
     public HostInfoMessage Info { get; } = new() { Name = "Studio", Os = "test", AppVersion = "1.0", Home = "/home/ada" };
     public List<AgentMessage> Agents { get; } =
@@ -52,6 +56,39 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
         lock (_gate) _projects.Add(project);
         Changed?.Invoke();
         return project;
+    }
+
+    public void SetProjectAppearance(ProjectMessage project, string? color = null, string? icon = null, string? image = null, byte[]? imageBytes = null)
+    {
+        lock (_gate)
+        {
+            project.Color = color;
+            project.Icon = icon;
+            project.Image = image;
+            if (image is not null && imageBytes is not null) _projectIcons[project.Id] = imageBytes;
+            else _projectIcons.Remove(project.Id);
+        }
+        Changed?.Invoke();
+    }
+
+    public void NotifyWorkspaceChanged() => Changed?.Invoke();
+
+    public Task<ProjectIconMessage?> GetProjectIconAsync(string projectId)
+    {
+        Interlocked.Increment(ref _iconRequests);
+        lock (_gate)
+        {
+            var project = _projects.FirstOrDefault(p => p.Id == projectId);
+            if (project is null || string.IsNullOrWhiteSpace(project.Image) || !_projectIcons.TryGetValue(projectId, out var bytes))
+            {
+                return Task.FromResult<ProjectIconMessage?>(new ProjectIconMessage());
+            }
+            return Task.FromResult<ProjectIconMessage?>(new ProjectIconMessage
+            {
+                Image = project.Image,
+                Data = Convert.ToBase64String(bytes),
+            });
+        }
     }
 
     public WorkspaceMessage AddWorkspace(ProjectMessage project, string branch, string? taskKind = null, string? taskKey = null, string? taskTitle = null, string? taskUrl = null)
@@ -87,9 +124,18 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
     {
         var item = new ItemMessage
         {
-            Id = "i" + Interlocked.Increment(ref _nextId), ProjectId = project.Id, Title = title, AgentId = agentId, Model = model, Effort = effort,
-            WorkspaceId = workspace?.Id, WorkspaceBranch = workspace?.Branch, Surface = surface,
-            Kind = agentId is null ? ItemKinds.Terminal : ItemKinds.Agent, Activity = activity, IsRunning = true,
+            Id = "i" + Interlocked.Increment(ref _nextId),
+            ProjectId = project.Id,
+            Title = title,
+            AgentId = agentId,
+            Model = model,
+            Effort = effort,
+            WorkspaceId = workspace?.Id,
+            WorkspaceBranch = workspace?.Branch,
+            Surface = surface,
+            Kind = agentId is null ? ItemKinds.Terminal : ItemKinds.Agent,
+            Activity = activity,
+            IsRunning = true,
         };
         lock (_gate) _items.Add(item);
         Changed?.Invoke();

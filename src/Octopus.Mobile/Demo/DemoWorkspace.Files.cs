@@ -19,7 +19,7 @@ public sealed partial class DemoWorkspace
     private const long BigLogLines = 6000;
 
     // Relative path to text; null for a file that is not text. Folders are what the paths imply.
-    private static readonly Dictionary<string, string?> s_files = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, string?> Files = new(StringComparer.Ordinal)
     {
         ["README.md"] = "# {0}\n\nThe made-up project of the preview.\n\n## Build\n\n```\ndotnet build\ndotnet test\n```\n",
         [".gitignore"] = "bin/\nobj/\n*.user\n",
@@ -78,11 +78,16 @@ public sealed partial class DemoWorkspace
         ["docs/design.md"] = "# Design\n\n- Tokens are signed with the current key.\n- Old keys stay valid for a day.\n",
         ["tests/TokenTests.cs"] = "namespace {0}.Tests;\n\npublic class TokenTests\n{\n    [Fact]\n    public void Issued_tokens_validate() { }\n}\n",
         ["assets/logo.png"] = null,
+        ["assets/data.bin"] = null,
         [BigLog] = "",
     };
 
+    // Valid 1x1 PNG bytes so demo image previews render a real bitmap without reading from disk.
+    private static readonly byte[] DemoPngBytes = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
     // Unified diffs of the changes of Octopus, each against what HEAD has.
-    private static readonly (string Path, RemoteChangeKind Kind, bool Staged, string Diff)[] s_changes =
+    private static readonly (string Path, RemoteChangeKind Kind, bool Staged, string Diff)[] Changes =
     [
         ("src/Auth/TokenService.cs", RemoteChangeKind.Modified, false, """
             @@ -1,14 +1,9 @@
@@ -156,7 +161,7 @@ public sealed partial class DemoWorkspace
         var prefix = relative.Length == 0 ? "" : relative + "/";
         var folders = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in s_files.Keys.Where(path => path.StartsWith(prefix, StringComparison.Ordinal)))
+        foreach (var path in Files.Keys.Where(path => path.StartsWith(prefix, StringComparison.Ordinal)))
         {
             var rest = path[prefix.Length..];
             if (rest.IndexOf('/') is var slash and >= 0) folders.Add(rest[..slash]);
@@ -173,7 +178,7 @@ public sealed partial class DemoWorkspace
     {
         Supported();
         var relative = RelativeOf(project, path);
-        if (!s_files.TryGetValue(relative, out var text)) throw new IOException($"“{path}”不存在。");
+        if (!Files.TryGetValue(relative, out var text)) throw new IOException($"“{path}”不存在。");
         if (text is null) return Task.FromResult(new RemoteFileContent(RemoteFileContentKind.Binary, "", 18_432));
         if (relative == BigLog) text = Log();
         var content = Fill(text, project);
@@ -181,6 +186,28 @@ public sealed partial class DemoWorkspace
         return Task.FromResult(size > maxBytes
             ? new RemoteFileContent(RemoteFileContentKind.TooLarge, "", size)
             : new RemoteFileContent(RemoteFileContentKind.Text, content, size));
+    }
+
+    public Task<RemoteFileBytes> ReadFileBytesAsync(RemoteProject project, string path, long maxBytes, CancellationToken cancellationToken = default)
+    {
+        Supported();
+        var relative = RelativeOf(project, path);
+        if (!Files.TryGetValue(relative, out var text)) throw new IOException($"“{path}”不存在。");
+        byte[] data;
+        if (text is null)
+        {
+            data = relative.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                ? DemoPngBytes
+                : [0x00, 0x01, 0x02, 0x03];
+        }
+        else
+        {
+            if (relative == BigLog) text = Log();
+            data = Encoding.UTF8.GetBytes(Fill(text, project));
+        }
+        return Task.FromResult(data.Length > maxBytes
+            ? new RemoteFileBytes(RemoteFileBytesKind.TooLarge, [], data.Length)
+            : new RemoteFileBytes(RemoteFileBytesKind.Ok, data, data.Length));
     }
 
     public Task<RemoteChanges> GetChangesAsync(RemoteProject project, string? workspacePath, CancellationToken cancellationToken = default)
@@ -191,7 +218,7 @@ public sealed partial class DemoWorkspace
             ? project.DefaultBranch
             : project.Workspaces.FirstOrDefault(workspace => workspace.Path == workspacePath)?.Branch;
         if (project.Name != "Octopus") return Task.FromResult(new RemoteChanges(true, branch, []));
-        var changes = s_changes.Select(change =>
+        var changes = Changes.Select(change =>
         {
             var diff = DiffOf(project, change.Path);
             return new RemoteChange(change.Path, Join(root, change.Path), change.Kind, change.Staged,
@@ -215,13 +242,13 @@ public sealed partial class DemoWorkspace
 
     private static RemoteDiff DiffOf(RemoteProject project, string path)
     {
-        var change = s_changes.FirstOrDefault(known => known.Path == path);
+        var change = Changes.FirstOrDefault(known => known.Path == path);
         if (change.Path is null) return RemoteDiff.Of(RemoteDiffKind.Empty);
         if (change.Diff == "binary") return RemoteDiff.Of(RemoteDiffKind.Binary);
         // A new file: every line of it added.
         var unified = change.Diff.Length > 0
             ? change.Diff
-            : AllAdded(Fill(s_files.GetValueOrDefault(path) ?? "", project));
+            : AllAdded(Fill(Files.GetValueOrDefault(path) ?? "", project));
         return Parse(Fill(unified, project));
     }
 

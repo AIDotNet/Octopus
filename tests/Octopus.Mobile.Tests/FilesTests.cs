@@ -87,8 +87,35 @@ public class FilesTests
         using var phone = new Phone();
         var project = phone.Workspace.Hosts[0].Projects[0];
 
-        // Binary file shows a clear non-text notice.
+        // Image file renders an in-app preview with zoom controls and disposes its bitmap on back.
         phone.Shell.ShowFile(project, project.Path + "/assets/logo.png", "assets");
+        var imagePage = phone.Top<FileViewerPage>();
+        var imageViewer = (FileViewerViewModel)imagePage.DataContext!;
+        Assert.True(Phone.Until(() => !imageViewer.IsLoading && imageViewer.ShowImage));
+        Assert.True(imageViewer.IsImage);
+        Assert.NotNull(imageViewer.ImageBitmap);
+        Assert.Equal(1, imageViewer.ImageWidth);
+        Assert.Equal(1, imageViewer.ImageHeight);
+        Assert.Equal("PNG", imageViewer.ImageFormatName);
+        Assert.Contains("1×1", imageViewer.Subtitle);
+        Assert.True(imageViewer.IsZoomFit);
+        Assert.True(imageViewer.CanZoomIn);
+        Assert.False(imageViewer.CanZoomOut);
+
+        imageViewer.ZoomInCommand.Execute(null);
+        Assert.False(imageViewer.IsZoomFit);
+        Assert.Equal(1.5, imageViewer.ZoomScale);
+        Assert.True(imageViewer.CanZoomOut);
+
+        imageViewer.ResetZoomCommand.Execute(null);
+        Assert.True(imageViewer.IsZoomFit);
+        Assert.Equal(1.0, imageViewer.ZoomScale);
+
+        phone.Shell.Back();
+        Assert.Null(imageViewer.ImageBitmap);
+
+        // Non-image binary file shows a clear non-text notice.
+        phone.Shell.ShowFile(project, project.Path + "/assets/data.bin", "assets");
         var binaryViewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
         Assert.True(Phone.Until(() => !binaryViewer.IsLoading && binaryViewer.HasMessage));
         Assert.Contains("文本文件", binaryViewer.Message);
@@ -201,10 +228,12 @@ public class FilesTests
         var repo = computer.Workspace.AddProject("App", "/repo/app", isGitRepository: true, defaultBranch: "main");
         var plain = computer.Workspace.AddProject("Notes", "/repo/notes", isGitRepository: false);
 
-        // Seed files: UTF-8 with BOM, nested folder, hidden .git folder (must be filtered out), binary, and >1MB too-large file.
+        // Seed files: UTF-8 with BOM, nested folder, hidden .git folder (must be filtered out), binary, valid PNG, and >1MB too-large file.
         computer.Workspace.Files["/repo/app/.git/HEAD"] = Encoding.UTF8.GetBytes("ref: refs/heads/main\n");
         computer.Workspace.Files["/repo/app/src/Main.cs"] = [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes("line 1\r\nline 2\n")];
         computer.Workspace.Files["/repo/app/img.bin"] = [0x89, 0x50, 0x4E, 0x47, 0x00, 0x01];
+        computer.Workspace.Files["/repo/app/shot.png"] = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
         computer.Workspace.Files["/repo/app/huge.log"] = new byte[FileViewerViewModel.MaxBytes + 64];
 
         // Respond to git/call using the exact camelCase JSON schema of Octopus.App's RemoteGitDispatcher.
@@ -261,8 +290,8 @@ public class FilesTests
         // 1. List files: .git is hidden, folders come first.
         phone.Shell.ShowFiles(remoteRepo);
         var files = phone.Model<FilesViewModel>();
-        Assert.True(Phone.Until(() => !files.IsLoading && files.Entries.Count == 3));
-        Assert.Equal(["src", "huge.log", "img.bin"], files.Entries.Select(entry => entry.Name));
+        Assert.True(Phone.Until(() => !files.IsLoading && files.Entries.Count == 4));
+        Assert.Equal(["src", "huge.log", "img.bin", "shot.png"], files.Entries.Select(entry => entry.Name));
 
         // 2. Read UTF-8 BOM text file through fs/read.
         files.Entries[0].OpenCommand.Execute(null);
@@ -282,11 +311,17 @@ public class FilesTests
         Assert.Contains("1 MB", hugeViewer.Message);
         phone.Shell.Back();
 
-        // 4. Binary file reports non-text.
+        // 4. Binary file reports non-text; PNG file decodes and renders as image preview over the remote protocol.
         phone.Shell.ShowFile(remoteRepo, "/repo/app/img.bin");
         var binViewer = phone.Model<FileViewerViewModel>();
         Assert.True(Phone.Until(() => !binViewer.IsLoading && binViewer.HasMessage));
         Assert.Contains("文本文件", binViewer.Message);
+        phone.Shell.Back();
+
+        phone.Shell.ShowFile(remoteRepo, "/repo/app/shot.png");
+        var imgViewer = phone.Model<FileViewerViewModel>();
+        Assert.True(Phone.Until(() => !imgViewer.IsLoading && imgViewer.ShowImage));
+        Assert.Equal((1, 1, "PNG"), (imgViewer.ImageWidth, imgViewer.ImageHeight, imgViewer.ImageFormatName));
         phone.Shell.Back();
 
         // 5. Git status + async diff-based line count backfill + DiffPage.
@@ -311,6 +346,42 @@ public class FilesTests
         var notRepo = phone.Model<ChangesViewModel>();
         Assert.True(Phone.Until(() => !notRepo.IsLoading && notRepo.IsNotRepository));
         Assert.True(phone.Top<ChangesPage>().FindControl<Control>("NotRepositoryText")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void Markdown_file_opens_in_rendered_preview_toggles_to_source_and_opens_relative_links()
+    {
+        using var phone = new Phone();
+        var project = phone.Workspace.Hosts[0].Projects[0];
+
+        phone.Shell.ShowFile(project, project.Path + "/README.md", project.Name);
+        var page = phone.Top<FileViewerPage>();
+        var viewer = (FileViewerViewModel)page.DataContext!;
+        Assert.True(Phone.Until(() => !viewer.IsLoading && viewer.ShowMarkdownPreview));
+        Assert.True(viewer.IsMarkdownFile);
+        Assert.True(viewer.ShowPreviewToggle);
+        Assert.False(viewer.ShowCodeLines);
+        Assert.True(page.FindControl<MobileMarkdownView>("MarkdownPreview")!.IsVisible);
+
+        // Toggle to raw source lines and back to preview.
+        viewer.TogglePreviewCommand.Execute(null);
+        Phone.Pump();
+        Assert.False(viewer.ShowMarkdownPreview);
+        Assert.True(viewer.ShowCodeLines);
+        Assert.NotEmpty(viewer.Lines);
+
+        viewer.TogglePreviewCommand.Execute(null);
+        Phone.Pump();
+        Assert.True(viewer.ShowMarkdownPreview);
+
+        // Clicking a web link opens the browser; clicking a relative image link opens the in-app image preview.
+        viewer.OpenLinkCommand.Execute("https://octopus.example/docs");
+        Assert.Equal("https://octopus.example/docs", phone.Opened?.ToString());
+
+        viewer.OpenLinkCommand.Execute("assets/logo.png");
+        var imageViewer = (FileViewerViewModel)phone.Top<FileViewerPage>().DataContext!;
+        Assert.True(Phone.Until(() => !imageViewer.IsLoading && imageViewer.ShowImage));
+        Assert.Equal("logo.png", imageViewer.Title);
     }
 
     [AvaloniaFact]

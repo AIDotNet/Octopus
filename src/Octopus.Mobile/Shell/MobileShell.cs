@@ -1,7 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Octopus.Mobile.Account;
+using Octopus.Mobile.Common;
 using Octopus.Mobile.Conversations;
 using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
@@ -49,14 +51,69 @@ public sealed class MobileShell : ContentControl, INavigator
     {
         base.OnAttachedToVisualTree(e);
         _topLevel = TopLevel.GetTopLevel(this);
-        if (_topLevel is not null) _topLevel.ScalingChanged += OnScalingChanged;
+        if (_topLevel is not null)
+        {
+            _topLevel.ScalingChanged += OnScalingChanged;
+            _topLevel.BackRequested += OnBackRequested;
+        }
     }
 
     protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        if (_topLevel is not null) _topLevel.ScalingChanged -= OnScalingChanged;
-        _topLevel = null;
+        if (_topLevel is not null)
+        {
+            _topLevel.ScalingChanged -= OnScalingChanged;
+            _topLevel.BackRequested -= OnBackRequested;
+            _topLevel = null;
+        }
+    }
+
+    private void OnBackRequested(object? sender, RoutedEventArgs e)
+    {
+        if (e.Handled) return;
+        if (HandleBackRequest()) e.Handled = true;
+    }
+
+    /// <summary>
+    /// Handles a system back gesture or hardware back press (Android full-screen edge swipe, back button, desktop Alt+Left).
+    /// Dismisses the topmost open modal/sheet/popover on the active page first; otherwise pops the navigation stack.
+    /// Returns false only at the root page with no open overlays so the OS can background/exit the app.
+    /// </summary>
+    public bool HandleBackRequest()
+    {
+        if (TryDismissTopOverlay()) return true;
+        if (_stack is { CanGoBack: true })
+        {
+            Back();
+            return true;
+        }
+        return false;
+    }
+
+    private bool TryDismissTopOverlay()
+    {
+        if (Top is not { } top) return false;
+        // Walk in reverse visual order so nested overlays (e.g. an ActionSheet opened on top of a Sheet) close topmost-first.
+        foreach (var visual in top.GetVisualDescendants().Reverse())
+        {
+            switch (visual)
+            {
+                case TKCode.Arc.Mobile.Dialog { IsOpen: true } dialog:
+                    if (dialog.IsDismissible) dialog.IsOpen = false;
+                    return true;
+                case Sheet { IsOpen: true } sheet:
+                    if (sheet.IsDismissible) sheet.IsOpen = false;
+                    return true;
+                case SessionWorkspaceOverlay { IsPopoverOpen: true } popover:
+                    if (popover.DataContext is SessionWorkspaceViewModel vm && vm.ClosePopoverCommand.CanExecute(null))
+                    {
+                        vm.ClosePopoverCommand.Execute(null);
+                    }
+                    return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -103,7 +160,7 @@ public sealed class MobileShell : ContentControl, INavigator
         ShowSession(session);
     }
 
-    public void ShowConversation(RemoteSession session) => Push(new ConversationPage(new ConversationViewModel(session, _workspace, this)));
+    public void ShowConversation(RemoteSession session) => Push(new ConversationPage(new ConversationViewModel(session, _workspace, this, _openBrowser)));
 
     public void ShowSessionDetails(RemoteSession session) => Push(new SessionDetailPage(new SessionDetailViewModel(session, _workspace, this)));
 
@@ -115,7 +172,7 @@ public sealed class MobileShell : ContentControl, INavigator
         Push(new FilesPage(new FilesViewModel(project, folder ?? project.Path, _workspace, this)));
 
     public void ShowFile(RemoteProject project, string path, string? location = null) =>
-        Push(new FileViewerPage(new FileViewerViewModel(project, path, location, _workspace, this)));
+        Push(new FileViewerPage(new FileViewerViewModel(project, path, location, _workspace, this, _openBrowser)));
 
     public void ShowChanges(RemoteProject project, string? workspacePath = null) =>
         Push(new ChangesPage(new ChangesViewModel(project, workspacePath, _workspace, this)));
@@ -169,7 +226,7 @@ public sealed class MobileShell : ContentControl, INavigator
         foreach (var page in _pages) (page as IClosablePage)?.OnClosed();
         _pages.Clear();
         (_stack?.Root as IClosablePage)?.OnClosed();
-        if (_stack is not null) _stack.Navigated -= OnNavigated;
+        _stack?.Navigated -= OnNavigated;
         _stack = null;
     }
 

@@ -295,7 +295,12 @@ public sealed partial class DemoWorkspace
             QueuedCount = update.QueuedCount,
             Composer = update.Composer is { } composer ? new AcpComposerMessage
             {
-                Models = composer.Models, Model = composer.Model, Modes = composer.Modes, Mode = composer.Mode, Efforts = composer.Efforts, Effort = composer.Effort,
+                Models = composer.Models,
+                Model = composer.Model,
+                Modes = composer.Modes,
+                Mode = composer.Mode,
+                Efforts = composer.Efforts,
+                Effort = composer.Effort,
             } : null,
         };
 
@@ -312,18 +317,34 @@ public sealed partial class DemoWorkspace
             Attachments = entry.Attachments is null ? null : [.. entry.Attachments],
             Tools = entry.Tools?.Select(tool => new AcpToolMessage
             {
-                Id = tool.Id, Title = tool.Title, Kind = tool.Kind, Status = tool.Status, Command = tool.Command, Path = tool.Path,
-                Added = tool.Added, Removed = tool.Removed, ExitCode = tool.ExitCode, Output = tool.Output, Diff = tool.Diff is null ? null : [.. tool.Diff],
+                Id = tool.Id,
+                Title = tool.Title,
+                Kind = tool.Kind,
+                Status = tool.Status,
+                Command = tool.Command,
+                Path = tool.Path,
+                Added = tool.Added,
+                Removed = tool.Removed,
+                ExitCode = tool.ExitCode,
+                Output = tool.Output,
+                Diff = tool.Diff is null ? null : [.. tool.Diff],
             }).ToList(),
             Plan = entry.Plan?.Select(item => new AcpPlanEntryMessage { Content = item.Content, Status = item.Status }).ToList(),
             Permission = entry.Permission is { } permission ? new AcpPermissionMessage
             {
-                Title = permission.Title, Detail = permission.Detail, Warning = permission.Warning, Options = permission.Options,
-                IsResolved = permission.IsResolved, ResolvedSummary = permission.ResolvedSummary,
+                Title = permission.Title,
+                Detail = permission.Detail,
+                Warning = permission.Warning,
+                Options = permission.Options,
+                IsResolved = permission.IsResolved,
+                ResolvedSummary = permission.ResolvedSummary,
             } : null,
             Question = entry.Question is { } question ? new AcpQuestionMessage
             {
-                Title = question.Title, Fields = question.Fields, IsResolved = question.IsResolved, ResolvedSummary = question.ResolvedSummary,
+                Title = question.Title,
+                Fields = question.Fields,
+                IsResolved = question.IsResolved,
+                ResolvedSummary = question.ResolvedSummary,
             } : null,
         };
 

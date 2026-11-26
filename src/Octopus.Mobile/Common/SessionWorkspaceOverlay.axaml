@@ -226,19 +226,21 @@
                                                               IsVisible="{Binding IsWorktree}" />
                                             </Panel>
                                             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <TextBlock Text="{Binding Title}"
+                                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding Title}"
                                                                FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
                                                                FontSize="13"
                                                                FontWeight="SemiBold"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <Border Classes="pill success" IsVisible="{Binding IsCurrent}">
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center" />
+                                                    <Border Grid.Column="1" Classes="pill success" IsVisible="{Binding IsCurrent}">
                                                         <TextBlock Text="{l:MobileLangResource SessionBranchesCurrent}" />
                                                     </Border>
-                                                    <Border Classes="wsPill" IsVisible="{Binding HasTaskKey}">
-                                                        <TextBlock Text="{Binding TaskKey}" />
+                                                    <Border Grid.Column="2" Classes="wsPill" IsVisible="{Binding HasTaskKey}">
+                                                        <TextBlock Text="{Binding TaskKey}" MaxWidth="76" TextTrimming="CharacterEllipsis" />
                                                     </Border>
-                                                </StackPanel>
+                                                </Grid>
                                                 <TextBlock Classes="projectCardPath" Text="{Binding Subtitle}" />
                                             </StackPanel>
                                             <TextBlock Grid.Column="2"
