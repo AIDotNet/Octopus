@@ -19,7 +19,7 @@ public sealed class LineReadingTests : IDisposable
 
     private static FileErrorCode Code(Action action) => Assert.Throws<FileAccessException>(action).Code;
 
-    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;
+    private static JsonElement Json(string json) => JsonElement.Parse(json);
 
     // ---------------------------------------------------------------- readLines
 

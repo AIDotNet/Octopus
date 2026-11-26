@@ -1,0 +1,168 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Bots"
+             x:Class="Octopus.App.Bots.NewBotDialogView"
+             x:DataType="vm:NewBotDialogViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.bot-pill">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Pill"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="Center"
+                                          VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#PART_Pill">
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+            </Style>
+            <Style Selector="^.selected">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            </Style>
+        </Style>
+
+        <Style Selector="Button.bot-swatch">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Ring"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="999"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^.selected">
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Foreground}" />
+            </Style>
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="14" MinWidth="420">
+        <!-- Identity: Avatar preview + Name + Color swatches -->
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+            <Border Width="52" Height="52" CornerRadius="26" VerticalAlignment="Top" Margin="0,4,0,0"
+                    Background="{Binding AvatarBrush}">
+                <TextBlock Text="{Binding AvatarInitial}" Foreground="White" FontSize="20" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+
+            <StackPanel Grid.Column="1" Spacing="8">
+                <TextBlock Classes="caption" Text="{l:AppLangResource BotDialogNameLabel}" />
+                <TextBox x:Name="NameInput"
+                         Text="{Binding Name, Mode=TwoWay}"
+                         PlaceholderText="{l:AppLangResource BotDialogNamePlaceholder}"
+                         MaxLength="32" />
+                <ItemsControl ItemsSource="{Binding Colors}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="6" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BotColorOptionViewModel">
+                            <Button Classes="bot-swatch" Classes.selected="{Binding IsSelected}"
+                                    Command="{Binding PickCommand}">
+                                <Ellipse Fill="{Binding Brush}" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Grid>
+
+        <!-- Agent selector -->
+        <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{l:AppLangResource BotDialogAgentLabel}" />
+            <ItemsControl ItemsSource="{Binding Agents}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:BotAgentOptionViewModel">
+                        <Button Classes="bot-pill" Classes.selected="{Binding IsSelected}"
+                                Command="{Binding PickCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Ellipse Width="8" Height="8" Fill="{Binding Accent}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Name}" FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                           FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Starter templates -->
+        <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{l:AppLangResource BotDialogTemplateLabel}" />
+            <ItemsControl ItemsSource="{Binding Templates}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:BotTemplateOptionViewModel">
+                        <Button Classes="bot-pill" Classes.selected="{Binding IsSelected}"
+                                Command="{Binding PickCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <lucide:LucideIcon Kind="{Binding Icon}" Size="13" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Label}" FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                           FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- SOUL.md responsibilities -->
+        <StackPanel Spacing="6">
+            <TextBlock Classes="caption" Text="{l:AppLangResource BotDialogSoulLabel}" />
+            <TextBox Text="{Binding Soul, Mode=TwoWay}"
+                     PlaceholderText="{l:AppLangResource BotDialogSoulPlaceholder}"
+                     AcceptsReturn="True" TextWrapping="Wrap"
+                     MinHeight="72" MaxHeight="130" />
+        </StackPanel>
+
+        <!-- Safety note -->
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <lucide:LucideIcon Kind="ShieldCheck" Size="13" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+            <TextBlock Classes="hint" Text="{l:AppLangResource BotDialogSafetyNote}" VerticalAlignment="Center" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

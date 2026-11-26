@@ -212,6 +212,29 @@ public sealed class FakeDialogService : IDialogService
         return Task.FromResult(next);
     }
 
+    public Octopus.App.Bots.NewBotRequest? NextBotRequest { get; set; }
+    public string? LastBotTemplateId { get; private set; }
+    public int NewBotAsked { get; private set; }
+
+    public Task<Octopus.App.Bots.NewBotRequest?> AskNewBotAsync(string? initialTemplateId = null)
+    {
+        NewBotAsked++;
+        LastBotTemplateId = initialTemplateId;
+        var next = NextBotRequest;
+        NextBotRequest = null;
+        return Task.FromResult(next);
+    }
+
+    public int ConnectorCatalogShown { get; private set; }
+    public string? LastConnectorCatalogBotId { get; private set; }
+
+    public Task ShowConnectorCatalogAsync(Octopus.Core.Bots.BotDefinition bot, Octopus.App.Bots.IBotService bots)
+    {
+        ConnectorCatalogShown++;
+        LastConnectorCatalogBotId = bot.Id;
+        return Task.CompletedTask;
+    }
+
     public Task<bool> ConfirmAsync(string title, string description, string confirmText, bool isDanger = false)
     {
         Asked++;

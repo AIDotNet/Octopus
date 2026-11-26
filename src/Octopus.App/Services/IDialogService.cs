@@ -78,6 +78,12 @@ public interface IDialogService
         Octopus.App.Services.Workspaces.IWorkspaceCleanupService cleanup,
         IProjectService projects,
         Octopus.Platform.IFileOpener? fileOpener = null);
+
+    /// <summary>Shows the "New Bot" dialog; returns the creation request or null when dismissed.</summary>
+    Task<Octopus.App.Bots.NewBotRequest?> AskNewBotAsync(string? initialTemplateId = null);
+
+    /// <summary>Shows the "Add to &lt;BotName&gt;" connector catalog dialog.</summary>
+    Task ShowConnectorCatalogAsync(Octopus.Core.Bots.BotDefinition bot, Octopus.App.Bots.IBotService bots);
 }
 
 /// <summary>What the project icon dialog returns: the color, a Lucide icon name (null: the initial) and a thumbnail file (null: none).</summary>

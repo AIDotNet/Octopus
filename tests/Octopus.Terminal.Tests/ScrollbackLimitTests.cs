@@ -14,7 +14,7 @@ public class ScrollbackLimitTests(ITestOutputHelper output)
         for (var i = 0; i < lines; i++)
         {
             sb.Append($"\u001b[38;5;{i % 200}m\u001b[1m{i:D6}\u001b[0m \u001b[48;5;{(i * 7) % 200}m");
-            sb.Append(new string((char)('a' + i % 26), 150));
+            sb.Append((char)('a' + (i % 26)), 150);
             sb.Append("\u001b[0m\r\n");
         }
         return Encoding.UTF8.GetBytes(sb.ToString());

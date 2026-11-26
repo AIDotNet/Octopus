@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
 using Octopus.App.Activity;
+using Octopus.App.Bots;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
@@ -32,6 +33,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     private readonly ISettingsStore? _settings;
     private readonly IAgentAccountService? _accounts;
     private readonly DeviceSwitcherViewModel? _devices;
+    private readonly IBotService? _bots;
     /// <summary>The open group as the rail last showed it; null before the first build and when all are closed.</summary>
     private string? _shownExpanded;
     private bool _built;
@@ -48,7 +50,8 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         IAgentScanner? scanner = null,
         ISettingsStore? settings = null,
         IAgentAccountService? accounts = null,
-        DeviceSwitcherViewModel? devices = null)
+        DeviceSwitcherViewModel? devices = null,
+        IBotService? bots = null)
     {
         _icons = icons;
         _activity = activity;
@@ -57,6 +60,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _settings = settings;
         _accounts = accounts;
         _devices = devices;
+        _bots = bots;
         _projects = projects;
         _opener = opener;
         _dialogs = dialogs;
@@ -66,6 +70,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _accounts?.Changed += (_, _) => UiContext.Run(Rebuild);
         _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
         _scanner?.Changed += (_, _) => UiContext.Run(Rebuild);
+        _bots?.Changed += (_, _) => UiContext.Run(RefreshBotState);
         ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
         // The rail lives as long as the shell, like the activity service: no unsubscribe.
         _activity?.Changed += (_, itemId) =>
@@ -74,14 +79,64 @@ public sealed partial class ProjectRailViewModel : ObservableObject
             {
                 ShowWork(project);
             }
+            if (_bots is not null)
+            {
+                RefreshBotBadges();
+            }
         };
         Rebuild();
+        RefreshBotState();
     }
 
     /// <summary>Device switcher bound to the top circular badge on the rail (Option B).</summary>
     public DeviceSwitcherViewModel? Devices => _devices;
 
     public bool HasDeviceSwitcher => _devices is not null;
+
+    public bool HasBots => _bots is not null;
+
+    [ObservableProperty] public partial bool IsBotMode { get; private set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBotAttention), nameof(BotAttentionBadgeText), nameof(ShowBotWorking))]
+    public partial int BotAttentionCount { get; private set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowBotWorking))]
+    public partial bool IsAnyBotWorking { get; private set; }
+
+    public bool HasBotAttention => BotAttentionCount > 0;
+    public string BotAttentionBadgeText => BotAttentionCount > 99 ? "99+" : BotAttentionCount.ToString();
+    public bool ShowBotWorking => !HasBotAttention && IsAnyBotWorking;
+
+    [RelayCommand]
+    private void EnterBotMode() => _bots?.SetBotMode(true);
+
+    private void RefreshBotState()
+    {
+        if (_bots is null) return;
+        IsBotMode = _bots.IsBotMode;
+        RefreshBotBadges();
+        UpdateCurrentRings();
+    }
+
+    private void RefreshBotBadges()
+    {
+        if (_bots is null) return;
+        BotAttentionCount = _bots.TotalNeedsAttentionCount();
+        IsAnyBotWorking = _bots.HasWorkingBots();
+    }
+
+    private void UpdateCurrentRings()
+    {
+        var current = IsBotMode ? null : _projects.Current?.Id;
+        foreach (var chip in Chips)
+        {
+            chip.IsCurrent = chip.Id == current;
+        }
+        foreach (var group in Entries.OfType<ProjectGroupViewModel>())
+        {
+            group.RefreshCurrent();
+        }
+    }
 
     /// <summary>Every project's square on the currently selected device, in or out of a group.</summary>
     public ObservableCollection<ProjectChipViewModel> Chips { get; } = [];
@@ -111,15 +166,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         else if (e.Kind == ProjectChangeKind.CurrentProject)
         {
             // Another project was chosen: only the rings move. The squares and folders stay as they are.
-            var current = _projects.Current?.Id;
-            foreach (var chip in Chips)
-            {
-                chip.IsCurrent = chip.Id == current;
-            }
-            foreach (var group in Entries.OfType<ProjectGroupViewModel>())
-            {
-                group.RefreshCurrent();
-            }
+            UpdateCurrentRings();
         }
         else if (e.Kind == ProjectChangeKind.GroupExpanded)
         {
@@ -169,7 +216,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
 
     private void Rebuild()
     {
-        var current = _projects.Current?.Id;
+        var current = IsBotMode ? null : _projects.Current?.Id;
         var activeDeviceKey = _projects.ActiveDeviceKey;
         var choices = _projects.Groups.Select(g => new GroupChoice(g.Id, g.Name)).ToList();
         var members = _projects.Groups.ToDictionary(g => g.Id, _ => new List<ProjectChipViewModel>());
@@ -221,7 +268,11 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _built = true;
     }
 
-    private void Select(ProjectChipViewModel chip) => _projects.SetCurrent(chip.Id);
+    private void Select(ProjectChipViewModel chip)
+    {
+        _bots?.SetBotMode(false);
+        _projects.SetCurrent(chip.Id);
+    }
 
     private void Rename(ProjectChipViewModel chip)
     {

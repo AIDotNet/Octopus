@@ -82,6 +82,13 @@ internal static class Forwarder
             }
             return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
         });
-        return await Task.WhenAny(read, Task.Delay(ReadTimeout)) == read ? await read : "";
+        try
+        {
+            return await read.WaitAsync(ReadTimeout);
+        }
+        catch (TimeoutException)
+        {
+            return "";
+        }
     }
 }

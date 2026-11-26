@@ -11,6 +11,7 @@ public static class StorageServiceCollectionExtensions
         services.AddSingleton<IProjectStore, JsonProjectStore>();
         services.AddSingleton<ISettingsStore, JsonSettingsStore>();
         services.AddSingleton<IAccountStore, JsonAccountStore>();
+        services.AddSingleton<IBotStore, JsonBotStore>();
         return services;
     }
 }

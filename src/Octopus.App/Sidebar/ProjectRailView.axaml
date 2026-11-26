@@ -8,9 +8,9 @@
              x:Class="Octopus.App.Sidebar.ProjectRailView"
              x:DataType="vm:ProjectRailViewModel">
     <Grid Width="{DynamicResource OctopusRailWidth}" RowDefinitions="Auto,*,Auto" Background="{arc:ArcDesignTokenResource SurfaceMuted}">
-        <!-- Option B: Circular device switcher badge at the top of the rail, separated from square project chips by a fine divider. -->
-        <StackPanel IsVisible="{Binding HasDeviceSwitcher}" HorizontalAlignment="Center" Margin="0,6,0,2" Spacing="6">
-            <Grid Width="{DynamicResource OctopusProjectSlotSize}" Height="{DynamicResource OctopusProjectSlotSize}" HorizontalAlignment="Center">
+        <!-- Top section: Circular device switcher badge, followed by the rounded-square Bot entry, then a fine divider above projects. -->
+        <StackPanel HorizontalAlignment="Center" Margin="0,6,0,2" Spacing="6">
+            <Grid IsVisible="{Binding HasDeviceSwitcher}" Width="{DynamicResource OctopusProjectSlotSize}" Height="{DynamicResource OctopusProjectSlotSize}" HorizontalAlignment="Center">
                 <Border BorderThickness="1.5" BorderBrush="{arc:ArcDesignTokenResource Border}" CornerRadius="999" IsHitTestVisible="False" />
                 <Button x:Name="DeviceBadgeButton" Classes="device-chip"
                         Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}"
@@ -88,6 +88,48 @@
                                     Foreground="{arc:ArcDesignTokenResource Accent}" />
                 </Border>
             </Grid>
+
+            <!-- Default Bot entry directly below the Device badge -->
+            <Grid IsVisible="{Binding HasBots}" Width="{DynamicResource OctopusRailWidth}" Height="{DynamicResource OctopusProjectSlotSize}">
+                <!-- Left accent indicator bar when Bot mode is active -->
+                <Border Width="3" Height="20" CornerRadius="0,3,3,0"
+                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Background="{arc:ArcDesignTokenResource Accent}"
+                        IsVisible="{Binding IsBotMode}" IsHitTestVisible="False" />
+
+                <Grid Width="{DynamicResource OctopusProjectSlotSize}" Height="{DynamicResource OctopusProjectSlotSize}" HorizontalAlignment="Center">
+                    <Button x:Name="BotEntryButton" Classes="bot-rail-chip" Classes.active="{Binding IsBotMode}"
+                            Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}"
+                            Command="{Binding EnterBotModeCommand}"
+                            AutomationProperties.Name="{l:AppLangResource BotRailTooltip}"
+                            arc:Tooltip.Tip="{l:AppLangResource BotRailTooltip}" arc:Tooltip.Side="Right">
+                        <lucide:LucideIcon Kind="Bot" Size="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Button>
+
+                    <!-- Top-right: yellow count badge when any Bot needs user input -->
+                    <Border IsVisible="{Binding HasBotAttention}" IsHitTestVisible="False"
+                            MinWidth="16" Height="16" Padding="3,0" CornerRadius="8"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-1,-1,0"
+                            Background="{arc:ArcDesignTokenResource Warning}"
+                            BorderBrush="{arc:ArcDesignTokenResource SurfaceMuted}" BorderThickness="1.5">
+                        <TextBlock FontSize="9.5" FontWeight="Bold" Foreground="#1C1405"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Text="{Binding BotAttentionBadgeText}" />
+                    </Border>
+
+                    <!-- Bottom-right: spinner when a Bot is working and nothing waits on the user -->
+                    <Border IsVisible="{Binding ShowBotWorking}" IsHitTestVisible="False"
+                            Width="{DynamicResource OctopusStatusBadgeSize}" Height="{DynamicResource OctopusStatusBadgeSize}"
+                            CornerRadius="{DynamicResource OctopusStatusBadgeCorner}"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-1,-1"
+                            Background="{arc:ArcDesignTokenResource Background}"
+                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                        <arc:ArcSpinner Width="9" Height="9" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Foreground="{arc:ArcDesignTokenResource Accent}" />
+                    </Border>
+                </Grid>
+            </Grid>
+
             <Border Width="24" Height="1" Background="{arc:ArcDesignTokenResource Border}" HorizontalAlignment="Center" />
         </StackPanel>
 

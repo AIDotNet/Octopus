@@ -38,7 +38,7 @@ public sealed class SignalAttachPlannerTests : IDisposable
             _project,
             enabled));
 
-    private static JsonElement ReadJson(string path) => JsonDocument.Parse(File.ReadAllText(path)).RootElement;
+    private static JsonElement ReadJson(string path) => JsonElement.Parse(File.ReadAllText(path));
 
     // ---- When nothing is attached ----
 
@@ -361,7 +361,7 @@ public sealed class SignalAttachPlannerTests : IDisposable
         var attachment = Plan(Builtins.Get("opencode"), "1.19.3");
         Assert.Empty(attachment.Arguments);
 
-        var config = JsonDocument.Parse(attachment.Environment["OPENCODE_CONFIG_CONTENT"]).RootElement;
+        var config = JsonElement.Parse(attachment.Environment["OPENCODE_CONFIG_CONTENT"]);
         var url = Assert.Single(config.GetProperty("plugin").EnumerateArray()).GetString()!;
         Assert.StartsWith("file:///", url);
         var script = File.ReadAllText(new Uri(url).LocalPath);
@@ -379,7 +379,7 @@ public sealed class SignalAttachPlannerTests : IDisposable
         var mine = """{"model":"anthropic/x","plugin":["my-plugin"]}""";
         var attachment = Plan(Builtins.Get("opencode"), "1.19.3", new() { ["OPENCODE_CONFIG_CONTENT"] = mine });
 
-        var config = JsonDocument.Parse(attachment.Environment["OPENCODE_CONFIG_CONTENT"]).RootElement;
+        var config = JsonElement.Parse(attachment.Environment["OPENCODE_CONFIG_CONTENT"]);
         Assert.Equal("anthropic/x", config.GetProperty("model").GetString());
         var plugins = config.GetProperty("plugin").EnumerateArray().Select(p => p.GetString()).ToList();
         Assert.Equal("my-plugin", plugins[0]);
@@ -411,7 +411,7 @@ public sealed class SignalAttachPlannerTests : IDisposable
 
         var attachment = Plan(GrokWithOverlay(), "1.0.62", new() { ["GROK_HOME"] = grokHome });
 
-        var overlay = JsonDocument.Parse(attachment.Environment["GROK_CONFIG"]).RootElement;
+        var overlay = JsonElement.Parse(attachment.Environment["GROK_CONFIG"]);
         var statusLine = overlay.GetProperty("ui").GetProperty("status_line");
         Assert.Equal("command", statusLine.GetProperty("type").GetString());
         Assert.Equal($"{Forwarder} statusline --agent grok --channel statusline --min-interval 2000", statusLine.GetProperty("command").GetString());
@@ -427,7 +427,7 @@ public sealed class SignalAttachPlannerTests : IDisposable
     public void Grok_overlay_merges_with_a_users_own_overlay()
     {
         var attachment = Plan(GrokWithOverlay(), "1.0.62", new() { ["GROK_CONFIG"] = """{"models":{"default_reasoning_effort":"high"}}""" });
-        var overlay = JsonDocument.Parse(attachment.Environment["GROK_CONFIG"]).RootElement;
+        var overlay = JsonElement.Parse(attachment.Environment["GROK_CONFIG"]);
         Assert.Equal("high", overlay.GetProperty("models").GetProperty("default_reasoning_effort").GetString());
         Assert.True(overlay.TryGetProperty("ui", out _));
         Assert.False(attachment.Environment.ContainsKey(SignalAttachPlanner.ChainVariable));

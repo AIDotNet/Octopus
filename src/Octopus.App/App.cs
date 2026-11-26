@@ -37,6 +37,8 @@ public class App : Application
         var projects = AppHost.Get<IProjectService>();
         Task.Run(projects.LoadAsync).GetAwaiter().GetResult();
         StartupTrace.Log("app:initialize:projects-loaded", projects.Current?.Name);
+        AppHost.Get<Bots.IBotService>().Load();
+        StartupTrace.Log("app:initialize:bots-loaded");
         _ = StartAgentScanAsync();
         // Ends the ssh processes that a run that did not end properly left, and starts the automatic tunnels of the project.
         AppHost.Get<Octopus.App.Services.ITunnelService>().Initialize();

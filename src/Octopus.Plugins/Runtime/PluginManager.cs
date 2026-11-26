@@ -181,7 +181,14 @@ public sealed class PluginManager : IPluginHostOwner, IAsyncDisposable, IDisposa
             await h.DeactivateAsync(PluginHostState.Stopped).ConfigureAwait(false);
             await h.DisposeAsync().ConfigureAwait(false);
         }));
-        await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(3))).ConfigureAwait(false);
+        try
+        {
+            await all.WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // Bounded shutdown: stop waiting after 3 seconds.
+        }
     }
 
     // ---------------------------------------------------------------- activation

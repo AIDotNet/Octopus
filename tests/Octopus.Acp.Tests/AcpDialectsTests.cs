@@ -86,8 +86,8 @@ public class AcpDialectsTests
         var ocUpdate = new AcpToolCallUpdate
         {
             ToolCallId = "t1",
-            RawInput = JsonDocument.Parse("""{ "command": "dotnet test" }""").RootElement,
-            RawOutput = JsonDocument.Parse("""{ "output": "Passed 10", "metadata": { "exit": 0 } }""").RootElement,
+            RawInput = JsonElement.Parse("""{ "command": "dotnet test" }"""),
+            RawOutput = JsonElement.Parse("""{ "output": "Passed 10", "metadata": { "exit": 0 } }"""),
         };
         opencode.NormalizeToolUpdate(ocUpdate);
         Assert.Equal("dotnet test", ocUpdate.Command);
@@ -100,7 +100,7 @@ public class AcpDialectsTests
         var qwenUpdate = new AcpToolCallUpdate
         {
             ToolCallId = "tq",
-            RawOutput = JsonDocument.Parse("""{ "type": "shell_result", "output": "ok", "exitCode": 0 }""").RootElement,
+            RawOutput = JsonElement.Parse("""{ "type": "shell_result", "output": "ok", "exitCode": 0 }"""),
         };
         qwen.NormalizeToolUpdate(qwenUpdate);
         Assert.Equal("ok", qwenUpdate.Stdout);
@@ -110,7 +110,7 @@ public class AcpDialectsTests
         var clineUpdate = new AcpToolCallUpdate
         {
             ToolCallId = "t2",
-            RawOutput = JsonDocument.Parse("""[{ "result": "[Command exited with code 0]\nok" }]""").RootElement,
+            RawOutput = JsonElement.Parse("""[{ "result": "[Command exited with code 0]\nok" }]"""),
         };
         cline.NormalizeToolUpdate(clineUpdate);
         Assert.Equal("ok", clineUpdate.Stdout);

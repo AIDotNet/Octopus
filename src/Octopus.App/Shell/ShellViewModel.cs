@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Octopus.App.Activity;
 using Octopus.App.Appearance;
+using Octopus.App.Bots;
 using Octopus.App.Common;
 using Octopus.App.Explorer.Subagent;
 using Octopus.App.Launcher;
@@ -33,6 +34,7 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
     private readonly ISettingsNavigator _navigator;
     private readonly IProjectService _projects;
     private readonly ISubagentService? _subagents;
+    private readonly IBotService? _bots;
 
     public ShellViewModel(
         ISettingsStore settings,
@@ -52,7 +54,10 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         Octopus.App.Updates.UpdateCardViewModel updateCard,
         Octopus.App.StarPrompt.StarPromptViewModel starPrompt,
         Octopus.App.Plugins.PluginPanels? pluginPanels = null,
-        ISubagentService? subagents = null)
+        ISubagentService? subagents = null,
+        IBotService? bots = null,
+        BotPanelViewModel? botPanel = null,
+        BotRightPanelViewModel? botRightPanel = null)
     {
         _settings = settings;
         _theme = theme;
@@ -62,6 +67,7 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         _navigator = navigator;
         _projects = projects;
         _subagents = subagents;
+        _bots = bots;
         _theme.DensityChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(RailWidth));
@@ -74,6 +80,17 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
                 ReadProject();
             }
         };
+        if (_bots is not null)
+        {
+            _bots.Changed += (_, e) =>
+            {
+                if (e.Kind == BotChangeKind.Mode)
+                {
+                    UiContext.Run(() => IsBotMode = _bots.IsBotMode);
+                }
+            };
+            IsBotMode = _bots.IsBotMode;
+        }
         ReadProject();
         IsRightPanelOpen = settings.Current.RightPanel.IsOpen;
         RightPanelWidth = Math.Clamp(settings.Current.RightPanel.Width, MinRightPanelWidth, MaxRightPanelWidth);
@@ -87,6 +104,8 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         Account = account;
         Rail = rail;
         Panel = panel;
+        BotPanel = botPanel;
+        BotRightPanel = botRightPanel;
         Workspace = workspace;
         Launcher = launcher;
         UpdateCard = updateCard;
@@ -104,12 +123,16 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
     public Account.AccountViewModel Account { get; }
     public ProjectRailViewModel Rail { get; }
     public ProjectPanelViewModel Panel { get; }
+    public BotPanelViewModel? BotPanel { get; }
+    public BotRightPanelViewModel? BotRightPanel { get; }
     public WorkspaceViewModel Workspace { get; }
     public LauncherViewModel Launcher { get; }
     /// <summary>The update card at the bottom right (design/10-自动更新.md §10).</summary>
     public Octopus.App.Updates.UpdateCardViewModel UpdateCard { get; }
     /// <summary>The non-intrusive GitHub Star floating pill at the bottom right (Scheme C).</summary>
     public Octopus.App.StarPrompt.StarPromptViewModel StarPrompt { get; }
+
+    [ObservableProperty] public partial bool IsBotMode { get; private set; }
 
     /// <summary>Room kept free at the top left for the system's window buttons.</summary>
     public double LeftInset { get; }
@@ -292,6 +315,10 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         {
             case AppCommand.ToggleSidebar: ToggleSidebar(); break;
             case AppCommand.ToggleRightPanel: ToggleRightPanel(); break;
+            case AppCommand.NewBot:
+                _bots?.SetBotMode(true);
+                if (BotPanel is not null) _ = BotPanel.NewBotAsync();
+                break;
             case AppCommand.NewTerminal: _opener.OpenTerminal(); break;
             case AppCommand.NewDefaultAgent: _opener.OpenDefaultAgent(); break;
             case AppCommand.CloseTab: _workspaceCommands.CloseActiveTab(); break;

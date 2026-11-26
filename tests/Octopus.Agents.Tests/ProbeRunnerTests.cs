@@ -382,7 +382,7 @@ public sealed class ProbeRunnerTests : IDisposable
     private static ProbeRpcRequest Request(string method, string? paramsJson = null, bool result = false) => new()
     {
         Method = method,
-        Params = paramsJson is null ? null : JsonDocument.Parse(paramsJson).RootElement.Clone(),
+        Params = paramsJson is null ? null : JsonElement.Parse(paramsJson),
         Result = result,
     };
 
@@ -402,7 +402,7 @@ public sealed class ProbeRunnerTests : IDisposable
         Assert.DoesNotContain("example.com", result.Json);
         Assert.Equal(SignalAccounts.KeyOfDirectory("/accounts/codex"), result.Account);
 
-        var requests = File.ReadAllLines(Log("requests")).Select(l => JsonDocument.Parse(l).RootElement).ToList();
+        var requests = File.ReadAllLines(Log("requests")).Select(l => JsonElement.Parse(l)).ToList();
         Assert.Equal(2, requests.Count);
         Assert.Equal("2.0", requests[0].GetProperty("jsonrpc").GetString());
         Assert.Equal(1, requests[0].GetProperty("id").GetInt32());

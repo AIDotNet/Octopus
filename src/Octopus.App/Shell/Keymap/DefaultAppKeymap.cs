@@ -10,6 +10,7 @@ public sealed class DefaultAppKeymap : AppKeymapBase
         const KeyModifiers ctrl = KeyModifiers.Control;
         Add(AppCommand.ToggleSidebar, Key.B, ctrl);
         Add(AppCommand.ToggleRightPanel, Key.B, ctrl | KeyModifiers.Alt);
+        Add(AppCommand.NewBot, Key.B, ctrl | KeyModifiers.Shift);
         AddHint(AppCommand.FindInTerminal, Key.F, ctrl | KeyModifiers.Shift);
         Add(AppCommand.NewTerminal, Key.T, ctrl | KeyModifiers.Shift);
         Add(AppCommand.NewDefaultAgent, Key.T, ctrl | KeyModifiers.Alt);

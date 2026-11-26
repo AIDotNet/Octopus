@@ -44,12 +44,12 @@ public sealed class SignalHookCleanupTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(AgyHooksPath)!);
         File.WriteAllText(AgyHooksPath, """{"lint":{"PostToolUse":[{"matcher":"run_command","hooks":[{"command":"./lint.sh"}]}]}}""");
         AttachAgy();
-        Assert.True(JsonDocument.Parse(File.ReadAllText(AgyHooksPath)).RootElement.TryGetProperty("octopus", out _));
+        Assert.True(JsonElement.Parse(File.ReadAllText(AgyHooksPath)).TryGetProperty("octopus", out _));
 
         Assert.True(SignalHookCleanup.RemoveAgyHooks(_home));
 
         Assert.True(File.Exists(AgyHooksPath));
-        var root = JsonDocument.Parse(File.ReadAllText(AgyHooksPath)).RootElement;
+        var root = JsonElement.Parse(File.ReadAllText(AgyHooksPath));
         Assert.False(root.TryGetProperty("octopus", out _));
         Assert.Equal("./lint.sh", root.GetProperty("lint").GetProperty("PostToolUse")[0].GetProperty("hooks")[0].GetProperty("command").GetString());
     }
@@ -86,7 +86,7 @@ public sealed class SignalHookCleanupTests : IDisposable
         File.WriteAllText(AgyHooksPath, "\uFEFF{\n  // user comment\n  \"octopus\": { \"Stop\": [] },\n  \"custom\": { \"Stop\": [] },\n}\n");
 
         Assert.True(SignalHookCleanup.RemoveAgyHooks(_home));
-        var root = JsonDocument.Parse(File.ReadAllText(AgyHooksPath)).RootElement;
+        var root = JsonElement.Parse(File.ReadAllText(AgyHooksPath));
         Assert.False(root.TryGetProperty("octopus", out _));
         Assert.True(root.TryGetProperty("custom", out _));
     }

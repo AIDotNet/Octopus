@@ -50,7 +50,7 @@ public sealed class UninstallHookCleanupTests : IDisposable
         Assert.True(cleaned.AgyHooksRemoved);
         Assert.True(cleaned.SignalAttachCacheRemoved);
         Assert.False(Directory.Exists(attachDir));
-        var hooks = JsonDocument.Parse(File.ReadAllText(hooksPath)).RootElement;
+        var hooks = JsonElement.Parse(File.ReadAllText(hooksPath));
         Assert.False(hooks.TryGetProperty("octopus", out _));
         Assert.True(hooks.TryGetProperty("keep", out _));
     }
@@ -124,7 +124,7 @@ public sealed class UninstallHookCleanupTests : IDisposable
 
         Assert.Equal(0, process.ExitCode);
         Assert.False(Directory.Exists(attachDir));
-        var hooks = JsonDocument.Parse(File.ReadAllText(hooksPath)).RootElement;
+        var hooks = JsonElement.Parse(File.ReadAllText(hooksPath));
         Assert.False(hooks.TryGetProperty("octopus", out _));
         Assert.True(hooks.TryGetProperty("keep", out _));
     }

@@ -1445,5 +1445,77 @@
     <unit id="AgentGuiStopReasonMaxTurnRequests"><segment><source>Stopped: reached maximum tool requests for this turn.</source><target state="translated">已停止：达到单轮最大工具调用次数限制。</target></segment></unit>
     <unit id="AgentGuiStopReasonRefusal"><segment><source>Stopped: the agent declined to complete this request.</source><target state="translated">已停止：智能体拒绝继续处理该请求。</target></segment></unit>
     <unit id="AgentGuiCompactionNotice"><segment><source>Context compacted</source><target state="translated">上下文已压缩</target></segment></unit>
+    <unit id="BotsTitle"><segment><source>Bots</source><target state="translated">Bots</target></segment></unit>
+    <unit id="BotDefaultName"><segment><source>New Bot</source><target state="translated">新 Bot</target></segment></unit>
+    <unit id="BotRailTooltip"><segment><source>Bots</source><target state="translated">Bots</target></segment></unit>
+    <unit id="BotNewButton"><segment><source>New Bot</source><target state="translated">新建 Bot</target></segment></unit>
+    <unit id="BotSearchPlaceholder"><segment><source>Search bots or chats</source><target state="translated">搜索 Bot 或会话</target></segment></unit>
+    <unit id="BotNewChat"><segment><source>New chat</source><target state="translated">新会话</target></segment></unit>
+    <unit id="BotNewChatButton"><segment><source>New chat</source><target state="translated">新建聊天</target></segment></unit>
+    <unit id="BotHomeChatSubtitle"><segment><source>Say hello to {0}</source><target state="translated">向 {0} 打个招呼</target></segment></unit>
+    <unit id="BotClosedAtPrefix"><segment><source>Closed on {0}</source><target state="translated">已于 {0} 关闭</target></segment></unit>
+    <unit id="BotPausedTag"><segment><source>Paused</source><target state="translated">已暂停</target></segment></unit>
+    <unit id="BotStatusIdle"><segment><source>Idle</source><target state="translated">空闲</target></segment></unit>
+    <unit id="BotStatusWorking"><segment><source>Working</source><target state="translated">正在工作</target></segment></unit>
+    <unit id="BotStatusPaused"><segment><source>Paused</source><target state="translated">已暂停</target></segment></unit>
+    <unit id="BotEmptyTitle"><segment><source>Create your first Bot</source><target state="translated">创建你的第一个 Bot</target></segment></unit>
+    <unit id="BotEmptyDescription"><segment><source>A Bot is a long-lived agent with its own home folder, SOUL, memory, and connectors.</source><target state="translated">Bot 是一个长期在线的智能体，拥有独立的主目录、职责定义、记忆和连接器。</target></segment></unit>
+    <unit id="BotEmptyTemplatesHeading"><segment><source>Start from a template</source><target state="translated">从模板开始</target></segment></unit>
+    <unit id="BotTemplateBlank"><segment><source>Blank</source><target state="translated">空白</target></segment></unit>
+    <unit id="BotTemplatePr"><segment><source>PR Reviewer</source><target state="translated">PR 审查员</target></segment></unit>
+    <unit id="BotTemplateCi"><segment><source>On-call Watcher</source><target state="translated">巡检值班</target></segment></unit>
+    <unit id="BotTemplateDaily"><segment><source>Daily Digest</source><target state="translated">日报助手</target></segment></unit>
+    <unit id="BotDialogTitle"><segment><source>New Bot</source><target state="translated">新建 Bot</target></segment></unit>
+    <unit id="BotDialogDescription"><segment><source>A Bot is a long-lived agent with its own name, memory, and responsibilities.</source><target state="translated">Bot 是一个长期在线的智能体，有自己的名字、记忆和职责。</target></segment></unit>
+    <unit id="BotDialogNameLabel"><segment><source>Name</source><target state="translated">名字</target></segment></unit>
+    <unit id="BotDialogNamePlaceholder"><segment><source>e.g. Watermelon, PR Reviewer</source><target state="translated">例如：西瓜、PR 审查员</target></segment></unit>
+    <unit id="BotDialogAgentLabel"><segment><source>Agent</source><target state="translated">用哪个智能体</target></segment></unit>
+    <unit id="BotDialogTemplateLabel"><segment><source>Start from template</source><target state="translated">从模板开始</target></segment></unit>
+    <unit id="BotDialogSoulLabel"><segment><source>Responsibilities (written to SOUL.md, optional)</source><target state="translated">它负责什么（写进 SOUL.md，可留空）</target></segment></unit>
+    <unit id="BotDialogSoulPlaceholder"><segment><source>Describe what it watches, does, and how it reports back</source><target state="translated">一两句话说清楚它盯什么、做什么、怎么向你汇报</target></segment></unit>
+    <unit id="BotDialogSafetyNote"><segment><source>Read-only by default: asks before making external changes</source><target state="translated">默认只读：没得到你同意前不改任何东西</target></segment></unit>
+    <unit id="BotDialogCreate"><segment><source>Create</source><target state="translated">创建</target></segment></unit>
+    <unit id="BotMenuNewChat"><segment><source>New chat</source><target state="translated">新会话</target></segment></unit>
+    <unit id="BotMenuEditSoul"><segment><source>Edit SOUL.md</source><target state="translated">编辑 SOUL.md</target></segment></unit>
+    <unit id="BotMenuEditMemory"><segment><source>Edit MEMORY.md</source><target state="translated">编辑 MEMORY.md</target></segment></unit>
+    <unit id="BotMenuRevealFolder"><segment><source>Reveal home folder</source><target state="translated">打开主目录</target></segment></unit>
+    <unit id="BotMenuPause"><segment><source>Pause</source><target state="translated">暂停</target></segment></unit>
+    <unit id="BotMenuResume"><segment><source>Resume</source><target state="translated">恢复</target></segment></unit>
+    <unit id="BotMenuRename"><segment><source>Rename</source><target state="translated">重命名</target></segment></unit>
+    <unit id="BotMenuDelete"><segment><source>Delete Bot</source><target state="translated">删除 Bot</target></segment></unit>
+    <unit id="BotDeleteConfirmTitle"><segment><source>Delete Bot "{0}"?</source><target state="translated">删除 Bot“{0}”？</target></segment></unit>
+    <unit id="BotDeleteConfirmBody"><segment><source>This removes the Bot from Octopus. Files in its home folder stay on disk.</source><target state="translated">这会从 Octopus 移除该 Bot，其主目录中的文件会保留在磁盘上。</target></segment></unit>
+    <unit id="BotRenameTitle"><segment><source>Rename Bot</source><target state="translated">重命名 Bot</target></segment></unit>
+    <unit id="BotChatRenameTitle"><segment><source>Rename chat</source><target state="translated">重命名会话</target></segment></unit>
+    <unit id="BotChatClose"><segment><source>Close chat</source><target state="translated">关闭会话</target></segment></unit>
+    <unit id="BotChatReopen"><segment><source>Reopen chat</source><target state="translated">重新打开</target></segment></unit>
+    <unit id="BotChatDelete"><segment><source>Delete chat</source><target state="translated">删除会话</target></segment></unit>
+    <unit id="BotRightTabHome"><segment><source>Home</source><target state="translated">Home</target></segment></unit>
+    <unit id="BotRightTabConnectors"><segment><source>Connectors</source><target state="translated">连接器</target></segment></unit>
+    <unit id="BotRightTabChats"><segment><source>Chats</source><target state="translated">聊天</target></segment></unit>
+    <unit id="BotRightTabFiles"><segment><source>Files</source><target state="translated">文件</target></segment></unit>
+    <unit id="BotRightEmptyTitle"><segment><source>Select a Bot</source><target state="translated">选择一个 Bot</target></segment></unit>
+    <unit id="BotRightEmptyDescription"><segment><source>Its overview, connectors, chats, and home files appear here.</source><target state="translated">它的概览、连接器、聊天和主目录文件会显示在这里。</target></segment></unit>
+    <unit id="BotHomeSoulHeading"><segment><source>Responsibilities (SOUL.md)</source><target state="translated">职责（SOUL.md）</target></segment></unit>
+    <unit id="BotHomeSoulEmpty"><segment><source>No responsibilities written yet. Edit SOUL.md to define what this Bot owns.</source><target state="translated">还没写职责。点击编辑 SOUL.md 来定义它负责的事情。</target></segment></unit>
+    <unit id="BotHomeItemsHeading"><segment><source>Items</source><target state="translated">条目</target></segment></unit>
+    <unit id="BotHomeItemsEmpty"><segment><source>Nothing tracked yet. Work items this Bot picks up will appear here.</source><target state="translated">暂无条目。它接手的任务和需要你确认的事项会显示在这里。</target></segment></unit>
+    <unit id="BotHomeMemoryHeading"><segment><source>Memory (MEMORY.md)</source><target state="translated">记忆（MEMORY.md）</target></segment></unit>
+    <unit id="BotHomeMemoryEmpty"><segment><source>No memory notes yet. Durable facts and preferences live in MEMORY.md.</source><target state="translated">还没有记忆。它在会话里学到的长期事实和偏好会逐行记在 MEMORY.md 里。</target></segment></unit>
+    <unit id="BotConnectorsEmptyDescription"><segment><source>Let others reach {0} via Slack, GitHub, and Linear, and let it work in your Google and other apps.</source><target state="translated">让他人通过 Slack、GitHub 和 Linear 联系 {0}，并让它在你的 Google 和其他应用中工作。</target></segment></unit>
+    <unit id="BotConnectorsAddButton"><segment><source>Add connector</source><target state="translated">添加连接器</target></segment></unit>
+    <unit id="BotConnectorConnected"><segment><source>Connected</source><target state="translated">已连接</target></segment></unit>
+    <unit id="BotConnectorRemove"><segment><source>Remove</source><target state="translated">移除</target></segment></unit>
+    <unit id="BotConnectorCatalogTitle"><segment><source>Add to {0}</source><target state="translated">添加到 {0}</target></segment></unit>
+    <unit id="BotConnectorCatalogSearch"><segment><source>Search apps</source><target state="translated">搜索应用</target></segment></unit>
+    <unit id="BotConnectorCatalogAdd"><segment><source>Add</source><target state="translated">添加</target></segment></unit>
+    <unit id="BotConnectorCatalogAdded"><segment><source>Added</source><target state="translated">已添加</target></segment></unit>
+    <unit id="BotConnectorCatalogAddByUrl"><segment><source>Add by URL</source><target state="translated">通过 URL 添加</target></segment></unit>
+    <unit id="BotConnectorUrlNamePlaceholder"><segment><source>Connector name (optional)</source><target state="translated">连接器名称（可选）</target></segment></unit>
+    <unit id="BotConnectorUrlPlaceholder"><segment><source>https://... (MCP server or Webhook URL)</source><target state="translated">https://...（MCP 服务或 Webhook 地址）</target></segment></unit>
+    <unit id="BotConnectorUrlConfirm"><segment><source>Add URL</source><target state="translated">添加地址</target></segment></unit>
+    <unit id="BotChatsSearchPlaceholder"><segment><source>Search chats and workers</source><target state="translated">搜索聊天和工作者</target></segment></unit>
+    <unit id="BotChatsEmpty"><segment><source>No matching chats</source><target state="translated">没有匹配的聊天</target></segment></unit>
+    <unit id="BotWorkspaceEmptyHint"><segment><source>Create a Bot in the left panel to start chatting.</source><target state="translated">在左侧面板新建一个 Bot，它的会话会在这里打开。</target></segment></unit>
   </file>
 </xliff>

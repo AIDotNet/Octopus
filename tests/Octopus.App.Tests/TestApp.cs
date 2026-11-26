@@ -46,13 +46,15 @@ public static class TestApp
             services.AddSingleton(p => (RecordingProjectStore)p.GetRequiredService<IProjectStore>());
             services.Replace(ServiceDescriptor.Singleton<ISettingsStore, InMemorySettingsStore>());
             services.Replace(ServiceDescriptor.Singleton<IAccountStore, InMemoryAccountStore>());
+            services.Replace(ServiceDescriptor.Singleton<IBotStore, InMemoryBotStore>());
             services.Replace(ServiceDescriptor.Singleton<IAppPaths>(_ => new TempAppPaths()));
             // Tests never touch the real keychain.
             services.Replace(ServiceDescriptor.Singleton<ISecretStore, MemorySecretStore>());
             // Plugins' agent data scopes (~/.claude, ~/.codex…) resolve under the temporary folder, never the real home.
             services.Replace(ServiceDescriptor.Singleton(p => new Octopus.Plugins.Security.UserHome(((TempAppPaths)p.GetRequiredService<IAppPaths>()).Home)));
-            // Managed git worktrees (~/.octopus/workspaces) resolve under the temporary folder in tests, never the real home.
+            // Managed git worktrees (~/.octopus/workspaces) and Bot homes (~/.octopus/bots) resolve under the temporary folder in tests, never the real home.
             services.Replace(ServiceDescriptor.Singleton(p => new Octopus.App.Services.Workspaces.WorkspaceRootOptions(((TempAppPaths)p.GetRequiredService<IAppPaths>()).Home)));
+            services.Replace(ServiceDescriptor.Singleton(p => new Octopus.App.Bots.BotRootOptions(((TempAppPaths)p.GetRequiredService<IAppPaths>()).Home)));
             // Scheduled automatic workspace cleanup stays off by default in tests unless explicitly started.
             services.Replace(ServiceDescriptor.Singleton(new Octopus.App.Services.Workspaces.WorkspaceCleanupOptions { AutoStart = false }));
             // Star prompt background timer stays off by default in tests unless explicitly configured.

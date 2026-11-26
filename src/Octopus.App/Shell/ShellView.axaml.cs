@@ -88,6 +88,10 @@ public partial class ShellView : UserControl
         {
             SyncRight();
         }
+        if (e.PropertyName == nameof(ShellViewModel.IsBotMode))
+        {
+            SyncRightPanelActive();
+        }
         if (e.PropertyName is nameof(ShellViewModel.CurrentProjectPath) or nameof(ShellViewModel.CurrentProjectRootPath) or nameof(ShellViewModel.CurrentWorkspaceBranch)
             or nameof(ShellViewModel.CurrentProjectName) or nameof(ShellViewModel.CurrentProjectSshHost) or nameof(ShellViewModel.CurrentProjectRemoteHost))
         {
@@ -192,9 +196,10 @@ public partial class ShellView : UserControl
             return;
         }
         // The panel keeps the open width, pinned to the clip's right edge: it slides in from the window's edge.
-        RightPanel.Width = _model!.RightPanelWidth;
-        RightPanel.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right;
-        RightPanel.IsVisible = true;
+        RightPanelHost.Width = _model!.RightPanelWidth;
+        RightPanelHost.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right;
+        RightPanelHost.IsVisible = true;
+        SyncRightPanelActive();
         RightSplitter.IsVisible = false;
         var column = Main.ColumnDefinitions[4];
         column.MinWidth = 0;
@@ -208,11 +213,12 @@ public partial class ShellView : UserControl
 
     private void OnRightArrived()
     {
-        RightPanel.Width = double.NaN;
-        RightPanel.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
+        RightPanelHost.Width = double.NaN;
+        RightPanelHost.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         var open = _rightOpen;
         var column = Main.ColumnDefinitions[4];
-        RightPanel.IsVisible = open;
+        RightPanelHost.IsVisible = open;
+        SyncRightPanelActive();
         RightSplitter.IsVisible = open;
         // The limits apply only while it is open: a closed panel is zero wide.
         column.MinWidth = open ? ShellViewModel.MinRightPanelWidth : 0;
@@ -221,6 +227,12 @@ public partial class ShellView : UserControl
         Toolbar.IsHitTestVisible = true;
         ThawWorkspace();
         UpdateInsets();
+    }
+
+    private void SyncRightPanelActive()
+    {
+        var open = _rightOpen || _right.IsSliding;
+        RightPanel.IsVisible = open && !(_model?.IsBotMode ?? false);
     }
 
     /// <summary>
@@ -275,7 +287,9 @@ public partial class ShellView : UserControl
             WorkspaceHost.RightInset = Toolbar.IsVisible ? Toolbar.Bounds.Width + Toolbar.Margin.Right : 0;
         }
         // The panel's top row stops where the corner switch (with the caption buttons, where there are any) begins.
-        RightPanel.TrailingInset = TopRight.Bounds.Width + 6;
+        var trailing = TopRight.Bounds.Width + 6;
+        RightPanel.TrailingInset = trailing;
+        BotRightPanel.TrailingInset = trailing;
     }
 
     /// <summary>

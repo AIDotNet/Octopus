@@ -550,6 +550,61 @@ public sealed class DialogService(
             return summary;
         });
 
+    public Task<Octopus.App.Bots.NewBotRequest?> AskNewBotAsync(string? initialTemplateId = null) =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return null;
+            }
+            var catalog = Composition.AppHost.Get<Octopus.Agents.IAgentCatalog>();
+            var scanner = Composition.AppHost.Get<Octopus.Agents.IAgentScanner>();
+            var settings = Composition.AppHost.Get<Octopus.Storage.ISettingsStore>();
+            var model = new Octopus.App.Bots.NewBotDialogViewModel(catalog, scanner, settings, initialTemplateId);
+            var view = new Octopus.App.Bots.NewBotDialogView(model);
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Medium,
+                Title = AppLangResources.Get(AppLangResourceKind.BotDialogTitle),
+                Description = AppLangResources.Get(AppLangResourceKind.BotDialogDescription),
+                Content = view,
+                Actions = Dialog.BuildActions(
+                [
+                    new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), false),
+                    new DialogAction(AppLangResources.Get(AppLangResourceKind.BotDialogCreate), true, ButtonVariant.Primary),
+                ]),
+            };
+            var result = await dialog.ShowAsync(windows.Window);
+            return result is true ? model.BuildRequest() : null;
+        });
+
+    public Task ShowConnectorCatalogAsync(Octopus.Core.Bots.BotDefinition bot, Octopus.App.Bots.IBotService bots) =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return;
+            }
+            var model = new Octopus.App.Bots.ConnectorCatalogViewModel(bot, bots);
+            var view = new Octopus.App.Bots.ConnectorCatalogView(model);
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Large,
+                Title = model.DialogTitle,
+                Description = "",
+                Content = view,
+                Actions = Dialog.BuildActions(
+                [
+                    new DialogAction(AppLangResources.Get(AppLangResourceKind.UpdateClose), true, ButtonVariant.Secondary),
+                ]),
+            };
+            dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthLG)] = 740.0;
+            await dialog.ShowAsync(windows.Window);
+        });
+
     private static Task<T> OnUiAsync<T>(Func<Task<T>> action) =>
+        Dispatcher.UIThread.CheckAccess() ? action() : Dispatcher.UIThread.InvokeAsync(action);
+
+    private static Task OnUiAsync(Func<Task> action) =>
         Dispatcher.UIThread.CheckAccess() ? action() : Dispatcher.UIThread.InvokeAsync(action);
 }

@@ -4,6 +4,7 @@
              xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:explorer="using:Octopus.App.Explorer"
+             xmlns:bots="using:Octopus.App.Bots"
              xmlns:launcher="using:Octopus.App.Launcher"
              xmlns:sidebar="using:Octopus.App.Sidebar"
              xmlns:workspace="using:Octopus.App.Workspace"
@@ -47,7 +48,12 @@
                     <Border BorderThickness="0,0,1,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}">
                         <sidebar:ProjectRailView DataContext="{Binding Rail}" />
                     </Border>
-                    <sidebar:ProjectPanelView Grid.Column="1" DataContext="{Binding Panel}" />
+                    <Panel Grid.Column="1" IsVisible="{Binding !IsBotMode}">
+                        <sidebar:ProjectPanelView DataContext="{Binding Panel}" />
+                    </Panel>
+                    <Panel Grid.Column="1" IsVisible="{Binding IsBotMode}">
+                        <bots:BotPanelView x:Name="BotPanel" DataContext="{Binding BotPanel}" />
+                    </Panel>
                 </Grid>
             </Grid>
             </Border>
@@ -95,9 +101,16 @@
             <GridSplitter x:Name="RightSplitter" Grid.Column="3" Width="{DynamicResource OctopusSplitterWidth}" IsVisible="False"
                           Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                           DragCompleted="OnRightSplitterDragCompleted" />
-            <!-- The panel is its own data context: the shell sets its visibility and project from code (ShellView.axaml.cs). -->
+            <!-- The right panel switches between Project Explorer and the dedicated Bot right panel. -->
             <Border x:Name="RightClip" Grid.Column="4" ClipToBounds="True">
-                <explorer:ExplorerPanelView x:Name="RightPanel" IsVisible="False" />
+                <Grid x:Name="RightPanelHost" IsVisible="False">
+                    <Panel IsVisible="{Binding !IsBotMode}">
+                        <explorer:ExplorerPanelView x:Name="RightPanel" />
+                    </Panel>
+                    <Panel IsVisible="{Binding IsBotMode}">
+                        <bots:BotRightPanelView x:Name="BotRightPanel" DataContext="{Binding BotRightPanel}" />
+                    </Panel>
+                </Grid>
             </Border>
         </Grid>
 

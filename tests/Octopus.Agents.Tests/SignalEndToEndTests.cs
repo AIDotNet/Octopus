@@ -111,7 +111,7 @@ public sealed class SignalEndToEndTests : IDisposable
         var env = AgentEnvironment(attachment);
 
         // A hook, from the generated plugin.
-        var hooks = JsonDocument.Parse(File.ReadAllText(Path.Combine(attachment.Arguments[3], "hooks", "hooks.json"))).RootElement;
+        var hooks = JsonElement.Parse(File.ReadAllText(Path.Combine(attachment.Arguments[3], "hooks", "hooks.json")));
         var stopCommand = hooks.GetProperty("hooks").GetProperty("Stop")[0].GetProperty("hooks")[0].GetProperty("command").GetString()!;
         var (stopSubscription, stop) = Next(_hub, "claude", "stop");
         using (stopSubscription)
@@ -130,7 +130,7 @@ public sealed class SignalEndToEndTests : IDisposable
         }
 
         // The status line, from the generated settings, chained to the user's own.
-        var statusLine = JsonDocument.Parse(File.ReadAllText(attachment.Arguments[1])).RootElement.GetProperty("statusLine").GetProperty("command").GetString()!;
+        var statusLine = JsonElement.Parse(File.ReadAllText(attachment.Arguments[1])).GetProperty("statusLine").GetProperty("command").GetString()!;
         var (lineSubscription, line) = Next(_hub, "claude", "statusline");
         using (lineSubscription)
         {
@@ -196,7 +196,7 @@ public sealed class SignalEndToEndTests : IDisposable
 
         var planner = new SignalAttachPlanner(new TestPaths(_root.Path));
         var attachment = planner.Plan(new SignalAttachRequest(Builtins.Get("opencode"), "item-oc", "/unused/octopus-signal", _hub.Endpoint, "1.19.3"));
-        var config = JsonDocument.Parse(attachment.Environment["OPENCODE_CONFIG_CONTENT"]).RootElement;
+        var config = JsonElement.Parse(attachment.Environment["OPENCODE_CONFIG_CONTENT"]);
         var pluginUrl = config.GetProperty("plugin")[0].GetString()!;
 
         // What OpenCode does with a plugin: import it, call the export, hand events to its `event` hook.
