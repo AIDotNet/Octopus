@@ -362,16 +362,26 @@ public sealed class RemoteHostService : IAsyncDisposable
             return;
         }
         _devices.Touch(channel.Peer.DeviceId, channel.PeerDescription.Name);
-        var helloWithInfo = _hello.HostInfo is not null ? _hello : new HelloMessage
+        var capabilities = _hello.Capabilities;
+        var hasBotGroupsCap = capabilities.Contains(RemoteMethods.CapabilityBotGroups, StringComparer.Ordinal);
+        if (_workspace.SupportsBotGroups && !hasBotGroupsCap)
+        {
+            capabilities = [.. capabilities, RemoteMethods.CapabilityBotGroups];
+        }
+        else if (!_workspace.SupportsBotGroups && hasBotGroupsCap)
+        {
+            capabilities = [.. capabilities.Where(c => !string.Equals(c, RemoteMethods.CapabilityBotGroups, StringComparison.Ordinal))];
+        }
+        var helloWithInfo = _hello.HostInfo is not null && ReferenceEquals(capabilities, _hello.Capabilities) ? _hello : new HelloMessage
         {
             Protocol = _hello.Protocol,
             MinProtocol = _hello.MinProtocol,
             MaxProtocol = _hello.MaxProtocol,
             AppVersion = _hello.AppVersion,
-            Capabilities = _hello.Capabilities,
+            Capabilities = capabilities,
             TerminalBuild = _hello.TerminalBuild,
             Transport = _hello.Transport,
-            HostInfo = _workspace.Info,
+            HostInfo = _hello.HostInfo ?? _workspace.Info,
         };
         var connection = new HostConnection(new RemoteConnection(channel), _workspace, helloWithInfo, HandleP2pHandshakeAsync);
         lock (_gate) _connections.Add((connection, remote));

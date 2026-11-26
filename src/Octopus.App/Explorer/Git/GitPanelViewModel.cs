@@ -4,26 +4,37 @@ using Octopus.App.Files;
 using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.Git;
+using TKCode.Arc;
+using TKCode.Arc.Icons.Lucide;
 
 namespace Octopus.App.Explorer.Git;
 
 /// <summary>
 /// The source control tab: branch (switch, create, delete), pull / push / fetch, stash, a commit box (with amend),
-/// grouped changes that can be staged, unstaged and discarded, and the latest commits, each of which opens to the files
-/// it changed. Everything below the commit box is one flat list (<see cref="Items"/>) that the view virtualizes, so
-/// thousands of changed files stay cheap. Every change to the repository goes through <see cref="IGitService"/>, one at
-/// a time (<see cref="IsBusy"/>); what git says when one fails shows under the commit button.
+/// collapsible working-tree changes that can be staged, unstaged and discarded, collapsible scroll-loaded recent
+/// commits (each opening to the files it changed), and an on-demand collapsible branch graph. Everything in the
+/// changes + commits list is one flat list (<see cref="Items"/>) that the view virtualizes, so thousands of changed
+/// files stay cheap. Every change to the repository goes through <see cref="IGitService"/>, one at a time
+/// (<see cref="IsBusy"/>); what git says when one fails shows under the commit button.
 /// </summary>
 public sealed partial class GitPanelViewModel : ObservableObject
 {
-    public const int CommitCount = 30;
+    public const int CommitPageSize = 20;
+    public const int CommitCount = CommitPageSize;
+    public const int MaxAutoRefreshCommits = 200;
+    public const int BranchGraphCommitCount = 20;
 
     private IGitService _git;
     private readonly IGitService _local;
     private readonly IDialogService? _dialogs;
+    private readonly GitChangesSectionHeaderViewModel _changesHeader = new();
+    private readonly GitCleanStateRowViewModel _cleanStateRow = new();
     private readonly GitCommitsHeaderViewModel _commitsHeader = new();
+    private readonly GitCommitsFooterViewModel _commitsFooter = new();
     private string? _root;
     private int _version;
+    private int _branchGraphVersion;
+    private bool _branchGraphDirty = true;
     private List<string> _itemKeys = [];
     private Task? _running;
     private Task? _queued;
@@ -43,13 +54,17 @@ public sealed partial class GitPanelViewModel : ObservableObject
     /// <summary>Local branches, then remote ones; read with the commits (when the Git tab shows).</summary>
     [ObservableProperty] public partial IReadOnlyList<GitBranch> Branches { get; private set; } = [];
 
+    /// <summary>Commits formatted for <see cref="BranchGraph"/>, loaded lazily when the branch graph section is expanded.</summary>
+    [ObservableProperty] public partial IReadOnlyList<BranchGraphCommit> BranchGraphCommits { get; private set; } = [];
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StashPopCommand))]
     public partial int StashCount { get; private set; }
 
     /// <summary>
-    /// What the list shows, in order: each group header followed by its rows, then the commits header, the commits and
-    /// the files of opened ones. Replaced whole (one reset for the list) and only when something in it changed.
+    /// What the list shows, in order: the collapsible changes section header and its clean state or groups/rows,
+    /// then the collapsible commits section header, the loaded commits (and opened files), and the load-more footer.
+    /// Replaced whole (one reset for the list) and only when something in it changed.
     /// </summary>
     [ObservableProperty] public partial IReadOnlyList<object> Items { get; private set; } = [];
 
@@ -57,6 +72,12 @@ public sealed partial class GitPanelViewModel : ObservableObject
     [ObservableProperty] public partial string AheadBehind { get; private set; } = "";
     [ObservableProperty] public partial bool IsClean { get; private set; }
     [ObservableProperty] public partial bool IsRefreshing { get; private set; }
+    [ObservableProperty] public partial bool IsChangesExpanded { get; set; } = true;
+    [ObservableProperty] public partial bool IsCommitsExpanded { get; set; } = true;
+    [ObservableProperty] public partial bool IsBranchGraphExpanded { get; set; }
+    [ObservableProperty] public partial bool HasMoreCommits { get; private set; }
+    [ObservableProperty] public partial bool IsLoadingMoreCommits { get; private set; }
+    [ObservableProperty] public partial bool IsLoadingBranchGraph { get; private set; }
     [ObservableProperty] public partial GitChangeRowViewModel? SelectedChange { get; set; }
     [ObservableProperty] public partial GitCommitRowViewModel? SelectedCommit { get; set; }
     [ObservableProperty] public partial GitCommitFileRowViewModel? SelectedCommitFile { get; set; }
@@ -92,8 +113,20 @@ public sealed partial class GitPanelViewModel : ObservableObject
     public bool HasNoCommits => Commits.Count == 0 && _root is not null;
     public bool HasStaged => Groups.Any(g => g.IsStaged);
     public bool ShowBusy => IsBusy && BusyText.Length > 0;
+    public bool HasBranchGraphCommits => BranchGraphCommits.Count > 0;
+    public bool ShowBranchGraphControl => IsBranchGraphExpanded && BranchGraphCommits.Count > 0;
+    public bool ShowBranchGraphEmpty => IsBranchGraphExpanded && !IsLoadingBranchGraph && BranchGraphCommits.Count == 0 && _root is not null;
+    public LucideIconKind BranchGraphChevronIcon => IsBranchGraphExpanded ? LucideIconKind.ChevronDown : LucideIconKind.ChevronRight;
+    public string BranchGraphTitle => BranchName.Length > 0 ? BranchName : AppLangResources.Get(AppLangResourceKind.ExplorerBranchGraph);
     public IEnumerable<GitBranch> LocalBranches => Branches.Where(b => !b.IsRemote);
     public IEnumerable<GitBranch> RemoteBranches => Branches.Where(b => b.IsRemote);
+
+    public BranchGraphLabels BranchGraphLabels { get; } = new()
+    {
+        JustNow = AppLangResources.Get(AppLangResourceKind.ExplorerAgoNow),
+        Files = static count => AppLangResources.Format(AppLangResourceKind.ExplorerCommitFiles, count),
+        HistorySummary = static (commits, branches) => AppLangResources.Format(AppLangResourceKind.ExplorerBranchGraphSummary, commits, branches),
+    };
 
     /// <summary>With nothing staged, the button stages every change first (what a person who types a message and presses it means).</summary>
     public string CommitButtonText => AppLangResources.Get(
@@ -130,6 +163,7 @@ public sealed partial class GitPanelViewModel : ObservableObject
 
     partial void OnGroupsChanged(IReadOnlyList<GitChangeGroupViewModel> value)
     {
+        _changesHeader.ChangeCount = value.Sum(g => g.Count);
         OnPropertyChanged(nameof(HasStaged));
         OnPropertyChanged(nameof(CommitButtonText));
         CommitCommand.NotifyCanExecuteChanged();
@@ -137,12 +171,58 @@ public sealed partial class GitPanelViewModel : ObservableObject
 
     partial void OnIsCleanChanged(bool value) => OnPropertyChanged(nameof(CommitButtonText));
 
+    partial void OnBranchNameChanged(string value) => OnPropertyChanged(nameof(BranchGraphTitle));
+
     partial void OnCommitsChanged(IReadOnlyList<GitCommitRowViewModel> value)
     {
-        _commitsHeader.HasNoCommits = HasNoCommits;
+        SyncCommitsHeader();
         OnPropertyChanged(nameof(HasCommits));
         OnPropertyChanged(nameof(HasNoCommits));
         CommitCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnHasMoreCommitsChanged(bool value)
+    {
+        SyncCommitsHeader();
+        _commitsFooter.HasMore = value;
+    }
+
+    partial void OnIsLoadingMoreCommitsChanged(bool value) => _commitsFooter.IsLoading = value;
+
+    partial void OnIsChangesExpandedChanged(bool value)
+    {
+        _changesHeader.IsExpanded = value;
+        Rebuild();
+    }
+
+    partial void OnIsCommitsExpandedChanged(bool value)
+    {
+        _commitsHeader.IsExpanded = value;
+        Rebuild();
+    }
+
+    partial void OnIsBranchGraphExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(BranchGraphChevronIcon));
+        OnPropertyChanged(nameof(ShowBranchGraphControl));
+        OnPropertyChanged(nameof(ShowBranchGraphEmpty));
+    }
+
+    partial void OnIsLoadingBranchGraphChanged(bool value) => OnPropertyChanged(nameof(ShowBranchGraphEmpty));
+
+    partial void OnBranchGraphCommitsChanged(IReadOnlyList<BranchGraphCommit> value)
+    {
+        OnPropertyChanged(nameof(HasBranchGraphCommits));
+        OnPropertyChanged(nameof(ShowBranchGraphControl));
+        OnPropertyChanged(nameof(ShowBranchGraphEmpty));
+    }
+
+    private void SyncCommitsHeader()
+    {
+        _commitsHeader.HasNoCommits = HasNoCommits;
+        _commitsHeader.CountText = Commits.Count == 0
+            ? ""
+            : HasMoreCommits ? $"{Commits.Count}+" : Commits.Count.ToString();
     }
 
     partial void OnBranchesChanged(IReadOnlyList<GitBranch> value)
@@ -175,10 +255,31 @@ public sealed partial class GitPanelViewModel : ObservableObject
     [RelayCommand]
     private void ToggleAmend() => IsAmend = !IsAmend;
 
+    [RelayCommand]
+    private void ToggleChangesSection() => IsChangesExpanded = !IsChangesExpanded;
+
+    [RelayCommand]
+    private void ToggleCommitsSection() => IsCommitsExpanded = !IsCommitsExpanded;
+
+    [RelayCommand]
+    private Task ToggleBranchGraph()
+    {
+        IsBranchGraphExpanded = !IsBranchGraphExpanded;
+        return IsBranchGraphExpanded && _branchGraphDirty ? LoadBranchGraphAsync() : Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private Task RefreshBranchGraph() => LoadBranchGraphAsync(force: true);
+
+    [RelayCommand]
+    public Task LoadMoreCommitsAsync() => LoadMoreCommitsCoreAsync();
+
     /// <param name="service">The git service of the machine the repository is on; null: this computer's.</param>
     public void SetRepository(string? root, IGitService? service = null)
     {
         _version++;
+        _branchGraphVersion++;
+        _branchGraphDirty = true;
         _git = service ?? _local;
         _root = root;
         // A read of the previous repository still running is dropped (by the version); the new one need not wait for it.
@@ -188,7 +289,12 @@ public sealed partial class GitPanelViewModel : ObservableObject
         Groups = [];
         Commits = [];
         Branches = [];
+        BranchGraphCommits = [];
         StashCount = 0;
+        HasMoreCommits = false;
+        IsLoadingMoreCommits = false;
+        IsLoadingBranchGraph = false;
+        IsBranchGraphExpanded = false;
         _itemKeys = [];
         Items = [];
         SelectedChange = null;
@@ -201,7 +307,8 @@ public sealed partial class GitPanelViewModel : ObservableObject
         GitError = null;
         OnPropertyChanged(nameof(HasRepository));
         OnPropertyChanged(nameof(HasNoCommits));
-        _commitsHeader.HasNoCommits = HasNoCommits;
+        OnPropertyChanged(nameof(ShowBranchGraphEmpty));
+        SyncCommitsHeader();
     }
 
     /// <summary>
@@ -245,20 +352,31 @@ public sealed partial class GitPanelViewModel : ObservableObject
         if (root is null) return;
         var version = ++_version;
         IsRefreshing = true;
+        var refreshGraph = false;
         try
         {
+            var commitLimit = Commits.Count > CommitPageSize ? Math.Min(Commits.Count, MaxAutoRefreshCommits) : CommitPageSize;
             var statusTask = _git.GetStatusAsync(root);
-            var logTask = includeLog ? _git.GetLogAsync(root, CommitCount) : null;
+            var logTask = includeLog ? _git.GetLogPageAsync(root, commitLimit + 1, skip: 0) : null;
             var branchesTask = includeLog ? _git.GetBranchesAsync(root) : null;
             var stashTask = includeLog ? _git.GetStashCountAsync(root) : null;
             var status = await statusTask;
-            var log = logTask is null ? null : await logTask;
+            var logRaw = logTask is null ? null : await logTask;
             var branches = branchesTask is null ? null : await branchesTask;
             var stashes = stashTask is null ? (int?)null : await stashTask;
             if (version != _version) return;
             if (branches is not null && !branches.SequenceEqual(Branches)) Branches = branches;
             if (stashes is { } count) StashCount = count;
-            Apply(status, log);
+            IReadOnlyList<GitCommit>? log = null;
+            bool? hasMore = null;
+            if (logRaw is not null)
+            {
+                hasMore = logRaw.Count > commitLimit;
+                log = hasMore.Value ? logRaw.Take(commitLimit).ToList() : logRaw;
+                _branchGraphDirty = true;
+                refreshGraph = IsBranchGraphExpanded;
+            }
+            Apply(status, log, hasMore);
             StatusChanged?.Invoke(this, status);
         }
         catch (Exception)
@@ -268,6 +386,67 @@ public sealed partial class GitPanelViewModel : ObservableObject
         finally
         {
             if (version == _version) IsRefreshing = false;
+        }
+        if (refreshGraph && version == _version) await LoadBranchGraphAsync(force: true);
+    }
+
+    private async Task LoadMoreCommitsCoreAsync()
+    {
+        if (_root is not { } root || !HasMoreCommits || IsLoadingMoreCommits || IsRefreshing) return;
+        var version = _version;
+        var skip = Commits.Count;
+        IsLoadingMoreCommits = true;
+        try
+        {
+            var raw = await _git.GetLogPageAsync(root, CommitPageSize + 1, skip);
+            if (version != _version || _root != root) return;
+            var hasMore = raw.Count > CommitPageSize;
+            var page = hasMore ? raw.Take(CommitPageSize) : raw;
+            var existing = Commits.Select(c => c.Commit.Hash).ToHashSet(StringComparer.Ordinal);
+            var added = new List<GitCommitRowViewModel>();
+            foreach (var commit in page)
+            {
+                if (existing.Add(commit.Hash)) added.Add(new GitCommitRowViewModel(commit));
+            }
+            HasMoreCommits = hasMore && added.Count > 0;
+            if (added.Count > 0) Commits = [.. Commits, .. added];
+        }
+        catch (Exception)
+        {
+            // Keep existing commits intact if loading a page fails.
+        }
+        finally
+        {
+            if (version == _version)
+            {
+                IsLoadingMoreCommits = false;
+                Rebuild();
+            }
+        }
+    }
+
+    public async Task LoadBranchGraphAsync(bool force = false)
+    {
+        if (_root is not { } root || !IsBranchGraphExpanded) return;
+        if (!force && !_branchGraphDirty) return;
+
+        var graphVersion = ++_branchGraphVersion;
+        var repoVersion = _version;
+        IsLoadingBranchGraph = true;
+        try
+        {
+            var commits = await _git.GetBranchGraphAsync(root, BranchGraphCommitCount);
+            if (graphVersion != _branchGraphVersion || repoVersion != _version || _root != root) return;
+            BranchGraphCommits = GitBranchGraphBuilder.Build(commits, BranchName.Length > 0 ? BranchName : null);
+            _branchGraphDirty = false;
+        }
+        catch (Exception)
+        {
+            if (graphVersion == _branchGraphVersion && _root == root) BranchGraphCommits = [];
+        }
+        finally
+        {
+            if (graphVersion == _branchGraphVersion) IsLoadingBranchGraph = false;
         }
     }
 
@@ -507,7 +686,7 @@ public sealed partial class GitPanelViewModel : ObservableObject
         return paths;
     }
 
-    private void Apply(GitStatus? status, IReadOnlyList<GitCommit>? log)
+    private void Apply(GitStatus? status, IReadOnlyList<GitCommit>? log, bool? hasMoreCommits)
     {
         if (status is not null)
         {
@@ -523,11 +702,15 @@ public sealed partial class GitPanelViewModel : ObservableObject
             if (!SameChanges(Groups, groups)) Groups = groups;
             IsClean = Groups.Count == 0;
         }
-        if (log is not null && !Commits.Select(c => c.Commit.Hash).SequenceEqual(log.Select(c => c.Hash)))
+        if (log is not null)
         {
-            // Commits that stay keep their row, so an opened one stays open.
-            var old = Commits.ToDictionary(c => c.Commit.Hash);
-            Commits = log.Select(c => old.TryGetValue(c.Hash, out var row) ? row : new GitCommitRowViewModel(c)).ToList();
+            if (!Commits.Select(c => c.Commit.Hash).SequenceEqual(log.Select(c => c.Hash)))
+            {
+                // Commits that stay keep their row, so an opened one stays open.
+                var old = Commits.ToDictionary(c => c.Commit.Hash);
+                Commits = log.Select(c => old.TryGetValue(c.Hash, out var row) ? row : new GitCommitRowViewModel(c)).ToList();
+            }
+            if (hasMoreCommits is { } more) HasMoreCommits = more;
         }
         Rebuild();
     }
@@ -542,34 +725,68 @@ public sealed partial class GitPanelViewModel : ObservableObject
         before.Count == after.Count && before.Zip(after).All(p => p.First.Title == p.Second.Title
             && p.First.Rows.Select(r => r.Change).SequenceEqual(p.Second.Rows.Select(r => r.Change)));
 
-    /// <summary>Lays the groups and commits out as one list; the list is replaced only when its content changed, and the selection follows the same file.</summary>
+    /// <summary>Lays the collapsible changes and commits sections out as one list; replaced only when its content changed.</summary>
     private void Rebuild()
     {
-        var items = new List<object>(Groups.Sum(g => g.Rows.Count + 1) + Commits.Count + 1);
+        if (_root is null)
+        {
+            if (Items.Count > 0)
+            {
+                _itemKeys = [];
+                Items = [];
+            }
+            return;
+        }
+
+        var items = new List<object>(Groups.Sum(g => g.Rows.Count + 1) + Commits.Count + 4);
         var keys = new List<string>(items.Capacity);
-        foreach (var group in Groups)
+
+        items.Add(_changesHeader);
+        keys.Add(IsChangesExpanded ? "sh+" : "sh-");
+        if (IsChangesExpanded)
         {
-            items.Add(group);
-            keys.Add("g" + group.Title);
-            foreach (var row in group.Rows)
+            if (IsClean)
             {
-                items.Add(row);
-                keys.Add("r" + row.Key);
+                items.Add(_cleanStateRow);
+                keys.Add("clean");
+            }
+            else
+            {
+                foreach (var group in Groups)
+                {
+                    items.Add(group);
+                    keys.Add("g" + group.Title);
+                    foreach (var row in group.Rows)
+                    {
+                        items.Add(row);
+                        keys.Add("r" + row.Key);
+                    }
+                }
             }
         }
+
         items.Add(_commitsHeader);
-        keys.Add("h");
-        foreach (var commit in Commits)
+        keys.Add(IsCommitsExpanded ? "ch+" : "ch-");
+        if (IsCommitsExpanded)
         {
-            items.Add(commit);
-            keys.Add("c" + commit.Commit.Hash + (commit.IsExpanded ? "+" : ""));
-            if (!commit.IsExpanded || commit.Files is null) continue;
-            foreach (var file in commit.Files)
+            foreach (var commit in Commits)
             {
-                items.Add(file);
-                keys.Add("f" + commit.Commit.Hash + file.File.Path);
+                items.Add(commit);
+                keys.Add("c" + commit.Commit.Hash + (commit.IsExpanded ? "+" : ""));
+                if (!commit.IsExpanded || commit.Files is null) continue;
+                foreach (var file in commit.Files)
+                {
+                    items.Add(file);
+                    keys.Add("f" + commit.Commit.Hash + file.File.Path);
+                }
+            }
+            if (HasMoreCommits || IsLoadingMoreCommits)
+            {
+                items.Add(_commitsFooter);
+                keys.Add("more");
             }
         }
+
         if (keys.SequenceEqual(_itemKeys, StringComparer.Ordinal) && items.SequenceEqual(Items)) return;
         _itemKeys = keys;
         if (SelectedChange is { } selected)
@@ -580,13 +797,63 @@ public sealed partial class GitPanelViewModel : ObservableObject
         {
             SelectedCommit = Commits.FirstOrDefault(c => c.Commit.Hash == commitSelected.Commit.Hash);
         }
-        _commitsHeader.HasNoCommits = HasNoCommits;
+        SyncCommitsHeader();
         Items = items;
     }
 }
 
-/// <summary>The "Recent commits" heading in the list, with the note shown when there are none.</summary>
+/// <summary>The collapsible "Working changes" section header in the list.</summary>
+public sealed partial class GitChangesSectionHeaderViewModel : ObservableObject
+{
+    [ObservableProperty] public partial bool IsExpanded { get; set; } = true;
+    [ObservableProperty] public partial int ChangeCount { get; set; }
+
+    public bool HasCount => ChangeCount > 0;
+    public string CountText => ChangeCount > 0 ? ChangeCount.ToString() : "";
+    public LucideIconKind ChevronIcon => IsExpanded ? LucideIconKind.ChevronDown : LucideIconKind.ChevronRight;
+
+    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ChevronIcon));
+
+    partial void OnChangeCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasCount));
+        OnPropertyChanged(nameof(CountText));
+    }
+}
+
+/// <summary>Shown inside the expanded working changes section when there are no uncommitted changes.</summary>
+public sealed class GitCleanStateRowViewModel;
+
+/// <summary>The collapsible "Recent commits" section header in the list, with the note shown when there are none.</summary>
 public sealed partial class GitCommitsHeaderViewModel : ObservableObject
 {
+    [ObservableProperty] public partial bool IsExpanded { get; set; } = true;
     [ObservableProperty] public partial bool HasNoCommits { get; set; }
+    [ObservableProperty] public partial string CountText { get; set; } = "";
+
+    public bool HasCount => CountText.Length > 0;
+    public bool ShowNoCommits => IsExpanded && HasNoCommits;
+    public LucideIconKind ChevronIcon => IsExpanded ? LucideIconKind.ChevronDown : LucideIconKind.ChevronRight;
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ChevronIcon));
+        OnPropertyChanged(nameof(ShowNoCommits));
+    }
+
+    partial void OnHasNoCommitsChanged(bool value) => OnPropertyChanged(nameof(ShowNoCommits));
+
+    partial void OnCountTextChanged(string value) => OnPropertyChanged(nameof(HasCount));
+}
+
+/// <summary>The scroll-loading footer shown at the end of recent commits when more history is available.</summary>
+public sealed partial class GitCommitsFooterViewModel : ObservableObject
+{
+    [ObservableProperty] public partial bool HasMore { get; set; }
+    [ObservableProperty] public partial bool IsLoading { get; set; }
+
+    public bool CanLoadMore => HasMore && !IsLoading;
+
+    partial void OnHasMoreChanged(bool value) => OnPropertyChanged(nameof(CanLoadMore));
+    partial void OnIsLoadingChanged(bool value) => OnPropertyChanged(nameof(CanLoadMore));
 }

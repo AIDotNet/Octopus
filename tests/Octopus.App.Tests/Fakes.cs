@@ -27,7 +27,14 @@ public sealed class FakeTerminalConnection(string? foreground = null) : ITermina
         yield break;
     }
 
-    public ValueTask WriteAsync(ReadOnlyMemory<byte> input, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    /// <summary>Everything written to the program, as text, in order.</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> Written { get; } = new();
+
+    public ValueTask WriteAsync(ReadOnlyMemory<byte> input, CancellationToken cancellationToken = default)
+    {
+        Written.Enqueue(System.Text.Encoding.UTF8.GetString(input.Span));
+        return ValueTask.CompletedTask;
+    }
     /// <summary>How often the terminal changed the size of the pty.</summary>
     public int Resizes { get; private set; }
     public ValueTask ResizeAsync(int columns, int rows, int pixelWidth, int pixelHeight)

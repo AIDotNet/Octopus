@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Octopus.App.Bots;
+using Octopus.App.Bots.Groups;
 using Octopus.App.Common;
 using Octopus.App.Files;
 using Octopus.App.Localization;
@@ -24,6 +25,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
     private readonly Dictionary<string, BotDockController> _botControllers = [];
     private readonly Activity.IItemActivityService? _activity;
     private readonly IBotService? _bots;
+    private readonly IBotGroupService? _botGroups;
 
     public WorkspaceViewModel(
         IProjectService projects,
@@ -32,10 +34,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
         CloseConfirmation confirmation,
         EmptyStateViewModel emptyState,
         Activity.IItemActivityService? activity = null,
-        IBotService? bots = null)
+        IBotService? bots = null,
+        IBotGroupService? botGroups = null,
+        BotGroupRoomViewModel? groupRoom = null)
     {
         _activity = activity;
         _bots = bots;
+        _botGroups = botGroups;
+        GroupRoom = groupRoom;
         _projects = projects;
         _registry = registry;
         _opener = opener;
@@ -43,24 +49,31 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
         EmptyState = emptyState;
         _projects.Changed += OnProjectsChanged;
         _bots?.Changed += OnBotsChanged;
+        _botGroups?.Changed += OnBotGroupsChanged;
         Refresh();
     }
 
     public EmptyStateViewModel EmptyState { get; }
+    public BotGroupRoomViewModel? GroupRoom { get; }
 
     /// <summary>The dock layout of the current project or bot; null while there is none.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
+    [NotifyPropertyChangedFor(nameof(ShowDockLayout), nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
     public partial object? CurrentLayout { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
+    [NotifyPropertyChangedFor(nameof(ShowDockLayout), nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
     public partial bool HasProject { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
+    [NotifyPropertyChangedFor(nameof(ShowDockLayout), nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
     public partial bool IsBotMode { get; private set; }
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowDockLayout), nameof(ShowNoProjectEmpty), nameof(ShowNoBotEmpty))]
+    public partial bool IsGroupRoomActive { get; private set; }
+
+    public bool ShowDockLayout => HasProject && !IsGroupRoomActive;
     public bool ShowNoProjectEmpty => !HasProject && !IsBotMode;
     public bool ShowNoBotEmpty => !HasProject && IsBotMode;
 
@@ -82,6 +95,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
     private void OnBotsChanged(object? sender, BotChangedEventArgs e)
     {
         if (e.Kind is BotChangeKind.Mode or BotChangeKind.Bots or BotChangeKind.CurrentBot)
+        {
+            UiContext.Run(Refresh);
+        }
+    }
+
+    private void OnBotGroupsChanged(object? sender, BotGroupChangedEventArgs e)
+    {
+        if (e.Kind is BotGroupChangeKind.Groups or BotGroupChangeKind.Selection)
         {
             UiContext.Run(Refresh);
         }
@@ -127,7 +148,18 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
 
         if (IsBotMode && _bots is not null)
         {
-            foreach (var controller in _controllers.Values) controller.SetActive(false);
+            foreach (var controller in _controllers.Values)
+            {
+                controller.SetActive(false);
+            }
+            if (_botGroups?.CurrentGroup is not null && GroupRoom is not null)
+            {
+                HasProject = true;
+                IsGroupRoomActive = true;
+                CurrentLayout = null;
+                return;
+            }
+            IsGroupRoomActive = false;
             var currentBot = _bots.CurrentBot;
             HasProject = currentBot is not null;
             if (currentBot is null)
@@ -148,6 +180,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
             }
             return;
         }
+
+        IsGroupRoomActive = false;
 
         var current = _projects.Current;
         HasProject = current is not null;
@@ -189,6 +223,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
     {
         _projects.Changed -= OnProjectsChanged;
         _bots?.Changed -= OnBotsChanged;
+        _botGroups?.Changed -= OnBotGroupsChanged;
         foreach (var controller in _controllers.Values)
         {
             controller.Dispose();

@@ -601,7 +601,8 @@
                                     <DataTemplate x:DataType="gui:AttachmentChipViewModel">
                                         <Border Margin="0,0,4,2" Padding="5,1" CornerRadius="5"
                                                 Background="{arc:ArcDesignTokenResource Surface}"
-                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
+                                                arc:Tooltip.Tip="{Binding Tooltip}">
                                             <StackPanel Orientation="Horizontal" Spacing="4">
                                                 <lucide:LucideIcon Kind="{Binding Icon}" Size="11" VerticalAlignment="Center" />
                                                 <TextBlock Classes="hint" Text="{Binding Label}" VerticalAlignment="Center" />
@@ -610,18 +611,16 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <StackPanel Spacing="2">
+                            <arc:ExpandableContent Lines="8"
+                                                   IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                                   MoreLabel="{l:AppLangResource AgentGuiUserTurnExpand}"
+                                                   LessLabel="{l:AppLangResource AgentGuiUserTurnCollapse}">
                                 <SelectableTextBlock Text="{Binding DisplayText}"
                                                      TextWrapping="Wrap"
                                                      FontSize="{arc:ArcDesignTokenResource TypeSM}"
                                                      LineHeight="19"
                                                      Foreground="{arc:ArcDesignTokenResource Foreground}" />
-                                <Button Classes="textLink accent"
-                                        HorizontalAlignment="Left"
-                                        IsVisible="{Binding IsCollapsible}"
-                                        Command="{Binding ToggleExpandedCommand}"
-                                        Content="{Binding ToggleExpandedText}" />
-                            </StackPanel>
+                            </arc:ExpandableContent>
                         </StackPanel>
                     </Border>
                     <StackPanel Classes="turnActions"
@@ -673,16 +672,16 @@
                                             AutomationProperties.Name="{l:AppLangResource AgentGuiCopyPrompt}"
                                             arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyPrompt}" />
                         </Grid>
-                        <SelectableTextBlock Text="{Binding DisplayText}"
-                                             TextWrapping="Wrap"
-                                             FontSize="{arc:ArcDesignTokenResource TypeXS}"
-                                             LineHeight="18"
-                                             Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
-                        <Button Classes="textLink accent"
-                                HorizontalAlignment="Left"
-                                IsVisible="{Binding IsCollapsible}"
-                                Command="{Binding ToggleExpandedCommand}"
-                                Content="{Binding ToggleExpandedText}" />
+                        <arc:ExpandableContent Lines="8"
+                                               IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                               MoreLabel="{l:AppLangResource AgentGuiUserTurnExpand}"
+                                               LessLabel="{l:AppLangResource AgentGuiUserTurnCollapse}">
+                            <SelectableTextBlock Text="{Binding DisplayText}"
+                                                 TextWrapping="Wrap"
+                                                 FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                 LineHeight="18"
+                                                 Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                        </arc:ExpandableContent>
                     </StackPanel>
                 </Border>
             </Grid>

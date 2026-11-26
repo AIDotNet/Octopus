@@ -84,6 +84,7 @@ public sealed class RemoteHostRuntime : IDisposable
             RemoteMethods.CapabilityProtocolV2, RemoteMethods.CapabilityCompression, RemoteMethods.CapabilityFileStream,
             RemoteMethods.CapabilitySessionResume, RemoteMethods.CapabilityTransportQuic, RemoteMethods.CapabilityTransportP2p,
             RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons, RemoteMethods.CapabilityBots,
+            RemoteMethods.CapabilityBotGroups,
         ],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         Transport = TransportNegotiation.CreateDefault(),

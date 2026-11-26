@@ -17,6 +17,7 @@ public sealed class GitCallArguments
     public string? Commit { get; set; }
     public string? BaseRef { get; set; }
     public int Count { get; set; }
+    public int Skip { get; set; }
     public bool Flag { get; set; }
     public bool Flag2 { get; set; }
 }
@@ -32,6 +33,7 @@ public sealed class GitCallReply
     public GitDirectories? Directories { get; set; }
     public GitCommandResult? Result { get; set; }
     public List<GitCommit>? Commits { get; set; }
+    public List<GitGraphCommit>? GraphCommits { get; set; }
     public List<GitBranch>? Branches { get; set; }
     public List<GitCommitFile>? Files { get; set; }
     public List<GitWorktree>? Worktrees { get; set; }
@@ -77,6 +79,12 @@ public sealed class RemoteGitService(RemoteClientRuntime runtime, string hostId)
 
     public async Task<IReadOnlyList<GitCommit>> GetLogAsync(string repositoryRoot, int count = 50, CancellationToken cancellationToken = default) =>
         (await ReadAsync(nameof(GetLogAsync), new GitCallArguments { Root = repositoryRoot, Count = count }, cancellationToken).ConfigureAwait(false))?.Commits ?? [];
+
+    public async Task<IReadOnlyList<GitCommit>> GetLogPageAsync(string repositoryRoot, int count, int skip, CancellationToken cancellationToken = default) =>
+        (await ReadAsync(nameof(GetLogPageAsync), new GitCallArguments { Root = repositoryRoot, Count = count, Skip = skip }, cancellationToken).ConfigureAwait(false))?.Commits ?? [];
+
+    public async Task<IReadOnlyList<GitGraphCommit>> GetBranchGraphAsync(string repositoryRoot, int count = 20, CancellationToken cancellationToken = default) =>
+        (await ReadAsync(nameof(GetBranchGraphAsync), new GitCallArguments { Root = repositoryRoot, Count = count }, cancellationToken).ConfigureAwait(false))?.GraphCommits ?? [];
 
     public async Task<GitFileDiff?> GetFileDiffAsync(string repositoryRoot, string path, bool staged, string? originalPath = null, CancellationToken cancellationToken = default) =>
         (await ReadAsync(nameof(GetFileDiffAsync), new GitCallArguments { Root = repositoryRoot, Path = path, Flag = staged, OriginalPath = originalPath }, cancellationToken).ConfigureAwait(false))?.Diff;
@@ -182,6 +190,8 @@ internal static class RemoteGitDispatcher
             nameof(IGitService.FindRepositoryRootAsync) => new GitCallReply { Text = await git.FindRepositoryRootAsync(a.Root) },
             nameof(IGitService.GetStatusAsync) => new GitCallReply { Status = await git.GetStatusAsync(a.Root) },
             nameof(IGitService.GetLogAsync) => new GitCallReply { Commits = [.. await git.GetLogAsync(a.Root, a.Count is > 0 and <= 500 ? a.Count : 50)] },
+            nameof(IGitService.GetLogPageAsync) => new GitCallReply { Commits = [.. await git.GetLogPageAsync(a.Root, a.Count is > 0 and <= 500 ? a.Count : 50, Math.Max(0, a.Skip))] },
+            nameof(IGitService.GetBranchGraphAsync) => new GitCallReply { GraphCommits = [.. await git.GetBranchGraphAsync(a.Root, a.Count is > 0 and <= 100 ? a.Count : 20)] },
             nameof(IGitService.GetFileDiffAsync) => new GitCallReply { Diff = await git.GetFileDiffAsync(a.Root, Need(a.Path), a.Flag, a.OriginalPath) },
             nameof(IGitService.GetGitDirectoriesAsync) => new GitCallReply { Directories = await git.GetGitDirectoriesAsync(a.Root) },
             nameof(IGitService.StageAsync) => new GitCallReply { Result = await git.StageAsync(a.Root, paths) },

@@ -65,7 +65,9 @@ public enum BotChatKind
     Home,
     Chat,
     Automation,
-    Connector
+    Connector,
+    /// <summary>Dedicated room session owned by a bot inside a Bot Group (hidden from the single-bot chat tree).</summary>
+    GroupMember
 }
 
 public enum BotChatStatus
@@ -97,6 +99,10 @@ public sealed class BotChat
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset LastActivityAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ClosedAt { get; set; }
+    /// <summary>When <see cref="Kind"/> is <see cref="BotChatKind.GroupMember"/>, the owning group id.</summary>
+    public string? GroupId { get; set; }
+    /// <summary>When <see cref="Kind"/> is <see cref="BotChatKind.GroupMember"/>, the owning thread id (null for the main room).</summary>
+    public string? GroupThreadId { get; set; }
 
     public string DisplayTitle => string.IsNullOrWhiteSpace(CustomTitle) ? Title : CustomTitle!;
 }
@@ -210,6 +216,10 @@ public sealed class BotsDocument
     public bool IsBotMode { get; set; }
     public string? ActiveBotId { get; set; }
     public string? ActiveChatId { get; set; }
+    /// <summary>Non-null when a Bot Group room is the active view in Bot mode.</summary>
+    public string? ActiveGroupId { get; set; }
+    /// <summary>Active thread inside <see cref="ActiveGroupId"/>; null means the main room.</summary>
+    public string? ActiveGroupThreadId { get; set; }
     public List<BotDefinition> Bots { get; set; } = [];
 }
 

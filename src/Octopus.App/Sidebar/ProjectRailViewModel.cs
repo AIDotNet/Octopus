@@ -8,6 +8,7 @@ using Octopus.Agents;
 using Octopus.Agents.Accounts;
 using Octopus.App.Activity;
 using Octopus.App.Bots;
+using Octopus.App.Bots.Groups;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
@@ -55,6 +56,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     private readonly IAgentAccountService? _accounts;
     private readonly DeviceSwitcherViewModel? _devices;
     private readonly IBotService? _bots;
+    private readonly IBotGroupService? _botGroups;
     /// <summary>The open group as the rail last showed it; null before the first build and when all are closed.</summary>
     private string? _shownExpanded;
     private bool _built;
@@ -72,7 +74,8 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         ISettingsStore? settings = null,
         IAgentAccountService? accounts = null,
         DeviceSwitcherViewModel? devices = null,
-        IBotService? bots = null)
+        IBotService? bots = null,
+        IBotGroupService? botGroups = null)
     {
         _icons = icons;
         _activity = activity;
@@ -82,6 +85,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _accounts = accounts;
         _devices = devices;
         _bots = bots;
+        _botGroups = botGroups;
         _projects = projects;
         _opener = opener;
         _dialogs = dialogs;
@@ -92,6 +96,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
         _scanner?.Changed += (_, _) => UiContext.Run(Rebuild);
         _bots?.Changed += (_, e) => UiContext.Run(() => RefreshBotState(e.Kind));
+        _botGroups?.Changed += (_, _) => UiContext.Run(RefreshBotBadges);
         ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
         // The rail lives as long as the shell, like the activity service: no unsubscribe.
         _activity?.Changed += (_, itemId) =>
@@ -195,9 +200,15 @@ public sealed partial class ProjectRailViewModel : ObservableObject
 
     private void RefreshBotBadges()
     {
-        if (_bots is null) return;
-        BotAttentionCount = _bots.TotalNeedsAttentionCount();
-        IsAnyBotWorking = _bots.HasWorkingBots();
+        if (_bots is null)
+        {
+            return;
+        }
+        var botAttention = _bots.TotalNeedsAttentionCount();
+        var groupApprovals = _botGroups?.TotalPendingApprovalCount() ?? 0;
+        var unreadGroups = _botGroups?.Groups.Count(g => g.IsUnread) ?? 0;
+        BotAttentionCount = botAttention + groupApprovals + unreadGroups;
+        IsAnyBotWorking = _bots.HasWorkingBots() || (_botGroups?.HasWorkingGroups() ?? false);
     }
 
     private void UpdateCurrentRings()

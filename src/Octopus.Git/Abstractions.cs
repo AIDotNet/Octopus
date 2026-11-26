@@ -28,6 +28,21 @@ public sealed record GitStatus(
 
 public sealed record GitCommit(string Hash, string ShortHash, string Subject, string Author, DateTimeOffset Date);
 
+/// <summary>One commit for the branch graph: hash, parents, ref decorations, message, author and optional diff stats.</summary>
+public sealed record GitGraphCommit(
+    string Hash,
+    string ShortHash,
+    IReadOnlyList<string> ParentHashes,
+    IReadOnlyList<string> Branches,
+    string? Tag,
+    string Subject,
+    string? Body,
+    string Author,
+    DateTimeOffset Date,
+    int? Additions = null,
+    int? Deletions = null,
+    int? Files = null);
+
 /// <summary>What a command that changes the repository did: success, or git's own words on why not.</summary>
 public sealed record GitCommandResult(bool Succeeded, string? Error = null)
 {
@@ -92,6 +107,14 @@ public interface IGitService
 
     /// <summary>The latest commits of the current branch, newest first; empty when there are none.</summary>
     Task<IReadOnlyList<GitCommit>> GetLogAsync(string repositoryRoot, int count = 50, CancellationToken cancellationToken = default);
+
+    /// <summary>A page of commits of the current branch starting after <paramref name="skip"/> commits, newest first.</summary>
+    Task<IReadOnlyList<GitCommit>> GetLogPageAsync(string repositoryRoot, int count, int skip, CancellationToken cancellationToken = default) =>
+        skip <= 0 ? GetLogAsync(repositoryRoot, count, cancellationToken) : Task.FromResult<IReadOnlyList<GitCommit>>([]);
+
+    /// <summary>Recent commits across local branches (and HEAD) in topological order with parent links and ref decorations.</summary>
+    Task<IReadOnlyList<GitGraphCommit>> GetBranchGraphAsync(string repositoryRoot, int count = 20, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<GitGraphCommit>>([]);
 
     /// <summary>
     /// The diff of one file, ready to show: staged (index against HEAD) or unstaged (working tree against index); an

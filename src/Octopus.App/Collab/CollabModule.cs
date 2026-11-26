@@ -17,6 +17,9 @@ internal static class CollabModule
         services.AddSingleton<CollabMcpServer>();
         services.AddSingleton<CollabCliMcpInjector>();
         services.AddSingleton<CollabStateStore>();
+        services.AddSingleton<ICollabPolicy, DefaultCollabPolicy>();
+        // The MCP tools agents see. Add a tool to CollabToolRegistry.BuiltIn, or register more ICollabTool services here.
+        foreach (var tool in Tools.CollabToolRegistry.BuiltIn) services.AddSingleton<Tools.ICollabTool>(tool);
         services.AddSingleton<ICollabRemoteHosts>(sp => new RuntimeCollabRemoteHosts(
             sp.GetRequiredService<Octopus.App.Remote.RemoteClientRuntime>(),
             sp.GetService<Octopus.App.Remote.RemoteProjects>()));
@@ -33,7 +36,9 @@ internal static class CollabModule
             () => sp.GetService<ITabContentRegistry>(),
             () => sp.GetService<IWorkspaceManager>(),
             sp.GetService<CollabStateStore>(),
-            () => sp.GetService<ICollabRemoteHosts>()));
+            () => sp.GetService<ICollabRemoteHosts>(),
+            sp.GetServices<Tools.ICollabTool>(),
+            sp.GetService<ICollabPolicy>()));
         services.AddSingleton<ICollabCoordinator>(sp => sp.GetRequiredService<CollabCoordinator>());
     }
 }

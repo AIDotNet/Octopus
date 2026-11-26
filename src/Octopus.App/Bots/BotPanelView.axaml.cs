@@ -20,6 +20,14 @@ public partial class BotPanelView : UserControl
         _model?.CopyRequested += OnCopyRequested;
     }
 
+    private void OnGroupRowDataContextChanged(object? sender, EventArgs e)
+    {
+        if (sender is Control control && control.DataContext is Groups.BotGroupTreeNodeViewModel node)
+        {
+            BotContextMenus.AttachGroupMenu(control, node);
+        }
+    }
+
     private void OnBotRowDataContextChanged(object? sender, EventArgs e)
     {
         if (sender is Control control && control.DataContext is BotTreeNodeViewModel node)

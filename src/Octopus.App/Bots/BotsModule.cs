@@ -10,6 +10,10 @@ internal static class BotsModule
         services.AddSingleton<BotHomeManager>();
         services.AddSingleton<BotConnectorRuntime>();
         services.AddSingleton<IBotService, BotService>();
+        services.AddSingleton<Groups.IBotGroupService>(sp => new Groups.BotGroupService(
+            sp.GetRequiredService<Octopus.Storage.IBotGroupStore>(),
+            sp.GetRequiredService<IBotService>(),
+            () => sp.GetService<Octopus.App.Workspace.ITabContentRegistry>()));
         services.AddSingleton(sp => new BotScheduler(
             sp.GetRequiredService<IBotService>(),
             () => sp.GetService<Octopus.App.Workspace.ITabContentRegistry>()));
@@ -18,5 +22,7 @@ internal static class BotsModule
             sp.GetRequiredService<BotScheduler>()));
         services.AddSingleton<BotPanelViewModel>();
         services.AddSingleton<BotRightPanelViewModel>();
+        services.AddSingleton<Groups.BotGroupRoomViewModel>();
+        services.AddSingleton<Groups.BotGroupRightPanelViewModel>();
     }
 }

@@ -80,6 +80,18 @@ public static class RemoteMethods
     public const string BotItemResolve = "bot/item/resolve";
     public const string BotConnectorToggle = "bot/connector/toggle";
 
+    // Bot Groups (multi-bot collaborative rooms).
+    public const string BotGroupList = "botGroup/list";
+    public const string BotGroupCreate = "botGroup/create";
+    public const string BotGroupUpdate = "botGroup/update";
+    public const string BotGroupDelete = "botGroup/delete";
+    public const string BotGroupRead = "botGroup/read";
+    public const string BotGroupSend = "botGroup/send";
+    public const string BotGroupStop = "botGroup/stop";
+    public const string BotGroupContinueHandoff = "botGroup/continue";
+    public const string BotGroupThreadCreate = "botGroup/thread/create";
+    public const string BotGroupApprovalRespond = "botGroup/approval/respond";
+
     /// <summary>Event: something under a watched folder changed.</summary>
     public const string FsChanged = "fs/changed";
     // A GUI conversation (AcpMessages.cs).
@@ -143,6 +155,8 @@ public static class RemoteMethods
     public const string CapabilityProjectIcons = "project.icons";
     /// <summary>The host exposes Bots, Bot multi-chat session management, work items, and connectors (<c>bot/*</c>).</summary>
     public const string CapabilityBots = "bots";
+    /// <summary>The host exposes multi-bot Group Rooms (<c>botGroup/*</c>).</summary>
+    public const string CapabilityBotGroups = "bot.groups";
 
     /// <summary>Maximum byte size of a single project thumbnail returned by <see cref="ProjectIcon"/>.</summary>
     public const int ProjectIconMaxBytes = 512 * 1024;

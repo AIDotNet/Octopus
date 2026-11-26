@@ -1786,17 +1786,23 @@ public static class AcpProtocolParser
                         extraRefs.Add($"@{att.DisplayName}");
                     }
                 }
-                else if (att.Kind == "file" && !string.IsNullOrEmpty(att.Path))
+                else if (att.Kind is "file" or "folder" && !string.IsNullOrEmpty(att.Path))
                 {
                     if (dialect.LinksFileMentions)
                     {
                         var uri = att.Path.StartsWith("file://", StringComparison.OrdinalIgnoreCase)
                             ? att.Path
                             : new Uri(Path.GetFullPath(att.Path)).AbsoluteUri;
+                        var name = string.IsNullOrEmpty(att.DisplayName)
+                            ? Path.GetFileName(Path.TrimEndingDirectorySeparator(att.Path))
+                            : Path.IsPathRooted(att.DisplayName)
+                                ? Path.GetFileName(Path.TrimEndingDirectorySeparator(att.DisplayName))
+                                : att.DisplayName;
+                        if (string.IsNullOrEmpty(name)) name = att.Path;
                         var linkObj = new JsonObject
                         {
                             ["type"] = "resource_link",
-                            ["name"] = string.IsNullOrEmpty(att.DisplayName) ? Path.GetFileName(att.Path) : att.DisplayName,
+                            ["name"] = name,
                             ["uri"] = uri,
                         };
                         if (!string.IsNullOrEmpty(att.MimeType)) linkObj["mimeType"] = att.MimeType;
@@ -1805,7 +1811,7 @@ public static class AcpProtocolParser
                     }
                     else
                     {
-                        extraRefs.Add($"@{att.DisplayName}");
+                        extraRefs.Add(FormatFileReference(att));
                     }
                 }
             }
@@ -1825,6 +1831,16 @@ public static class AcpProtocolParser
         });
 
         return blocks;
+    }
+
+    private static string FormatFileReference(AcpPromptAttachment att)
+    {
+        var target = string.IsNullOrEmpty(att.DisplayName) ? att.Path : att.DisplayName;
+        if (Path.IsPathRooted(target) || target.Any(char.IsWhiteSpace))
+        {
+            return target.Any(char.IsWhiteSpace) ? $"\"{target}\"" : target;
+        }
+        return $"@{target}";
     }
 
     private static void AttachAnnotations(JsonObject block, AcpContentAnnotations? annotations)

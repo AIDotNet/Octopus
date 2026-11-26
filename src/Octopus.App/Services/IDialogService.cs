@@ -93,6 +93,16 @@ public interface IDialogService
 
     /// <summary>Shows the Bot Import confirmation modal for a decoded <c>octopus://bot/import</c> payload.</summary>
     Task<bool> ConfirmBotImportAsync(Octopus.Core.Bots.BotSharePayload payload);
+
+    /// <summary>Shows the "New Bot Group" dialog; returns the group settings or null when dismissed.</summary>
+    Task<Octopus.App.Bots.Groups.BotGroupDialogResult?> AskNewBotGroupAsync(IReadOnlyList<Octopus.Core.Bots.BotDefinition> bots) =>
+        Task.FromResult<Octopus.App.Bots.Groups.BotGroupDialogResult?>(null);
+
+    /// <summary>Shows the "Manage Bot Group" dialog for an existing group; returns updated settings or null when dismissed.</summary>
+    Task<Octopus.App.Bots.Groups.BotGroupDialogResult?> AskEditBotGroupAsync(
+        Octopus.Core.Bots.BotGroupDefinition group,
+        IReadOnlyList<Octopus.Core.Bots.BotDefinition> bots) =>
+        Task.FromResult<Octopus.App.Bots.Groups.BotGroupDialogResult?>(null);
 }
 
 /// <summary>What the project icon dialog returns: the color, a Lucide icon name (null: the initial) and a thumbnail file (null: none).</summary>

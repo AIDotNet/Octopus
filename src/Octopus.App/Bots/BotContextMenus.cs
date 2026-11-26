@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Octopus.App.Bots.Groups;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using TKCode.Arc;
@@ -6,9 +7,32 @@ using TKCode.Arc.Icons.Lucide;
 
 namespace Octopus.App.Bots;
 
-/// <summary>Builds Arc-styled right-click context menus for Bot rows and Bot chat rows.</summary>
+/// <summary>Builds Arc-styled right-click context menus for Bot rows, Bot chat rows, and Bot Group rows.</summary>
 internal static class BotContextMenus
 {
+    public static void AttachGroupMenu(Control target, BotGroupTreeNodeViewModel node)
+    {
+        var entries = new List<MenuFactory.Entry>
+        {
+            new(AppLangResources.Get(AppLangResourceKind.BotGroupMenuNewThread), node.NewThreadCommand)
+            {
+                Icon = Icon(LucideIconKind.MessageSquarePlus),
+            },
+            new(AppLangResources.Get(AppLangResourceKind.BotGroupMenuManageMembers), node.ManageMembersCommand)
+            {
+                Icon = Icon(LucideIconKind.Users),
+            },
+            new(AppLangResources.Get(AppLangResourceKind.BotGroupMenuRename), node.RenameCommand, Glyph: ArcIcons.Pencil),
+            new(
+                AppLangResources.Get(AppLangResourceKind.BotGroupMenuDelete),
+                node.DeleteCommand,
+                IsDestructive: true,
+                SeparatorBefore: true,
+                Glyph: ArcIcons.Trash2),
+        };
+        MenuFactory.Attach(target, entries);
+    }
+
     public static void AttachBotMenu(Control target, BotTreeNodeViewModel node)
     {
         var entries = new List<MenuFactory.Entry>

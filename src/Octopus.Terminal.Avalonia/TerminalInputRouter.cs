@@ -345,6 +345,23 @@ public sealed class TerminalInputRouter(
         }
     }
 
+    /// <summary>Pastes explicit text (such as dropped file paths), honoring bracketed paste without multiline confirmation.</summary>
+    public void PasteText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        var writer = new ArrayBufferWriter<byte>();
+        var outcome = session.Read(c => c.EncodePaste(text, allowUnsafe: true, writer));
+        if (outcome == PasteOutcome.Written)
+        {
+            session.Use(c =>
+            {
+                c.ScrollViewport(ViewportScroll.Bottom);
+                if (c.HasSelection) c.ClearSelection();
+            });
+            session.Send(writer.WrittenSpan);
+        }
+    }
+
     public void Dispose() => _encoder.Dispose();
 
     /// <summary>

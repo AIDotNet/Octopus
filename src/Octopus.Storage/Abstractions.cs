@@ -73,3 +73,27 @@ public interface IBotStore
     /// <summary>Changes <see cref="Current"/>, normalizes it, and writes the file.</summary>
     void Update(Action<BotsDocument> mutate);
 }
+
+/// <summary>
+/// Reads and writes <c>bot-groups.json</c> (group definitions) and <c>bot-groups/&lt;groupId&gt;.json</c>
+/// (per-group message transcript and pending deliveries).
+/// </summary>
+public interface IBotGroupStore
+{
+    BotGroupsDocument Current { get; }
+    event EventHandler? Changed;
+
+    void Load();
+
+    /// <summary>Changes <see cref="Current"/>, normalizes it, and writes <c>bot-groups.json</c>.</summary>
+    void Update(Action<BotGroupsDocument> mutate);
+
+    /// <summary>Reads a group's persisted transcript and pending delivery document (creating an empty one when missing).</summary>
+    BotGroupRoomDocument ReadRoom(string groupId);
+
+    /// <summary>Atomically updates and persists one group's room document.</summary>
+    BotGroupRoomDocument UpdateRoom(string groupId, Action<BotGroupRoomDocument> mutate);
+
+    /// <summary>Removes a group's persisted transcript file when the group is deleted.</summary>
+    void DeleteRoom(string groupId);
+}

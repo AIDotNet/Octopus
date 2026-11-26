@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json.Nodes;
 using Octopus.App.Files;
 using Octopus.Platform;
 
@@ -16,15 +15,15 @@ public sealed class CollabStateStore(IAppPaths paths)
 
     public string FilePath => Path.Combine(paths.DataDirectory, "collab", "state.json");
 
-    public JsonObject? Load()
+    /// <summary>The saved ledger, or null when there is none or it cannot be read.</summary>
+    public string? LoadText()
     {
-        var path = FilePath;
         try
         {
-            if (!File.Exists(path)) return null;
-            return JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
+            var path = FilePath;
+            return File.Exists(path) ? File.ReadAllText(path) : null;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             return null;
         }

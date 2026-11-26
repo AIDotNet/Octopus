@@ -37,6 +37,8 @@ public interface IBotService
     bool IsBotMode { get; }
     BotDefinition? CurrentBot { get; }
     BotChat? CurrentChat { get; }
+    string? ActiveGroupId { get; }
+    string? ActiveGroupThreadId { get; }
     BotHomeManager Home { get; }
     BotConnectorRuntime ConnectorRuntime { get; }
 
@@ -48,6 +50,8 @@ public interface IBotService
 
     BotDefinition CreateBot(NewBotRequest request);
     void SelectBot(string botId);
+    void SelectGroup(string groupId, string? threadId = null);
+    void ClearActiveGroup();
     void SetBotExpanded(string botId, bool expanded);
     void RenameBot(string botId, string name);
     void SetBotPaused(string botId, bool paused);
@@ -57,6 +61,10 @@ public interface IBotService
     void DeleteBot(string botId);
 
     BotChat? CreateChat(string botId, string? agentId = null, string? title = null, bool activate = true);
+    /// <summary>Creates an isolated background chat owned by a bot inside a Bot Group room or thread.</summary>
+    BotChat? CreateGroupMemberChat(string botId, string groupId, string? threadId, string title);
+    /// <summary>Returns a <see cref="ProjectItem"/> for a group member chat without inserting it into the single-bot dock.</summary>
+    ProjectItem? GetGroupMemberBackingItem(string botId, string chatId);
     void OpenChat(string botId, string chatId);
     void CloseChat(string botId, string chatId);
     void RenameChat(string botId, string chatId, string? customTitle);

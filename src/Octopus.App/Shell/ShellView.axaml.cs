@@ -290,6 +290,7 @@ public partial class ShellView : UserControl
         var trailing = TopRight.Bounds.Width + 6;
         RightPanel.TrailingInset = trailing;
         BotRightPanel.TrailingInset = trailing;
+        BotGroupRightPanel.TrailingInset = trailing;
     }
 
     /// <summary>

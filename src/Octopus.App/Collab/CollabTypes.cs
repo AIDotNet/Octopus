@@ -13,6 +13,48 @@ public enum CollabTaskStatus
     Cancelled,
 }
 
+/// <summary>Where a negotiation thread stands. <see cref="CollabThreadStatusKeys"/> gives the wire / persisted spelling.</summary>
+public enum CollabThreadStatus
+{
+    /// <summary>Open: a reply is expected or may follow.</summary>
+    Active,
+    /// <summary>Both sides consider it settled (also the outcome of an implicit end-of-turn report).</summary>
+    Agreed,
+    /// <summary>The responder cannot proceed.</summary>
+    Blocked,
+    /// <summary>The task behind it was cancelled, or a participant stopped or went away.</summary>
+    Cancelled,
+    /// <summary>Octopus restarted while it was open.</summary>
+    Interrupted,
+    /// <summary>Its hop budget is used up; the user can extend it.</summary>
+    PausedBudget,
+}
+
+public static class CollabThreadStatusKeys
+{
+    /// <summary>The spelling used in tool results, the ledger file and the UI (<c>paused_budget</c>).</summary>
+    public static string ToKey(this CollabThreadStatus status) => status switch
+    {
+        CollabThreadStatus.Agreed => "agreed",
+        CollabThreadStatus.Blocked => "blocked",
+        CollabThreadStatus.Cancelled => "cancelled",
+        CollabThreadStatus.Interrupted => "interrupted",
+        CollabThreadStatus.PausedBudget => "paused_budget",
+        _ => "active",
+    };
+
+    public static CollabThreadStatus Parse(string? key) => key switch
+    {
+        "agreed" => CollabThreadStatus.Agreed,
+        "blocked" => CollabThreadStatus.Blocked,
+        "cancelled" => CollabThreadStatus.Cancelled,
+        "interrupted" => CollabThreadStatus.Interrupted,
+        "paused_budget" => CollabThreadStatus.PausedBudget,
+        "active" => CollabThreadStatus.Active,
+        _ => CollabThreadStatus.Interrupted,
+    };
+}
+
 public sealed class CollabTaskRecord
 {
     public required string TaskId { get; init; }
@@ -61,7 +103,8 @@ public sealed class CollabThreadRecord
     public List<string> ParticipantItemIds { get; init; } = [];
     public int Hops { get; set; }
     public int MaxHops { get; set; } = CollabSettings.DefaultMaxNegotiationHops;
-    public string Status { get; set; } = "active";
+    public CollabThreadStatus Status { get; set; } = CollabThreadStatus.Active;
+    public string StatusKey => Status.ToKey();
     public List<CollabMessageRecord> Messages { get; init; } = [];
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 
@@ -69,7 +112,7 @@ public sealed class CollabThreadRecord
     public long UpdatedSeq { get; set; }
 
     /// <summary>True once the thread can no longer progress without a new message (agreed, blocked, cancelled, interrupted, out of budget).</summary>
-    public bool IsClosed => Status is "agreed" or "blocked" or "cancelled" or "interrupted" or "paused_budget";
+    public bool IsClosed => Status != CollabThreadStatus.Active;
 }
 
 public sealed class CollabBubbledApproval
@@ -145,6 +188,9 @@ public interface ICollabSessionBridge
 public interface ICollabToolHandler
 {
     Task<JsonObject> CallToolAsync(string callerItemId, string toolName, JsonObject? arguments, CancellationToken cancellationToken);
+
+    /// <summary>The <c>tools/list</c> schemas; null lets the server use the tools it was created with.</summary>
+    JsonArray? ListTools() => null;
 }
 
 /// <summary>Read-only descriptor for one active peer session in the workspace.</summary>

@@ -14,6 +14,8 @@ public interface INavigator
     void ShowHost(RemoteHost host);
     /// <summary>Opens the dedicated workspace for a Bot (Chats/Sessions, Home, Connectors, Settings).</summary>
     void ShowBot(RemoteBot bot, BotDetailTab initialTab = BotDetailTab.Sessions) { }
+    /// <summary>Opens a multi-bot Group Room (optionally focused on a specific thread).</summary>
+    void ShowBotGroup(RemoteBotGroup group, string? threadId = null) { }
     /// <summary>A session's terminal, or its GUI conversation when the host supports it (its details otherwise).</summary>
     void ShowSession(RemoteSession session);
     /// <summary>Switches from the current session page directly to another session without stacking session pages.</summary>

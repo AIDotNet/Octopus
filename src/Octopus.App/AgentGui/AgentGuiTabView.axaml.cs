@@ -4,9 +4,9 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Octopus.App.Workspace;
+using Octopus.Terminal.Avalonia;
 
 namespace Octopus.App.AgentGui;
 
@@ -26,7 +26,9 @@ public partial class AgentGuiTabView : UserControl, ITabContent
         TimelineView.LinkOpenRequested += OnTimelineLinkOpenRequested;
 
         DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragEnterEvent, OnDragOver);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         AddHandler(DragDrop.DropEvent, OnDropAsync);
     }
 
@@ -89,6 +91,7 @@ public partial class AgentGuiTabView : UserControl, ITabContent
     {
         base.OnDetachedFromVisualTree(e);
         _isAttached = false;
+        DropOverlay.IsVisible = false;
         // Release transient overlays when switching away from this tab.
         if (_model is not null)
         {
@@ -255,19 +258,35 @@ public partial class AgentGuiTabView : UserControl, ITabContent
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        var hasFiles = e.DataTransfer.TryGetFiles() is { Length: > 0 };
-        e.DragEffects = hasFiles ? DragDropEffects.Copy : DragDropEffects.None;
+        var canDrop = _model is not null && TerminalFileDrop.HasFiles(e.DataTransfer);
+        e.DragEffects = canDrop ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+        DropOverlay.IsVisible = canDrop;
     }
+
+    private void OnDragLeave(object? sender, DragEventArgs e) => DropOverlay.IsVisible = false;
 
     private async void OnDropAsync(object? sender, DragEventArgs e)
     {
-        if (_model is null) return;
-        var files = e.DataTransfer.TryGetFiles();
-        if (files is null || files.Length == 0) return;
-        var paths = files.Select(f => f.TryGetLocalPath()).Where(p => !string.IsNullOrEmpty(p)).Cast<string>().ToList();
-        if (paths.Count > 0)
+        DropOverlay.IsVisible = false;
+        // Extract paths synchronously: the platform disposes e.DataTransfer as soon as the drop event returns.
+        var paths = TerminalFileDrop.ExtractLocalPaths(e.DataTransfer);
+        if (_model is null || paths.Count == 0)
+        {
+            e.DragEffects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+        e.DragEffects = DragDropEffects.Copy;
+        e.Handled = true;
+        try
         {
             await _model.AttachFilePathsAsync(paths);
+            ComposerInput.Focus();
+        }
+        catch
+        {
+            // Ignore unexpected I/O errors during async drop attachment so the UI thread is never terminated.
         }
     }
 

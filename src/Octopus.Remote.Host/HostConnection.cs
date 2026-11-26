@@ -98,6 +98,7 @@ internal sealed class HostConnection : IAsyncDisposable
         RegisterFiles(json);
         RegisterConversations(json);
         RegisterBots(json);
+        RegisterBotGroups(json);
         _connection.Handle(RemoteMethods.SystemMetrics, json.SystemMetricsRequestMessage, json.SystemMetricsSnapshotMessage,
             (request, ct) => _workspace.GetSystemMetricsAsync(request, ct));
         _connection.Handle(RemoteMethods.SystemSignalProcess, json.SignalProcessMessage, json.SignalProcessResultMessage,
@@ -306,6 +307,42 @@ internal sealed class HostConnection : IAsyncDisposable
         _connection.Handle(RemoteMethods.BotConnectorToggle, json.ToggleBotConnectorMessage, json.Nothing, async (request, _) =>
         {
             await _workspace.ToggleBotConnectorAsync(request).ConfigureAwait(false);
+            return new Nothing();
+        });
+    }
+
+    private void RegisterBotGroups(RemoteJsonContext json)
+    {
+        _connection.Handle(RemoteMethods.BotGroupList, json.Nothing, json.BotGroupListMessage,
+            async (_, _) => new BotGroupListMessage { Groups = [.. await _workspace.ListBotGroupsAsync().ConfigureAwait(false)] });
+        _connection.Handle(RemoteMethods.BotGroupCreate, json.CreateBotGroupMessage, json.BotGroupMessageDto,
+            (request, _) => _workspace.CreateBotGroupAsync(request));
+        _connection.Handle(RemoteMethods.BotGroupUpdate, json.UpdateBotGroupMessage, json.BotGroupMessageDto,
+            (request, _) => _workspace.UpdateBotGroupAsync(request));
+        _connection.Handle(RemoteMethods.BotGroupDelete, json.BotGroupRefMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.DeleteBotGroupAsync(request.GroupId).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.BotGroupRead, json.BotGroupRoomReadRequestMessage, json.BotGroupRoomSnapshotMessage,
+            (request, _) => _workspace.ReadBotGroupRoomAsync(request));
+        _connection.Handle(RemoteMethods.BotGroupSend, json.BotGroupSendMessage, json.BotGroupEntryDto,
+            (request, _) => _workspace.SendBotGroupMessageAsync(request));
+        _connection.Handle(RemoteMethods.BotGroupStop, json.BotGroupStopMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.StopBotGroupAsync(request).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.BotGroupContinueHandoff, json.BotGroupContinueHandoffMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.ContinueBotGroupHandoffAsync(request).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.BotGroupThreadCreate, json.BotGroupRefMessage, json.BotGroupThreadDto,
+            (request, _) => _workspace.CreateBotGroupThreadAsync(request.GroupId));
+        _connection.Handle(RemoteMethods.BotGroupApprovalRespond, json.BotGroupApprovalRespondMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.RespondBotGroupApprovalAsync(request).ConfigureAwait(false);
             return new Nothing();
         });
     }

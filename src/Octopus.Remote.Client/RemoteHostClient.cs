@@ -196,6 +196,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public bool SupportsBots =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityBots);
 
+    /// <summary>Both sides support multi-bot Group Rooms (<c>botGroup/*</c>).</summary>
+    public bool SupportsBotGroups =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityBotGroups);
+
     /// <summary>Projects or their items changed on the host. Raised on the receiving thread.</summary>
     public event Action? WorkspaceChanged;
     /// <summary>One item's title or activity changed. Raised on the receiving thread.</summary>
@@ -276,6 +280,38 @@ public sealed class RemoteHostClient : IAsyncDisposable
 
     public Task ToggleBotConnectorAsync(string botId, string connectorId, bool enabled, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.BotConnectorToggle, new ToggleBotConnectorMessage { BotId = botId, ConnectorId = connectorId, Enabled = enabled }, RemoteJsonContext.Default.ToggleBotConnectorMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    // ---- Bot Groups (BotGroupMessages.cs) ----
+
+    public async Task<IReadOnlyList<BotGroupMessageDto>> ListBotGroupsAsync(CancellationToken cancellationToken = default) =>
+        (await CallAsync(RemoteMethods.BotGroupList, new Nothing(), RemoteJsonContext.Default.Nothing, RemoteJsonContext.Default.BotGroupListMessage, cancellationToken).ConfigureAwait(false)).Groups;
+
+    public Task<BotGroupMessageDto> CreateBotGroupAsync(CreateBotGroupMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupCreate, request, RemoteJsonContext.Default.CreateBotGroupMessage, RemoteJsonContext.Default.BotGroupMessageDto, cancellationToken);
+
+    public Task<BotGroupMessageDto> UpdateBotGroupAsync(UpdateBotGroupMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupUpdate, request, RemoteJsonContext.Default.UpdateBotGroupMessage, RemoteJsonContext.Default.BotGroupMessageDto, cancellationToken);
+
+    public Task DeleteBotGroupAsync(string groupId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupDelete, new BotGroupRefMessage { GroupId = groupId }, RemoteJsonContext.Default.BotGroupRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task<BotGroupRoomSnapshotMessage> ReadBotGroupRoomAsync(BotGroupRoomReadRequestMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupRead, request, RemoteJsonContext.Default.BotGroupRoomReadRequestMessage, RemoteJsonContext.Default.BotGroupRoomSnapshotMessage, cancellationToken);
+
+    public Task<BotGroupEntryDto> SendBotGroupMessageAsync(BotGroupSendMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupSend, request, RemoteJsonContext.Default.BotGroupSendMessage, RemoteJsonContext.Default.BotGroupEntryDto, cancellationToken);
+
+    public Task StopBotGroupAsync(BotGroupStopMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupStop, request, RemoteJsonContext.Default.BotGroupStopMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task ContinueBotGroupHandoffAsync(BotGroupContinueHandoffMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupContinueHandoff, request, RemoteJsonContext.Default.BotGroupContinueHandoffMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task<BotGroupThreadDto> CreateBotGroupThreadAsync(string groupId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupThreadCreate, new BotGroupRefMessage { GroupId = groupId }, RemoteJsonContext.Default.BotGroupRefMessage, RemoteJsonContext.Default.BotGroupThreadDto, cancellationToken);
+
+    public Task RespondBotGroupApprovalAsync(BotGroupApprovalRespondMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.BotGroupApprovalRespond, request, RemoteJsonContext.Default.BotGroupApprovalRespondMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
     // ---- GUI conversations (AcpMessages.cs) ----
 

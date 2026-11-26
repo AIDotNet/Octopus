@@ -47,13 +47,6 @@ public sealed partial class UserTurnItem : AgentTimelineItem
         }
     }
 
-    /// <summary>Collapsed preview limits: long prompts render only this much text until the user expands them.</summary>
-    internal const int CollapsedMaxChars = 600;
-    internal const int CollapsedMaxLines = 8;
-
-    private bool _isExpanded;
-    private bool _previewComputed;
-    private int _previewLength;
     private string _displaySource = "";
 
     public string Text { get; private set; }
@@ -63,64 +56,12 @@ public sealed partial class UserTurnItem : AgentTimelineItem
     public bool IsRegularUserMessage => !IsCollabMessage;
     public string CollabHeader { get; private set; } = "";
 
-    /// <summary>True when the prompt exceeds the collapsed preview limits.</summary>
-    public bool IsCollapsible
-    {
-        get
-        {
-            EnsurePreview();
-            return _previewLength < _displaySource.Length;
-        }
-    }
+    /// <summary>Expanded state bound two-way to <see cref="ExpandableContent.IsExpanded"/> so it survives list recycling.</summary>
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
 
-    public bool IsExpanded
-    {
-        get => _isExpanded;
-        private set
-        {
-            if (_isExpanded == value) return;
-            _isExpanded = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(DisplayText));
-            OnPropertyChanged(nameof(ToggleExpandedText));
-        }
-    }
-
-    /// <summary>Text actually laid out by the view: a short preview while collapsed, so long prompts stay cheap to render.</summary>
-    public string DisplayText
-    {
-        get
-        {
-            if (_isExpanded) return _displaySource;
-            EnsurePreview();
-            return _previewLength < _displaySource.Length ? _displaySource[.._previewLength].TrimEnd() + "…" : _displaySource;
-        }
-    }
-
-    public string ToggleExpandedText => AppLangResources.Get(
-        _isExpanded ? AppLangResourceKind.AgentGuiUserTurnCollapse : AppLangResourceKind.AgentGuiUserTurnExpand);
-
-    [RelayCommand]
-    private void ToggleExpanded() => IsExpanded = !IsExpanded;
-
-    // Scans at most CollapsedMaxChars + 1 characters, so the cost is independent of prompt length.
-    private void EnsurePreview()
-    {
-        if (_previewComputed) return;
-        _previewComputed = true;
-        var text = _displaySource;
-        var limit = Math.Min(text.Length, CollapsedMaxChars);
-        var lines = 1;
-        for (var i = 0; i < limit; i++)
-        {
-            if (text[i] == '\n' && ++lines > CollapsedMaxLines)
-            {
-                _previewLength = i;
-                return;
-            }
-        }
-        _previewLength = text.Length > CollapsedMaxChars ? CollapsedMaxChars : text.Length;
-    }
+    /// <summary>Display text shown in the timeline (full text; visual clamping is handled by <see cref="ExpandableContent"/>).</summary>
+    public string DisplayText => _displaySource;
 
     /// <summary>Message id from a replayed <c>user_message_chunk</c>, used to stitch chunks together.</summary>
     public string? MessageId { get; init; }
@@ -130,14 +71,12 @@ public sealed partial class UserTurnItem : AgentTimelineItem
     {
         if (string.IsNullOrEmpty(delta)) return;
         Text += delta;
-        _previewComputed = false;
         ParseCollabMetadata();
         OnPropertyChanged(nameof(Text));
         OnPropertyChanged(nameof(IsCollabMessage));
         OnPropertyChanged(nameof(IsRegularUserMessage));
         OnPropertyChanged(nameof(CollabHeader));
         OnPropertyChanged(nameof(DisplayText));
-        OnPropertyChanged(nameof(IsCollapsible));
         OnPropertyChanged(nameof(CanReuse));
     }
 
@@ -153,26 +92,12 @@ public sealed partial class UserTurnItem : AgentTimelineItem
 
     private void ParseCollabMetadata()
     {
-        var trimmed = Text.TrimStart();
-        if (trimmed.StartsWith("[Octopus Collab", StringComparison.Ordinal))
+        if (Octopus.Remote.Protocol.CollabEnvelope.TryParse(Text) is { } envelope)
         {
-            var firstLineEnd = trimmed.IndexOf('\n');
-            var firstLine = (firstLineEnd >= 0 ? trimmed[..firstLineEnd] : trimmed).Trim();
-            if (firstLine.EndsWith(']') && firstLine.Length > 2)
-            {
-                IsCollabMessage = true;
-                var inner = firstLine[1..^1].Trim();
-                if (inner.StartsWith("Octopus ", StringComparison.Ordinal))
-                {
-                    inner = inner["Octopus ".Length..];
-                }
-                CollabHeader = inner;
-
-                var body = firstLineEnd >= 0 ? trimmed[(firstLineEnd + 1)..].Trim() : "";
-                body = StripCollabInstructionFooter(body);
-                _displaySource = body.Length > 0 ? body : inner;
-                return;
-            }
+            IsCollabMessage = true;
+            CollabHeader = envelope.RawHeader;
+            _displaySource = envelope.Body.Length > 0 ? envelope.Body : envelope.RawHeader;
+            return;
         }
 
         IsCollabMessage = false;
@@ -221,33 +146,6 @@ public sealed partial class UserTurnItem : AgentTimelineItem
         OnPropertyChanged(nameof(HasAttachments));
     }
 
-    private static string StripCollabInstructionFooter(string body)
-    {
-        if (string.IsNullOrWhiteSpace(body)) return "";
-        var normalized = body.Replace("\r\n", "\n", StringComparison.Ordinal);
-        string[] footerPrefixes =
-        [
-            "When finished (or if you need clarification from the delegating agent),",
-            "(The other session marked this thread as agreed/completed;",
-            "(Reply via `reply_thread(",
-            "(Please follow the user's guidance and continue or conclude the thread",
-            "(This message comes from another computer:",
-        ];
-
-        foreach (var prefix in footerPrefixes)
-        {
-            var idx = normalized.LastIndexOf(prefix, StringComparison.Ordinal);
-            if (idx > 0 && normalized[idx - 1] == '\n')
-            {
-                return normalized[..idx].TrimEnd();
-            }
-            if (idx == 0)
-            {
-                return "";
-            }
-        }
-        return body;
-    }
 }
 
 /// <summary>An attachment pill shown in the composer or inside a sent user turn.</summary>
@@ -264,12 +162,28 @@ public sealed class AttachmentChipViewModel
     }
 
     public AcpPromptAttachment Attachment { get; }
-    public string Label => string.IsNullOrWhiteSpace(Attachment.DisplayName)
-        ? Path.GetFileName(Attachment.Path)
-        : Attachment.DisplayName;
+    public string Label
+    {
+        get
+        {
+            var raw = string.IsNullOrWhiteSpace(Attachment.DisplayName)
+                ? Attachment.Path
+                : Attachment.DisplayName;
+            if (string.IsNullOrWhiteSpace(raw)) return "";
+            if (Attachment.Kind is "file" or "folder" or "image" && Path.IsPathRooted(raw))
+            {
+                var trimmed = Path.TrimEndingDirectorySeparator(raw);
+                var name = Path.GetFileName(trimmed);
+                return string.IsNullOrEmpty(name) ? raw : name;
+            }
+            return raw;
+        }
+    }
+    public string? Tooltip => string.IsNullOrWhiteSpace(Attachment.Path) ? null : Attachment.Path;
     public LucideIconKind Icon => Attachment.Kind switch
     {
         "image" => LucideIconKind.Image,
+        "folder" => LucideIconKind.Folder,
         "session" => LucideIconKind.MessageSquare,
         "agent" => LucideIconKind.Bot,
         _ => LucideIconKind.FileText,

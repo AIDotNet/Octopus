@@ -71,3 +71,42 @@ public sealed class InMemoryBotStore(BotsDocument? initial = null) : IBotStore
         Changed?.Invoke(this, EventArgs.Empty);
     }
 }
+
+/// <summary>A bot group store that keeps group metadata and room transcripts in memory (headless tests).</summary>
+public sealed class InMemoryBotGroupStore(BotGroupsDocument? initial = null) : IBotGroupStore
+{
+    private readonly Dictionary<string, BotGroupRoomDocument> _rooms = new(StringComparer.Ordinal);
+
+    public BotGroupsDocument Current { get; private set; } = JsonBotGroupStore.Normalize(initial);
+    public event EventHandler? Changed;
+
+    public void Load() => Changed?.Invoke(this, EventArgs.Empty);
+
+    public void Update(Action<BotGroupsDocument> mutate)
+    {
+        mutate(Current);
+        Current = JsonBotGroupStore.Normalize(Current);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public BotGroupRoomDocument ReadRoom(string groupId)
+    {
+        if (!_rooms.TryGetValue(groupId, out var room))
+        {
+            room = JsonBotGroupStore.NormalizeRoom(null, groupId);
+            _rooms[groupId] = room;
+        }
+        return room;
+    }
+
+    public BotGroupRoomDocument UpdateRoom(string groupId, Action<BotGroupRoomDocument> mutate)
+    {
+        var room = ReadRoom(groupId);
+        mutate(room);
+        room = JsonBotGroupStore.NormalizeRoom(room, groupId);
+        _rooms[groupId] = room;
+        return room;
+    }
+
+    public void DeleteRoom(string groupId) => _rooms.Remove(groupId);
+}

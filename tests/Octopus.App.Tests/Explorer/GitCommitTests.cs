@@ -112,7 +112,7 @@ public class GitCommitTests
         model.SetRepository(project.Root);
         await model.RefreshAsync();
         Assert.Equal(3000, model.Groups.Single().Rows.Count);
-        Assert.Equal(3000 + 2, model.Items.Count);   // the heading, the rows, the commits heading
+        Assert.Equal(3000 + 3, model.Items.Count);   // changes section heading, group heading, rows, commits heading
 
         var view = new GitTabView { DataContext = model };
         var window = new Window { Width = 320, Height = 760, Content = view };
@@ -255,6 +255,84 @@ public class GitCommitTests
         await git.ToggleCommit(git.Commits[0]);
         Assert.Empty(git.Items.OfType<GitCommitFileRowViewModel>());
         panel.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task Sections_collapse_commits_paginate_and_branch_graph_mounts_only_when_expanded()
+    {
+        if (ExplorerFixture.FindGit() is null) return;
+        using var project = Repository();
+        var totalCommits = GitPanelViewModel.CommitPageSize + 6;
+        for (var i = 1; i <= totalCommits; i++)
+        {
+            project.Write($"c{i:D2}.txt", $"v{i}\n");
+            project.Git("add", ".");
+            project.Git("commit", "-q", "-m", $"commit-{i:D2}");
+        }
+        var main = project.GitOutput("branch", "--show-current");
+        project.Git("checkout", "-q", "-b", "feat/ui");
+        project.Write("feat.txt", "feature\n");
+        project.Git("add", ".");
+        project.Git("commit", "-q", "-m", "feat-commit");
+        project.Git("checkout", "-q", main);
+        project.Git("merge", "-q", "--no-ff", "feat/ui", "-m", "Merge branch 'feat/ui'");
+        project.Write("dirty.txt", "wip\n");
+
+        var model = new GitPanelViewModel(AppHost.Get<Octopus.Git.IGitService>());
+        model.SetRepository(project.Root);
+        await model.RefreshAsync();
+
+        // Commits load one page at a time instead of everything at once.
+        Assert.Equal(GitPanelViewModel.CommitPageSize, model.Commits.Count);
+        Assert.True(model.HasMoreCommits);
+        Assert.Contains(model.Items, i => i is GitCommitsFooterViewModel);
+
+        // Branch graph starts collapsed and does not load until expanded.
+        Assert.False(model.IsBranchGraphExpanded);
+        Assert.Empty(model.BranchGraphCommits);
+
+        var view = new GitTabView { DataContext = model };
+        var window = new Window { Width = 320, Height = 760, Content = view };
+        window.Show();
+        Frames.Pump();
+        Assert.Empty(window.GetVisualDescendants().OfType<TKCode.Arc.BranchGraph>());
+
+        // Collapsing Changes and Commits hides their rows.
+        Assert.True(model.IsChangesExpanded);
+        Assert.True(model.IsCommitsExpanded);
+        model.ToggleChangesSectionCommand.Execute(null);
+        Assert.False(model.IsChangesExpanded);
+        Assert.Empty(model.Items.OfType<GitChangeRowViewModel>());
+        model.ToggleCommitsSectionCommand.Execute(null);
+        Assert.False(model.IsCommitsExpanded);
+        Assert.Empty(model.Items.OfType<GitCommitRowViewModel>());
+        model.ToggleCommitsSectionCommand.Execute(null);
+        Assert.Equal(GitPanelViewModel.CommitPageSize, model.Items.OfType<GitCommitRowViewModel>().Count());
+
+        // Loading the next page appends the remaining commits and clears HasMoreCommits.
+        await model.LoadMoreCommitsAsync();
+        Assert.Equal(totalCommits + 2, model.Commits.Count); // + feat-commit + merge commit
+        Assert.False(model.HasMoreCommits);
+        Assert.DoesNotContain(model.Items, i => i is GitCommitsFooterViewModel);
+
+        // Expanding Branch Graph lazily loads commits and mounts the Arc BranchGraph control.
+        await model.ToggleBranchGraphCommand.ExecuteAsync(null);
+        Frames.Pump();
+        Assert.True(model.IsBranchGraphExpanded);
+        Assert.NotEmpty(model.BranchGraphCommits);
+        Assert.Contains(model.BranchGraphCommits, c => c.Branch == "feat/ui");
+        var graphControl = Assert.Single(window.GetVisualDescendants().OfType<TKCode.Arc.BranchGraph>());
+        Assert.False(graphControl.AutoPlay);
+        Assert.False(graphControl.AreControlsVisible);
+
+        // Collapsing Branch Graph unmounts it again.
+        await model.ToggleBranchGraphCommand.ExecuteAsync(null);
+        Frames.Pump();
+        Assert.False(model.IsBranchGraphExpanded);
+        Assert.Empty(window.GetVisualDescendants().OfType<TKCode.Arc.BranchGraph>());
+
+        window.Close();
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static async Task FileTabWait(Func<bool> condition)

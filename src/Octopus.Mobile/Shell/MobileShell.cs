@@ -182,6 +182,9 @@ public sealed class MobileShell : ContentControl, INavigator
     public void ShowBot(RemoteBot bot, BotDetailTab initialTab = BotDetailTab.Sessions) =>
         Push(new BotDetailPage(new BotDetailViewModel(bot, _workspace, this, initialTab)));
 
+    public void ShowBotGroup(RemoteBotGroup group, string? threadId = null) =>
+        Push(new BotGroupDetailPage(new BotGroupDetailViewModel(group, _workspace, this, threadId)));
+
     public void ShowSession(RemoteSession session)
     {
         // A GUI session opens its conversation when the host speaks acp.gui (G-A), or its details with an update note (G-0).

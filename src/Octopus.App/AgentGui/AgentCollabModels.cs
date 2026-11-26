@@ -113,8 +113,8 @@ public sealed partial class CollabThreadPanelViewModel : ObservableObject
         ThreadId = thread.ThreadId;
         Title = thread.Title;
         HopsText = $"{thread.Hops}/{thread.MaxHops}";
-        Status = thread.Status;
-        IsBudgetPaused = thread.Status == "paused_budget";
+        Status = thread.StatusKey;
+        IsBudgetPaused = thread.Status == CollabThreadStatus.PausedBudget;
         foreach (var msg in thread.Messages)
         {
             Messages.Add(new CollabThreadMessageViewModel(msg));

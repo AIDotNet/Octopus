@@ -11,6 +11,7 @@
            x:DataType="vm:HostsViewModel"
            IsScrollable="True">
     <arcm:Page.Resources>
+        <StreamGeometry x:Key="GroupUsersGlyph">M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75</StreamGeometry>
         <!-- One computer row: how it is reached, and a pill with what needs the person there (a lock: its access
              password gets in). Offline it is faded and does nothing. -->
         <DataTemplate x:Key="HostRow" x:DataType="vm:HostRowViewModel">
@@ -116,7 +117,12 @@
             </arcm:Navbar.Leading>
             <arcm:Navbar.Trailing>
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <!-- Quick import link + create Bot on Bots tab -->
+                    <!-- Quick new group + import link + create Bot on Bots tab -->
+                    <arcm:IconButton Name="NavNewGroupButton"
+                                     Icon="{StaticResource GroupUsersGlyph}"
+                                     Command="{Binding Bots.OpenNewGroupCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource BotGroupsNewButton}"
+                                     IsVisible="{Binding IsBotsTab}" />
                     <arcm:IconButton Name="NavImportBotButton"
                                      Icon="{x:Static arc:ArcIcons.ExternalLink}"
                                      Command="{Binding Bots.OpenImportBotCommand}"
@@ -336,8 +342,8 @@
                            FontSize="{arc:ArcDesignTokenResource TypeSM}" />
             </Border>
 
-            <!-- Search + filter chips when bots exist -->
-            <StackPanel Spacing="8" IsVisible="{Binding HasBots}">
+            <!-- Search + filter chips when bots or groups exist -->
+            <StackPanel Spacing="8" IsVisible="{Binding HasAnyBotsOrGroups}">
                 <arcm:TextField Name="BotsSearchField"
                                 Classes="hostSearch"
                                 Margin="16,0"
@@ -367,6 +373,105 @@
                     </StackPanel>
                 </ScrollViewer>
             </StackPanel>
+
+            <!-- Bot Groups section above single Bots -->
+            <StackPanel Name="BotGroupsSection" Spacing="8" IsVisible="{Binding HasAnyBotsOrGroups}">
+                <Grid ColumnDefinitions="*,Auto" Margin="18,0">
+                    <TextBlock Classes="sectionHeader"
+                               Text="{l:MobileLangResource BotGroupsSectionHeader}"
+                               VerticalAlignment="Center" />
+                    <Button Name="BotsNewGroupInlineButton"
+                            Grid.Column="1"
+                            Classes="inlineLinkBtn"
+                            Command="{Binding OpenNewGroupCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="12"
+                                          Foreground="{arc:ArcDesignTokenResource Accent}"
+                                          VerticalAlignment="Center" />
+                            <TextBlock Text="{l:MobileLangResource BotGroupsNewButton}" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <ItemsControl Name="BotGroupsList" ItemsSource="{Binding VisibleGroups}" IsVisible="{Binding HasVisibleGroups}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="10" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="bots:BotGroupCardViewModel">
+                            <Border Classes="projectCard"
+                                    Classes.attention="{Binding HasAttention}"
+                                    Margin="16,0">
+                                <Button Classes="cardHeaderBtn" Command="{Binding OpenCommand}" Padding="12,11">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="11">
+                                        <!-- Avatar cluster -->
+                                        <ItemsControl Grid.Column="0" ItemsSource="{Binding MemberAvatars}" VerticalAlignment="Center">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="-6" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="bots:BotGroupAvatarViewModel">
+                                                    <Border Classes="groupAvatarPip" Background="{Binding Background}">
+                                                        <TextBlock Text="{Binding Initial}" />
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Classes="projectCardTitle" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                    <Border Classes="branchTag" IsVisible="{Binding HasOverflow}">
+                                                        <TextBlock Text="{Binding OverflowText}" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1"
+                                                           Classes="muted"
+                                                           Text="{Binding LatestTimeText}"
+                                                           IsVisible="{Binding HasLatestTime}"
+                                                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                            <TextBlock Classes="projectCardPath" Text="{Binding MemberCountText}" />
+                                            <TextBlock Classes="secondary"
+                                                       Text="{Binding LatestPreview}"
+                                                       IsVisible="{Binding HasLatestPreview}"
+                                                       MaxLines="1"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Border Classes="pill compact waiting" IsVisible="{Binding HasPendingApprovals}">
+                                                <TextBlock Text="{Binding ApprovalBadgeText}" />
+                                            </Border>
+                                            <Border Classes="pill compact working" IsVisible="{Binding StatusIsWorking}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <arc:ArcSpinner />
+                                                    <TextBlock Text="{l:MobileLangResource BotsStatusWorking}" />
+                                                </StackPanel>
+                                            </Border>
+                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronRight}" Size="15"
+                                                          Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                          VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Single Bots section header when groups are also shown -->
+            <TextBlock Classes="sectionHeader"
+                       Margin="18,4,18,-4"
+                       Text="{l:MobileLangResource BotGroupsSingleBotsHeader}"
+                       IsVisible="{Binding ShowSingleBotsHeader}" />
 
             <!-- Expandable Bot cards with inline 1-tap approvals & embedded active sessions -->
             <ItemsControl Name="BotAccordionList" ItemsSource="{Binding VisibleBots}" IsVisible="{Binding HasVisibleBots}">
@@ -809,6 +914,73 @@
                                       IsDestructive="True"
                                       Command="{Binding LeaveLocalCommand}" />
             </arcm:ActionSheet>
+
+            <!-- New Bot Group Sheet -->
+            <arcm:Sheet Name="NewBotGroupSheet"
+                        DataContext="{Binding Bots}"
+                        x:DataType="bots:BotsTabViewModel"
+                        IsOpen="{Binding IsNewGroupOpen, Mode=TwoWay}"
+                        MaxHeightFraction="0.88"
+                        Title="{l:MobileLangResource BotGroupsNewTitle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="16,4,16,24" Spacing="12">
+                        <TextBlock Classes="secondary" IsVisible="{Binding HasNoOnlineHosts}"
+                                   Text="{l:MobileLangResource BotsNoOnlineHostHint}" TextWrapping="Wrap" />
+
+                        <StackPanel Spacing="6" IsVisible="{Binding HasOnlineHosts}">
+                            <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotsNewBotHostLabel}" />
+                            <arcm:Segmented ItemsSource="{Binding OnlineHostNames}"
+                                            SelectedIndex="{Binding SelectedGroupHostIndex, Mode=TwoWay}" />
+                        </StackPanel>
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotGroupsNewNameLabel}" />
+                        <arcm:TextField Text="{Binding NewGroupName, Mode=TwoWay}"
+                                        PlaceholderText="{l:MobileLangResource BotGroupsNewNamePlaceholder}" />
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotGroupsNewMembersLabel}" />
+                        <arcm:ListGroup ItemsSource="{Binding NewGroupMemberChoices}"
+                                        IsVisible="{Binding HasNewGroupMemberChoices}">
+                            <arcm:ListGroup.ItemTemplate>
+                                <DataTemplate x:DataType="bots:BotGroupMemberToggleViewModel">
+                                    <arcm:ListItem>
+                                        <arcm:ListItem.Trailing>
+                                            <arcm:Switch IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                        </arcm:ListItem.Trailing>
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,3">
+                                            <Border Grid.Column="0" Classes="badge" Background="{Binding AvatarBrush}">
+                                                <TextBlock Text="{Binding Initial}" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                                <TextBlock Classes="sessionTitle" Text="{Binding BotName}" />
+                                                <TextBlock Classes="secondary" Text="{Binding AgentLabel}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </arcm:ListItem>
+                                </DataTemplate>
+                            </arcm:ListGroup.ItemTemplate>
+                        </arcm:ListGroup>
+                        <Border Classes="emptyCard" IsVisible="{Binding HasNoNewGroupMemberChoices}">
+                            <TextBlock Classes="muted" Text="{l:MobileLangResource BotGroupsNewMembersEmpty}" TextWrapping="Wrap" />
+                        </Border>
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotGroupsNewReplyModeLabel}" />
+                        <arcm:Segmented ItemsSource="{Binding GroupReplyModeLabels}"
+                                        SelectedIndex="{Binding SelectedGroupReplyModeIndex, Mode=TwoWay}" />
+
+                        <TextBlock Text="{Binding ErrorMessage}"
+                                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                                   IsVisible="{Binding HasError}"
+                                   TextWrapping="Wrap"
+                                   FontSize="{arc:ArcDesignTokenResource TypeSM}" />
+
+                        <arcm:Button Variant="Filled"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource BotGroupsNewCreate}"
+                                     Command="{Binding ConfirmCreateGroupCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </arcm:Sheet>
 
             <!-- New Bot Sheet -->
             <arcm:Sheet Name="NewBotSheet"

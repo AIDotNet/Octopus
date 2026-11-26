@@ -212,64 +212,6 @@ public sealed class ServerMonitorExtensionsTests
         Assert.Equal("Column", openObj["tree"]!["t"]!.GetValue<string>());
     }
 
-    [Fact]
-    public async Task RealServerMonitorPlugin_ManifestValid_And_AllThreeSurfacesRender()
-    {
-        var pluginDir = "/Users/token/code/Octopus/Octopus-Plugins/octopus.server-monitor";
-        if (!Directory.Exists(pluginDir)) return;
-
-        var parsed = PluginManifestReader.ReadPackage(pluginDir, PluginSource.File, requireDirectoryName: true);
-        Assert.True(parsed.IsValid, string.Join("\n", parsed.Issues));
-        Assert.Empty(parsed.Issues);
-
-        var fakeDevices = new FakeDeviceContext();
-        var fakeSystem = new FakeSystemService();
-        await using var harness = new Harness();
-        harness.Options = new PluginManagerOptions
-        {
-            RestartDelays = [TimeSpan.FromMilliseconds(50)],
-            MaxCrashes = 3,
-            Budgets = TurnBudgets.Default,
-        };
-        harness.ExtraModules.Add(new DevicesModule(fakeDevices));
-        harness.ExtraModules.Add(new SystemMetricsModule(fakeSystem, fakeDevices));
-
-        var target = Path.Combine(harness.BuiltinRoot, "octopus.server-monitor");
-        Directory.CreateDirectory(target);
-        foreach (var file in Directory.GetFiles(pluginDir))
-        {
-            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
-        }
-
-        var manager = await harness.StartAsync();
-        var ct = TestContext.Current.CancellationToken;
-        var host = manager.Find("octopus.server-monitor");
-        Assert.NotNull(host);
-        Assert.Equal(PluginHostState.Running, host!.State);
-        Assert.Contains(("panel", "octopus.server-monitor.panel"), host.Providers);
-        Assert.Contains(("view", "octopus.server-monitor.dashboard"), host.Providers);
-
-        // Open right panel
-        var panelJson = await host.InvokeAsync("view.open", new JsonArray("panel", "octopus.server-monitor.panel", new JsonObject
-        {
-            ["instanceId"] = "panel:octopus.server-monitor.panel",
-            ["visible"] = true,
-        }), TimeSpan.FromSeconds(5), ct);
-        Assert.Equal("Scroll", JsonNode.Parse(panelJson)!["tree"]!["t"]!.GetValue<string>());
-
-        // Open full dashboard view
-        var dashJson = await host.InvokeAsync("view.open", new JsonArray("view", "octopus.server-monitor.dashboard", new JsonObject
-        {
-            ["instanceId"] = "tab:dash",
-            ["visible"] = true,
-        }), TimeSpan.FromSeconds(5), ct);
-        Assert.Equal("Scroll", JsonNode.Parse(dashJson)!["tree"]!["t"]!.GetValue<string>());
-
-        // Click indicator to render popover
-        var popJson = await host.InvokeAsync("indicator.click:octopus.server-monitor.indicator", [], TimeSpan.FromSeconds(5), ct);
-        Assert.Equal("Column", JsonNode.Parse(popJson)!["tree"]!["t"]!.GetValue<string>());
-    }
-
     private sealed class FakeDeviceContext : IPluginDeviceContext
     {
         public PluginDeviceInfo Current { get; } = new("local", "local", "MyMac", null, "local", ["system.metrics", "system.signal", "process.run"]);

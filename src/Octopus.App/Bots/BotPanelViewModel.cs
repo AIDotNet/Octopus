@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Octopus.App.Activity;
+using Octopus.App.Bots.Groups;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
@@ -271,6 +272,7 @@ public sealed partial class BotPanelViewModel : ObservableObject
     private readonly IAppKeymap _keymap;
     private readonly IProjectIconStore? _icons;
     private readonly IItemActivityService? _activity;
+    private readonly IBotGroupService? _botGroups;
 
     public BotPanelViewModel(
         IBotService bots,
@@ -278,7 +280,8 @@ public sealed partial class BotPanelViewModel : ObservableObject
         IFileOpener files,
         IAppKeymap keymap,
         IProjectIconStore? icons = null,
-        IItemActivityService? activity = null)
+        IItemActivityService? activity = null,
+        IBotGroupService? botGroups = null)
     {
         _bots = bots;
         _dialogs = dialogs;
@@ -286,8 +289,10 @@ public sealed partial class BotPanelViewModel : ObservableObject
         _keymap = keymap;
         _icons = icons;
         _activity = activity;
+        _botGroups = botGroups;
 
         _bots.Changed += (_, _) => UiContext.Run(Rebuild);
+        _botGroups?.Changed += (_, _) => UiContext.Run(Rebuild);
         _activity?.Changed += (_, _) => UiContext.Run(Rebuild);
         ArcLanguage.Changed += (_, _) => UiContext.Run(() =>
         {
@@ -299,6 +304,7 @@ public sealed partial class BotPanelViewModel : ObservableObject
         Rebuild();
     }
 
+    public ObservableCollection<BotGroupTreeNodeViewModel> GroupNodes { get; } = [];
     public ObservableCollection<BotTreeNodeViewModel> BotNodes { get; } = [];
     public ObservableCollection<BotQuickTemplateViewModel> StarterTemplates { get; } = [];
 
@@ -308,14 +314,44 @@ public sealed partial class BotPanelViewModel : ObservableObject
     [ObservableProperty] public partial string SearchQuery { get; set; } = "";
     [ObservableProperty] public partial int BotCount { get; private set; }
     [ObservableProperty] public partial bool HasBots { get; private set; }
+    [ObservableProperty] public partial bool HasGroups { get; private set; }
+    [ObservableProperty] public partial bool HasAnyContent { get; private set; }
     [ObservableProperty] public partial bool IsEmpty { get; private set; }
 
+    public bool ShowNewGroupButton => _botGroups is not null;
     public string NewBotShortcutHint => _keymap.Hint(AppCommand.NewBot);
 
     partial void OnSearchQueryChanged(string value) => Rebuild();
 
     [RelayCommand]
     public Task NewBotAsync() => OpenNewBotDialogAsync(null);
+
+    [RelayCommand]
+    public async Task NewGroupAsync()
+    {
+        if (_botGroups is null)
+        {
+            return;
+        }
+        if (_bots.Bots.Count == 0)
+        {
+            await _dialogs.ConfirmAsync(
+                AppLangResources.Get(AppLangResourceKind.BotGroupNoBotsTitle),
+                AppLangResources.Get(AppLangResourceKind.BotGroupNoBotsBody),
+                AppLangResources.Get(AppLangResourceKind.UpdateClose));
+            return;
+        }
+        var result = await _dialogs.AskNewBotGroupAsync(_bots.Bots);
+        if (result is null)
+        {
+            return;
+        }
+        _botGroups.CreateGroup(new CreateBotGroupRequest(
+            result.Name,
+            result.BotIds,
+            result.ReplyMode,
+            result.MaxHops));
+    }
 
     [RelayCommand]
     public async Task ImportBotFromLinkAsync()
@@ -368,19 +404,94 @@ public sealed partial class BotPanelViewModel : ObservableObject
     public void Rebuild()
     {
         var all = _bots.Bots;
+        var allGroups = _botGroups?.Groups ?? [];
         BotCount = all.Count;
         HasBots = all.Count > 0;
-        IsEmpty = all.Count == 0;
+        HasGroups = allGroups.Count > 0;
+        HasAnyContent = HasBots || HasGroups;
+        IsEmpty = !HasAnyContent;
 
         var query = SearchQuery.Trim();
-        var activeBotId = _bots.CurrentBot?.Id;
-        var activeChatId = _bots.CurrentChat?.Id;
+        var activeGroupId = _botGroups?.CurrentGroup?.Id;
+        var activeThreadId = _botGroups?.CurrentThreadId;
+        var hasActiveGroup = !string.IsNullOrWhiteSpace(activeGroupId);
+        var activeBotId = hasActiveGroup ? null : _bots.CurrentBot?.Id;
+        var activeChatId = hasActiveGroup ? null : _bots.CurrentChat?.Id;
+
+        GroupNodes.Clear();
+        if (_botGroups is not null)
+        {
+            foreach (var group in allGroups)
+            {
+                var groupMatches = query.Length == 0
+                    || group.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || (group.Latest?.Text.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false);
+
+                var matchingThreads = group.Threads
+                    .Where(t => groupMatches || (t.Title?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false))
+                    .ToList();
+
+                if (!groupMatches && matchingThreads.Count == 0)
+                {
+                    continue;
+                }
+
+                var isCurrentGroup = string.Equals(group.Id, activeGroupId, StringComparison.Ordinal);
+                var rooms = new List<BotGroupRoomRowViewModel>(1 + matchingThreads.Count)
+                {
+                    new(
+                        group.Id,
+                        threadId: null,
+                        title: AppLangResources.Get(AppLangResourceKind.BotGroupMainRoom),
+                        isMainRoom: true,
+                        isSelected: isCurrentGroup && string.IsNullOrWhiteSpace(activeThreadId),
+                        pendingApprovalCount: _botGroups.GetPendingApprovals(group.Id).Count(a => string.IsNullOrWhiteSpace(a.ThreadId)),
+                        open: row => _botGroups.SelectGroup(row.GroupId, row.ThreadId)),
+                };
+
+                foreach (var thread in matchingThreads)
+                {
+                    var threadTitle = string.IsNullOrWhiteSpace(thread.Title)
+                        ? AppLangResources.Get(AppLangResourceKind.BotGroupUntitledThread)
+                        : thread.Title!;
+                    rooms.Add(new BotGroupRoomRowViewModel(
+                        group.Id,
+                        thread.Id,
+                        threadTitle,
+                        isMainRoom: false,
+                        isSelected: isCurrentGroup && string.Equals(activeThreadId, thread.Id, StringComparison.Ordinal),
+                        pendingApprovalCount: _botGroups.GetPendingApprovals(group.Id, thread.Id).Count,
+                        open: row => _botGroups.SelectGroup(row.GroupId, row.ThreadId)));
+                }
+
+                var preview = FormatGroupPreview(group);
+                var totalPending = _botGroups.GetPendingApprovals(group.Id).Count;
+                var working = _botGroups.IsGroupWorking(group.Id);
+                var avatars = BotGroupUiHelpers.BuildAvatarCluster(group, _bots, _icons, 4);
+
+                GroupNodes.Add(new BotGroupTreeNodeViewModel(
+                    group,
+                    avatars,
+                    preview,
+                    isCurrent: isCurrentGroup,
+                    isExpanded: query.Length > 0 || group.IsExpanded,
+                    pendingApprovalCount: totalPending,
+                    isWorking: working,
+                    rooms: rooms,
+                    toggle: OnToggleGroup,
+                    newThread: OnCreateGroupThreadAsync,
+                    manageMembers: OnManageGroupMembersAsync,
+                    rename: RenameGroupAsync,
+                    delete: DeleteGroupAsync));
+            }
+        }
 
         BotNodes.Clear();
         foreach (var bot in all)
         {
             var botMatches = query.Length == 0 || bot.Name.Contains(query, StringComparison.OrdinalIgnoreCase);
             var orderedChats = bot.Chats
+                .Where(c => c.Kind != BotChatKind.GroupMember)
                 .OrderBy(c => c.Kind == BotChatKind.Home ? 0 : 1)
                 .ThenByDescending(c => c.IsOpen)
                 .ThenByDescending(c => c.LastActivityAt)
@@ -389,7 +500,10 @@ public sealed partial class BotPanelViewModel : ObservableObject
                     || (c.Subtitle?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false))
                 .ToList();
 
-            if (!botMatches && orderedChats.Count == 0) continue;
+            if (!botMatches && orderedChats.Count == 0)
+            {
+                continue;
+            }
 
             var chatVms = new List<BotChatRowViewModel>(orderedChats.Count);
             var needs = bot.Items.Count(i => i.Status == BotWorkItemStatus.NeedsYou);
@@ -401,8 +515,14 @@ public sealed partial class BotPanelViewModel : ObservableObject
                     || (_activity is not null && _activity.Of(chat.Id) == ItemActivity.Working);
                 var chatNeeds = chat.Status == BotChatStatus.NeedsYou
                     || (_activity is not null && _activity.Of(chat.Id) == ItemActivity.Waiting);
-                if (chatNeeds) needs++;
-                if (chatWorking) working = true;
+                if (chatNeeds)
+                {
+                    needs++;
+                }
+                if (chatWorking)
+                {
+                    working = true;
+                }
 
                 chatVms.Add(new BotChatRowViewModel(
                     bot,
@@ -435,6 +555,98 @@ public sealed partial class BotPanelViewModel : ObservableObject
                 rename: RenameBotAsync,
                 delete: DeleteBotAsync,
                 avatarImage: _icons?.Load(bot.Image)));
+        }
+    }
+
+    private static string FormatGroupPreview(BotGroupDefinition group)
+    {
+        if (group.Latest is { } latest && !string.IsNullOrWhiteSpace(latest.Text))
+        {
+            return string.IsNullOrWhiteSpace(latest.AuthorName)
+                ? latest.Text
+                : $"{latest.AuthorName}: {latest.Text}";
+        }
+        return AppLangResources.Format(AppLangResourceKind.BotGroupMemberCount, group.Members.Count);
+    }
+
+    private void OnToggleGroup(BotGroupTreeNodeViewModel node)
+    {
+        if (_botGroups is null)
+        {
+            return;
+        }
+        if (!string.Equals(_botGroups.CurrentGroup?.Id, node.GroupId, StringComparison.Ordinal))
+        {
+            _botGroups.SelectGroup(node.GroupId);
+            if (!node.IsExpanded)
+            {
+                _botGroups.SetGroupExpanded(node.GroupId, true);
+            }
+            return;
+        }
+        _botGroups.SetGroupExpanded(node.GroupId, !node.IsExpanded);
+    }
+
+    private async Task OnCreateGroupThreadAsync(BotGroupTreeNodeViewModel node)
+    {
+        if (_botGroups is null)
+        {
+            return;
+        }
+        await _botGroups.CreateThreadAsync(node.GroupId);
+    }
+
+    private async Task OnManageGroupMembersAsync(BotGroupTreeNodeViewModel node)
+    {
+        if (_botGroups is null || _botGroups.FindGroup(node.GroupId) is not { } group)
+        {
+            return;
+        }
+        var result = await _dialogs.AskEditBotGroupAsync(group, _bots.Bots);
+        if (result is null)
+        {
+            return;
+        }
+        await _botGroups.UpdateGroupAsync(new UpdateBotGroupRequest(
+            group.Id,
+            group.Revision,
+            result.Name,
+            result.BotIds,
+            result.ReplyMode,
+            result.MaxHops));
+    }
+
+    private async Task RenameGroupAsync(BotGroupTreeNodeViewModel node)
+    {
+        if (_botGroups is null || _botGroups.FindGroup(node.GroupId) is not { } group)
+        {
+            return;
+        }
+        var name = await _dialogs.AskNameAsync(
+            AppLangResources.Get(AppLangResourceKind.BotGroupRenameTitle),
+            AppLangResources.Get(AppLangResourceKind.BotGroupDialogNameLabel),
+            group.Name,
+            AppLangResources.Get(AppLangResourceKind.Save));
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            await _botGroups.UpdateGroupAsync(new UpdateBotGroupRequest(group.Id, group.Revision, Name: name));
+        }
+    }
+
+    private async Task DeleteGroupAsync(BotGroupTreeNodeViewModel node)
+    {
+        if (_botGroups is null)
+        {
+            return;
+        }
+        var ok = await _dialogs.ConfirmAsync(
+            AppLangResources.Format(AppLangResourceKind.BotGroupDeleteConfirmTitle, node.Name),
+            AppLangResources.Get(AppLangResourceKind.BotGroupDeleteConfirmBody),
+            AppLangResources.Get(AppLangResourceKind.BotGroupMenuDelete),
+            isDanger: true);
+        if (ok)
+        {
+            await _botGroups.DeleteGroupAsync(node.GroupId);
         }
     }
 

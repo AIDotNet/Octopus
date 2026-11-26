@@ -4,6 +4,7 @@
              xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:vm="using:Octopus.App.Bots"
+             xmlns:grp="using:Octopus.App.Bots.Groups"
              x:Class="Octopus.App.Bots.BotPanelView"
              x:DataType="vm:BotPanelViewModel">
     <UserControl.Styles>
@@ -52,18 +53,28 @@
                        IsVisible="{Binding HasBots}" VerticalAlignment="Center" />
         </Grid>
 
-        <!-- Always-at-top "+ New Bot" primary action + Import from link icon -->
+        <!-- Always-at-top "+ New Bot" + "+ New Group" + Import from link -->
         <Border Grid.Row="1" Padding="10,6,10,4">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="5">
                 <arc:Button x:Name="NewBotButton" Variant="Primary" Size="Small" HorizontalAlignment="Stretch"
                             Command="{Binding NewBotCommand}"
                             AutomationProperties.Name="{l:AppLangResource BotNewButton}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="5" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <lucide:LucideIcon Kind="Plus" Size="14" VerticalAlignment="Center" />
                         <TextBlock Text="{l:AppLangResource BotNewButton}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
                 </arc:Button>
-                <arc:Button Grid.Column="1" Variant="Secondary" Size="Small" Padding="7,0" MinWidth="28"
+                <arc:Button x:Name="NewGroupButton" Grid.Column="1" Variant="Secondary" Size="Small" Padding="8,0"
+                            IsVisible="{Binding ShowNewGroupButton}"
+                            Command="{Binding NewGroupCommand}"
+                            AutomationProperties.Name="{l:AppLangResource BotGroupNewButton}"
+                            arc:Tooltip.Tip="{l:AppLangResource BotGroupNewButton}">
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <lucide:LucideIcon Kind="Users" Size="13" VerticalAlignment="Center" />
+                        <TextBlock Text="{l:AppLangResource BotGroupNewButton}" FontWeight="Medium" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+                <arc:Button Grid.Column="2" Variant="Secondary" Size="Small" Padding="7,0" MinWidth="28"
                             Command="{Binding ImportBotFromLinkCommand}"
                             AutomationProperties.Name="{l:AppLangResource BotImportFromLinkButton}"
                             arc:Tooltip.Tip="{l:AppLangResource BotImportFromLinkButton}">
@@ -72,8 +83,8 @@
             </Grid>
         </Border>
 
-        <!-- Search box (shown when there is at least one bot) -->
-        <Border Grid.Row="2" Padding="10,4,10,6" IsVisible="{Binding HasBots}">
+        <!-- Search box (shown when there is at least one bot or group) -->
+        <Border Grid.Row="2" Padding="10,4,10,6" IsVisible="{Binding HasAnyContent}">
             <arc:SearchField Size="Small" IsLabelVisible="False"
                              Label="{l:AppLangResource BotSearchPlaceholder}"
                              Placeholder="{l:AppLangResource BotSearchPlaceholder}"
@@ -128,9 +139,167 @@
             </StackPanel>
         </arc:ScrollArea>
 
-        <!-- Scheme A: Bot Tree list -->
-        <arc:ScrollArea Grid.Row="3" IsVisible="{Binding HasBots}" OverlayScrollbarMode="Auto" FadeLength="0">
-            <ItemsControl ItemsSource="{Binding BotNodes}" Margin="6,2,6,12">
+        <!-- Scheme A: Groups + Bot Tree list -->
+        <arc:ScrollArea Grid.Row="3" IsVisible="{Binding HasAnyContent}" OverlayScrollbarMode="Auto" FadeLength="0">
+            <StackPanel Margin="6,2,6,12" Spacing="4">
+                <!-- Groups section (shown above Bots when groups exist) -->
+                <StackPanel IsVisible="{Binding HasGroups}" Spacing="2" Margin="0,0,0,6">
+                    <TextBlock Classes="caption" Margin="6,2,6,2" Text="{l:AppLangResource BotGroupSectionGroups}" />
+                    <ItemsControl ItemsSource="{Binding GroupNodes}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="grp:BotGroupTreeNodeViewModel">
+                                <StackPanel Spacing="1" Margin="0,1,0,3">
+                                    <!-- Group parent row -->
+                                    <Grid Classes="bot-header" ColumnDefinitions="*,Auto">
+                                        <Button Classes="row" Classes.selected="{Binding IsCurrent}" Padding="4,5"
+                                                Command="{Binding ToggleCommand}"
+                                                DataContextChanged="OnGroupRowDataContextChanged"
+                                                AutomationProperties.Name="{Binding Name}">
+                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" ColumnSpacing="6" Margin="0,0,2,0">
+                                                <!-- Expand/collapse chevron -->
+                                                <Panel Width="12" VerticalAlignment="Center">
+                                                    <lucide:LucideIcon Kind="ChevronDown" Size="12" IsVisible="{Binding IsExpanded}"
+                                                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                                    <lucide:LucideIcon Kind="ChevronRight" Size="12" IsVisible="{Binding !IsExpanded}"
+                                                                       Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                                </Panel>
+
+                                                <!-- 2x2 Member avatar cluster (up to 4 members) -->
+                                                <Border Grid.Column="1" Width="24" Height="24" CornerRadius="6"
+                                                        Background="{arc:ArcDesignTokenResource Surface}"
+                                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                                        BorderThickness="1" Padding="1" ClipToBounds="True" VerticalAlignment="Center">
+                                                    <Panel>
+                                                        <Border IsVisible="{Binding HasSingleAvatar}" CornerRadius="5"
+                                                                Background="{Binding SingleAvatar.AvatarBrush}" ClipToBounds="True">
+                                                            <Panel>
+                                                                <Image IsVisible="{Binding SingleAvatar.HasAvatarImage}" Source="{Binding SingleAvatar.AvatarImage}"
+                                                                       Width="22" Height="22" Stretch="UniformToFill" />
+                                                                <TextBlock IsVisible="{Binding SingleAvatar.ShowInitial}" Text="{Binding SingleAvatar.Initial}"
+                                                                           Foreground="White" FontSize="10" FontWeight="Bold"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                <lucide:LucideIcon IsVisible="{Binding SingleAvatar.HasAvatarIcon}" Kind="{Binding SingleAvatar.AvatarIcon}"
+                                                                                   Size="11" Foreground="White"
+                                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Panel>
+                                                        </Border>
+                                                        <ItemsControl IsVisible="{Binding HasMultiAvatar}" ItemsSource="{Binding Avatars}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <UniformGrid Columns="2" Rows="2" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate x:DataType="grp:BotGroupAvatarTile">
+                                                                    <Border Margin="0.5" CornerRadius="2.5" Background="{Binding AvatarBrush}" ClipToBounds="True">
+                                                                        <Panel>
+                                                                            <Image IsVisible="{Binding HasAvatarImage}" Source="{Binding AvatarImage}" Stretch="UniformToFill" />
+                                                                            <TextBlock IsVisible="{Binding !HasAvatarImage}" Text="{Binding Initial}"
+                                                                                       Foreground="White" FontSize="7" FontWeight="Bold"
+                                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                        </Panel>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </Panel>
+                                                </Border>
+
+                                                <!-- Group name + latest preview / member count -->
+                                                <StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center">
+                                                    <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding Name}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Classes="hint" FontSize="10.5" Text="{Binding PreviewText}"
+                                                               IsVisible="{Binding HasPreview}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+
+                                                <!-- Pending approval badge / working spinner / unread dot -->
+                                                <Border Grid.Column="3" IsVisible="{Binding ShowPendingBadge}"
+                                                        MinWidth="16" Height="16" Padding="4,0" CornerRadius="8" VerticalAlignment="Center"
+                                                        Background="{arc:ArcDesignTokenResource Warning}">
+                                                    <TextBlock Text="{Binding PendingBadgeText}" FontSize="10" FontWeight="Bold" Foreground="#1C1405"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <arc:ArcSpinner Grid.Column="4" Width="11" Height="11" VerticalAlignment="Center"
+                                                                IsVisible="{Binding ShowWorkingSpinner}"
+                                                                Foreground="{arc:ArcDesignTokenResource Accent}" />
+                                                <Ellipse Grid.Column="5" Width="7" Height="7" VerticalAlignment="Center"
+                                                         IsVisible="{Binding ShowUnreadDot}"
+                                                         Fill="{arc:ArcDesignTokenResource Accent}" />
+                                            </Grid>
+                                        </Button>
+
+                                        <!-- Quick "+" new thread button on hover -->
+                                        <arc:Button Grid.Column="1" Classes="icon bot-row-more" Variant="Ghost" VerticalAlignment="Center"
+                                                    Command="{Binding NewThreadCommand}"
+                                                    AutomationProperties.Name="{l:AppLangResource BotGroupNewThread}"
+                                                    arc:Tooltip.Tip="{l:AppLangResource BotGroupNewThread}">
+                                            <lucide:LucideIcon Kind="Plus" Size="13" />
+                                        </arc:Button>
+                                    </Grid>
+
+                                    <!-- Expanded rooms: Main Room + Threads + "+ New thread" -->
+                                    <Border IsVisible="{Binding IsExpanded}" Margin="16,0,0,0" Padding="6,0,0,0"
+                                            BorderThickness="1,0,0,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}">
+                                        <StackPanel Spacing="1">
+                                            <ItemsControl ItemsSource="{Binding Rooms}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Spacing="1" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="grp:BotGroupRoomRowViewModel">
+                                                        <Button Classes="row" Classes.selected="{Binding IsSelected}"
+                                                                Padding="6,5"
+                                                                Command="{Binding OpenCommand}"
+                                                                AutomationProperties.Name="{Binding Title}">
+                                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                                                                <Border Width="18" Height="18" CornerRadius="5" VerticalAlignment="Center"
+                                                                        Background="{arc:ArcDesignTokenResource BorderSubtle}">
+                                                                    <lucide:LucideIcon Kind="{Binding Icon}" Size="11"
+                                                                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+                                                                <TextBlock Grid.Column="1" Classes="body" FontSize="12" Text="{Binding Title}"
+                                                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                                <Border Grid.Column="2" IsVisible="{Binding HasPendingApproval}"
+                                                                        MinWidth="16" Height="16" Padding="4,0" CornerRadius="8" VerticalAlignment="Center"
+                                                                        Background="{arc:ArcDesignTokenResource Warning}">
+                                                                    <TextBlock Text="{Binding PendingBadgeText}" FontSize="10" FontWeight="Bold" Foreground="#1C1405"
+                                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+                                                            </Grid>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- Inline "+ New thread" row -->
+                                            <Button Classes="row" Padding="6,4" Command="{Binding NewThreadCommand}">
+                                                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                    <lucide:LucideIcon Kind="Plus" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                                    <TextBlock Classes="hint" Text="{l:AppLangResource BotGroupNewThread}" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Bots section heading when groups also exist -->
+                <TextBlock Classes="caption" Margin="6,2,6,2" IsVisible="{Binding HasGroups}"
+                           Text="{l:AppLangResource BotGroupSectionBots}" />
+
+                <ItemsControl ItemsSource="{Binding BotNodes}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Spacing="2" />
@@ -271,6 +440,7 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            </StackPanel>
         </arc:ScrollArea>
     </Grid>
 </UserControl>

@@ -52,11 +52,18 @@ public sealed partial class GitService(IProcessRunner runner, IExecutableLocator
         return result is { Succeeded: true } ? PorcelainV2Parser.Parse(result.StandardOutput, repositoryRoot) : null;
     }
 
-    public async Task<IReadOnlyList<GitCommit>> GetLogAsync(string repositoryRoot, int count = 50, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<GitCommit>> GetLogAsync(string repositoryRoot, int count = 50, CancellationToken cancellationToken = default) =>
+        GetLogPageAsync(repositoryRoot, count, skip: 0, cancellationToken);
+
+    public async Task<IReadOnlyList<GitCommit>> GetLogPageAsync(string repositoryRoot, int count, int skip, CancellationToken cancellationToken = default)
     {
-        var result = await RunAsync(
-            ["-C", repositoryRoot, "log", "-n", count.ToString(CultureInfo.InvariantCulture),
-             "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e"], null, cancellationToken).ConfigureAwait(false);
+        if (count <= 0) return [];
+        var args = new List<string>(8) { "-C", repositoryRoot, "log" };
+        if (skip > 0) args.Add("--skip=" + skip.ToString(CultureInfo.InvariantCulture));
+        args.Add("-n");
+        args.Add(count.ToString(CultureInfo.InvariantCulture));
+        args.Add("--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e");
+        var result = await RunAsync([.. args], null, cancellationToken).ConfigureAwait(false);
         if (result is not { Succeeded: true }) return [];
         var commits = new List<GitCommit>();
         foreach (var record in result.StandardOutput.Split('\x1e', StringSplitOptions.RemoveEmptyEntries))
@@ -67,6 +74,96 @@ public sealed partial class GitService(IProcessRunner runner, IExecutableLocator
             commits.Add(new GitCommit(fields[0], fields[1], fields[2], fields[3], date));
         }
         return commits;
+    }
+
+    public async Task<IReadOnlyList<GitGraphCommit>> GetBranchGraphAsync(string repositoryRoot, int count = 20, CancellationToken cancellationToken = default)
+    {
+        if (count <= 0) return [];
+        var result = await RunAsync(
+            ["-C", repositoryRoot, "log", "--branches", "HEAD", "--topo-order",
+             "-n", count.ToString(CultureInfo.InvariantCulture),
+             "--decorate=full", "--shortstat",
+             "--pretty=format:%x1e%H%x1f%h%x1f%P%x1f%D%x1f%s%x1f%b%x1f%an%x1f%aI%x1f"],
+            null, cancellationToken).ConfigureAwait(false);
+        if (result is not { Succeeded: true }) return [];
+
+        var commits = new List<GitGraphCommit>();
+        foreach (var record in result.StandardOutput.Split('\x1e', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = record.Split('\x1f');
+            if (fields.Length < 8) continue;
+            var hash = fields[0].Trim('\r', '\n');
+            if (hash.Length == 0) continue;
+            if (!DateTimeOffset.TryParse(fields[7].Trim(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)) continue;
+
+            var parents = fields[2].Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var (branches, tag) = ParseDecorations(fields[3]);
+            var body = fields[5].Replace("\r\n", "\n").Trim();
+            var (files, additions, deletions) = fields.Length > 8 ? ParseShortStat(fields[8]) : (null, null, null);
+            commits.Add(new GitGraphCommit(
+                hash,
+                fields[1].Trim(),
+                parents,
+                branches,
+                tag,
+                fields[4].TrimEnd('\r', '\n'),
+                body.Length > 0 ? body : null,
+                fields[6].Trim(),
+                date,
+                additions,
+                deletions,
+                files));
+        }
+        return commits;
+    }
+
+    private static (IReadOnlyList<string> Branches, string? Tag) ParseDecorations(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return ([], null);
+        var branches = new List<string>();
+        string? tag = null;
+        foreach (var part in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            const string headPrefix = "HEAD -> ";
+            const string headsPrefix = "refs/heads/";
+            const string tagPrefix = "tag: refs/tags/";
+
+            if (part.StartsWith(headPrefix, StringComparison.Ordinal))
+            {
+                var target = part[headPrefix.Length..];
+                var name = target.StartsWith(headsPrefix, StringComparison.Ordinal) ? target[headsPrefix.Length..] : target;
+                if (name.Length > 0 && !branches.Contains(name, StringComparer.Ordinal)) branches.Insert(0, name);
+            }
+            else if (part.StartsWith(headsPrefix, StringComparison.Ordinal))
+            {
+                var name = part[headsPrefix.Length..];
+                if (name.Length > 0 && !branches.Contains(name, StringComparer.Ordinal)) branches.Add(name);
+            }
+            else if (tag is null && part.StartsWith(tagPrefix, StringComparison.Ordinal))
+            {
+                var name = part[tagPrefix.Length..];
+                if (name.Length > 0) tag = name;
+            }
+        }
+        return (branches, tag);
+    }
+
+    private static (int? Files, int? Additions, int? Deletions) ParseShortStat(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return (null, null, null);
+        int? files = null;
+        int? additions = null;
+        int? deletions = null;
+        foreach (var segment in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var space = segment.IndexOf(' ');
+            if (space <= 0 || !int.TryParse(segment[..space], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)) continue;
+            if (segment.Contains("file", StringComparison.Ordinal)) files = value;
+            else if (segment.Contains("insertion", StringComparison.Ordinal)) additions = value;
+            else if (segment.Contains("deletion", StringComparison.Ordinal)) deletions = value;
+        }
+        if (files is null && additions is null && deletions is null) return (null, null, null);
+        return (files, additions ?? 0, deletions ?? 0);
     }
 
     /// <summary>A file bigger than this is not read to be shown as "all added".</summary>

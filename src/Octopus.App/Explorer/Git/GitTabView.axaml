@@ -24,6 +24,44 @@
         <Style Selector="Grid.git-heading">
             <Setter Property="Background" Value="Transparent" />
         </Style>
+        <Style Selector="Button.git-section">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.git-section:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+        <Style Selector="Button.git-section:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Border}" />
+        </Style>
+        <Style Selector="Button.git-load-more">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.git-load-more:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+        <Style Selector="Border.git-section-divider">
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+        </Style>
+        <Style Selector="Border.git-count-pill">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+            <Setter Property="Padding" Value="5,0" />
+            <Setter Property="MinWidth" Value="18" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*">
@@ -81,23 +119,42 @@
                                  Foreground="{arc:ArcDesignTokenResource Danger}" />
         </StackPanel>
 
-        <Grid Grid.Row="2" RowDefinitions="Auto,*">
-            <TextBlock Classes="ex-hint" Margin="14,4" IsVisible="{Binding IsClean}" Text="{l:AppLangResource ExplorerClean}" />
-            <!-- One virtualized list: group headings, changes, the commits heading and the commits. -->
-            <ItemsControl x:Name="List" Grid.Row="1" ItemsSource="{Binding Items}" Margin="4,0,4,0">
+        <Grid x:Name="SectionsGrid" Grid.Row="2" RowDefinitions="*,Auto">
+            <!-- Virtualized list: collapsible working changes section and collapsible scroll-loaded commits section. -->
+            <ItemsControl x:Name="List" Grid.Row="0" ItemsSource="{Binding Items}" Margin="4,0,4,0">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.Template>
                     <ControlTemplate>
                         <arc:ScrollArea Name="PART_ScrollViewer" FadeLength="0" HorizontalScrollBarVisibility="Disabled">
-                            <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="0,0,0,10" />
+                            <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="0,0,0,8" />
                         </arc:ScrollArea>
                     </ControlTemplate>
                 </ItemsControl.Template>
                 <ItemsControl.DataTemplates>
+                    <DataTemplate DataType="git:GitChangesSectionHeaderViewModel">
+                        <Border Classes="git-section-divider" Padding="0,3,0,2">
+                            <Button Classes="git-section"
+                                    Command="{Binding $parent[ItemsControl].((git:GitPanelViewModel)DataContext).ToggleChangesSectionCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource ExplorerWorkingChanges}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="5" Margin="6,4,6,4">
+                                    <lucide:LucideIcon Kind="{Binding ChevronIcon}" Size="12" VerticalAlignment="Center"
+                                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                    <TextBlock Grid.Column="1" Classes="ex-caption" VerticalAlignment="Center"
+                                               Text="{l:AppLangResource ExplorerWorkingChanges}" />
+                                    <Border Grid.Column="2" Classes="git-count-pill" IsVisible="{Binding HasCount}">
+                                        <TextBlock Classes="ex-hint" HorizontalAlignment="Center" Text="{Binding CountText}" />
+                                    </Border>
+                                </Grid>
+                            </Button>
+                        </Border>
+                    </DataTemplate>
+                    <DataTemplate DataType="git:GitCleanStateRowViewModel">
+                        <TextBlock Classes="ex-hint" Margin="22,4,8,6" Text="{l:AppLangResource ExplorerClean}" />
+                    </DataTemplate>
                     <DataTemplate DataType="git:GitChangeGroupViewModel">
-                        <Grid Classes="git-heading" ColumnDefinitions="*,Auto,Auto,Auto" Height="{DynamicResource OctopusGitGroupHeight}" Margin="8,0,6,0">
+                        <Grid Classes="git-heading" ColumnDefinitions="*,Auto,Auto,Auto" Height="{DynamicResource OctopusGitGroupHeight}" Margin="12,0,6,0">
                             <TextBlock Classes="ex-caption" VerticalAlignment="Bottom" Margin="0,0,0,4" Text="{Binding Title}" />
                             <arc:Button Grid.Column="1" Classes="git-action" Variant="Ghost" VerticalAlignment="Bottom" Margin="0,0,2,1"
                                         IsVisible="{Binding CanDiscard}"
@@ -145,9 +202,24 @@
                         </Border>
                     </DataTemplate>
                     <DataTemplate DataType="git:GitCommitsHeaderViewModel">
-                        <StackPanel Margin="8,10,8,3" Spacing="3">
-                            <TextBlock Classes="ex-caption" Text="{l:AppLangResource ExplorerRecentCommits}" />
-                            <TextBlock Classes="ex-hint" IsVisible="{Binding HasNoCommits}" Text="{l:AppLangResource ExplorerNoCommits}" />
+                        <StackPanel Margin="0,4,0,2" Spacing="2">
+                            <Border Classes="git-section-divider" Padding="0,3,0,0">
+                                <Button Classes="git-section"
+                                        Command="{Binding $parent[ItemsControl].((git:GitPanelViewModel)DataContext).ToggleCommitsSectionCommand}"
+                                        AutomationProperties.Name="{l:AppLangResource ExplorerRecentCommits}">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="5" Margin="6,4,6,4">
+                                        <lucide:LucideIcon Kind="{Binding ChevronIcon}" Size="12" VerticalAlignment="Center"
+                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                        <TextBlock Grid.Column="1" Classes="ex-caption" VerticalAlignment="Center"
+                                                   Text="{l:AppLangResource ExplorerRecentCommits}" />
+                                        <Border Grid.Column="2" Classes="git-count-pill" IsVisible="{Binding HasCount}">
+                                            <TextBlock Classes="ex-hint" HorizontalAlignment="Center" Text="{Binding CountText}" />
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                            </Border>
+                            <TextBlock Classes="ex-hint" Margin="22,4,8,4" IsVisible="{Binding ShowNoCommits}"
+                                       Text="{l:AppLangResource ExplorerNoCommits}" />
                         </StackPanel>
                     </DataTemplate>
                     <DataTemplate DataType="git:GitCommitRowViewModel">
@@ -179,8 +251,63 @@
                             </Grid>
                         </Border>
                     </DataTemplate>
+                    <DataTemplate DataType="git:GitCommitsFooterViewModel">
+                        <Panel Margin="6,4,6,6">
+                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" Margin="0,4"
+                                        IsVisible="{Binding IsLoading}">
+                                <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+                                <TextBlock Classes="ex-hint" VerticalAlignment="Center" Text="{l:AppLangResource ExplorerLoadingMoreCommits}" />
+                            </StackPanel>
+                            <Button Classes="git-load-more" IsVisible="{Binding CanLoadMore}"
+                                    Command="{Binding $parent[ItemsControl].((git:GitPanelViewModel)DataContext).LoadMoreCommitsCommand}">
+                                <TextBlock Classes="ex-hint" HorizontalAlignment="Center" Text="{l:AppLangResource ExplorerLoadMoreCommits}" />
+                            </Button>
+                        </Panel>
+                    </DataTemplate>
                 </ItemsControl.DataTemplates>
             </ItemsControl>
+
+            <!-- Collapsible Branch Graph section (collapsed by default; mounts and loads only when expanded). -->
+            <Border Grid.Row="1" Classes="git-section-divider" Padding="4,2,4,4" IsVisible="{Binding HasRepository}">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Button x:Name="BranchGraphHeaderButton" Classes="git-section" Command="{Binding ToggleBranchGraphCommand}"
+                                AutomationProperties.Name="{l:AppLangResource ExplorerBranchGraph}">
+                            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="5" Margin="6,4,6,4">
+                                <lucide:LucideIcon Kind="{Binding BranchGraphChevronIcon}" Size="12" VerticalAlignment="Center"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                <lucide:LucideIcon Grid.Column="1" Kind="GitBranch" Size="12" VerticalAlignment="Center"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                <TextBlock Grid.Column="2" Classes="ex-caption" VerticalAlignment="Center"
+                                           Text="{l:AppLangResource ExplorerBranchGraph}" />
+                            </Grid>
+                        </Button>
+                        <arc:Button Grid.Column="1" Classes="ex-icon" Variant="Ghost"
+                                    IsVisible="{Binding IsBranchGraphExpanded}"
+                                    Command="{Binding RefreshBranchGraphCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource ExplorerRefresh}"
+                                    arc:Tooltip.Tip="{l:AppLangResource ExplorerRefresh}">
+                            <lucide:LucideIcon Kind="RefreshCw" Size="12" />
+                        </arc:Button>
+                    </Grid>
+
+                    <Border x:Name="BranchGraphHost" Grid.Row="1" MaxHeight="340" IsVisible="{Binding IsBranchGraphExpanded}">
+                        <Panel Margin="2,4,2,2">
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="16,10"
+                                        IsVisible="{Binding IsLoadingBranchGraph}">
+                                <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+                                <TextBlock Classes="ex-hint" VerticalAlignment="Center" Text="{l:AppLangResource ExplorerLoadingBranchGraph}" />
+                            </StackPanel>
+                            <TextBlock Classes="ex-hint" Margin="18,8" IsVisible="{Binding ShowBranchGraphEmpty}"
+                                       Text="{l:AppLangResource ExplorerNoCommits}" />
+                            <arc:ScrollArea FadeLength="0" HorizontalScrollBarVisibility="Disabled"
+                                            IsVisible="{Binding ShowBranchGraphControl}">
+                                <Border x:Name="BranchGraphSlot" Margin="2,0,2,4" />
+                            </arc:ScrollArea>
+                        </Panel>
+                    </Border>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Avalonia.Headless.XUnit;
 using Octopus.Agents;
+using Octopus.Agents.Signals;
 using Octopus.App.Collab;
 using Octopus.App.Composition;
 using Octopus.App.Services;
@@ -153,7 +154,7 @@ public sealed class CollabTests
         Assert.Equal(CollabTaskStatus.Cancelled, childTask.Status);
         Assert.Equal("User changed plans", childTask.ResultSummary);
         Assert.Equal(CollabTaskStatus.Cancelled, coordinator.GetTasksForItem(grandchildId).Single().Status);
-        Assert.Equal("cancelled", coordinator.FindThread(child["thread_id"]!.GetValue<string>())!.Status);
+        Assert.Equal(CollabThreadStatus.Cancelled, coordinator.FindThread(child["thread_id"]!.GetValue<string>())!.Status);
 
         for (var i = 0; i < 40 && (Volatile.Read(ref childBridge.TurnCancellations) == 0 || Volatile.Read(ref grandchildBridge.TurnCancellations) == 0); i++)
         {
@@ -631,6 +632,102 @@ public sealed class CollabTests
         var peers = Body(await coordinator.CallToolAsync(parent.Id, "list_peers", null, ct));
         Assert.Null(peers["remote_projects"]);
         Assert.DoesNotContain(peers["active_sessions"]!.AsArray(), p => p!["session_id"]!.GetValue<string>() == "ops-1");
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task A_child_with_several_open_permission_cards_shows_all_of_them_on_its_parent()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (parent, _, coordinator, _) = await SetUpParentAsync("octopus-collab-cards-");
+        var child = await DelegateAsync(coordinator, parent.Id, "Install and build", ct);
+        var childId = child["session_id"]!.GetValue<string>();
+        CollabBubbledApproval Card(string id, string tool) => new(id, parent.Id, childId, "codex", "Install and build", tool, null, null, _ => { });
+
+        coordinator.ReportChildApproval(Card("p1", "npm install"));
+        coordinator.ReportChildApproval(Card("p2", "dotnet build"));
+        Assert.Equal(["npm install", "dotnet build"], coordinator.GetBubbledApprovalsForParent(parent.Id).Select(a => a.ToolTitle).Order().Reverse());
+        Assert.Equal(CollabTaskStatus.WaitingApproval, coordinator.GetTasksForItem(parent.Id).Single().Status);
+
+        // One answered: the other still shows, and the task still waits.
+        coordinator.ClearChildApproval(childId, "p1");
+        Assert.Equal("dotnet build", Assert.Single(coordinator.GetBubbledApprovalsForParent(parent.Id)).ToolTitle);
+        Assert.Equal(CollabTaskStatus.WaitingApproval, coordinator.GetTasksForItem(parent.Id).Single().Status);
+
+        coordinator.ClearChildApproval(childId, "p2");
+        Assert.Empty(coordinator.GetBubbledApprovalsForParent(parent.Id));
+        Assert.Equal(CollabTaskStatus.Running, coordinator.GetTasksForItem(parent.Id).Single().Status);
+    }
+
+    private sealed class EchoTool(string name = "echo") : Octopus.App.Collab.Tools.ICollabTool
+    {
+        public string Name => name;
+        public string Description => "Echoes who called.";
+        public JsonObject InputSchema => new() { ["type"] = "object" };
+
+        public Task<JsonObject> CallAsync(Octopus.App.Collab.Tools.ICollabOperations ops, string callerItemId, Octopus.App.Collab.Tools.CollabToolArgs args, CancellationToken ct) =>
+            Task.FromResult(Octopus.App.Collab.Tools.CollabToolResult.Ok(new JsonObject { ["caller"] = callerItemId, ["peers"] = ops.ListPeers(callerItemId).Count }));
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task A_new_tool_is_one_class_it_is_listed_called_and_can_replace_a_built_in()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(Directory.CreateTempSubdirectory("octopus-collab-tool-").FullName);
+        var me = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Me", Surface = AgentSurface.Gui };
+        projects.AddItem(project, me);
+        using var coordinator = new CollabCoordinator(
+            projects,
+            AppHost.Get<IAgentCatalog>(),
+            AppHost.Get<IAgentScanner>(),
+            AppHost.Get<ISettingsStore>(),
+            new CollabMcpServer(),
+            tools: [.. Octopus.App.Collab.Tools.CollabToolRegistry.BuiltIn, new EchoTool(), new EchoTool("read_session")]);
+
+        var names = coordinator.ListTools().Select(t => t!["name"]!.GetValue<string>()).ToList();
+        Assert.Equal(8, names.Count);
+        Assert.Contains("echo", names);
+        Assert.Single(names, n => n == "read_session");
+
+        var echoed = Body(await coordinator.CallToolAsync(me.Id, "echo", null, ct));
+        Assert.Equal(me.Id, echoed["caller"]!.GetValue<string>());
+        // Registered later under a built-in's name: it replaces that built-in.
+        Assert.Equal(me.Id, Body(await coordinator.CallToolAsync(me.Id, "read_session", null, ct))["caller"]!.GetValue<string>());
+        Assert.True((await coordinator.CallToolAsync(me.Id, "no_such_tool", null, ct))["isError"]?.GetValue<bool>());
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task A_terminal_agent_gets_messages_pasted_answers_when_its_hook_says_done_and_esc_cancels_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (parent, parentBridge, coordinator, _) = await SetUpParentAsync("octopus-collab-term-");
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.FindProjectOf(parent.Id)!;
+        var cli = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "CLI Claude", Surface = AgentSurface.Terminal };
+        projects.AddItem(project, cli, activate: false);
+        var factory = AppHost.Get<FakeTerminalConnectionFactory>();
+        AppHost.Get<Octopus.Terminal.Avalonia.TerminalSessionRegistry>().GetOrStart(
+            cli.Id, AppHost.Get<IItemLaunchService>().Plan(project, cli), factory, new TKCode.Terminal.Core.TerminalSize(80, 24, 0, 0),
+            Octopus.Terminal.Avalonia.TerminalPalettes.Dark, TKCode.Terminal.Core.ColorScheme.Dark, 1000, out _);
+        var pty = factory.Connections.Last();
+        string AllWritten() => string.Concat(pty.Written);
+
+        // A message is pasted into the CLI as one submission.
+        var sent = Body(await coordinator.CallToolAsync(parent.Id, "send_message",
+            new JsonObject { ["target_session_id"] = cli.Id, ["message"] = "Is the build green?" }, ct));
+        var threadId = sent["thread_id"]!.GetValue<string>();
+        await WaitUntilAsync(() => AllWritten().Contains("Is the build green?", StringComparison.Ordinal), ct);
+
+        // Its turn ends when its Stop hook fires: whatever it printed since is the answer, relayed to the asker.
+        AppHost.Get<ISignalHub>().Publish(new AgentSignal("claude", "stop", cli.Id, "", 0, 0, "{}"));
+        await WaitUntilAsync(() => coordinator.FindThread(threadId)!.Messages.Last().FromItemId == cli.Id, ct);
+        await WaitUntilAsync(() => parentBridge.DeliveredPrompts.Any(p => p.Contains("Terminal session reported turn completion.", StringComparison.Ordinal)), ct);
+
+        // A task handed to it and then cancelled interrupts its turn with Esc.
+        var task = Body(await coordinator.CallToolAsync(parent.Id, "delegate_task", new JsonObject { ["target"] = cli.Id, ["goal"] = "Run the slow suite" }, ct));
+        await coordinator.CallToolAsync(parent.Id, "cancel_task", new JsonObject { ["task_id"] = task["task_id"]!.GetValue<string>() }, ct);
+        await WaitUntilAsync(() => AllWritten().EndsWith('\u001b'), ct);
+        Assert.Equal(CollabTaskStatus.Cancelled, coordinator.GetTasksForItem(parent.Id).Single(t => t.TaskId == task["task_id"]!.GetValue<string>()).Status);
     }
 
     [AvaloniaFact, FreshApp]

@@ -3,12 +3,14 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:grp="using:Octopus.App.Bots.Groups"
              xmlns:vm="using:Octopus.App.Workspace"
              x:Class="Octopus.App.Workspace.WorkspaceView"
              x:DataType="vm:WorkspaceViewModel">
     <Grid Background="{arc:ArcDesignTokenResource Background}">
-        <ContentControl Content="{Binding CurrentLayout}" IsVisible="{Binding HasProject}"
+        <ContentControl Content="{Binding CurrentLayout}" IsVisible="{Binding ShowDockLayout}"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+        <grp:BotGroupRoomView DataContext="{Binding GroupRoom}" IsVisible="{Binding IsGroupRoomActive}" />
         <Panel IsVisible="{Binding ShowNoProjectEmpty}">
             <vm:NoProjectView DataContext="{Binding EmptyState}" />
         </Panel>

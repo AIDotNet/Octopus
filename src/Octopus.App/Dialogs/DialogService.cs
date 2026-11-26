@@ -745,6 +745,73 @@ public sealed class DialogService(
             return await dialog.ShowAsync(windows.Window) is true;
         });
 
+    public Task<Octopus.App.Bots.Groups.BotGroupDialogResult?> AskNewBotGroupAsync(IReadOnlyList<Octopus.Core.Bots.BotDefinition> bots) =>
+        ShowBotGroupDialogAsync(existingGroup: null, bots);
+
+    public Task<Octopus.App.Bots.Groups.BotGroupDialogResult?> AskEditBotGroupAsync(
+        Octopus.Core.Bots.BotGroupDefinition group,
+        IReadOnlyList<Octopus.Core.Bots.BotDefinition> bots) =>
+        ShowBotGroupDialogAsync(group, bots);
+
+    private Task<Octopus.App.Bots.Groups.BotGroupDialogResult?> ShowBotGroupDialogAsync(
+        Octopus.Core.Bots.BotGroupDefinition? existingGroup,
+        IReadOnlyList<Octopus.Core.Bots.BotDefinition> bots) =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return null;
+            }
+            var catalog = Composition.AppHost.Get<Octopus.Agents.IAgentCatalog>();
+            var model = new Octopus.App.Bots.Groups.BotGroupDialogViewModel(bots, catalog, icons, existingGroup);
+            var view = new Octopus.App.Bots.Groups.BotGroupDialogView(model);
+
+            var cancelButton = new TKCode.Arc.Button
+            {
+                Content = AppLangResources.Get(AppLangResourceKind.Cancel),
+                Variant = ButtonVariant.Secondary,
+                Size = ControlSize.Small,
+            };
+            var confirmButton = new TKCode.Arc.Button
+            {
+                Content = AppLangResources.Get(existingGroup is null ? AppLangResourceKind.BotGroupDialogCreate : AppLangResourceKind.Save),
+                Variant = ButtonVariant.Primary,
+                Size = ControlSize.Small,
+                IsEnabled = model.CanConfirm,
+            };
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Spacing = 8,
+            };
+            actions.Children.Add(cancelButton);
+            actions.Children.Add(confirmButton);
+
+            var dialog = new Dialog
+            {
+                Size = ControlSize.Medium,
+                Title = AppLangResources.Get(existingGroup is null ? AppLangResourceKind.BotGroupDialogCreateTitle : AppLangResourceKind.BotGroupDialogEditTitle),
+                Description = AppLangResources.Get(existingGroup is null ? AppLangResourceKind.BotGroupDialogCreateDescription : AppLangResourceKind.BotGroupDialogEditDescription),
+                Content = view,
+                Actions = actions,
+            };
+            dialog.Resources[DialogSurfaceTokens.Key(DialogSurfaceTokenKind.PanelWidthMD)] = 500.0;
+
+            model.ValidationChanged += (_, _) => Dispatcher.UIThread.Post(() => confirmButton.IsEnabled = model.CanConfirm);
+            cancelButton.Click += (_, _) => dialog.Close(false);
+            confirmButton.Click += (_, _) =>
+            {
+                if (model.CanConfirm)
+                {
+                    dialog.Close(true);
+                }
+            };
+
+            var result = await dialog.ShowAsync(windows.Window);
+            return result is true ? model.BuildResult() : null;
+        });
+
     private static Task<T> OnUiAsync<T>(Func<Task<T>> action) =>
         Dispatcher.UIThread.CheckAccess() ? action() : Dispatcher.UIThread.InvokeAsync(action);
 

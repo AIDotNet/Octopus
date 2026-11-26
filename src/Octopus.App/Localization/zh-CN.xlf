@@ -403,8 +403,14 @@
     <unit id="ExplorerChanges"><segment><source>Changes</source><target state="translated">更改</target></segment></unit>
     <unit id="ExplorerUntracked"><segment><source>Untracked</source><target state="translated">未跟踪</target></segment></unit>
     <unit id="ExplorerClean"><segment><source>The working tree is clean</source><target state="translated">工作区是干净的</target></segment></unit>
+    <unit id="ExplorerWorkingChanges"><segment><source>Working changes</source><target state="translated">工作区更改</target></segment></unit>
     <unit id="ExplorerRecentCommits"><segment><source>Recent commits</source><target state="translated">最近提交</target></segment></unit>
     <unit id="ExplorerNoCommits"><segment><source>No commits yet</source><target state="translated">还没有提交</target></segment></unit>
+    <unit id="ExplorerLoadMoreCommits"><segment><source>Load more commits</source><target state="translated">加载更多提交</target></segment></unit>
+    <unit id="ExplorerLoadingMoreCommits"><segment><source>Loading more commits…</source><target state="translated">正在加载更多提交…</target></segment></unit>
+    <unit id="ExplorerBranchGraph"><segment><source>Branch graph</source><target state="translated">分支图</target></segment></unit>
+    <unit id="ExplorerLoadingBranchGraph"><segment><source>Loading branch graph…</source><target state="translated">正在加载分支图…</target></segment></unit>
+    <unit id="ExplorerBranchGraphSummary"><segment><source>{0} commits · {1} branches</source><target state="translated">{0} 次提交 · {1} 个分支</target></segment></unit>
     <unit id="ExplorerCommitMessage"><segment><source>Message (⌘Enter to commit)</source><target state="translated">提交信息（⌘Enter 提交）</target></segment></unit>
     <unit id="ExplorerCommitMessageOther"><segment><source>Message (Ctrl+Enter to commit)</source><target state="translated">提交信息（Ctrl+Enter 提交）</target></segment></unit>
     <unit id="ExplorerCommit"><segment><source>Commit</source><target state="translated">提交</target></segment></unit>
@@ -1688,5 +1694,81 @@
     <unit id="BotScheduleOff"><segment><source>Off</source><target state="translated">已停用</target></segment></unit>
     <unit id="BotScheduleLastFailed"><segment><source>Last run failed: {0}</source><target state="translated">上次运行失败：{0}</target></segment></unit>
     <unit id="BotScheduleLastMissed"><segment><source>Skipped a run while Octopus was closed</source><target state="translated">Octopus 未运行时错过了一次</target></segment></unit>
+    <unit id="AgentGuiDropFilesHint"><segment><source>Drop files or folders to attach</source><target state="translated">松开以添加文件或文件夹</target></segment></unit>
+    <unit id="BotGroupNewButton"><segment><source>New Group</source><target state="translated">新建群组</target></segment></unit>
+    <unit id="BotGroupNoBotsTitle"><segment><source>Create a bot first</source><target state="translated">请先创建一个 Bot</target></segment></unit>
+    <unit id="BotGroupNoBotsBody"><segment><source>You need at least one bot before creating a Bot Group.</source><target state="translated">创建 Bot 群组前，请先至少创建一个 Bot。</target></segment></unit>
+    <unit id="BotGroupSectionGroups"><segment><source>Groups</source><target state="translated">群组</target></segment></unit>
+    <unit id="BotGroupSectionBots"><segment><source>Bots</source><target state="translated">Bots</target></segment></unit>
+    <unit id="BotGroupMainRoom"><segment><source>Main Room</source><target state="translated">主房间</target></segment></unit>
+    <unit id="BotGroupNewThread"><segment><source>New thread</source><target state="translated">新建话题</target></segment></unit>
+    <unit id="BotGroupUntitledThread"><segment><source>New thread</source><target state="translated">新话题</target></segment></unit>
+    <unit id="BotGroupMemberCount"><segment><source>{0} bots</source><target state="translated">{0} 个 Bot</target></segment></unit>
+    <unit id="BotGroupMenuNewThread"><segment><source>New thread</source><target state="translated">新建话题</target></segment></unit>
+    <unit id="BotGroupMenuManageMembers"><segment><source>Manage members...</source><target state="translated">管理成员...</target></segment></unit>
+    <unit id="BotGroupMenuRename"><segment><source>Rename group...</source><target state="translated">重命名群组...</target></segment></unit>
+    <unit id="BotGroupMenuDelete"><segment><source>Delete group</source><target state="translated">删除群组</target></segment></unit>
+    <unit id="BotGroupRenameTitle"><segment><source>Rename Bot Group</source><target state="translated">重命名 Bot 群组</target></segment></unit>
+    <unit id="BotGroupDeleteConfirmTitle"><segment><source>Delete "{0}"?</source><target state="translated">删除「{0}」？</target></segment></unit>
+    <unit id="BotGroupDeleteConfirmBody"><segment><source>The group transcript and member group sessions will be deleted. Individual bots stay intact.</source><target state="translated">群组聊天记录和群内成员会话将被删除，但各个 Bot 本身不会受到影响。</target></segment></unit>
+    <unit id="BotGroupDialogCreateTitle"><segment><source>New Bot Group</source><target state="translated">新建 Bot 群组</target></segment></unit>
+    <unit id="BotGroupDialogCreateDescription"><segment><source>Bring multiple bots into one shared room to collaborate via @mentions.</source><target state="translated">将多个 Bot 拉入同一个房间，通过 @提及 协同工作。</target></segment></unit>
+    <unit id="BotGroupDialogEditTitle"><segment><source>Manage Bot Group</source><target state="translated">管理 Bot 群组</target></segment></unit>
+    <unit id="BotGroupDialogEditDescription"><segment><source>Update the group's name, members, default reply mode, and handoff limit.</source><target state="translated">更新群组名称、成员、默认回复模式和自动接力上限。</target></segment></unit>
+    <unit id="BotGroupDialogNameLabel"><segment><source>Group name</source><target state="translated">群组名称</target></segment></unit>
+    <unit id="BotGroupDialogNamePlaceholder"><segment><source>e.g. Engineering Council</source><target state="translated">例如：研发协作群</target></segment></unit>
+    <unit id="BotGroupDialogDefaultName"><segment><source>Bot Group</source><target state="translated">Bot 群组</target></segment></unit>
+    <unit id="BotGroupDialogMembersLabel"><segment><source>Members ({0} selected)</source><target state="translated">成员（已选 {0} 个）</target></segment></unit>
+    <unit id="BotGroupDialogMembersRequired"><segment><source>Select at least one bot.</source><target state="translated">请至少选择一个 Bot。</target></segment></unit>
+    <unit id="BotGroupDialogReplyModeLabel"><segment><source>Default reply mode</source><target state="translated">默认回复模式</target></segment></unit>
+    <unit id="BotGroupReplyModeMentions"><segment><source>Only when mentioned</source><target state="translated">仅被 @提及时回复</target></segment></unit>
+    <unit id="BotGroupReplyModeAll"><segment><source>All bots</source><target state="translated">所有 Bot 回复</target></segment></unit>
+    <unit id="BotGroupReplyModeBot"><segment><source>Specific bot</source><target state="translated">指定 Bot 回复</target></segment></unit>
+    <unit id="BotGroupDialogDefaultBotLabel"><segment><source>Default replier</source><target state="translated">默认回复 Bot</target></segment></unit>
+    <unit id="BotGroupDialogMaxHopsLabel"><segment><source>Max @mention handoff hops</source><target state="translated">自动 @接力上限（跳）</target></segment></unit>
+    <unit id="BotGroupDialogMaxHopsHint"><segment><source>Maximum automatic bot-to-bot @mention handoffs before pausing for confirmation.</source><target state="translated">单次请求中 Bot 之间自动 @接力的最大次数，超出后暂停等待确认。</target></segment></unit>
+    <unit id="BotGroupDialogCreate"><segment><source>Create Group</source><target state="translated">创建群组</target></segment></unit>
+    <unit id="BotGroupRoomMembersButton"><segment><source>Members</source><target state="translated">成员</target></segment></unit>
+    <unit id="BotGroupRoomStopAll"><segment><source>Stop All</source><target state="translated">全部停止</target></segment></unit>
+    <unit id="BotGroupRoomLoadEarlier"><segment><source>Load earlier messages</source><target state="translated">加载更早消息</target></segment></unit>
+    <unit id="BotGroupRoomEmptyTitle"><segment><source>Start collaborating</source><target state="translated">开始群组协作</target></segment></unit>
+    <unit id="BotGroupRoomEmptyDescription"><segment><source>Post a message or @mention specific bots to ask them to work together.</source><target state="translated">发送消息或 @提及 指定 Bot，让它们在同一房间内协同完成任务。</target></segment></unit>
+    <unit id="BotGroupHandoffLine"><segment><source>{0} asked {1}</source><target state="translated">{0} @了 {1}</target></segment></unit>
+    <unit id="BotGroupHopLimitNotice"><segment><source>Automatic @mention handoff paused after reaching the hop limit.</source><target state="translated">自动 @接力已达到上限并暂停。</target></segment></unit>
+    <unit id="BotGroupHopLimitContinue"><segment><source>Continue (+3 hops)</source><target state="translated">继续（+3 跳）</target></segment></unit>
+    <unit id="BotGroupTurnQueued"><segment><source>Queued</source><target state="translated">排队中</target></segment></unit>
+    <unit id="BotGroupTurnRunning"><segment><source>Working…</source><target state="translated">处理中…</target></segment></unit>
+    <unit id="BotGroupTurnCompleted"><segment><source>Done</source><target state="translated">已完成</target></segment></unit>
+    <unit id="BotGroupTurnStopped"><segment><source>Stopped</source><target state="translated">已停止</target></segment></unit>
+    <unit id="BotGroupTurnFailed"><segment><source>Failed</source><target state="translated">失败</target></segment></unit>
+    <unit id="BotGroupTurnStop"><segment><source>Stop</source><target state="translated">停止</target></segment></unit>
+    <unit id="BotGroupTurnReply"><segment><source>@Reply</source><target state="translated">@回复</target></segment></unit>
+    <unit id="BotGroupTurnInspect"><segment><source>Inspect Session</source><target state="translated">查看会话</target></segment></unit>
+    <unit id="BotGroupApprovalNeedsYou"><segment><source>{0} · Needs you</source><target state="translated">{0} · 等待确认</target></segment></unit>
+    <unit id="BotGroupApprovalCount"><segment><source>{0} pending approvals</source><target state="translated">{0} 个待确认操作</target></segment></unit>
+    <unit id="BotGroupApprovalDismiss"><segment><source>Cancel</source><target state="translated">取消</target></segment></unit>
+    <unit id="BotGroupComposerPlaceholder"><segment><source>Message the group… Use @BotName or @everyone</source><target state="translated">在群组中发消息… 可使用 @Bot名称 或 @everyone</target></segment></unit>
+    <unit id="BotGroupComposerRepliesPrefix"><segment><source>Replies:</source><target state="translated">回复：</target></segment></unit>
+    <unit id="BotGroupComposerRepliesNone"><segment><source>No one (use @mention)</source><target state="translated">无人回复（请使用 @提及）</target></segment></unit>
+    <unit id="BotGroupComposerRepliesAll"><segment><source>All bots ({0})</source><target state="translated">所有 Bot（{0}）</target></segment></unit>
+    <unit id="BotGroupComposerRepliesMentions"><segment><source>Mentioned: {0}</source><target state="translated">已提及：{0}</target></segment></unit>
+    <unit id="BotGroupComposerErrorAmbiguous"><segment><source>Ambiguous @mention matches multiple bots.</source><target state="translated">@提及 匹配到多个同名 Bot。</target></segment></unit>
+    <unit id="BotGroupComposerErrorUnknown"><segment><source>Unknown @mention at the start of the message.</source><target state="translated">消息开头的 @提及 未匹配任何成员。</target></segment></unit>
+    <unit id="BotGroupComposerErrorDefaultMissing"><segment><source>Default replier is no longer in this group.</source><target state="translated">默认回复 Bot 已不在本群中。</target></segment></unit>
+    <unit id="BotGroupComposerEveryone"><segment><source>@everyone</source><target state="translated">@everyone（全部）</target></segment></unit>
+    <unit id="BotGroupComposerMentionTip"><segment><source>Insert @mention</source><target state="translated">插入 @提及</target></segment></unit>
+    <unit id="BotGroupComposerReplyModeHeading"><segment><source>Who replies by default</source><target state="translated">默认回复对象</target></segment></unit>
+    <unit id="BotGroupRightTabOverview"><segment><source>Overview</source><target state="translated">概览</target></segment></unit>
+    <unit id="BotGroupRightTabItems"><segment><source>Work Items</source><target state="translated">事项</target></segment></unit>
+    <unit id="BotGroupRightEmptyTitle"><segment><source>No group selected</source><target state="translated">未选择群组</target></segment></unit>
+    <unit id="BotGroupRightEmptyDescription"><segment><source>Select a Bot Group from the sidebar to inspect its members and settings.</source><target state="translated">从左侧选择一个 Bot 群组以查看成员与设置。</target></segment></unit>
+    <unit id="BotGroupRightSectionSettings"><segment><source>Room settings</source><target state="translated">房间设置</target></segment></unit>
+    <unit id="BotGroupRightSectionMembers"><segment><source>Members</source><target state="translated">群组成员</target></segment></unit>
+    <unit id="BotGroupRightManageMembers"><segment><source>Manage Members</source><target state="translated">管理成员</target></segment></unit>
+    <unit id="BotGroupRightJumpToBot"><segment><source>Open bot</source><target state="translated">打开 Bot</target></segment></unit>
+    <unit id="BotGroupRightRemoveMember"><segment><source>Remove from group</source><target state="translated">移出群组</target></segment></unit>
+    <unit id="BotGroupRightItemsEmptyTitle"><segment><source>No work items</source><target state="translated">暂无待办事项</target></segment></unit>
+    <unit id="BotGroupRightItemsEmptyDescription"><segment><source>Work items created by member bots will appear here.</source><target state="translated">群内成员 Bot 创建的工作事项会汇总显示在这里。</target></segment></unit>
+    <unit id="BotGroupHopsOption"><segment><source>{0} hops</source><target state="translated">{0} 跳</target></segment></unit>
   </file>
 </xliff>

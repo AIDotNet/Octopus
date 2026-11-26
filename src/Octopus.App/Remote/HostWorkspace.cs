@@ -3,6 +3,7 @@ using Avalonia.Threading;
 using Octopus.Agents;
 using Octopus.App.Activity;
 using Octopus.App.Bots;
+using Octopus.App.Bots.Groups;
 using Octopus.App.Common;
 using Octopus.App.Services;
 using Octopus.App.Services.Workspaces;
@@ -49,6 +50,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     private readonly ILoginEnvironment? _login;
     private readonly IProjectIconStore? _icons;
     private readonly IBotService? _bots;
+    private readonly IBotGroupService? _botGroups;
     private readonly HostConversations _conversations;
 
     public HostWorkspace(IProjectService projects, IItemLaunchService launcher, ITerminalConnectionFactory factory, TerminalSessionRegistry sessions,
@@ -56,7 +58,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         Octopus.FileSystem.IFileTreeService files, Octopus.Git.IGitService git, PathComparer paths,
         IWorkspaceManager? workspaces = null, IGitHubTaskProvider? taskProvider = null,
         ILocalSystemMetricsCollector? metrics = null, IExecutableLocator? locator = null, ILoginEnvironment? login = null,
-        IProjectIconStore? icons = null, IBotService? bots = null)
+        IProjectIconStore? icons = null, IBotService? bots = null, IBotGroupService? botGroups = null)
     {
         _files = files;
         _git = git;
@@ -68,6 +70,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         _login = login;
         _icons = icons;
         _bots = bots;
+        _botGroups = botGroups;
         _projects = projects;
         _launcher = launcher;
         _factory = factory;
@@ -82,6 +85,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         projects.Changed += OnProjectsChanged;
         activity.Changed += OnActivityChanged;
         bots?.Changed += OnBotsChanged;
+        botGroups?.Changed += OnBotGroupsChanged;
     }
 
     public event Action? Changed;
@@ -739,10 +743,13 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         _projects.Changed -= OnProjectsChanged;
         _activity.Changed -= OnActivityChanged;
         _bots?.Changed -= OnBotsChanged;
+        _botGroups?.Changed -= OnBotGroupsChanged;
         _conversations.Dispose();
     }
 
     private void OnBotsChanged(object? sender, BotChangedEventArgs e) => Changed?.Invoke();
+
+    private void OnBotGroupsChanged(object? sender, BotGroupChangedEventArgs e) => Changed?.Invoke();
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
@@ -972,6 +979,289 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
 
     private IBotService RequireBots() =>
         _bots ?? throw new RemoteException(RemoteProtocol.MethodNotFound, "Bots are not supported by this host.");
+
+    // ---- Bot Groups RPC bridge (BotGroupMessages.cs) ----
+
+    public bool SupportsBotGroups => _botGroups is not null;
+
+    public Task<IReadOnlyList<BotGroupMessageDto>> ListBotGroupsAsync() => OnUi<IReadOnlyList<BotGroupMessageDto>>(() =>
+        _botGroups is null ? [] : [.. _botGroups.Groups.Select(ToBotGroupDto)]);
+
+    public Task<BotGroupMessageDto> CreateBotGroupAsync(CreateBotGroupMessage request) => OnUi(() =>
+    {
+        var groups = RequireBotGroups();
+        try
+        {
+            var created = groups.CreateGroup(new CreateBotGroupRequest(
+                request.Name,
+                request.BotIds ?? [],
+                ParseReplyMode(request.ReplyModeKind, request.ReplyModeBotId)));
+            return ToBotGroupDto(created);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw ToBotGroupRemoteException(e);
+        }
+    });
+
+    public async Task<BotGroupMessageDto> UpdateBotGroupAsync(UpdateBotGroupMessage request)
+    {
+        var groups = RequireBotGroups();
+        try
+        {
+            var updated = await OnUiAsync(() => groups.UpdateGroupAsync(new UpdateBotGroupRequest(
+                request.GroupId,
+                request.Revision,
+                request.Name,
+                request.BotIds,
+                ParseReplyMode(request.ReplyModeKind, request.ReplyModeBotId),
+                request.MaxHops))).ConfigureAwait(false);
+            return await OnUi(() => ToBotGroupDto(updated)).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw ToBotGroupRemoteException(e);
+        }
+    }
+
+    public async Task DeleteBotGroupAsync(string groupId)
+    {
+        var groups = RequireBotGroups();
+        try
+        {
+            await OnUiAsync(() => groups.DeleteGroupAsync(groupId)).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw ToBotGroupRemoteException(e);
+        }
+    }
+
+    public Task<BotGroupRoomSnapshotMessage> ReadBotGroupRoomAsync(BotGroupRoomReadRequestMessage request) => OnUi(() =>
+    {
+        var groups = RequireBotGroups();
+        try
+        {
+            var limit = request.Limit <= 0 ? 60 : request.Limit;
+            var page = groups.ReadRoom(request.GroupId, Blank(request.ThreadId), request.BeforeSequence, limit);
+            return new BotGroupRoomSnapshotMessage
+            {
+                Group = ToBotGroupDto(page.Group),
+                ThreadId = page.ThreadId,
+                Messages = [.. page.Messages.Select(ToBotGroupEntryDto)],
+                Approvals = [.. page.Approvals.Select(ToBotGroupApprovalDto)],
+                HasEarlier = page.HasEarlier,
+            };
+        }
+        catch (InvalidOperationException e)
+        {
+            throw ToBotGroupRemoteException(e);
+        }
+    });
+
+    public async Task<BotGroupEntryDto> SendBotGroupMessageAsync(BotGroupSendMessage request)
+    {
+        var groups = RequireBotGroups();
+        try
+        {
+            var entry = await OnUiAsync(() => groups.SendMessageAsync(
+                request.GroupId,
+                request.Revision,
+                request.Text,
+                Blank(request.ThreadId),
+                Blank(request.MessageId))).ConfigureAwait(false);
+            return await OnUi(() => ToBotGroupEntryDto(entry)).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw ToBotGroupRemoteException(e);
+        }
+    }
+
+    public async Task StopBotGroupAsync(BotGroupStopMessage request)
+    {
+        var groups = RequireBotGroups();
+        try
+        {
+            await OnUiAsync(() => groups.StopAsync(request.GroupId, Blank(request.ThreadId), Blank(request.BotId))).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw ToBotGroupRemoteException(e);
+        }
+    }
+
+    public async Task ContinueBotGroupHandoffAsync(BotGroupContinueHandoffMessage request)
+    {
+        var groups = RequireBotGroups();
+        try
+        {
+            var extraHops = request.ExtraHops <= 0 ? 3 : request.ExtraHops;
+            await OnUiAsync(() => groups.ContinueHandoffAsync(request.GroupId, request.MessageId, extraHops)).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw ToBotGroupRemoteException(e);
+        }
+    }
+
+    public async Task<BotGroupThreadDto> CreateBotGroupThreadAsync(string groupId)
+    {
+        var groups = RequireBotGroups();
+        try
+        {
+            var thread = await OnUiAsync(() => groups.CreateThreadAsync(groupId)).ConfigureAwait(false);
+            return await OnUi(() => ToBotGroupThreadDto(thread)).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw ToBotGroupRemoteException(e);
+        }
+    }
+
+    public Task RespondBotGroupApprovalAsync(BotGroupApprovalRespondMessage request) => OnUi(() =>
+    {
+        var groups = RequireBotGroups();
+        groups.RespondApproval(request.ApprovalId, Blank(request.OptionId));
+        return true;
+    });
+
+    private IBotGroupService RequireBotGroups() =>
+        _botGroups ?? throw new RemoteException(RemoteProtocol.MethodNotFound, "Bot Groups are not supported by this host.");
+
+    private static RemoteException ToBotGroupRemoteException(InvalidOperationException e) =>
+        e.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+            ? new RemoteException(RemoteMethods.NotFound, e.Message)
+            : new RemoteException(RemoteProtocol.InvalidParams, e.Message);
+
+    private static BotGroupReplyMode? ParseReplyMode(string? kind, string? botId)
+    {
+        if (string.IsNullOrWhiteSpace(kind))
+        {
+            return null;
+        }
+        var parsedKind = kind.Trim().ToLowerInvariant() switch
+        {
+            "bot" => BotGroupReplyModeKind.Bot,
+            "all" => BotGroupReplyModeKind.All,
+            _ => BotGroupReplyModeKind.Mentions,
+        };
+        return new BotGroupReplyMode
+        {
+            Kind = parsedKind,
+            BotId = Blank(botId),
+        };
+    }
+
+    private BotGroupMessageDto ToBotGroupDto(BotGroupDefinition group)
+    {
+        var groups = _botGroups!;
+        return new BotGroupMessageDto
+        {
+            Id = group.Id,
+            Name = group.Name,
+            Revision = group.Revision,
+            ReplyModeKind = group.ReplyMode.Kind switch
+            {
+                BotGroupReplyModeKind.Bot => "bot",
+                BotGroupReplyModeKind.All => "all",
+                _ => "mentions",
+            },
+            ReplyModeBotId = group.ReplyMode.BotId,
+            MaxHops = group.MaxHops,
+            IsUnread = group.IsUnread,
+            LatestAuthorName = group.Latest?.AuthorName,
+            LatestText = group.Latest?.Text,
+            LatestAt = group.Latest?.At,
+            PendingApprovalCount = groups.GetPendingApprovals(group.Id).Count,
+            IsWorking = groups.IsGroupWorking(group.Id),
+            Members = [.. group.Members.Select(ToBotGroupMemberDto)],
+            Threads = [.. group.Threads.Select(ToBotGroupThreadDto)],
+            CreatedAt = group.CreatedAt,
+        };
+    }
+
+    private BotGroupMemberDto ToBotGroupMemberDto(BotGroupMember member)
+    {
+        var bot = _bots?.Bots.FirstOrDefault(b => string.Equals(b.Id, member.BotId, StringComparison.Ordinal));
+        return new BotGroupMemberDto
+        {
+            BotId = member.BotId,
+            ChatId = member.ChatId,
+            BotName = bot?.Name ?? member.BotId,
+            BotColor = string.IsNullOrWhiteSpace(bot?.Color) ? "#5b5bd6" : bot.Color,
+            AgentId = string.IsNullOrWhiteSpace(bot?.AgentId) ? "claude" : bot.AgentId,
+            IsPaused = bot?.IsPaused ?? false,
+        };
+    }
+
+    private BotGroupThreadDto ToBotGroupThreadDto(BotGroupThread thread) => new()
+    {
+        Id = thread.Id,
+        Title = thread.Title,
+        Members = [.. thread.Members.Select(ToBotGroupMemberDto)],
+        CreatedAt = thread.CreatedAt,
+    };
+
+    private BotGroupEntryDto ToBotGroupEntryDto(BotGroupMessage entry) => new()
+    {
+        Id = entry.Id,
+        GroupId = entry.GroupId,
+        ThreadId = entry.ThreadId,
+        Sequence = entry.Sequence,
+        IsOwner = entry.IsOwner,
+        AuthorBotId = entry.AuthorBotId,
+        AuthorBotName = entry.AuthorBotName,
+        Text = entry.Text,
+        RequesterBotName = entry.RequesterBotName,
+        IsMentionHandoff = entry.IsMentionHandoff,
+        PausedByHopLimit = entry.PausedByHopLimit,
+        HopDepth = entry.HopDepth,
+        Turns = [.. entry.Turns.Select(ToBotGroupTurnDto)],
+        CreatedAt = entry.CreatedAt,
+    };
+
+    private BotGroupTurnDto ToBotGroupTurnDto(BotGroupTurn turn) => new()
+    {
+        OperationId = turn.OperationId,
+        BotId = turn.BotId,
+        BotName = turn.BotName,
+        BotColor = string.IsNullOrWhiteSpace(turn.BotColor) ? "#5b5bd6" : turn.BotColor,
+        AgentId = string.IsNullOrWhiteSpace(turn.AgentId) ? "claude" : turn.AgentId,
+        ChatId = turn.ChatId,
+        Status = turn.Status switch
+        {
+            BotGroupTurnStatus.Running => "running",
+            BotGroupTurnStatus.Completed => "completed",
+            BotGroupTurnStatus.Stopped => "stopped",
+            BotGroupTurnStatus.Failed => "failed",
+            _ => "queued",
+        },
+        Reply = turn.Reply,
+        StreamingPreview = _botGroups?.GetStreamingPreview(turn.OperationId),
+        Error = turn.Error,
+        CreatedAt = turn.CreatedAt,
+        CompletedAt = turn.CompletedAt,
+    };
+
+    private static BotGroupApprovalDto ToBotGroupApprovalDto(BotGroupPendingApproval approval) => new()
+    {
+        ApprovalId = approval.ApprovalId,
+        GroupId = approval.GroupId,
+        ThreadId = approval.ThreadId,
+        BotId = approval.BotId,
+        BotName = approval.BotName,
+        ChatId = approval.ChatId,
+        Title = approval.Title,
+        Detail = approval.Detail,
+        WarningMessage = approval.WarningMessage,
+        Options = [.. approval.Options.Select(o => new AcpOptionMessage
+        {
+            Id = o.OptionId,
+            Label = o.Name,
+            Detail = o.Kind,
+        })],
+    };
 
     private static BotDefinition FindBot(IBotService bots, string botId) =>
         bots.Bots.FirstOrDefault(b => b.Id == botId)
@@ -1393,6 +1683,9 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     }
 
     private static Task OnUiAsync(Func<Task> action) =>
+        Dispatcher.UIThread.CheckAccess() ? action() : Dispatcher.UIThread.InvokeAsync(action);
+
+    private static Task<T> OnUiAsync<T>(Func<Task<T>> action) =>
         Dispatcher.UIThread.CheckAccess() ? action() : Dispatcher.UIThread.InvokeAsync(action);
 
     /// <summary>One device's view of one session: the session's output and events go to the sink, the device's input and size requests come in.</summary>

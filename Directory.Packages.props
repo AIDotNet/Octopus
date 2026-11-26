@@ -12,7 +12,6 @@
         <PackageVersion Include="Avalonia.Android" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.iOS" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
-        <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
         <!-- Real drawing in the phone app's headless tests (the desktop app's tests get it through Avalonia.Desktop). -->
         <PackageVersion Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />

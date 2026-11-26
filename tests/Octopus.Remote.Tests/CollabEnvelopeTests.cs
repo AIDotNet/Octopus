@@ -34,4 +34,28 @@ public sealed class CollabEnvelopeTests
         Assert.Null(CollabEnvelope.TryParse("计算一下 1+1"));
         Assert.Null(CollabEnvelope.TryParse("[Octopus Collab without a closing bracket\nbody"));
     }
+
+    [Fact]
+    public void Every_envelope_the_bus_builds_parses_back_to_its_body_without_the_footer()
+    {
+        var built = new (string Text, string Body, string HeaderStart)[]
+        {
+            (CollabEnvelope.Delegation("task_1_ab", "t_2_cd", "Claude Code · Lead", "Write tests", ["a.cs"]), "Write tests\n\nRelevant files:\n- a.cs", "Collab Task · Delegated by @Claude Code · Lead"),
+            (CollabEnvelope.Delegation("task_1_ab", "t_2_cd", "Lead", "Run CI", [], fromDevice: "MacBook"), "Run CI", "Collab Task · Delegated by @Lead"),
+            (CollabEnvelope.Delegation("task_1_ab", "t_2_cd", "Lead", "Audit", [], readOnly: true), "Audit", "Collab Task · Delegated by @Lead · Read-Only Mode"),
+            (CollabEnvelope.Message("t_2_cd", "Codex", 1, 6, "camelCase?", expectReply: true), "camelCase?", "Collab · From @Codex"),
+            (CollabEnvelope.Message("t_2_cd", "Codex", 1, 6, "camelCase?", expectReply: true, toRemote: true), "camelCase?", "Collab · From @Codex"),
+            (CollabEnvelope.Reply("t_2_cd", "API", "Codex", 2, 6, "agreed", "Yes."), "Yes.", "Collab Reply · From @Codex"),
+            (CollabEnvelope.Reply("t_2_cd", "API", "Codex", 2, 6, "agreed", "Which DB?", autoReportedFromSessionId: "s1"), "Which DB?", "Collab Reply · From @Codex"),
+            (CollabEnvelope.Interjection("t_2_cd", "Ship it."), "Ship it.", "Collab · User Interjection"),
+        };
+        foreach (var (text, body, headerStart) in built)
+        {
+            var parsed = CollabEnvelope.TryParse(text);
+            Assert.NotNull(parsed);
+            Assert.Equal(body.Replace("\n", Environment.NewLine, StringComparison.Ordinal).ReplaceLineEndings("\n"), parsed.Body.ReplaceLineEndings("\n"));
+            Assert.StartsWith(headerStart, parsed.Header, StringComparison.Ordinal);
+        }
+        Assert.Equal("MacBook", CollabEnvelope.TryParse(built[1].Text)!.FromDevice);
+    }
 }

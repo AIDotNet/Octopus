@@ -304,4 +304,51 @@ public class GitServiceTests : IDisposable
         Assert.True((await _service.UnstageAsync(_dir, [":odd.txt"], ct)).Succeeded);
         Assert.Equal(GitChangeKind.Untracked, (await _service.GetStatusAsync(_dir, ct))!.Changes.Single().Kind);
     }
+
+    [Fact]
+    public async Task Log_pages_and_branch_graph_return_paginated_commits_and_merge_topology()
+    {
+        if (_git is null) return;
+        var ct = TestContext.Current.CancellationToken;
+        Git("init", "-q");
+        Git("config", "user.name", "Tester");
+        Git("config", "user.email", "t@example.com");
+        for (var i = 1; i <= 5; i++)
+        {
+            Write($"f{i}.txt", $"line {i}\n");
+            Git("add", ".");
+            Git("commit", "-q", "-m", $"commit-{i}");
+        }
+
+        var page1 = await _service.GetLogPageAsync(_dir, count: 2, skip: 0, ct);
+        var page2 = await _service.GetLogPageAsync(_dir, count: 2, skip: 2, ct);
+        var page3 = await _service.GetLogPageAsync(_dir, count: 2, skip: 4, ct);
+        Assert.Equal(["commit-5", "commit-4"], page1.Select(c => c.Subject).ToArray());
+        Assert.Equal(["commit-3", "commit-2"], page2.Select(c => c.Subject).ToArray());
+        Assert.Equal(["commit-1"], page3.Select(c => c.Subject).ToArray());
+
+        // Create a feature branch, commit on it, then merge back with --no-ff to verify parent links and decorations.
+        var mainBranch = (await _service.GetStatusAsync(_dir, ct))!.Branch!;
+        Git("checkout", "-q", "-b", "feat/graph");
+        Write("feat.txt", "hello\nworld\n");
+        Git("add", ".");
+        Git("commit", "-q", "-m", "feat commit");
+        Git("tag", "v0.1.0");
+        Git("checkout", "-q", mainBranch);
+        Git("merge", "-q", "--no-ff", "feat/graph", "-m", "Merge branch 'feat/graph'");
+
+        var graph = await _service.GetBranchGraphAsync(_dir, count: 10, ct);
+        Assert.True(graph.Count >= 3);
+        var mergeCommit = graph[0];
+        Assert.Equal("Merge branch 'feat/graph'", mergeCommit.Subject);
+        Assert.Equal(2, mergeCommit.ParentHashes.Count);
+        Assert.Contains(mainBranch, mergeCommit.Branches);
+
+        var featCommit = graph.Single(c => c.Subject == "feat commit");
+        Assert.Equal("v0.1.0", featCommit.Tag);
+        Assert.Contains("feat/graph", featCommit.Branches);
+        Assert.Equal(1, featCommit.Files);
+        Assert.Equal(2, featCommit.Additions);
+        Assert.Equal(0, featCommit.Deletions);
+    }
 }

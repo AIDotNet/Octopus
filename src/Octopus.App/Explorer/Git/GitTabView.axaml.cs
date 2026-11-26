@@ -1,20 +1,28 @@
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Octopus.App.Localization;
 using TKCode.Arc;
 
 namespace Octopus.App.Explorer.Git;
 
 /// <summary>
-/// The source control tab: branch menu, sync buttons, commit box, grouped changes and recent commits. A click on a
-/// change opens its diff, a double-click the file; a click on a commit opens it to its files. The platform's command
-/// key with Enter in the message commits.
+/// The source control tab: branch menu, sync buttons, commit box, collapsible working changes and scroll-loaded
+/// recent commits, plus an on-demand collapsible branch graph. A click on a change opens its diff, a double-click the
+/// file; a click on a commit opens it to its files. The platform's command key with Enter in the message commits.
 /// </summary>
 public partial class GitTabView : UserControl
 {
+    private const double ScrollLoadThresholdPx = 120;
+    private const double DefaultBranchGraphMaxHeight = 340;
+
     private GitPanelViewModel? _model;
+    private ScrollViewer? _scrollViewer;
+    private BranchGraph? _branchGraph;
     private bool _subscribed;
 
     public GitTabView()
@@ -25,6 +33,7 @@ public partial class GitTabView : UserControl
             : AppLangResourceKind.ExplorerCommitMessageOther);
         MessageBox.Label = MessageBox.Placeholder;
         MessageBox.AddHandler(KeyDownEvent, OnMessageKeyDown, RoutingStrategies.Tunnel);
+        List.TemplateApplied += OnListTemplateApplied;
     }
 
     protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
@@ -36,6 +45,8 @@ public partial class GitTabView : UserControl
             _subscribed = true;
             BuildBranchMenu();
             BuildMoreMenu();
+            UpdateSectionLayout();
+            SyncBranchGraphView();
         }
     }
 
@@ -58,11 +69,48 @@ public partial class GitTabView : UserControl
             _subscribed = false;
         }
         _model = DataContext as GitPanelViewModel;
-        if (_model is null) return;
+        if (_model is null)
+        {
+            DetachBranchGraph();
+            return;
+        }
         _model.PropertyChanged += OnModelChanged;
         _subscribed = true;
         BuildBranchMenu();
         BuildMoreMenu();
+        UpdateSectionLayout();
+        SyncBranchGraphView();
+    }
+
+    private void OnListTemplateApplied(object? sender, TemplateAppliedEventArgs e)
+    {
+        _scrollViewer?.ScrollChanged -= OnListScrollChanged;
+        _scrollViewer = e.NameScope.Find<ScrollViewer>("PART_ScrollViewer");
+        _scrollViewer?.ScrollChanged += OnListScrollChanged;
+    }
+
+    private void OnListScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (_scrollViewer is not { } sv || _model is not { } model) return;
+        if (!model.IsCommitsExpanded || !model.HasMoreCommits || model.IsLoadingMoreCommits || model.IsRefreshing) return;
+        if (sv.Extent.Height <= sv.Viewport.Height + 1) return;
+        var remaining = sv.Extent.Height - sv.Viewport.Height - sv.Offset.Y;
+        if (remaining > ScrollLoadThresholdPx) return;
+        _ = LoadMorePreservingScrollAsync(model, sv);
+    }
+
+    private static async Task LoadMorePreservingScrollAsync(GitPanelViewModel model, ScrollViewer sv)
+    {
+        var saved = sv.Offset;
+        await model.LoadMoreCommitsAsync();
+        if (Math.Abs(sv.Offset.Y - saved.Y) > 1)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                var maxY = Math.Max(0, sv.Extent.Height - sv.Viewport.Height);
+                sv.Offset = new Vector(saved.X, Math.Min(saved.Y, maxY));
+            }, DispatcherPriority.Loaded);
+        }
     }
 
     private void OnModelChanged(object? sender, PropertyChangedEventArgs e)
@@ -75,7 +123,75 @@ public partial class GitTabView : UserControl
             case nameof(GitPanelViewModel.IsAmend) or nameof(GitPanelViewModel.StashCount):
                 BuildMoreMenu();
                 break;
+            case nameof(GitPanelViewModel.IsChangesExpanded) or nameof(GitPanelViewModel.IsCommitsExpanded):
+                UpdateSectionLayout();
+                break;
+            case nameof(GitPanelViewModel.IsBranchGraphExpanded)
+                or nameof(GitPanelViewModel.BranchGraphCommits)
+                or nameof(GitPanelViewModel.BranchGraphTitle):
+                UpdateSectionLayout();
+                SyncBranchGraphView();
+                break;
         }
+    }
+
+    private void UpdateSectionLayout()
+    {
+        if (_model is not { } model || SectionsGrid.RowDefinitions.Count < 2) return;
+        var upperExpanded = model.IsChangesExpanded || model.IsCommitsExpanded;
+        if (!upperExpanded && model.IsBranchGraphExpanded)
+        {
+            SectionsGrid.RowDefinitions[0].Height = GridLength.Auto;
+            SectionsGrid.RowDefinitions[1].Height = GridLength.Star;
+            BranchGraphHost.MaxHeight = double.PositiveInfinity;
+        }
+        else if (!upperExpanded)
+        {
+            SectionsGrid.RowDefinitions[0].Height = GridLength.Auto;
+            SectionsGrid.RowDefinitions[1].Height = GridLength.Auto;
+            BranchGraphHost.MaxHeight = DefaultBranchGraphMaxHeight;
+        }
+        else
+        {
+            SectionsGrid.RowDefinitions[0].Height = GridLength.Star;
+            SectionsGrid.RowDefinitions[1].Height = GridLength.Auto;
+            BranchGraphHost.MaxHeight = DefaultBranchGraphMaxHeight;
+        }
+    }
+
+    private void SyncBranchGraphView()
+    {
+        if (_model is not { ShowBranchGraphControl: true } model)
+        {
+            DetachBranchGraph();
+            return;
+        }
+
+        if (_branchGraph is null)
+        {
+            _branchGraph = new BranchGraph
+            {
+                AutoPlay = false,
+                StartsFinished = true,
+                AreControlsVisible = false,
+                Labels = model.BranchGraphLabels,
+                Title = model.BranchGraphTitle,
+                ItemsSource = model.BranchGraphCommits,
+            };
+            BranchGraphSlot.Child = _branchGraph;
+        }
+        else
+        {
+            _branchGraph.Title = model.BranchGraphTitle;
+            _branchGraph.ItemsSource = model.BranchGraphCommits;
+        }
+    }
+
+    private void DetachBranchGraph()
+    {
+        if (_branchGraph is null) return;
+        BranchGraphSlot.Child = null;
+        _branchGraph = null;
     }
 
     /// <summary>The local branches to switch to (the current one checked), the remote ones in a submenu, then create and delete.</summary>

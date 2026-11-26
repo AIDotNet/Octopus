@@ -76,6 +76,7 @@ public sealed partial class RemoteHost : ObservableObject
     public string? Platform { get; set; }
     public ObservableCollection<RemoteProject> Projects { get; } = [];
     public ObservableCollection<RemoteBot> Bots { get; } = [];
+    public ObservableCollection<RemoteBotGroup> BotGroups { get; } = [];
     public IReadOnlyList<AgentOption> Agents { get; set; } = [];
 
     public bool IsOnline => Link != HostLink.Offline;

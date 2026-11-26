@@ -191,12 +191,7 @@ dotnet run --project src/Octopus.Mobile.Desktop
 # Build and run all tests
 dotnet build Octopus.slnx
 dotnet test Octopus.slnx
-
-# Run the live terminal smoke test (briefly opens a window)
-dotnet run --project tests/Octopus.Terminal.Smoke -- --script
 ```
-
-> The terminal smoke test launches the native default PowerShell on Windows (verifying I/O, resize, `Ctrl+C`, exit codes, and restart) and the login shell on macOS / Linux (additionally verifying device responses, `vim`, and `terminfo`).
 
 ### Project Structure
 
@@ -217,7 +212,7 @@ src/
 ├── Octopus.Remote(.Host/.Client)             P-256 identity, E2E secure channel, LAN & relay transport
 ├── Octopus.App                               Cross-platform Avalonia desktop app & built-in plugins
 └── Octopus.Mobile(.Desktop/.Android/.iOS)    Mobile companion UI & platform heads (Android/iOS in Octopus.Mobile.slnx)
-tests/                                        Module unit tests, headless UI tests & terminal smoke test
+tests/                                        Module unit tests & headless UI tests
 packaging/                                    macOS plist/entitlements, Windows Inno Setup & Linux installer assets
 tools/                                        Packaging, icon generation, update signing & release helper scripts
 ```

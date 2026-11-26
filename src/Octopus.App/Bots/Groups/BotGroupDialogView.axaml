@@ -1,0 +1,151 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Bots.Groups"
+             x:Class="Octopus.App.Bots.Groups.BotGroupDialogView"
+             x:DataType="vm:BotGroupDialogViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.group-member-row">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Padding" Value="9,7" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Row"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#PART_Row">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            </Style>
+            <Style Selector="^.selected /template/ Border#PART_Row">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+            </Style>
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="14" HorizontalAlignment="Stretch">
+        <!-- Group name -->
+        <arc:Input x:Name="NameInput" Size="Small"
+                   Label="{l:AppLangResource BotGroupDialogNameLabel}"
+                   Placeholder="{l:AppLangResource BotGroupDialogNamePlaceholder}"
+                   Text="{Binding Name, Mode=TwoWay}"
+                   MaxLength="48" />
+
+        <!-- Member checklist -->
+        <StackPanel Spacing="6">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="caption" Text="{Binding MembersHeading}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                           Foreground="{arc:ArcDesignTokenResource Danger}"
+                           IsVisible="{Binding HasValidationError}"
+                           Text="{l:AppLangResource BotGroupDialogMembersRequired}"
+                           VerticalAlignment="Center" />
+            </Grid>
+            <Border Background="{arc:ArcDesignTokenResource Surface}"
+                    BorderBrush="{arc:ArcDesignTokenResource Border}"
+                    BorderThickness="1"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
+                    Padding="4">
+                <arc:ScrollArea MaxHeight="200" Orientation="Vertical" FadeLength="0">
+                    <ItemsControl ItemsSource="{Binding Members}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BotGroupMemberOptionViewModel">
+                                <Button Classes="group-member-row" Classes.selected="{Binding IsSelected}"
+                                        Command="{Binding ToggleCommand}">
+                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="9">
+                                        <!-- Checkbox indicator -->
+                                        <Border Width="16" Height="16" CornerRadius="4" VerticalAlignment="Center"
+                                                BorderThickness="1.5"
+                                                BorderBrush="{arc:ArcDesignTokenResource Border}"
+                                                Background="{arc:ArcDesignTokenResource Surface}">
+                                            <Panel>
+                                                <Border IsVisible="{Binding IsSelected}" CornerRadius="3"
+                                                        Background="{arc:ArcDesignTokenResource Accent}">
+                                                    <lucide:LucideIcon Kind="Check" Size="11" Foreground="White"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                            </Panel>
+                                        </Border>
+
+                                        <!-- Bot avatar -->
+                                        <Border Grid.Column="1" Width="24" Height="24" CornerRadius="6"
+                                                Background="{Binding AvatarBrush}" ClipToBounds="True" VerticalAlignment="Center">
+                                            <Panel>
+                                                <Image IsVisible="{Binding HasAvatarImage}" Source="{Binding AvatarImage}"
+                                                       Width="24" Height="24" Stretch="UniformToFill"
+                                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                                <lucide:LucideIcon IsVisible="{Binding HasAvatarIcon}" Kind="{Binding AvatarIcon}" Size="13" Foreground="White"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                <TextBlock IsVisible="{Binding ShowInitial}" Text="{Binding Initial}" Foreground="White"
+                                                           FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Panel>
+                                        </Border>
+
+                                        <!-- Bot name + agent -->
+                                        <StackPanel Grid.Column="2" Spacing="1" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding Name}"
+                                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <Border IsVisible="{Binding IsPaused}" Padding="4,0" CornerRadius="4"
+                                                        Background="{arc:ArcDesignTokenResource BorderSubtle}" VerticalAlignment="Center">
+                                                    <TextBlock Classes="hint" FontSize="10" Text="{l:AppLangResource BotPausedTag}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Classes="hint" FontSize="11" Text="{Binding AgentName}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </arc:ScrollArea>
+            </Border>
+        </StackPanel>
+
+        <!-- Reply mode + Max handoff hops -->
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+            <arc:Select Size="Small" AutoScrollToSelectedItem="False"
+                        Label="{l:AppLangResource BotGroupDialogReplyModeLabel}"
+                        ItemsSource="{Binding ReplyModeOptions}"
+                        SelectedValue="{Binding SelectedReplyModeKind, Mode=TwoWay}" />
+            <arc:Select Grid.Column="1" Size="Small" AutoScrollToSelectedItem="False"
+                        Label="{l:AppLangResource BotGroupDialogMaxHopsLabel}"
+                        ItemsSource="{Binding MaxHopsOptions}"
+                        SelectedValue="{Binding SelectedMaxHopsKey, Mode=TwoWay}" />
+        </Grid>
+
+        <!-- Conditional default replier selector when ReplyMode == Bot -->
+        <arc:Select Size="Small" AutoScrollToSelectedItem="False"
+                    IsVisible="{Binding ShowDefaultBotPicker}"
+                    Label="{l:AppLangResource BotGroupDialogDefaultBotLabel}"
+                    ItemsSource="{Binding DefaultBotOptions}"
+                    SelectedValue="{Binding SelectedDefaultBotId, Mode=TwoWay}" />
+
+        <!-- Hint -->
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <lucide:LucideIcon Kind="GitFork" Size="13" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{l:AppLangResource BotGroupDialogMaxHopsHint}" VerticalAlignment="Center" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

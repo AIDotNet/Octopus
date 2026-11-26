@@ -1,0 +1,682 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:grp="using:Octopus.App.Bots.Groups"
+             x:Class="Octopus.App.Bots.Groups.BotGroupRoomView"
+             x:DataType="grp:BotGroupRoomViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.room-pill">
+            <Setter Property="Height" Value="26" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Pill"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#PART_Pill">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            </Style>
+            <Style Selector="^.selected">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            </Style>
+        </Style>
+
+        <Style Selector="Button.turn-action">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="7,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}" VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            </Style>
+            <Style Selector="^.danger">
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+            </Style>
+        </Style>
+
+        <Style Selector="Button.group-composer-chip">
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="7,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}" VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            </Style>
+            <Style Selector="^.open">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+                <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            </Style>
+        </Style>
+
+        <Style Selector="Border.group-composer-card">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+        <Style Selector="Border.group-composer-card:focus-within">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        </Style>
+
+        <Style Selector="TextBox.group-composer-input">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="MaxHeight" Value="140" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="FontSize" Value="{arc:ArcDesignTokenResource TypeSM}" />
+            <Setter Property="LineHeight" Value="20" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            <Setter Property="CaretBrush" Value="{arc:ArcDesignTokenResource Foreground}" />
+            <Setter Property="SelectionBrush" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            <Setter Property="PlaceholderForeground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Cursor" Value="IBeam" />
+            <Setter Property="Template">
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                        <ScrollViewer Name="PART_ScrollViewer"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <Panel>
+                                <TextBlock Name="PART_Placeholder"
+                                           Margin="0,1,0,0"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           LineHeight="{TemplateBinding LineHeight}"
+                                           Foreground="{TemplateBinding PlaceholderForeground}"
+                                           Text="{TemplateBinding PlaceholderText}"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.IsVisible>
+                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                            <Binding ElementName="PART_TextPresenter" Path="PreeditText" Converter="{x:Static StringConverters.IsNullOrEmpty}" />
+                                            <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="Text" Converter="{x:Static StringConverters.IsNullOrEmpty}" />
+                                        </MultiBinding>
+                                    </TextBlock.IsVisible>
+                                </TextBlock>
+                                <TextPresenter Name="PART_TextPresenter"
+                                               Margin="0,1,0,0"
+                                               Text="{TemplateBinding Text, Mode=TwoWay}"
+                                               CaretBlinkInterval="{TemplateBinding CaretBlinkInterval}"
+                                               CaretIndex="{TemplateBinding CaretIndex}"
+                                               SelectionStart="{TemplateBinding SelectionStart}"
+                                               SelectionEnd="{TemplateBinding SelectionEnd}"
+                                               TextWrapping="{TemplateBinding TextWrapping}"
+                                               LineHeight="{TemplateBinding LineHeight}"
+                                               SelectionBrush="{TemplateBinding SelectionBrush}"
+                                               SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                               CaretBrush="{TemplateBinding CaretBrush}" />
+                            </Panel>
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto" Background="{arc:ArcDesignTokenResource Background}">
+        <!-- Top Bar: Group header + room/thread selector + Members / Stop All -->
+        <Border Grid.Row="0"
+                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="0,0,0,1"
+                Padding="14,8">
+            <StackPanel Spacing="8">
+                <!-- Identity & Actions Row -->
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <!-- Group avatar cluster -->
+                    <Border Width="30" Height="30" CornerRadius="8"
+                            Background="{arc:ArcDesignTokenResource Surface}"
+                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                            BorderThickness="1" Padding="1.5" ClipToBounds="True" VerticalAlignment="Center">
+                        <Panel>
+                            <Border IsVisible="{Binding HasSingleAvatar}" CornerRadius="6"
+                                    Background="{Binding SingleAvatar.AvatarBrush}" ClipToBounds="True">
+                                <Panel>
+                                    <Image IsVisible="{Binding SingleAvatar.HasAvatarImage}" Source="{Binding SingleAvatar.AvatarImage}" Stretch="UniformToFill" />
+                                    <TextBlock IsVisible="{Binding SingleAvatar.ShowInitial}" Text="{Binding SingleAvatar.Initial}"
+                                               Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <lucide:LucideIcon IsVisible="{Binding SingleAvatar.HasAvatarIcon}" Kind="{Binding SingleAvatar.AvatarIcon}"
+                                                       Size="13" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Panel>
+                            </Border>
+                            <ItemsControl IsVisible="{Binding HasMultiAvatar}" ItemsSource="{Binding GroupAvatars}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="2" Rows="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="grp:BotGroupAvatarTile">
+                                        <Border Margin="0.5" CornerRadius="3" Background="{Binding AvatarBrush}" ClipToBounds="True">
+                                            <Panel>
+                                                <Image IsVisible="{Binding HasAvatarImage}" Source="{Binding AvatarImage}" Stretch="UniformToFill" />
+                                                <TextBlock IsVisible="{Binding !HasAvatarImage}" Text="{Binding Initial}"
+                                                           Foreground="White" FontSize="8" FontWeight="Bold"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Panel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Panel>
+                    </Border>
+
+                    <!-- Group Name + Member Count -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Classes="body" FontSize="14" FontWeight="SemiBold" Text="{Binding GroupName}"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <Border Padding="6,1" CornerRadius="999" Background="{arc:ArcDesignTokenResource BorderSubtle}" VerticalAlignment="Center">
+                            <TextBlock Classes="hint" FontSize="11" Text="{Binding MemberCountText}" />
+                        </Border>
+                        <arc:ArcSpinner Width="12" Height="12" IsVisible="{Binding IsWorking}"
+                                        Foreground="{arc:ArcDesignTokenResource Accent}" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- Action Buttons: Members + Stop All -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <arc:Button Variant="Danger" Size="Small" IsVisible="{Binding IsWorking}" Command="{Binding StopAllCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                <lucide:LucideIcon Kind="Square" Size="11" VerticalAlignment="Center" />
+                                <TextBlock Text="{l:AppLangResource BotGroupRoomStopAll}" FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </arc:Button>
+                        <arc:Button Variant="Secondary" Size="Small" Command="{Binding ManageMembersCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                <lucide:LucideIcon Kind="Users" Size="13" VerticalAlignment="Center" />
+                                <TextBlock Text="{l:AppLangResource BotGroupRoomMembersButton}" FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </arc:Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Room / Thread Pills Row -->
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <ItemsControl ItemsSource="{Binding RoomTabs}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="grp:BotGroupRoomTabViewModel">
+                                        <Button Classes="room-pill" Classes.selected="{Binding IsSelected}"
+                                                Command="{Binding SelectCommand}">
+                                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                <lucide:LucideIcon Kind="{Binding Icon}" Size="12" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Medium"
+                                                           MaxWidth="180" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <Border IsVisible="{Binding HasPendingApproval}"
+                                                        MinWidth="15" Height="15" Padding="4,0" CornerRadius="8"
+                                                        Background="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding PendingBadgeText}" FontSize="9.5" FontWeight="Bold"
+                                                               Foreground="#1C1405" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Button Classes="room-pill" Command="{Binding CreateThreadCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                    <lucide:LucideIcon Kind="Plus" Size="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="{l:AppLangResource BotGroupNewThread}" FontSize="12" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Transcript Scroll Area -->
+        <ScrollViewer x:Name="TranscriptScroller" Grid.Row="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="20,16,20,20" Spacing="14" MaxWidth="860" HorizontalAlignment="Stretch">
+                <!-- Load Earlier -->
+                <arc:Button Variant="Secondary" Size="Small" HorizontalAlignment="Center"
+                            IsVisible="{Binding HasEarlier}" Command="{Binding LoadEarlierCommand}"
+                            Content="{l:AppLangResource BotGroupRoomLoadEarlier}" />
+
+                <!-- Empty Room State -->
+                <StackPanel IsVisible="{Binding IsTranscriptEmpty}" HorizontalAlignment="Center"
+                            Margin="16,48,16,32" Spacing="8" MaxWidth="340">
+                    <Border Width="44" Height="44" CornerRadius="12" HorizontalAlignment="Center"
+                            Background="{arc:ArcDesignTokenResource AccentSubtle}">
+                        <lucide:LucideIcon Kind="MessagesSquare" Size="22" Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Classes="body" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"
+                               Text="{l:AppLangResource BotGroupRoomEmptyTitle}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap" TextAlignment="Center"
+                               Text="{l:AppLangResource BotGroupRoomEmptyDescription}" />
+                </StackPanel>
+
+                <!-- Messages & Bot Turns -->
+                <ItemsControl ItemsSource="{Binding Messages}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="14" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="grp:BotGroupMessageItemViewModel">
+                            <StackPanel Spacing="8">
+                                <!-- Owner message bubble with highlighted @mentions -->
+                                <Border IsVisible="{Binding IsOwner}"
+                                        HorizontalAlignment="Right" MaxWidth="680"
+                                        Padding="12,9" CornerRadius="12"
+                                        Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                        BorderThickness="1">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Classes="body" TextWrapping="Wrap" LineHeight="20"
+                                                   grp:BotGroupMentionText.Segments="{Binding MentionSegments}" />
+                                        <TextBlock Classes="hint" FontSize="10" HorizontalAlignment="Right" Text="{Binding TimeText}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Bot handoff compact pill -->
+                                <Border IsVisible="{Binding IsHandoffLine}"
+                                        HorizontalAlignment="Left" Padding="9,4" CornerRadius="999"
+                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                        BorderThickness="1">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <lucide:LucideIcon Kind="CornerDownRight" Size="12"
+                                                           Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                                        <TextBlock Classes="hint" FontSize="11.5" FontWeight="Medium"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                   Text="{Binding HandoffText}" VerticalAlignment="Center" />
+                                        <TextBlock Classes="hint" FontSize="10" Text="{Binding TimeText}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Hop-limit pause notice banner -->
+                                <Border IsVisible="{Binding IsHopLimitPaused}"
+                                        Padding="12,9" CornerRadius="9"
+                                        Background="{arc:ArcDesignTokenResource Surface}"
+                                        BorderBrush="{arc:ArcDesignTokenResource Warning}"
+                                        BorderThickness="1">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                        <lucide:LucideIcon Kind="TriangleAlert" Size="16"
+                                                           Foreground="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Classes="body" FontWeight="Medium" TextWrapping="Wrap"
+                                                       Text="{l:AppLangResource BotGroupHopLimitNotice}" />
+                                            <TextBlock Classes="hint" IsVisible="{Binding HasPausedTargets}"
+                                                       Text="{Binding PausedTargetsText}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <arc:Button Grid.Column="2" Variant="Primary" Size="Small" VerticalAlignment="Center"
+                                                    IsLoading="{Binding IsResuming}"
+                                                    Command="{Binding ContinueHandoffCommand}"
+                                                    Content="{l:AppLangResource BotGroupHopLimitContinue}" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- Bot Turn Cards -->
+                                <ItemsControl IsVisible="{Binding HasTurns}" ItemsSource="{Binding Turns}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Spacing="8" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="grp:BotGroupTurnItemViewModel">
+                                            <Border Padding="12,10" CornerRadius="10"
+                                                    Background="{arc:ArcDesignTokenResource Surface}"
+                                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                                    BorderThickness="1">
+                                                <StackPanel Spacing="8">
+                                                    <!-- Card header: avatar + bot name + agent pill + status + actions -->
+                                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                                        <!-- Bot avatar -->
+                                                        <Border Width="24" Height="24" CornerRadius="6"
+                                                                Background="{Binding Avatar.AvatarBrush}" ClipToBounds="True" VerticalAlignment="Center">
+                                                            <Panel>
+                                                                <Image IsVisible="{Binding Avatar.HasAvatarImage}" Source="{Binding Avatar.AvatarImage}"
+                                                                       Width="24" Height="24" Stretch="UniformToFill" />
+                                                                <lucide:LucideIcon IsVisible="{Binding Avatar.HasAvatarIcon}" Kind="{Binding Avatar.AvatarIcon}"
+                                                                                   Size="12" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                <TextBlock IsVisible="{Binding Avatar.ShowInitial}" Text="{Binding Avatar.Initial}"
+                                                                           Foreground="White" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Panel>
+                                                        </Border>
+
+                                                        <!-- Name + Agent pill + Status -->
+                                                        <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding BotName}"
+                                                                       Margin="0,0,6,0" VerticalAlignment="Center" />
+                                                            <Border Padding="5,1" CornerRadius="4" Margin="0,0,6,0"
+                                                                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
+                                                                    VerticalAlignment="Center">
+                                                                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                    <Ellipse Width="6" Height="6" Fill="{Binding AgentAccent}" VerticalAlignment="Center" />
+                                                                    <TextBlock Classes="hint" FontSize="10.5" Text="{Binding AgentName}" VerticalAlignment="Center" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}"
+                                                                                Foreground="{arc:ArcDesignTokenResource Accent}" VerticalAlignment="Center" />
+                                                                <lucide:LucideIcon Kind="Clock" Size="11" IsVisible="{Binding IsQueued}"
+                                                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                                                <lucide:LucideIcon Kind="CircleCheck" Size="11" IsVisible="{Binding IsCompleted}"
+                                                                                   Foreground="{arc:ArcDesignTokenResource Success}" VerticalAlignment="Center" />
+                                                                <lucide:LucideIcon Kind="Square" Size="10" IsVisible="{Binding IsStopped}"
+                                                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                                                <lucide:LucideIcon Kind="CircleAlert" Size="11" IsVisible="{Binding IsFailed}"
+                                                                                   Foreground="{arc:ArcDesignTokenResource Danger}" VerticalAlignment="Center" />
+                                                                <TextBlock Classes="hint" FontSize="11" Text="{Binding StatusLabel}" VerticalAlignment="Center" />
+                                                            </StackPanel>
+                                                        </WrapPanel>
+
+                                                        <!-- Card actions: Stop (when active), @Reply, Inspect Session -->
+                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                            <Button Classes="turn-action danger" IsVisible="{Binding IsActive}"
+                                                                    Command="{Binding StopCommand}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                                    <lucide:LucideIcon Kind="Square" Size="10" VerticalAlignment="Center" />
+                                                                    <TextBlock FontSize="11" Text="{l:AppLangResource BotGroupTurnStop}" VerticalAlignment="Center" />
+                                                                </StackPanel>
+                                                            </Button>
+                                                            <Button Classes="turn-action" Command="{Binding ReplyCommand}">
+                                                                <TextBlock FontSize="11" Text="{l:AppLangResource BotGroupTurnReply}" VerticalAlignment="Center" />
+                                                            </Button>
+                                                            <Button Classes="turn-action" IsVisible="{Binding CanInspect}"
+                                                                    Command="{Binding InspectCommand}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                                                    <lucide:LucideIcon Kind="ExternalLink" Size="10.5" VerticalAlignment="Center" />
+                                                                    <TextBlock FontSize="11" Text="{l:AppLangResource BotGroupTurnInspect}" VerticalAlignment="Center" />
+                                                                </StackPanel>
+                                                            </Button>
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                    <!-- Markdown / Streaming body -->
+                                                    <arc:Markdown IsVisible="{Binding HasBody}" Text="{Binding BodyMarkdown}" />
+
+                                                    <!-- Error text -->
+                                                    <Border IsVisible="{Binding HasError}" Padding="8,6" CornerRadius="6"
+                                                            Background="#18EF4444" BorderBrush="#44EF4444" BorderThickness="1">
+                                                        <TextBlock FontSize="12" TextWrapping="Wrap"
+                                                                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                                                                   Text="{Binding ErrorText}" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Unified Approval Dock (BotGroupApprovalDock) right above the composer -->
+        <Border x:Name="BotGroupApprovalDock" Grid.Row="2"
+                IsVisible="{Binding HasApprovals}"
+                Margin="16,0,16,8" MaxWidth="860" HorizontalAlignment="Stretch"
+                Padding="12,10" CornerRadius="10"
+                Background="{arc:ArcDesignTokenResource Surface}"
+                BorderBrush="{arc:ArcDesignTokenResource Warning}"
+                BorderThickness="1">
+            <StackPanel Spacing="8">
+                <!-- Dock header + multi-approval switcher -->
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <lucide:LucideIcon Kind="ShieldAlert" Size="15"
+                                       Foreground="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding SelectedApproval.HeaderLabel}" VerticalAlignment="Center" />
+                        <Border IsVisible="{Binding HasMultipleApprovals}" Padding="6,1" CornerRadius="999"
+                                Background="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center">
+                            <TextBlock FontSize="10.5" FontWeight="Bold" Foreground="#1C1405" Text="{Binding ApprovalCountText}" />
+                        </Border>
+                    </StackPanel>
+                    <arc:Select Grid.Column="2" Size="Small" MinWidth="170" MaxWidth="240"
+                                IsVisible="{Binding HasMultipleApprovals}"
+                                AutoScrollToSelectedItem="False"
+                                ItemsSource="{Binding ApprovalSelectorOptions}"
+                                SelectedValue="{Binding SelectedApprovalId, Mode=TwoWay}" />
+                </Grid>
+
+                <!-- Active approval detail -->
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="body" FontWeight="SemiBold" TextWrapping="Wrap"
+                               Text="{Binding SelectedApproval.Title}" />
+                    <TextBlock Classes="hint" TextWrapping="Wrap"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               IsVisible="{Binding SelectedApproval.HasDetail}"
+                               Text="{Binding SelectedApproval.Detail}" />
+                    <TextBlock FontSize="12" TextWrapping="Wrap"
+                               Foreground="{arc:ArcDesignTokenResource Warning}"
+                               IsVisible="{Binding SelectedApproval.HasWarning}"
+                               Text="{Binding SelectedApproval.WarningMessage}" />
+                </StackPanel>
+
+                <!-- Permission options -->
+                <ItemsControl ItemsSource="{Binding SelectedApproval.Options}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="grp:BotGroupApprovalOptionViewModel">
+                            <arc:Button Size="Small" Variant="{Binding Variant}"
+                                        Content="{Binding Label}" Command="{Binding ChooseCommand}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- Composer -->
+        <Border Grid.Row="3" Padding="16,0,16,14">
+            <StackPanel MaxWidth="860" HorizontalAlignment="Stretch" Spacing="6">
+                <!-- Draft audience / send error banner -->
+                <Border IsVisible="{Binding HasAudienceError}" Padding="9,6" CornerRadius="7"
+                        Background="#18EF4444" BorderBrush="#44EF4444" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <lucide:LucideIcon Kind="CircleAlert" Size="13" Foreground="{arc:ArcDesignTokenResource Danger}" VerticalAlignment="Center" />
+                        <TextBlock FontSize="12" Foreground="{arc:ArcDesignTokenResource Danger}"
+                                   Text="{Binding AudienceErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+                <Border IsVisible="{Binding HasSendError}" Padding="9,6" CornerRadius="7"
+                        Background="#18EF4444" BorderBrush="#44EF4444" BorderThickness="1">
+                    <TextBlock FontSize="12" Foreground="{arc:ArcDesignTokenResource Danger}"
+                               Text="{Binding SendErrorText}" TextWrapping="Wrap" />
+                </Border>
+
+                <!-- Composer Card -->
+                <Border Classes="group-composer-card" Padding="12,10,10,8">
+                    <StackPanel Spacing="8">
+                        <TextBox x:Name="ComposerInput" Classes="group-composer-input"
+                                 Text="{Binding ComposerText, Mode=TwoWay}"
+                                 PlaceholderText="{l:AppLangResource BotGroupComposerPlaceholder}"
+                                 AutomationProperties.Name="{l:AppLangResource BotGroupComposerPlaceholder}" />
+
+                        <!-- Bottom toolbar: Reply Picker + Quick @ Mention + Stop / Send -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- Reply Picker Popover -->
+                                <arc:Popover Placement="Top" Alignment="Start" Offset="6" Margin="0,0,4,0"
+                                             IsOpen="{Binding IsReplyPickerOpen, Mode=TwoWay}">
+                                    <arc:Popover.Trigger>
+                                        <Button Classes="group-composer-chip" Classes.open="{Binding IsReplyPickerOpen}">
+                                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                <TextBlock Classes="hint" FontSize="11.5" Text="{l:AppLangResource BotGroupComposerRepliesPrefix}" VerticalAlignment="Center" />
+                                                <TextBlock FontSize="11.5" FontWeight="SemiBold"
+                                                           Foreground="{arc:ArcDesignTokenResource Foreground}"
+                                                           MaxWidth="240" TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding AudiencePreviewText}" VerticalAlignment="Center" />
+                                                <lucide:LucideIcon Kind="ChevronDown" Size="11" Opacity="0.7" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                    </arc:Popover.Trigger>
+                                    <StackPanel MinWidth="210" MaxWidth="280" Spacing="1">
+                                        <TextBlock Classes="hint" Margin="8,4,8,4" Text="{l:AppLangResource BotGroupComposerReplyModeHeading}" />
+                                        <ItemsControl ItemsSource="{Binding ReplyModeChoices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="grp:BotGroupReplyModeChoiceViewModel">
+                                                    <Button Classes="row" Classes.selected="{Binding IsSelected}" Padding="8,5"
+                                                            Command="{Binding SelectCommand}">
+                                                        <Grid ColumnDefinitions="Auto,*,18" ColumnSpacing="8">
+                                                            <Panel Width="18" Height="18" VerticalAlignment="Center">
+                                                                <Border IsVisible="{Binding HasAvatar}" Width="18" Height="18" CornerRadius="5"
+                                                                        Background="{Binding Avatar.AvatarBrush}" ClipToBounds="True">
+                                                                    <Panel>
+                                                                        <Image IsVisible="{Binding Avatar.HasAvatarImage}" Source="{Binding Avatar.AvatarImage}" Stretch="UniformToFill" />
+                                                                        <TextBlock IsVisible="{Binding !Avatar.HasAvatarImage}" Text="{Binding Avatar.Initial}"
+                                                                                   Foreground="White" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                    </Panel>
+                                                                </Border>
+                                                                <lucide:LucideIcon IsVisible="{Binding !HasAvatar}" Kind="{Binding Icon}" Size="13"
+                                                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Panel>
+                                                            <TextBlock Grid.Column="1" Classes="body" FontSize="12" Text="{Binding Label}"
+                                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                            <lucide:LucideIcon Grid.Column="2" Kind="Check" Size="13"
+                                                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                                               IsVisible="{Binding IsSelected}"
+                                                                               HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </arc:Popover>
+
+                                <!-- Quick @ Mention Picker Popover -->
+                                <arc:Popover Placement="Top" Alignment="Start" Offset="6"
+                                             IsOpen="{Binding IsMentionPickerOpen, Mode=TwoWay}">
+                                    <arc:Popover.Trigger>
+                                        <Button Classes="group-composer-chip" Classes.open="{Binding IsMentionPickerOpen}"
+                                                arc:Tooltip.Tip="{l:AppLangResource BotGroupComposerMentionTip}">
+                                            <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                                                <lucide:LucideIcon Kind="AtSign" Size="12" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                    </arc:Popover.Trigger>
+                                    <StackPanel MinWidth="180" MaxWidth="250" Spacing="1">
+                                        <TextBlock Classes="hint" Margin="8,4,8,4" Text="{l:AppLangResource BotGroupComposerMentionTip}" />
+                                        <ItemsControl ItemsSource="{Binding MentionChoices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="grp:BotGroupMentionChoiceViewModel">
+                                                    <Button Classes="row" Padding="8,5" Command="{Binding InsertCommand}">
+                                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                                                            <Panel Width="18" Height="18" VerticalAlignment="Center">
+                                                                <Border IsVisible="{Binding HasAvatar}" Width="18" Height="18" CornerRadius="5"
+                                                                        Background="{Binding Avatar.AvatarBrush}" ClipToBounds="True">
+                                                                    <Panel>
+                                                                        <Image IsVisible="{Binding Avatar.HasAvatarImage}" Source="{Binding Avatar.AvatarImage}" Stretch="UniformToFill" />
+                                                                        <TextBlock IsVisible="{Binding !Avatar.HasAvatarImage}" Text="{Binding Avatar.Initial}"
+                                                                                   Foreground="White" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                    </Panel>
+                                                                </Border>
+                                                                <lucide:LucideIcon IsVisible="{Binding !HasAvatar}" Kind="Users" Size="13"
+                                                                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Panel>
+                                                            <TextBlock Grid.Column="1" Classes="body" FontSize="12" FontWeight="Medium"
+                                                                       Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </arc:Popover>
+                            </WrapPanel>
+
+                            <!-- Stop / Send buttons -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <arc:Button Variant="Danger" Size="Small" IsVisible="{Binding IsWorking}"
+                                            Command="{Binding StopAllCommand}"
+                                            arc:Tooltip.Tip="{l:AppLangResource BotGroupRoomStopAll}">
+                                    <lucide:LucideIcon Kind="Square" Size="12" VerticalAlignment="Center" />
+                                </arc:Button>
+                                <arc:Button Variant="Primary" Size="Small" IsEnabled="{Binding CanSend}"
+                                            IsLoading="{Binding IsSending}"
+                                            Command="{Binding SendCommand}"
+                                            AutomationProperties.Name="{l:AppLangResource AgentGuiSend}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                        <lucide:LucideIcon Kind="ArrowUp" Size="13" VerticalAlignment="Center" />
+                                        <TextBlock Text="{l:AppLangResource AgentGuiSend}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </arc:Button>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

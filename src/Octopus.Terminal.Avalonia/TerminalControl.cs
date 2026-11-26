@@ -10,6 +10,9 @@ using Octopus.Core.Terminals;
 using TKCode.Terminal.Avalonia;
 using TKCode.Terminal.Core;
 using Cursor = Avalonia.Input.Cursor;
+using DragDrop = Avalonia.Input.DragDrop;
+using DragDropEffects = Avalonia.Input.DragDropEffects;
+using DragEventArgs = Avalonia.Input.DragEventArgs;
 using StandardCursorType = Avalonia.Input.StandardCursorType;
 
 namespace Octopus.Terminal.Avalonia;
@@ -63,6 +66,14 @@ public sealed class TerminalControl : Decorator
     private bool _updatingScrollBar;
     private readonly SelectionOverlay _overlay;
     private readonly Border _background = new();
+    private readonly Border _dropOverlay = new()
+    {
+        BorderThickness = new Thickness(2),
+        CornerRadius = new CornerRadius(6),
+        Margin = new Thickness(6),
+        IsVisible = false,
+        IsHitTestVisible = false,
+    };
     private readonly Border _messageBar;
     private readonly TextBlock _message = new() { TextWrapping = TextWrapping.Wrap };
 
@@ -109,7 +120,7 @@ public sealed class TerminalControl : Decorator
             IsHitTestVisible = false,
             Child = _message,
         };
-        var surface = new Grid { Children = { _view, _overlay, _messageBar, _searchHost } };
+        var surface = new Grid { Children = { _view, _overlay, _dropOverlay, _messageBar, _searchHost } };
         Grid.SetColumn(_scrollBar, 1);
         Grid.SetColumnSpan(_background, 2);
         Child = new Grid
@@ -132,6 +143,12 @@ public sealed class TerminalControl : Decorator
         _view.LostFocus += (_, _) => _router?.HandleFocus(false);
         EffectiveViewportChanged += (_, _) => _session?.SetVisible(IsOnScreen());
         ActualThemeVariantChanged += (_, _) => ApplyTheme();
+
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragEnterEvent, OnDragOver);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
+        AddHandler(DragDrop.DropEvent, OnDrop);
     }
 
     /// <summary>Terminal font. Changing it recomputes the grid.</summary>
@@ -340,6 +357,21 @@ public sealed class TerminalControl : Decorator
     /// <summary>Sends text to the process as if it had been typed (no paste wrapping).</summary>
     public void SendText(string text) => _session?.Send(text);
 
+    /// <summary>
+    /// Inserts dropped file or folder paths into the running terminal as shell-safe absolute paths (honoring
+    /// bracketed paste) and focuses the terminal. Returns false when nothing is running or no valid path was given.
+    /// </summary>
+    public bool DropPaths(IEnumerable<string> paths)
+    {
+        if (!IsRunning || _router is null) return false;
+        var formatted = TerminalFileDrop.FormatPaths(paths);
+        if (string.IsNullOrEmpty(formatted)) return false;
+        ReclaimSize();
+        _router.PasteText(formatted);
+        FocusTerminal();
+        return true;
+    }
+
     /// <summary>Sends a key as if it had been pressed (a key of a touch key bar), encoded for the terminal's current modes.</summary>
     public void SendKey(TerminalKey key, KeyMods mods = KeyMods.None) => _router?.SendKey(key, mods);
 
@@ -466,6 +498,7 @@ public sealed class TerminalControl : Decorator
         base.OnDetachedFromVisualTree(e);
         _topLevel?.ScalingChanged -= OnScalingChanged;
         _topLevel = null;
+        _dropOverlay.IsVisible = false;
         _session?.SetVisible(false);
         // The process is deliberately left alone: a tab that is switched away comes back.
     }
@@ -786,8 +819,34 @@ public sealed class TerminalControl : Decorator
         var palette = TerminalPalettes.For(_dark);
         var fg = ToColor(palette.Foreground);
         _background.Background = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(ToColor(palette.Background));
+        _dropOverlay.Background = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg, 0.06);
+        _dropOverlay.BorderBrush = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg, 0.45);
         _messageBar.Background = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg, 0.14);
         _message.Foreground = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg);
+    }
+
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        var canDrop = IsRunning && _router is not null && TerminalFileDrop.HasFiles(e.DataTransfer);
+        e.DragEffects = canDrop ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+        _dropOverlay.IsVisible = canDrop;
+    }
+
+    private void OnDragLeave(object? sender, DragEventArgs e) => _dropOverlay.IsVisible = false;
+
+    private void OnDrop(object? sender, DragEventArgs e)
+    {
+        _dropOverlay.IsVisible = false;
+        if (!IsRunning || _router is null)
+        {
+            e.DragEffects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+        var paths = TerminalFileDrop.ExtractLocalPaths(e.DataTransfer);
+        e.DragEffects = paths.Count > 0 && DropPaths(paths) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
     }
 
     private static Color ToColor(TerminalRgb rgb) => Color.FromRgb(rgb.R, rgb.G, rgb.B);

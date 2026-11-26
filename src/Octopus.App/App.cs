@@ -66,6 +66,9 @@ public class App : Application
                 // Bots' own schedules (and the look-around / memory-maintenance switches), plus the bot-only MCP tools to make them.
                 AppHost.Get<Bots.BotScheduleMcpServer>().Start();
                 AppHost.Get<Bots.BotScheduler>().Start();
+                var botGroups = AppHost.Get<Bots.Groups.IBotGroupService>();
+                botGroups.Load();
+                _ = botGroups.ResumePendingDeliveriesAsync();
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
             {

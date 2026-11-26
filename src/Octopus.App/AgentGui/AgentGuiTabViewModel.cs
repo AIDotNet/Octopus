@@ -420,6 +420,31 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     bool ICollabSessionBridge.IsConnected => _session?.IsConnected == true;
     string? ICollabSessionBridge.CurrentStatusDetail => StatusDetail;
 
+    private string? _activeOperationId;
+    private readonly List<AgentGuiPendingApproval> _pendingApprovals = [];
+
+    /// <summary>Raised when a prompt turn begins executing: (itemId, operationId).</summary>
+    public event Action<string, string?>? TurnStarted;
+    /// <summary>Raised as assistant text deltas flush during a turn: (itemId, operationId, currentMarkdown).</summary>
+    public event Action<string, string?, string>? TurnStreaming;
+    /// <summary>Raised when a prompt turn settles: (itemId, operationId, finalMarkdown, cancelled, error).</summary>
+    public event Action<string, string?, string?, bool, string?>? TurnFinished;
+    /// <summary>Raised when a permission/plan approval request awaits user action.</summary>
+    public event Action<AgentGuiPendingApproval>? PermissionApprovalAdded;
+    /// <summary>Raised when a permission/plan approval request is resolved or cancelled: (approvalId).</summary>
+    public event Action<string>? PermissionApprovalCleared;
+
+    public IReadOnlyList<AgentGuiPendingApproval> PendingApprovals
+    {
+        get
+        {
+            lock (_pendingApprovals)
+            {
+                return [.. _pendingApprovals];
+            }
+        }
+    }
+
     public async Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId = null, string? taskId = null, CancellationToken cancellationToken = default)
     {
         if (_disposed || string.IsNullOrWhiteSpace(promptText)) return false;
@@ -588,7 +613,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     "peer",
                     other.AgentId ?? "terminal",
                     other.DisplayTitle,
-                    thread.Status == "paused_budget" ? "waiting_approval" : DescribeRibbonStatus(otherId),
+                    thread.Status == CollabThreadStatus.PausedBudget ? "waiting_approval" : DescribeRibbonStatus(otherId),
                     _collab.HostNameOf(otherId) is { } peerHost ? $"@{peerHost} · {thread.Hops}/{thread.MaxHops}" : $"{thread.Hops}/{thread.MaxHops}",
                     isCurrent: ActiveCollabThread?.ThreadId == threadId,
                     activate: () => ToggleCollabThread(threadId)));
@@ -1531,7 +1556,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             }
 
             _manualStopRequested = false;
-            await ExecutePromptAsync(activeSession, next.Text, next.Attachments);
+            await ExecutePromptAsync(activeSession, next.Text, next.Attachments, next.CollabTaskId);
             next = null;
 
             // 1. An urgent "Send Now" prompt always dispatches immediately after the cancelled turn settles.
@@ -1563,12 +1588,14 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    private async Task ExecutePromptAsync(IAcpSession session, string text, IReadOnlyList<AcpPromptAttachment> attached)
+    private async Task ExecutePromptAsync(IAcpSession session, string text, IReadOnlyList<AcpPromptAttachment> attached, string? operationId = null)
     {
         var turnStartedAt = DateTimeOffset.UtcNow;
         var turnSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _activeTurnSettled = turnSettled;
         _isTurnActive = true;
+        _activeOperationId = operationId;
+        TurnStarted?.Invoke(_item.Id, operationId);
 
         var userTurn = new UserTurnItem(text, attached, ReusePrompt);
         var assistantTurn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript, workingDirectory: WorkingDirectory);
@@ -1631,10 +1658,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             if (promptResult.StopReason == "cancelled")
             {
                 NotifyCollabTurnStopped(turnStartedAt, finalMarkdown);
+                TurnFinished?.Invoke(_item.Id, operationId, finalMarkdown, true, null);
             }
             else
             {
                 _collab?.NotifyTurnCompleted(_item.Id, finalMarkdown);
+                TurnFinished?.Invoke(_item.Id, operationId, finalMarkdown, false, null);
             }
         }
         catch (OperationCanceledException)
@@ -1647,6 +1676,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
             NotifyCollabTurnStopped(turnStartedAt, partialText: null);
+            TurnFinished?.Invoke(_item.Id, operationId, null, true, null);
         }
         catch (AcpRpcException ex) when (ex.Code == -32800)
         {
@@ -1658,6 +1688,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
             NotifyCollabTurnStopped(turnStartedAt, partialText: null);
+            TurnFinished?.Invoke(_item.Id, operationId, null, true, null);
         }
         catch (AcpAuthRequiredException authEx)
         {
@@ -1670,7 +1701,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 State = AgentGuiState.Disconnected;
                 RefreshDiagnostics();
             });
-            _collab?.NotifyTurnAborted(_item.Id, $"{AgentName} needs to be signed in again before it can continue.", failed: true);
+            var authMsg = $"{AgentName} needs to be signed in again before it can continue.";
+            _collab?.NotifyTurnAborted(_item.Id, authMsg, failed: true);
+            TurnFinished?.Invoke(_item.Id, operationId, null, false, authMsg);
         }
         catch (Exception ex)
         {
@@ -1681,10 +1714,13 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 State = AgentGuiState.Ready;
                 RefreshDiagnostics();
             });
-            _collab?.NotifyTurnAborted(_item.Id, $"{AgentName} stopped with an error: {ex.Message}", failed: true);
+            var errMsg = $"{AgentName} stopped with an error: {ex.Message}";
+            _collab?.NotifyTurnAborted(_item.Id, errMsg, failed: true);
+            TurnFinished?.Invoke(_item.Id, operationId, null, false, errMsg);
         }
         finally
         {
+            _activeOperationId = null;
             if (ReferenceEquals(_activeTurn, assistantTurn))
             {
                 _activeTurn = null;
@@ -1927,11 +1963,17 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         await AttachFilePathsAsync([path]);
     }
 
-    /// <summary>Attaches dropped or picked file/image paths, honoring the current agent's image capability.</summary>
+    /// <summary>Attaches dropped or picked file/folder/image paths, honoring the current agent's image capability.</summary>
     public async Task AttachFilePathsAsync(IEnumerable<string> paths)
     {
+        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         foreach (var attachment in await ReadAttachmentsAsync(paths))
         {
+            if (!string.IsNullOrEmpty(attachment.Path)
+                && Attachments.Any(c => string.Equals(c.Attachment.Path, attachment.Path, comparison)))
+            {
+                continue;
+            }
             AddAttachment(attachment);
         }
     }
@@ -1976,9 +2018,35 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private async Task<List<AcpPromptAttachment>> ReadAttachmentsAsync(IEnumerable<string> paths)
     {
         var result = new List<AcpPromptAttachment>();
-        foreach (var path in paths)
+        var seen = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+        foreach (var rawPath in paths)
         {
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) continue;
+            if (string.IsNullOrWhiteSpace(rawPath)) continue;
+            string path;
+            try
+            {
+                path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rawPath));
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                continue;
+            }
+            if (!seen.Add(path)) continue;
+
+            var isDirectory = Directory.Exists(path);
+            if (!isDirectory && !File.Exists(path)) continue;
+
+            if (isDirectory)
+            {
+                result.Add(new AcpPromptAttachment
+                {
+                    Kind = "folder",
+                    Path = path,
+                    DisplayName = FormatAttachmentDisplayName(path),
+                });
+                continue;
+            }
+
             var ext = Path.GetExtension(path);
             if (ImageExtensions.Contains(ext) && Composer.SupportsImageAttachments)
             {
@@ -2009,18 +2077,42 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             }
             else
             {
-                var rel = path.StartsWith(WorkingDirectory, StringComparison.OrdinalIgnoreCase)
-                    ? Path.GetRelativePath(WorkingDirectory, path).Replace('\\', '/')
-                    : Path.GetFileName(path);
                 result.Add(new AcpPromptAttachment
                 {
                     Kind = "file",
                     Path = path,
-                    DisplayName = rel,
+                    DisplayName = FormatAttachmentDisplayName(path),
                 });
             }
         }
         return result;
+    }
+
+    private string FormatAttachmentDisplayName(string fullPath)
+    {
+        if (IsStrictlyWithinDirectory(fullPath, WorkingDirectory))
+        {
+            return Path.GetRelativePath(WorkingDirectory, fullPath).Replace('\\', '/');
+        }
+        return fullPath;
+    }
+
+    private static bool IsStrictlyWithinDirectory(string fullPath, string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return false;
+        try
+        {
+            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+            var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            var prefix = root.EndsWith(Path.DirectorySeparatorChar)
+                ? root
+                : root + Path.DirectorySeparatorChar;
+            return fullPath.StartsWith(prefix, comparison);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Attaches an image directly from clipboard bytes (only when current agent supports images).</summary>
@@ -2674,11 +2766,23 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (_disposed || batch is null) return;
 
         var turn = EnsureActiveTurn();
+        var hasMessageDelta = false;
         for (var i = 0; i < batch.Count; i++)
         {
             var (channel, messageId, text) = batch[i];
-            if (channel == "reasoning") turn.AppendThought(text, messageId);
-            else turn.AppendMessage(text, messageId);
+            if (channel == "reasoning")
+            {
+                turn.AppendThought(text, messageId);
+            }
+            else
+            {
+                turn.AppendMessage(text, messageId);
+                hasMessageDelta = true;
+            }
+        }
+        if (hasMessageDelta && TurnStreaming is not null && !string.IsNullOrEmpty(turn.MarkdownText))
+        {
+            TurnStreaming.Invoke(_item.Id, _activeOperationId, turn.MarkdownText);
         }
         RequestAutoScrollIfPinned();
     }
@@ -3616,6 +3720,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         var reg = ct.Register(() =>
         {
             _collab?.ClearChildApproval(_item.Id, approvalId);
+            ClearPendingApproval(approvalId);
             tcs.TrySetResult(null);
             if (card is not null)
             {
@@ -3632,6 +3737,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             {
                 reg.Dispose();
                 _collab?.ClearChildApproval(_item.Id, approvalId);
+                ClearPendingApproval(approvalId);
                 if (State == AgentGuiState.Waiting) State = prev == AgentGuiState.Working ? AgentGuiState.Working : AgentGuiState.Ready;
                 tcs.TrySetResult(optionId);
                 if (card is not null)
@@ -3646,6 +3752,19 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             OnPropertyChanged(nameof(ShowEmptyState));
             OnPropertyChanged(nameof(HasTimeline));
             ScrollToBottomRequested?.Invoke(this, true);
+
+            var permTitle = string.IsNullOrWhiteSpace(request.ToolCall.Title)
+                ? (request.ToolCall.Name ?? "Tool permission")
+                : request.ToolCall.Title!;
+            var permDetail = request.ActionDetail ?? request.ToolCall.Command ?? permTitle;
+            AddPendingApproval(new AgentGuiPendingApproval(
+                approvalId,
+                _item.Id,
+                permTitle,
+                permDetail,
+                request.WarningMessage,
+                request.Options,
+                opt => SetUi(() => ResolvePermission(opt))));
 
             // Bubble spawned child permission requests up to the parent session so the user can approve in-place.
             if (!string.IsNullOrEmpty(_item.ParentItemId) && _collab is not null)
@@ -3675,6 +3794,28 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             }
         });
         return tcs.Task;
+    }
+
+    private void AddPendingApproval(AgentGuiPendingApproval approval)
+    {
+        lock (_pendingApprovals)
+        {
+            _pendingApprovals.Add(approval);
+        }
+        PermissionApprovalAdded?.Invoke(approval);
+    }
+
+    private void ClearPendingApproval(string approvalId)
+    {
+        var removed = false;
+        lock (_pendingApprovals)
+        {
+            removed = _pendingApprovals.RemoveAll(a => string.Equals(a.ApprovalId, approvalId, StringComparison.Ordinal)) > 0;
+        }
+        if (removed)
+        {
+            PermissionApprovalCleared?.Invoke(approvalId);
+        }
     }
 
     private async Task DismissPermissionCardAsync(PermissionCardItem card)

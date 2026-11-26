@@ -5,6 +5,7 @@
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:explorer="using:Octopus.App.Explorer"
              xmlns:bots="using:Octopus.App.Bots"
+             xmlns:botGroups="using:Octopus.App.Bots.Groups"
              xmlns:launcher="using:Octopus.App.Launcher"
              xmlns:sidebar="using:Octopus.App.Sidebar"
              xmlns:workspace="using:Octopus.App.Workspace"
@@ -86,7 +87,7 @@
                 <!-- Split, over the right end of the top row. The "+" lives in each group's own tab strip (WorkspaceView). -->
                 <StackPanel x:Name="Toolbar" Orientation="Horizontal" Height="{DynamicResource OctopusTopRowHeight}" Spacing="2"
                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,40,0"
-                            IsVisible="{Binding Workspace.HasProject}">
+                            IsVisible="{Binding Workspace.ShowDockLayout}">
                     <!-- Plugin indicators (design/plugins/05-界面能力.md §7), e.g. the agents' usage. -->
                     <plugins:IndicatorStrip Margin="0,0,4,0" />
                     <arc:Button Classes="icon" Variant="Ghost" VerticalAlignment="Center"
@@ -101,14 +102,17 @@
             <GridSplitter x:Name="RightSplitter" Grid.Column="3" Width="{DynamicResource OctopusSplitterWidth}" IsVisible="False"
                           Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                           DragCompleted="OnRightSplitterDragCompleted" />
-            <!-- The right panel switches between Project Explorer and the dedicated Bot right panel. -->
+            <!-- The right panel switches between Project Explorer, single-Bot panel, and Bot Group panel. -->
             <Border x:Name="RightClip" Grid.Column="4" ClipToBounds="True">
                 <Grid x:Name="RightPanelHost" IsVisible="False">
                     <Panel IsVisible="{Binding !IsBotMode}">
                         <explorer:ExplorerPanelView x:Name="RightPanel" />
                     </Panel>
-                    <Panel IsVisible="{Binding IsBotMode}">
+                    <Panel IsVisible="{Binding ShowSingleBotRightPanel}">
                         <bots:BotRightPanelView x:Name="BotRightPanel" DataContext="{Binding BotRightPanel}" />
+                    </Panel>
+                    <Panel IsVisible="{Binding ShowGroupRightPanel}">
+                        <botGroups:BotGroupRightPanelView x:Name="BotGroupRightPanel" DataContext="{Binding BotGroupRightPanel}" />
                     </Panel>
                 </Grid>
             </Border>

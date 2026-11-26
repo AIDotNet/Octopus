@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Octopus.App.Activity;
 using Octopus.App.Appearance;
 using Octopus.App.Bots;
+using Octopus.App.Bots.Groups;
 using Octopus.App.Common;
 using Octopus.App.Explorer.Subagent;
 using Octopus.App.Launcher;
@@ -35,6 +36,7 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
     private readonly IProjectService _projects;
     private readonly ISubagentService? _subagents;
     private readonly IBotService? _bots;
+    private readonly IBotGroupService? _botGroups;
 
     public ShellViewModel(
         ISettingsStore settings,
@@ -57,7 +59,9 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         ISubagentService? subagents = null,
         IBotService? bots = null,
         BotPanelViewModel? botPanel = null,
-        BotRightPanelViewModel? botRightPanel = null)
+        BotRightPanelViewModel? botRightPanel = null,
+        IBotGroupService? botGroups = null,
+        BotGroupRightPanelViewModel? botGroupRightPanel = null)
     {
         _settings = settings;
         _theme = theme;
@@ -68,6 +72,7 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         _projects = projects;
         _subagents = subagents;
         _bots = bots;
+        _botGroups = botGroups;
         _theme.DensityChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(RailWidth));
@@ -88,13 +93,23 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         {
             _bots.Changed += (_, e) =>
             {
-                if (e.Kind == BotChangeKind.Mode)
+                if (e.Kind is BotChangeKind.Mode or BotChangeKind.CurrentBot or BotChangeKind.Bots)
                 {
-                    UiContext.Run(() => IsBotMode = _bots.IsBotMode);
+                    UiContext.Run(RefreshBotModeState);
                 }
             };
-            IsBotMode = _bots.IsBotMode;
         }
+        if (_botGroups is not null)
+        {
+            _botGroups.Changed += (_, e) =>
+            {
+                if (e.Kind is BotGroupChangeKind.Selection or BotGroupChangeKind.Groups)
+                {
+                    UiContext.Run(RefreshBotModeState);
+                }
+            };
+        }
+        RefreshBotModeState();
         ReadProject();
         IsRightPanelOpen = settings.Current.RightPanel.IsOpen;
         RightPanelWidth = Math.Clamp(settings.Current.RightPanel.Width, MinRightPanelWidth, MaxRightPanelWidth);
@@ -110,6 +125,7 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         Panel = panel;
         BotPanel = botPanel;
         BotRightPanel = botRightPanel;
+        BotGroupRightPanel = botGroupRightPanel;
         Workspace = workspace;
         Launcher = launcher;
         UpdateCard = updateCard;
@@ -130,6 +146,7 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
     public ProjectPanelViewModel Panel { get; }
     public BotPanelViewModel? BotPanel { get; }
     public BotRightPanelViewModel? BotRightPanel { get; }
+    public BotGroupRightPanelViewModel? BotGroupRightPanel { get; }
     public WorkspaceViewModel Workspace { get; }
     public LauncherViewModel Launcher { get; }
     /// <summary>The update card at the bottom right (design/10-自动更新.md §10).</summary>
@@ -137,7 +154,22 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
     /// <summary>The non-intrusive GitHub Star floating pill at the bottom right (Scheme C).</summary>
     public Octopus.App.StarPrompt.StarPromptViewModel StarPrompt { get; }
 
-    [ObservableProperty] public partial bool IsBotMode { get; private set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowSingleBotRightPanel), nameof(ShowGroupRightPanel))]
+    public partial bool IsBotMode { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowSingleBotRightPanel), nameof(ShowGroupRightPanel))]
+    public partial bool IsBotGroupActive { get; private set; }
+
+    public bool ShowSingleBotRightPanel => IsBotMode && !IsBotGroupActive;
+    public bool ShowGroupRightPanel => IsBotMode && IsBotGroupActive;
+
+    private void RefreshBotModeState()
+    {
+        IsBotMode = _bots?.IsBotMode == true;
+        IsBotGroupActive = IsBotMode && _botGroups?.CurrentGroup is not null && BotGroupRightPanel is not null;
+    }
 
     /// <summary>Room kept free at the top left for the system's window buttons.</summary>
     public double LeftInset { get; }
@@ -325,6 +357,11 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
 
     public void CreateChatForCurrentBot()
     {
+        if (_botGroups?.CurrentGroup is { } activeGroup)
+        {
+            _ = _botGroups.CreateThreadAsync(activeGroup.Id);
+            return;
+        }
         if (_bots?.CurrentBot is { } bot)
         {
             _bots.CreateChat(bot.Id);

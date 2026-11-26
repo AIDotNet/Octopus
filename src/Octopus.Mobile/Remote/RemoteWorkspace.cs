@@ -712,14 +712,16 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         {
             using var limit = new CancellationTokenSource(CallTimeout);
             var ct = limit.Token;
-            // Agents, projects, and (when supported) bots are independent; fetch in parallel.
+            // Agents, projects, bots, and (when supported) bot groups are independent; fetch in parallel.
             var agentsTask = client.ListAgentsAsync(ct);
             var projectsTask = client.ListProjectsAsync(ct);
             var botsTask = client.SupportsBots ? client.ListBotsAsync(ct) : Task.FromResult<IReadOnlyList<BotMessage>>([]);
-            await Task.WhenAll(agentsTask, projectsTask, botsTask).ConfigureAwait(false);
+            var botGroupsTask = client.SupportsBotGroups ? client.ListBotGroupsAsync(ct) : Task.FromResult<IReadOnlyList<BotGroupMessageDto>>([]);
+            await Task.WhenAll(agentsTask, projectsTask, botsTask, botGroupsTask).ConfigureAwait(false);
             var agents = await agentsTask.ConfigureAwait(false);
             var projects = await projectsTask.ConfigureAwait(false);
             var bots = await botsTask.ConfigureAwait(false);
+            var botGroups = await botGroupsTask.ConfigureAwait(false);
             var itemPairs = await Task.WhenAll(projects.Select(async project =>
                 (project.Id, Items: await client.ListItemsAsync(project.Id, ct).ConfigureAwait(false)))).ConfigureAwait(false);
             var items = itemPairs.ToDictionary(p => p.Id, p => p.Items, StringComparer.Ordinal);
@@ -742,6 +744,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 }
                 Apply(state, client, projects, items);
                 ApplyBots(state.Host, bots);
+                ApplyBotGroups(state.Host, botGroups);
             });
         }
         catch (Exception e) when (e is IOException or RemoteException or OperationCanceledException or ObjectDisposedException)

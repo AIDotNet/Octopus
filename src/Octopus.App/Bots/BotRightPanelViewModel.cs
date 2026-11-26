@@ -844,7 +844,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
         if (bot is null) return;
 
         var working = bot.Items.Any(i => i.Status == BotWorkItemStatus.Working)
-            || bot.Chats.Any(c => c.Status == BotChatStatus.Working || (_activity is not null && _activity.Of(c.Id) == ItemActivity.Working));
+            || bot.Chats.Where(c => c.Kind != BotChatKind.GroupMember)
+                .Any(c => c.Status == BotChatStatus.Working || (_activity is not null && _activity.Of(c.Id) == ItemActivity.Working));
         IsBotWorking = working;
         BotStatusText = bot.IsPaused
             ? AppLangResources.Get(AppLangResourceKind.BotStatusPaused)
@@ -865,7 +866,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
         }
 
         NeedsCount = bot.Items.Count(i => i.Status == BotWorkItemStatus.NeedsYou)
-            + bot.Chats.Count(c => c.Status == BotChatStatus.NeedsYou || (_activity is not null && _activity.Of(c.Id) == ItemActivity.Waiting));
+            + bot.Chats.Where(c => c.Kind != BotChatKind.GroupMember)
+                .Count(c => c.Status == BotChatStatus.NeedsYou || (_activity is not null && _activity.Of(c.Id) == ItemActivity.Waiting));
 
         RebuildChats();
     }
@@ -883,6 +885,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
         var query = ChatSearchQuery.Trim();
         var activeChatId = _bots.CurrentChat?.Id;
         var ordered = bot.Chats
+            .Where(c => c.Kind != BotChatKind.GroupMember)
             .OrderByDescending(c => c.IsOpen)
             .ThenByDescending(c => c.LastActivityAt)
             .Where(c => query.Length == 0

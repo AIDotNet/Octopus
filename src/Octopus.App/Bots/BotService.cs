@@ -22,6 +22,7 @@ public sealed class BotService : IBotService
     private readonly PathComparer _paths;
     private readonly IItemActivityService? _activity;
     private readonly Dictionary<string, Project> _backingProjects = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProjectItem> _groupMemberItems = new(StringComparer.Ordinal);
     private bool _loaded;
 
     public BotService(
@@ -81,9 +82,27 @@ public sealed class BotService : IBotService
         {
             var bot = CurrentBot;
             if (bot is null) return null;
-            return bot.Chats.FirstOrDefault(c => c.Id == bot.ActiveChatId)
+            return bot.Chats.FirstOrDefault(c => c.Id == bot.ActiveChatId && c.Kind != BotChatKind.GroupMember)
                 ?? bot.Chats.FirstOrDefault(c => c.Id == bot.HomeChatId)
-                ?? bot.Chats.FirstOrDefault();
+                ?? bot.Chats.FirstOrDefault(c => c.Kind != BotChatKind.GroupMember);
+        }
+    }
+
+    public string? ActiveGroupId
+    {
+        get
+        {
+            EnsureLoaded();
+            return _store.Current.ActiveGroupId;
+        }
+    }
+
+    public string? ActiveGroupThreadId
+    {
+        get
+        {
+            EnsureLoaded();
+            return _store.Current.ActiveGroupThreadId;
         }
     }
 
@@ -172,6 +191,8 @@ public sealed class BotService : IBotService
             d.Bots.Insert(0, bot);
             d.ActiveBotId = bot.Id;
             d.ActiveChatId = homeChat.Id;
+            d.ActiveGroupId = null;
+            d.ActiveGroupThreadId = null;
             d.IsBotMode = true;
         });
 
@@ -190,21 +211,54 @@ public sealed class BotService : IBotService
         var bot = FindBot(botId);
         if (bot is null) return;
         var modeChanged = !IsBotMode;
-        var botChanged = _store.Current.ActiveBotId != bot.Id;
-        var activeChat = bot.Chats.FirstOrDefault(c => c.Id == bot.ActiveChatId)
+        var botChanged = _store.Current.ActiveBotId != bot.Id || _store.Current.ActiveGroupId is not null;
+        var activeChat = bot.Chats.FirstOrDefault(c => c.Id == bot.ActiveChatId && c.Kind != BotChatKind.GroupMember)
             ?? bot.Chats.FirstOrDefault(c => c.Id == bot.HomeChatId)
-            ?? bot.Chats.FirstOrDefault();
+            ?? bot.Chats.FirstOrDefault(c => c.Kind != BotChatKind.GroupMember);
 
         _store.Update(d =>
         {
             d.IsBotMode = true;
             d.ActiveBotId = bot.Id;
             d.ActiveChatId = activeChat?.Id;
+            d.ActiveGroupId = null;
+            d.ActiveGroupThreadId = null;
         });
         EnsureBackingProject(bot);
 
         if (modeChanged) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Mode, bot, activeChat));
         if (botChanged || modeChanged) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.CurrentBot, bot, activeChat));
+    }
+
+    public void SelectGroup(string groupId, string? threadId = null)
+    {
+        EnsureLoaded();
+        if (string.IsNullOrWhiteSpace(groupId)) return;
+        var modeChanged = !IsBotMode;
+        var selectionChanged = !string.Equals(_store.Current.ActiveGroupId, groupId, StringComparison.Ordinal)
+            || !string.Equals(_store.Current.ActiveGroupThreadId, threadId, StringComparison.Ordinal);
+
+        _store.Update(d =>
+        {
+            d.IsBotMode = true;
+            d.ActiveGroupId = groupId;
+            d.ActiveGroupThreadId = string.IsNullOrWhiteSpace(threadId) ? null : threadId;
+        });
+
+        if (modeChanged) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Mode));
+        if (selectionChanged || modeChanged) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.CurrentBot));
+    }
+
+    public void ClearActiveGroup()
+    {
+        EnsureLoaded();
+        if (_store.Current.ActiveGroupId is null && _store.Current.ActiveGroupThreadId is null) return;
+        _store.Update(d =>
+        {
+            d.ActiveGroupId = null;
+            d.ActiveGroupThreadId = null;
+        });
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.CurrentBot, CurrentBot, CurrentChat));
     }
 
     public void SetBotExpanded(string botId, bool expanded)
@@ -371,6 +425,8 @@ public sealed class BotService : IBotService
                 target.ActiveChatId = chat.Id;
                 d.ActiveBotId = target.Id;
                 d.ActiveChatId = chat.Id;
+                d.ActiveGroupId = null;
+                d.ActiveGroupThreadId = null;
                 d.IsBotMode = true;
             }
         });
@@ -395,6 +451,53 @@ public sealed class BotService : IBotService
         return chat;
     }
 
+    public BotChat? CreateGroupMemberChat(string botId, string groupId, string? threadId, string title)
+    {
+        EnsureLoaded();
+        var bot = FindBot(botId);
+        if (bot is null) return null;
+
+        var resolvedAgentId = ResolveAgentId(bot.AgentId);
+        var now = DateTimeOffset.UtcNow;
+        var chat = new BotChat
+        {
+            Id = $"bot-group-member-{Guid.NewGuid():N}",
+            Kind = BotChatKind.GroupMember,
+            GroupId = groupId,
+            GroupThreadId = string.IsNullOrWhiteSpace(threadId) ? null : threadId,
+            Title = string.IsNullOrWhiteSpace(title) ? "Group Session" : title.Trim(),
+            AgentId = resolvedAgentId,
+            Surface = AgentSurface.Gui,
+            Status = BotChatStatus.Idle,
+            IsOpen = false,
+            CreatedAt = now,
+            LastActivityAt = now,
+        };
+
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId) is not { } target) return;
+            target.Chats.Add(chat);
+        });
+
+        return FindBot(botId)?.Chats.FirstOrDefault(c => c.Id == chat.Id) ?? chat;
+    }
+
+    public ProjectItem? GetGroupMemberBackingItem(string botId, string chatId)
+    {
+        EnsureLoaded();
+        var bot = FindBot(botId);
+        var chat = bot?.Chats.FirstOrDefault(c => c.Id == chatId);
+        if (bot is null || chat is null) return null;
+        EnsureBackingProject(bot);
+        if (!_groupMemberItems.TryGetValue(chatId, out var item))
+        {
+            item = ToProjectItem(bot, chat);
+            _groupMemberItems[chatId] = item;
+        }
+        return item;
+    }
+
     public void OpenChat(string botId, string chatId)
     {
         EnsureLoaded();
@@ -405,7 +508,7 @@ public sealed class BotService : IBotService
         var wasClosed = !chat.IsOpen || chat.Status == BotChatStatus.Closed;
         var wasUnread = bot.IsUnread;
         var modeChanged = !IsBotMode;
-        var botChanged = _store.Current.ActiveBotId != bot.Id;
+        var botChanged = _store.Current.ActiveBotId != bot.Id || _store.Current.ActiveGroupId is not null;
 
         _store.Update(d =>
         {
@@ -419,6 +522,8 @@ public sealed class BotService : IBotService
             target.ActiveChatId = targetChat.Id;
             d.ActiveBotId = target.Id;
             d.ActiveChatId = targetChat.Id;
+            d.ActiveGroupId = null;
+            d.ActiveGroupThreadId = null;
             d.IsBotMode = true;
         });
 
@@ -955,6 +1060,8 @@ public sealed class BotService : IBotService
             d.Bots.Insert(0, bot);
             d.ActiveBotId = bot.Id;
             d.ActiveChatId = homeChat.Id;
+            d.ActiveGroupId = null;
+            d.ActiveGroupThreadId = null;
             d.IsBotMode = true;
         });
 
@@ -1088,6 +1195,7 @@ public sealed class BotService : IBotService
     public ProjectItem? FindItem(string itemId)
     {
         EnsureLoaded();
+        if (_groupMemberItems.TryGetValue(itemId, out var groupItem)) return groupItem;
         foreach (var project in _backingProjects.Values)
         {
             var found = project.Items.FirstOrDefault(i => i.Id == itemId);
@@ -1288,7 +1396,7 @@ public sealed class BotService : IBotService
             project.Color = bot.Color;
         }
 
-        foreach (var chat in bot.Chats.Where(c => c.IsOpen))
+        foreach (var chat in bot.Chats.Where(c => c.IsOpen && c.Kind != BotChatKind.GroupMember))
         {
             if (project.Items.All(i => i.Id != chat.Id))
             {

@@ -64,17 +64,22 @@ public sealed partial class SessionRowViewModel : ObservableObject, IDisposable
 
     public static string? OriginOf(RemoteSession session)
     {
-        if (session.OriginDevice is { Length: > 0 } device)
+        // The host reports a parent only within itself, and another computer as the origin device.
+        (string Title, bool SameProject, string? Host)? parent =
+            session.ParentItemId is { } parentId && session.Project.Sessions.FirstOrDefault(s => s.Id == parentId) is { } p
+                ? (p.Title, true, null)
+                : null;
+        var origin = Octopus.Core.Agents.CollabOrigin.Describe(parent, session.OriginDevice, session.OriginSession);
+        return origin.Kind switch
         {
-            return session.OriginSession is { Length: > 0 } by
-                ? MobileLangResources.Format(MobileLangResourceKind.SessionOriginFromDeviceBy, device, by)
-                : MobileLangResources.Format(MobileLangResourceKind.SessionOriginFromDevice, device);
-        }
-        if (session.ParentItemId is { } parentId && session.Project.Sessions.FirstOrDefault(s => s.Id == parentId) is { } parent)
-        {
-            return MobileLangResources.Format(MobileLangResourceKind.SessionDelegatedBy, parent.Title);
-        }
-        return null;
+            Octopus.Core.Agents.CollabOriginKind.SameProjectParent or Octopus.Core.Agents.CollabOriginKind.LocalParentElsewhere =>
+                MobileLangResources.Format(MobileLangResourceKind.SessionDelegatedBy, origin.Session ?? ""),
+            Octopus.Core.Agents.CollabOriginKind.OtherDevice when origin.Session is { } by =>
+                MobileLangResources.Format(MobileLangResourceKind.SessionOriginFromDeviceBy, origin.Device ?? "", by),
+            Octopus.Core.Agents.CollabOriginKind.OtherDevice =>
+                MobileLangResources.Format(MobileLangResourceKind.SessionOriginFromDevice, origin.Device ?? ""),
+            _ => null,
+        };
     }
 
     /// <summary>The row was held and its menu opened: the tap that ends the press does not open the session too.</summary>

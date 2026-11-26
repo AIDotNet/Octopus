@@ -1,0 +1,427 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:common="using:Octopus.Mobile.Common"
+           xmlns:vm="using:Octopus.Mobile.Bots"
+           x:Class="Octopus.Mobile.Bots.BotGroupDetailPage"
+           x:DataType="vm:BotGroupDetailViewModel"
+           AvoidKeyboard="True">
+    <arcm:Page.Resources>
+        <StreamGeometry x:Key="GroupUsersGlyph">M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75</StreamGeometry>
+        <StreamGeometry x:Key="StopGlyph">M6 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z</StreamGeometry>
+    </arcm:Page.Resources>
+
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{Binding GroupName}"
+                     ShowBack="True"
+                     BackText="{l:MobileLangResource TabBots}"
+                     BackCommand="{Binding BackCommand}">
+            <arcm:Navbar.Trailing>
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <arcm:IconButton Name="GroupRefreshButton"
+                                     Icon="{x:Static arc:ArcIcons.RefreshCw}"
+                                     Command="{Binding RefreshCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource Refresh}" />
+                    <arcm:IconButton Name="GroupMembersButton"
+                                     Icon="{StaticResource GroupUsersGlyph}"
+                                     Command="{Binding OpenMembersSheetCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource BotGroupsMembersSheetTitle}" />
+                </StackPanel>
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
+    </arcm:Page.Header>
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
+        <!-- Thread switcher strip + subtitle -->
+        <Border Grid.Row="0" Classes="projectWsBar">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="secondary" Text="{Binding GroupSubtitle}" Margin="6,0" />
+                <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="6,0">
+                        <ItemsControl Name="ThreadTabsControl" ItemsSource="{Binding ThreadTabs}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BotGroupThreadTabViewModel">
+                                    <Button Classes="wsTabBtn"
+                                            Classes.active="{Binding IsSelected}"
+                                            Command="{Binding SelectCommand}">
+                                        <TextBlock Text="{Binding Label}" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Name="NewThreadButton"
+                                Classes="wsTabBtn newBranch"
+                                Command="{Binding CreateThreadCommand}">
+                            <TextBlock Text="{l:MobileLangResource BotGroupsNewThread}" />
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+        <!-- Scrollable Transcript -->
+        <ScrollViewer Grid.Row="1"
+                      Name="TranscriptScroll"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="16,12,16,16" Spacing="12">
+                <!-- Inline error banner -->
+                <Border Padding="12,8" CornerRadius="10"
+                        Background="{arc:ArcDesignTokenResource DangerSubtle}"
+                        IsVisible="{Binding HasError}">
+                    <TextBlock Text="{Binding ErrorMessage}"
+                               Foreground="{arc:ArcDesignTokenResource Danger}"
+                               TextWrapping="Wrap"
+                               FontSize="{arc:ArcDesignTokenResource TypeSM}" />
+                </Border>
+
+                <!-- Load earlier button -->
+                <Button Name="LoadEarlierButton"
+                        Classes="inlineLinkBtn"
+                        HorizontalAlignment="Center"
+                        IsVisible="{Binding HasEarlier}"
+                        Command="{Binding LoadEarlierCommand}">
+                    <TextBlock Text="{l:MobileLangResource BotGroupsLoadEarlier}" />
+                </Button>
+
+                <!-- Empty transcript state -->
+                <Border Name="EmptyTranscriptCard" Classes="emptyCard" IsVisible="{Binding IsTranscriptEmpty}">
+                    <TextBlock Classes="muted"
+                               Text="{l:MobileLangResource BotGroupsEmptyTranscript}"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center" />
+                </Border>
+
+                <!-- Transcript entries -->
+                <ItemsControl Name="TranscriptItems" ItemsSource="{Binding Entries}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="14" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BotGroupEntryItemViewModel">
+                            <StackPanel Spacing="8">
+                                <!-- Owner message bubble -->
+                                <Border Classes="groupOwnerBubble"
+                                        HorizontalAlignment="Right"
+                                        MaxWidth="320"
+                                        IsVisible="{Binding IsOwner}">
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <TextBlock Text="{Binding AuthorLabel}"
+                                                       Foreground="White"
+                                                       Opacity="0.85"
+                                                       FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                       FontWeight="SemiBold" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding TimeText}"
+                                                       Foreground="White"
+                                                       Opacity="0.72"
+                                                       FontSize="{arc:ArcDesignTokenResource TypeXS}" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding Text}"
+                                                   Foreground="White"
+                                                   TextWrapping="Wrap"
+                                                   FontSize="{arc:ArcDesignTokenResource TypeBase}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Bot-to-bot @mention handoff pill -->
+                                <Border Classes="groupHandoffPill"
+                                        HorizontalAlignment="Center"
+                                        IsVisible="{Binding IsMentionHandoff}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Sparkles}" Size="12"
+                                                      Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                      VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Text}"
+                                                   FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                   Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Hop-limit pause notice card with Continue button -->
+                                <Border Classes="botTodoStrip"
+                                        Margin="0"
+                                        IsVisible="{Binding IsHopLimitPause}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="{l:MobileLangResource BotGroupsHandoffPaused}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                                   Foreground="{arc:ArcDesignTokenResource Warning}" />
+                                        <TextBlock Classes="secondary" Text="{Binding Text}" TextWrapping="Wrap" />
+                                        <arcm:Button Variant="Filled"
+                                                     HorizontalAlignment="Left"
+                                                     Content="{l:MobileLangResource BotGroupsContinueHandoff}"
+                                                     Command="{Binding ContinueHandoffCommand}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Bot turn cards -->
+                                <ItemsControl ItemsSource="{Binding Turns}" IsVisible="{Binding HasTurns}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Spacing="8" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:BotGroupTurnCardViewModel">
+                                            <Border Classes="surfaceCard" Padding="12,10">
+                                                <StackPanel Spacing="8">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                                        <Border Grid.Column="0" Classes="badge" Background="{Binding AvatarBrush}">
+                                                            <TextBlock Text="{Binding Initial}" />
+                                                        </Border>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Classes="sessionTitle" Text="{Binding BotName}" VerticalAlignment="Center" />
+                                                                <Border Classes="pill compact"
+                                                                        Classes.working="{Binding IsRunning}"
+                                                                        Classes.error="{Binding IsFailed}"
+                                                                        IsVisible="{Binding HasStatusPill}">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                        <arc:ArcSpinner IsVisible="{Binding IsRunning}" />
+                                                                        <TextBlock Text="{Binding StatusText}" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <TextBlock Classes="muted" Text="{Binding TimeText}" FontSize="{arc:ArcDesignTokenResource TypeXS}" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2"
+                                                                Classes="inlineLinkBtn"
+                                                                Command="{Binding ReplyAtCommand}">
+                                                            <TextBlock Text="{l:MobileLangResource BotGroupsAtReply}" />
+                                                        </Button>
+                                                    </Grid>
+
+                                                    <common:MobileMarkdownView Markdown="{Binding BodyText}"
+                                                                               IsVisible="{Binding HasBody}" />
+
+                                                    <Border Padding="8,6"
+                                                            CornerRadius="8"
+                                                            Background="{arc:ArcDesignTokenResource DangerSubtle}"
+                                                            IsVisible="{Binding HasError}">
+                                                        <TextBlock Text="{Binding ErrorText}"
+                                                                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                                                                   FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                                                   TextWrapping="Wrap" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Pending Approvals Dock -->
+        <Border Grid.Row="2"
+                Name="ApprovalsDock"
+                Classes="bar"
+                IsVisible="{Binding HasPendingApprovals}">
+            <StackPanel Spacing="8" Margin="8,2">
+                <TextBlock Text="{Binding PendingApprovalsHeader}"
+                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                           FontWeight="SemiBold"
+                           Foreground="{arc:ArcDesignTokenResource Warning}" />
+                <ItemsControl ItemsSource="{Binding PendingApprovals}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="8" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BotGroupApprovalCardViewModel">
+                            <Border Classes="botTodoStrip" Margin="0">
+                                <StackPanel Spacing="6">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="guiTag">
+                                            <TextBlock Text="{Binding BotName}" />
+                                        </Border>
+                                        <TextBlock Classes="sessionTitle" Text="{Binding Title}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Classes="preview" Text="{Binding Detail}" TextWrapping="Wrap" IsVisible="{Binding HasDetail}" />
+                                    <TextBlock Classes="secondary" Text="{Binding WarningMessage}" TextWrapping="Wrap" IsVisible="{Binding HasWarning}" />
+                                    <ItemsControl ItemsSource="{Binding Options}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:BotGroupApprovalOptionViewModel">
+                                                <Button Classes="botOptionBtn" Command="{Binding ChooseCommand}">
+                                                    <TextBlock Text="{Binding Label}" />
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- ReplyMode Switcher + Composer -->
+        <Border Grid.Row="3" Classes="bar">
+            <StackPanel Spacing="8" Margin="4,2">
+                <!-- Reply mode pills: Bot / All / @Mentions -->
+                <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Name="ReplyModeBotChip"
+                                Classes="chipBtn"
+                                Classes.active="{Binding IsReplyModeBot}"
+                                Command="{Binding SetReplyModeBotCommand}">
+                            <TextBlock Text="{l:MobileLangResource BotGroupsReplyModeBot}" />
+                        </Button>
+                        <Button Name="ReplyModeAllChip"
+                                Classes="chipBtn"
+                                Classes.active="{Binding IsReplyModeAll}"
+                                Command="{Binding SetReplyModeAllCommand}">
+                            <TextBlock Text="{l:MobileLangResource BotGroupsReplyModeAll}" />
+                        </Button>
+                        <Button Name="ReplyModeMentionsChip"
+                                Classes="chipBtn"
+                                Classes.active="{Binding IsReplyModeMentions}"
+                                Command="{Binding SetReplyModeMentionsCommand}">
+                            <TextBlock Text="{l:MobileLangResource BotGroupsReplyModeMentions}" />
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Target bot selector when ReplyMode == Bot -->
+                <ScrollViewer HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled"
+                              IsVisible="{Binding ShowTargetBotBar}">
+                    <ItemsControl ItemsSource="{Binding TargetBotChoices}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BotGroupTargetChipViewModel">
+                                <Button Classes="wsTabBtn"
+                                        Classes.active="{Binding IsSelected}"
+                                        Command="{Binding SelectCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <Border Width="16" Height="16" CornerRadius="5" Background="{Binding AvatarBrush}">
+                                            <TextBlock Text="{Binding Initial}" Foreground="White" FontSize="9" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="{Binding BotName}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Message input + Stop + Send -->
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                    <arcm:TextField Name="GroupComposerField"
+                                    Grid.Column="0"
+                                    Text="{Binding ComposerText, Mode=TwoWay}"
+                                    TextWrapping="Wrap"
+                                    Height="NaN"
+                                    MinHeight="42"
+                                    MaxHeight="120"
+                                    PlaceholderText="{l:MobileLangResource BotGroupsComposerPlaceholder}"
+                                    VerticalAlignment="Center" />
+                    <arcm:IconButton Name="GroupStopButton"
+                                     Grid.Column="1"
+                                     Variant="Tinted"
+                                     Icon="{StaticResource StopGlyph}"
+                                     Command="{Binding StopCommand}"
+                                     IsVisible="{Binding CanStop}"
+                                     AutomationProperties.Name="{l:MobileLangResource BotGroupsStop}" />
+                    <arcm:IconButton Name="GroupSendButton"
+                                     Grid.Column="2"
+                                     Variant="Filled"
+                                     Icon="{x:Static arc:ArcIcons.ArrowUp}"
+                                     Command="{Binding SendCommand}"
+                                     IsEnabled="{Binding CanSend}"
+                                     AutomationProperties.Name="{l:MobileLangResource Send}" />
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+
+    <arcm:Page.Overlay>
+        <Panel>
+            <!-- Member Management & Group Settings Sheet -->
+            <arcm:Sheet Name="GroupMembersSheet"
+                        IsOpen="{Binding IsMembersSheetOpen, Mode=TwoWay}"
+                        MaxHeightFraction="0.86"
+                        Title="{l:MobileLangResource BotGroupsMembersSheetTitle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="16,4,16,24" Spacing="12">
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotGroupsNewNameLabel}" />
+                        <arcm:TextField Text="{Binding EditGroupName, Mode=TwoWay}"
+                                        PlaceholderText="{l:MobileLangResource BotGroupsNewNamePlaceholder}" />
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource BotGroupsNewMembersLabel}" />
+                        <arcm:ListGroup ItemsSource="{Binding MemberChoices}">
+                            <arcm:ListGroup.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BotGroupMemberToggleViewModel">
+                                    <arcm:ListItem>
+                                        <arcm:ListItem.Trailing>
+                                            <arcm:Switch IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                        </arcm:ListItem.Trailing>
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" Margin="0,3">
+                                            <Border Grid.Column="0" Classes="badge" Background="{Binding AvatarBrush}">
+                                                <TextBlock Text="{Binding Initial}" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                                <TextBlock Classes="sessionTitle" Text="{Binding BotName}" />
+                                                <TextBlock Classes="secondary" Text="{Binding AgentLabel}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </arcm:ListItem>
+                                </DataTemplate>
+                            </arcm:ListGroup.ItemTemplate>
+                        </arcm:ListGroup>
+
+                        <arcm:Button Variant="Filled"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource BotGroupsSaveMembers}"
+                                     Command="{Binding SaveMembersCommand}" />
+
+                        <arcm:Button Variant="Tinted"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Foreground="{arc:ArcDesignTokenResource Danger}"
+                                     Content="{l:MobileLangResource BotGroupsDelete}"
+                                     Command="{Binding AskDeleteGroupCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </arcm:Sheet>
+
+            <!-- Delete Group Confirmation ActionSheet -->
+            <arcm:ActionSheet Name="DeleteGroupConfirmSheet"
+                              IsOpen="{Binding IsDeleteConfirmOpen, Mode=TwoWay}"
+                              Title="{Binding DeleteConfirmTitle}"
+                              CancelText="{l:MobileLangResource Cancel}">
+                <arcm:ActionSheetItem Content="{l:MobileLangResource BotGroupsDelete}"
+                                      IsDestructive="True"
+                                      Command="{Binding ConfirmDeleteGroupCommand}" />
+            </arcm:ActionSheet>
+        </Panel>
+    </arcm:Page.Overlay>
+</arcm:Page>

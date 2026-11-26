@@ -112,7 +112,22 @@ public interface IHostWorkspace
     Task ResolveBotItemAsync(ResolveBotItemMessage request) => throw NoBots();
     Task ToggleBotConnectorAsync(ToggleBotConnectorMessage request) => throw NoBots();
 
+    // Bot Groups (multi-bot collaborative rooms, BotGroupMessages.cs).
+    bool SupportsBotGroups => false;
+    Task<IReadOnlyList<BotGroupMessageDto>> ListBotGroupsAsync() => Task.FromResult<IReadOnlyList<BotGroupMessageDto>>([]);
+    Task<BotGroupMessageDto> CreateBotGroupAsync(CreateBotGroupMessage request) => throw NoBotGroups();
+    Task<BotGroupMessageDto> UpdateBotGroupAsync(UpdateBotGroupMessage request) => throw NoBotGroups();
+    Task DeleteBotGroupAsync(string groupId) => throw NoBotGroups();
+    Task<BotGroupRoomSnapshotMessage> ReadBotGroupRoomAsync(BotGroupRoomReadRequestMessage request) => throw NoBotGroups();
+    Task<BotGroupEntryDto> SendBotGroupMessageAsync(BotGroupSendMessage request) => throw NoBotGroups();
+    Task StopBotGroupAsync(BotGroupStopMessage request) => throw NoBotGroups();
+    Task ContinueBotGroupHandoffAsync(BotGroupContinueHandoffMessage request) => throw NoBotGroups();
+    Task<BotGroupThreadDto> CreateBotGroupThreadAsync(string groupId) => throw NoBotGroups();
+    Task RespondBotGroupApprovalAsync(BotGroupApprovalRespondMessage request) => throw NoBotGroups();
+
     private static RemoteException NoBots() => new(RemoteProtocol.MethodNotFound, "Bots are not supported by this host.");
+
+    private static RemoteException NoBotGroups() => new(RemoteProtocol.MethodNotFound, "Bot Groups are not supported by this host.");
 
     private static RemoteException NoConversations() => new(RemoteMethods.NotAllowed, "This host shows no GUI conversations.");
 

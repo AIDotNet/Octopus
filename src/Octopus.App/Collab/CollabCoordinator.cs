@@ -1,12 +1,11 @@
-using System.Collections.Concurrent;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
-using Avalonia;
-using Avalonia.Threading;
 using Octopus.Agents;
 using Octopus.Agents.Signals;
 using Octopus.App.Activity;
+using Octopus.App.Collab.Ledger;
+using Octopus.App.Collab.Sessions;
+using Octopus.App.Collab.Tools;
 using Octopus.App.Services;
 using Octopus.App.Services.Workspaces;
 using Octopus.App.Workspace;
@@ -98,10 +97,8 @@ public interface ICollabCoordinator
     string? ResolveAgentAlias(string input);
 }
 
-public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, IDisposable
+public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, ICollabOperations, IDisposable
 {
-    private const int MaxReplySummaryChars = 3500;
-    private const int MaxTerminalReadChars = 4000;
 
     private static readonly Dictionary<string, string[]> ExtraAliases = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -117,73 +114,28 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     };
 
     private readonly IProjectService _projects;
+    // Thread-safe reads of the projects; _projects itself is only used to change them (on the UI thread) and for events.
+    private readonly CollabProjectIndex _index;
     private readonly IAgentCatalog _catalog;
     private readonly IAgentScanner _scanner;
     private readonly ISettingsStore _settings;
     private readonly CollabMcpServer _server;
     private readonly CollabCliMcpInjector? _cliInjector;
     private readonly IItemActivityService? _activity;
-    private readonly ISignalHub? _signals;
-    private readonly TerminalSessionRegistry? _terminalSessions;
     private readonly Func<ITabContentRegistry?>? _tabRegistryFactory;
     private readonly Func<IWorkspaceManager?>? _workspaceManagerFactory;
 
-    private readonly object _gate = new();
-    private readonly ConcurrentDictionary<string, ICollabSessionBridge> _guiSessions = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CollabTaskRecord> _tasks = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CollabThreadRecord> _threads = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CollabBubbledApproval> _childApprovals = new(StringComparer.Ordinal);
-    // Tracks pending implicit-reply target per session so finishing a turn without calling reply_thread still replies cleanly.
-    private readonly Dictionary<string, PendingExpectation> _pendingExpectations = new(StringComparer.Ordinal);
-    private readonly List<EventWaiter> _eventWaiters = [];
-    // Per caller: task/thread id -> UpdatedSeq last returned by await_events, so each change is reported once.
-    private readonly Dictionary<string, Dictionary<string, long>> _seen = new(StringComparer.Ordinal);
-    private readonly IDisposable? _signalSub;
-    private readonly CollabStateStore? _store;
+    // Every session the bus talks to (GUI tabs, terminals, conversations on other computers), reached through providers.
+    private readonly CollabSessions _sessions = new();
+    private readonly RemoteSessionProvider _remoteProvider;
+    // Tasks, threads, open cards, owed answers, blocked await_events and read marks; persisted (collab/state.json).
+    private readonly CollabLedger _ledger;
+    // The MCP tools agents see; each maps its JSON arguments to one of the ICollabOperations below.
+    private readonly CollabToolRegistry _tools;
+    // Rules product decisions may change (wake-ups, cascades, budgets, limits); defaults follow the user's settings.
+    private readonly ICollabPolicy _policy;
     private readonly Func<ICollabRemoteHosts?>? _remoteHostsFactory;
-    // Sessions on paired hosts that this computer follows (delegates it started there, peers it messaged).
-    private readonly ConcurrentDictionary<string, RemoteCollabSession> _remoteSessions = new(StringComparer.Ordinal);
-    private Timer? _persistTimer;
-    private int _seq;
-    private long _eventSeq;
     private bool _disposed;
-
-    private const int PersistDebounceMs = 400;
-    private const int MaxPersistedTasks = 500;
-    private const int MaxPersistedThreads = 300;
-    private const int MaxPersistedMessagesPerThread = 40;
-    private static readonly TimeSpan PersistRetention = TimeSpan.FromDays(14);
-
-    private static readonly JsonSerializerOptions ToolJsonOptions = new()
-    {
-        WriteIndented = false,
-        // Keep CJK and symbols readable for the model (and 6x cheaper) instead of \uXXXX escapes.
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
-    private sealed record EventWaiter(
-        string CallerItemId,
-        HashSet<string> FilterIds,
-        TaskCompletionSource<bool> Tcs)
-    {
-        public bool Matches(string threadId, IReadOnlyCollection<string> taskIds)
-        {
-            if (FilterIds.Count == 0) return true;
-            if (FilterIds.Contains(threadId)) return true;
-            foreach (var taskId in taskIds)
-            {
-                if (FilterIds.Contains(taskId)) return true;
-            }
-            return false;
-        }
-    }
-
-    private sealed record PendingExpectation(
-        string CallerItemId,
-        string? TaskId,
-        string? ThreadId,
-        int TerminalBaselineLength,
-        DateTimeOffset DispatchedAt);
 
     public CollabCoordinator(
         IProjectService projects,
@@ -198,26 +150,36 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         Func<ITabContentRegistry?>? tabRegistryFactory = null,
         Func<IWorkspaceManager?>? workspaceManagerFactory = null,
         CollabStateStore? store = null,
-        Func<ICollabRemoteHosts?>? remoteHostsFactory = null)
+        Func<ICollabRemoteHosts?>? remoteHostsFactory = null,
+        IEnumerable<ICollabTool>? tools = null,
+        ICollabPolicy? policy = null)
     {
         _projects = projects;
+        // Subscribed before this coordinator's own handler, so that handler already sees the new snapshot.
+        _index = new CollabProjectIndex(projects);
         _catalog = catalog;
         _scanner = scanner;
         _settings = settings;
         _server = server;
         _cliInjector = cliInjector;
         _activity = activity;
-        _signals = signals;
-        _terminalSessions = terminalSessions;
         _tabRegistryFactory = tabRegistryFactory;
         _workspaceManagerFactory = workspaceManagerFactory;
-        _store = store;
         _remoteHostsFactory = remoteHostsFactory;
-        RestoreState();
+        _tools = new CollabToolRegistry(tools ?? CollabToolRegistry.BuiltIn);
+        _policy = policy ?? new DefaultCollabPolicy(settings);
+        _ledger = new CollabLedger(store);
+        _ledger.Restore();
+
+        // First match wins: another computer's project, then a GUI tab here, then a terminal here.
+        _remoteProvider = new RemoteSessionProvider(_sessions, () => RemoteHosts, this, id => RaiseChanged(id));
+        _sessions.AddProvider(_remoteProvider);
+        _sessions.AddProvider(new LocalGuiSessionProvider(_sessions, tabRegistryFactory));
+        _sessions.AddProvider(new TerminalSessionProvider(
+            _sessions, _index, terminalSessions, tabRegistryFactory, settings, catalog, signals, activity, NotifyTurnCompleted));
 
         _server.AttachHandler(this);
         _projects.Changed += OnProjectsChanged;
-        _signalSub = _signals?.Subscribe(null, null, OnTerminalSignal);
     }
 
     public event Action<string?>? Changed;
@@ -229,7 +191,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     {
         get
         {
-            lock (_gate) return _eventWaiters.Count;
+            return _ledger.WaiterCount;
         }
     }
 
@@ -243,13 +205,13 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     public void RegisterGuiSession(ICollabSessionBridge bridge)
     {
-        _guiSessions[bridge.ItemId] = bridge;
+        _sessions.Register(bridge);
         RaiseChanged(bridge.ItemId);
     }
 
     public void UnregisterGuiSession(string itemId)
     {
-        if (!_guiSessions.TryRemove(itemId, out _)) return;
+        if (!_sessions.Unregister(itemId)) return;
         ClearChildApproval(itemId);
         // The session is gone, so whatever it was asked to answer will never be answered. No wake-up: this also runs
         // while the app shuts down, and the delegator learns the outcome from await_events or the persisted ledger.
@@ -259,39 +221,42 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     public void ReportChildApproval(CollabBubbledApproval approval)
     {
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            _childApprovals[approval.ChildItemId] = approval;
-            foreach (var task in _tasks.Values)
+            _ledger.Approvals[(approval.ChildItemId, approval.ApprovalId)] = approval;
+            foreach (var task in _ledger.Tasks.Values)
             {
                 if (task.TargetItemId == approval.ChildItemId && task.Status == CollabTaskStatus.Running)
                 {
-                    task.Status = CollabTaskStatus.WaitingApproval;
-                    task.LatestActivity = $"Waiting approval: {approval.ToolTitle}";
-                    TouchLocked(task);
+                    _ledger.SetTaskStatus(task, CollabTaskStatus.WaitingApproval, $"Waiting approval: {approval.ToolTitle}");
                 }
             }
         }
-        SignalEventWaiters();
+        _ledger.SignalWaiters();
         RaiseChanged(approval.ParentItemId);
     }
 
     public void ClearChildApproval(string childItemId, string? approvalId = null)
     {
         string? parentId = null;
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            if (_childApprovals.TryGetValue(childItemId, out var existing)
-                && (approvalId is null || existing.ApprovalId == approvalId))
+            var cleared = _ledger.Approvals
+                .Where(kv => kv.Key.Child == childItemId && (approvalId is null || kv.Key.Approval == approvalId))
+                .ToList();
+            foreach (var (key, existing) in cleared)
             {
                 parentId = existing.ParentItemId;
-                _childApprovals.Remove(childItemId);
-                foreach (var task in _tasks.Values)
+                _ledger.Approvals.Remove(key);
+            }
+            // The task waits as long as any card of that child is still open.
+            if (cleared.Count > 0 && !_ledger.Approvals.Keys.Any(k => k.Child == childItemId))
+            {
+                foreach (var task in _ledger.Tasks.Values)
                 {
                     if (task.TargetItemId == childItemId && task.Status == CollabTaskStatus.WaitingApproval)
                     {
-                        task.Status = CollabTaskStatus.Running;
-                        TouchLocked(task);
+                        _ledger.SetTaskStatus(task, CollabTaskStatus.Running);
                     }
                 }
             }
@@ -304,9 +269,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     public IReadOnlyList<CollabBubbledApproval> GetBubbledApprovalsForParent(string parentItemId)
     {
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            return _childApprovals.Values
+            return _ledger.Approvals.Values
                 .Where(a => a.ParentItemId == parentItemId && !a.IsResolved)
                 .ToList();
         }
@@ -314,16 +279,16 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     public IReadOnlyList<ProjectItem> GetSpawnedChildren(string parentItemId)
     {
-        if (_projects.FindProjectOf(parentItemId) is not { } home) return [];
+        if (_index.FindProjectOf(parentItemId) is not { } home) return [];
         // Children in the parent's own project first (sidebar order), then delegates on other computers.
-        return home.Items
-            .Concat(_projects.Projects.Where(p => !ReferenceEquals(p, home)).SelectMany(p => p.Items))
+        return _index.ItemsOf(home)
+            .Concat(_index.Projects.Where(p => !ReferenceEquals(p, home)).SelectMany(_index.ItemsOf))
             .Where(i => string.Equals(i.ParentItemId, parentItemId, StringComparison.Ordinal))
             .ToList();
     }
 
     public string? HostNameOf(string itemId) =>
-        _projects.FindProjectOf(itemId) is { RemoteHost: { Length: > 0 } hostId } project && ProjectLocation.IsOnRemoteHost(project)
+        _index.FindProjectOf(itemId) is { RemoteHost: { Length: > 0 } hostId } project && ProjectLocation.IsOnRemoteHost(project)
             ? _remoteHostsFactory?.Invoke()?.HostName(hostId) ?? hostId
             : null;
 
@@ -333,9 +298,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     public IReadOnlyList<CollabThreadRecord> GetThreadsForItem(string itemId)
     {
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            return _threads.Values
+            return _ledger.Threads.Values
                 .Where(t => t.ParticipantItemIds.Contains(itemId, StringComparer.Ordinal))
                 .OrderByDescending(t => t.UpdatedAt)
                 .ToList();
@@ -344,9 +309,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     public IReadOnlyList<CollabTaskRecord> GetTasksForItem(string itemId)
     {
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            return _tasks.Values
+            return _ledger.Tasks.Values
                 .Where(t => t.CallerItemId == itemId || t.TargetItemId == itemId)
                 .OrderByDescending(t => t.CreatedAt)
                 .ToList();
@@ -355,9 +320,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     public CollabThreadRecord? FindThread(string threadId)
     {
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            return _threads.GetValueOrDefault(threadId);
+            return _ledger.Threads.GetValueOrDefault(threadId);
         }
     }
 
@@ -367,7 +332,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         var result = new List<CollabPeerInfo>();
         foreach (var project in visibleProjects)
         {
-            foreach (var item in project.Items)
+            foreach (var item in _index.ItemsOf(project))
             {
                 if (item.Kind is not (ProjectItemKind.Agent or ProjectItemKind.Terminal)) continue;
                 var agentId = item.AgentId ?? "terminal";
@@ -375,7 +340,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 var surface = item.Kind == ProjectItemKind.Agent && item.Surface == AgentSurface.Gui ? "gui" : "terminal";
                 var status = DescribeStatus(item.Id);
                 var cwd = string.IsNullOrWhiteSpace(item.WorkingDirectory) ? project.Path : item.WorkingDirectory!;
-                var branch = item.WorkspaceId is { } wid ? _projects.FindWorkspace(project, wid)?.Branch : null;
+                var branch = item.WorkspaceId is { } wid ? _index.FindWorkspace(project, wid)?.Branch : null;
                 var summary = BuildOneLineSummary(item.Id);
                 result.Add(new CollabPeerInfo(
                     item.Id,
@@ -395,7 +360,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         foreach (var project in VisibleRemoteProjects())
         {
             var hostName = remotes!.HostName(project.RemoteHost!);
-            foreach (var item in project.Items)
+            foreach (var item in _index.ItemsOf(project))
             {
                 if (item.Kind is not (ProjectItemKind.Agent or ProjectItemKind.Terminal)) continue;
                 result.Add(new CollabPeerInfo(
@@ -423,7 +388,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     private IReadOnlyList<Project> VisibleRemoteProjects() =>
         RemoteHosts is null
             ? []
-            : _projects.Projects.Where(p => ProjectLocation.IsOnRemoteHost(p) && p.RemoteHost is { Length: > 0 } && p.RemoteId is { Length: > 0 }).ToList();
+            : _index.Projects.Where(p => ProjectLocation.IsOnRemoteHost(p) && p.RemoteHost is { Length: > 0 } && p.RemoteId is { Length: > 0 }).ToList();
 
     public IReadOnlyList<CollabAvailableAgentInfo> ListAvailableAgents()
     {
@@ -480,7 +445,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             if (m.Kind == "session")
             {
                 var status = DescribeStatus(m.TargetId);
-                var item = _projects.FindItem(m.TargetId);
+                var item = _index.FindItem(m.TargetId);
                 var surface = item?.Surface == AgentSurface.Gui ? "gui" : "terminal";
                 sb.Append("  <session order=\"").Append(++order)
                   .Append("\" id=\"").Append(EscapeXml(m.TargetId))
@@ -538,9 +503,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         if (targets.Count == 1) return await SendUserDirectMessageAsync(fromItemId, targets[0], text, ct).ConfigureAwait(false);
 
         var body = text.Trim();
-        var labels = targets.Select(id => _projects.FindItem(id) is { } item ? "@" + FormatCallerLabel(item) : id).ToList();
+        var labels = targets.Select(id => _index.FindItem(id) is { } item ? "@" + FormatCallerLabel(item) : id).ToList();
         // Every delivery counts as a hop; widen the new thread's budget so the fan-out itself does not eat the replies'.
-        var defaultMaxHops = Math.Clamp(_settings.Current.Agents.Collab.MaxNegotiationHops, CollabSettings.MinNegotiationHops, CollabSettings.MaxAllowedNegotiationHops);
+        var defaultMaxHops = _policy.DefaultMaxHops;
         CollabThreadRecord? thread = null;
         for (var i = 0; i < targets.Count; i++)
         {
@@ -566,18 +531,18 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         if (string.IsNullOrWhiteSpace(text)) return false;
         List<string> participants;
         int round;
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            if (!_threads.TryGetValue(threadId, out var thread)) return false;
+            if (!_ledger.Threads.TryGetValue(threadId, out var thread)) return false;
             if (extendBudget)
             {
                 thread.MaxHops = Math.Min(CollabSettings.MaxAllowedNegotiationHops, thread.MaxHops + 4);
-                if (thread.Status == "paused_budget") thread.Status = "active";
+                if (thread.Status == CollabThreadStatus.PausedBudget) _ledger.SetThreadStatus(thread, CollabThreadStatus.Active);
             }
             round = thread.Hops;
-            thread.Messages.Add(new CollabMessageRecord
+            _ledger.AppendMessage(thread, new CollabMessageRecord
             {
-                MessageId = NextId("msg"),
+                MessageId = _ledger.NextId("msg"),
                 ThreadId = threadId,
                 FromItemId = "user",
                 FromLabel = "User",
@@ -585,16 +550,15 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 Text = text.Trim(),
                 IsUserInterjection = true,
             });
-            TouchLocked(thread);
             participants = [.. thread.ParticipantItemIds];
         }
 
-        var envelope = $"[Octopus Collab · User Interjection · Thread #{threadId}]\n{text.Trim()}\n(Please follow the user's guidance and continue or conclude the thread via reply_thread.)";
+        var envelope = CollabEnvelope.Interjection(threadId, text);
         foreach (var pid in participants)
         {
             await DeliverEnvelopeAsync(pid, envelope, threadId, taskId: null, expectReply: false, callerItemId: "user", ct).ConfigureAwait(false);
         }
-        SignalEventWaiters();
+        _ledger.SignalWaiters();
         RaiseChanged(null);
         return true;
     }
@@ -608,91 +572,26 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             return ToolError("Multi-agent collaboration is currently disabled in Octopus Settings → Agents.");
         }
 
-        return toolName switch
+        if (_tools.Find(toolName) is not { } tool)
         {
-            "list_peers" => HandleListPeers(callerItemId, arguments),
-            "read_session" => await HandleReadSessionAsync(callerItemId, arguments, cancellationToken).ConfigureAwait(false),
-            "delegate_task" => await HandleDelegateTaskAsync(callerItemId, arguments, cancellationToken).ConfigureAwait(false),
-            "send_message" => await HandleSendMessageAsync(callerItemId, arguments, cancellationToken).ConfigureAwait(false),
-            "reply_thread" => await HandleReplyThreadAsync(callerItemId, arguments, cancellationToken).ConfigureAwait(false),
-            "await_events" => await HandleAwaitEventsAsync(callerItemId, arguments, cancellationToken).ConfigureAwait(false),
-            "cancel_task" => await HandleCancelTaskAsync(callerItemId, arguments, cancellationToken).ConfigureAwait(false),
-            _ => ToolError($"Unknown collaboration tool: {toolName}"),
-        };
+            return CollabToolResult.Error($"Unknown collaboration tool: {toolName}");
+        }
+        return await tool.CallAsync(this, callerItemId, new CollabToolArgs(arguments), cancellationToken).ConfigureAwait(false);
     }
 
-    private JsonObject HandleListPeers(string callerItemId, JsonObject? args)
+    public JsonArray ListTools() => _tools.Schemas();
+
+    public CollabIsolationMode DefaultIsolation => _settings.Current.Agents.Collab.DefaultIsolation;
+
+    public IReadOnlyList<CollabRemoteProjectInfo> ListRemoteProjects()
     {
-        var scope = Str(args, "scope") ?? "group";
-        var peers = ListPeers(callerItemId, scope);
-        var agents = ListAvailableAgents();
-
-        var peersArr = new JsonArray();
-        foreach (var p in peers)
-        {
-            peersArr.Add((JsonNode)new JsonObject
-            {
-                ["session_id"] = p.ItemId,
-                ["is_self"] = p.ItemId == callerItemId,
-                ["agent_id"] = p.AgentId,
-                ["agent_name"] = p.AgentName,
-                ["title"] = p.Title,
-                ["surface"] = p.Surface,
-                ["status"] = p.Status,
-                ["working_directory"] = p.WorkingDirectory,
-                ["branch"] = p.Branch,
-                ["parent_session_id"] = p.ParentItemId,
-                ["isolation"] = p.Isolation,
-                ["summary"] = p.Summary,
-            });
-            if (p.Host is not null) ((JsonObject)peersArr[^1]!)["host"] = p.Host;
-        }
-
-        var agentsArr = new JsonArray();
-        foreach (var a in agents)
-        {
-            var aliasArr = new JsonArray();
-            foreach (var al in a.Aliases) aliasArr.Add((JsonNode)JsonValue.Create(al));
-            agentsArr.Add((JsonNode)new JsonObject
-            {
-                ["agent_id"] = a.AgentId,
-                ["name"] = a.Name,
-                ["supports_acp"] = a.SupportsAcp,
-                ["default_surface"] = a.DefaultSurface,
-                ["aliases"] = aliasArr,
-            });
-        }
-
-        var payload = new JsonObject
-        {
-            ["caller_session_id"] = callerItemId,
-            ["default_isolation"] = IsolationToKey(_settings.Current.Agents.Collab.DefaultIsolation),
-            ["active_sessions"] = peersArr,
-            ["available_agents"] = agentsArr,
-        };
-        var remoteProjects = VisibleRemoteProjects();
-        if (remoteProjects.Count > 0)
-        {
-            var arr = new JsonArray();
-            foreach (var project in remoteProjects)
-            {
-                arr.Add((JsonNode)new JsonObject
-                {
-                    ["project_id"] = project.Id,
-                    ["name"] = project.Name,
-                    ["host"] = RemoteHosts!.HostName(project.RemoteHost!),
-                    ["path"] = project.Path,
-                });
-            }
-            payload["remote_projects"] = arr;
-            payload["remote_hint"] = "Pass a remote project_id to delegate_task to start an agent on that computer; send_message/read_session/cancel_task work on remote sessions too.";
-        }
-        return ToolOk(payload);
+        if (RemoteHosts is not { } remotes) return [];
+        return [.. VisibleRemoteProjects().Select(p => new CollabRemoteProjectInfo(p.Id, p.Name, remotes.HostName(p.RemoteHost!), p.Path))];
     }
 
-    private async Task<JsonObject> HandleReadSessionAsync(string callerItemId, JsonObject? args, CancellationToken ct)
+    public async Task<JsonObject> ReadSessionAsync(string callerItemId, string targetSessionId, int maxTurns, CancellationToken ct)
     {
-        var targetId = Str(args, "target_session_id");
+        var targetId = targetSessionId;
         if (string.IsNullOrWhiteSpace(targetId))
         {
             return ToolError("target_session_id is required.");
@@ -702,11 +601,10 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             return ToolError($"Session '{targetId}' is not found in your current project or merged workspace group.");
         }
 
-        var maxTurns = Math.Clamp(Int(args, "max_turns") ?? 5, 1, 20);
-        var item = _projects.FindItem(targetId)!;
-        if (_projects.FindProjectOf(targetId) is { } targetProject && ProjectLocation.IsOnRemoteHost(targetProject) && !_guiSessions.ContainsKey(targetId))
+        var item = _index.FindItem(targetId)!;
+        if (_index.FindProjectOf(targetId) is { } targetProject && ProjectLocation.IsOnRemoteHost(targetProject))
         {
-            await EnsureRemoteSessionAsync(targetProject, item, parentItemId: null, fresh: false, ct).ConfigureAwait(false);
+            await _sessions.EnsureAsync(targetProject, item, ct).ConfigureAwait(false);
         }
         var summary = ReadSessionContent(item, maxTurns);
 
@@ -723,10 +621,10 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         });
     }
 
-    private async Task<JsonObject> HandleDelegateTaskAsync(string callerItemId, JsonObject? args, CancellationToken ct)
+    public async Task<JsonObject> DelegateTaskAsync(string callerItemId, CollabDelegateRequest request, CancellationToken ct)
     {
-        var target = Str(args, "target");
-        var goal = Str(args, "goal");
+        var target = request.Target;
+        var goal = request.Goal;
         if (string.IsNullOrWhiteSpace(target) || string.IsNullOrWhiteSpace(goal))
         {
             return ToolError("Both 'target' and 'goal' are required.");
@@ -734,24 +632,24 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
         var collabCfg = _settings.Current.Agents.Collab;
         var depth = ComputeDelegationDepth(callerItemId);
-        if (depth >= collabCfg.MaxDelegationDepth)
+        if (depth >= _policy.MaxDelegationDepth)
         {
-            return ToolError($"Delegation depth limit ({collabCfg.MaxDelegationDepth}) reached; complete the task directly or ask the user.");
+            return ToolError($"Delegation depth limit ({_policy.MaxDelegationDepth}) reached; complete the task directly or ask the user.");
         }
 
         // Case 1: Target matches an existing visible session id -> route directly into that session.
-        if (_projects.FindItem(target) is { } existingItem && IsPeerVisible(callerItemId, existingItem.Id))
+        if (_index.FindItem(target) is { } existingItem && IsPeerVisible(callerItemId, existingItem.Id))
         {
             if (existingItem.Id == callerItemId)
             {
                 return ToolError("Cannot delegate a task to yourself.");
             }
-            var title = Str(args, "title") ?? TruncateTitle(goal);
-            var taskId = NextId("task");
+            var title = request.Title ?? TruncateTitle(goal);
+            var taskId = _ledger.NextId("task");
             var sent = await SendMessageInternalAsync(
                 callerItemId,
                 existingItem.Id,
-                FormatTaskBody(taskId, goal, ReadStringList(args, "context_files")),
+                CollabEnvelope.TaskBody(taskId, goal, request.ContextFiles),
                 threadId: null,
                 title: title,
                 expectReply: true,
@@ -775,10 +673,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 Status = CollabTaskStatus.Running,
                 LatestActivity = "Dispatched to existing session",
             };
-            lock (_gate)
+            lock (_ledger.Gate)
             {
-                _tasks[taskId] = taskRecord;
-                TouchLocked(taskRecord);
+                _ledger.Add(taskRecord);
             }
             RaiseChanged(callerItemId);
             return ToolOk(new JsonObject
@@ -798,21 +695,21 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             return ToolError($"Unknown target session or agent '{target}'. Call list_peers to see valid session_ids and available agents.");
         }
 
-        if (Str(args, "project_id") is { Length: > 0 } projectId)
+        if (request.ProjectId is { Length: > 0 } projectId)
         {
             var remoteProject = VisibleRemoteProjects().FirstOrDefault(p => p.Id == projectId);
             if (remoteProject is not null)
             {
-                return await HandleRemoteDelegateAsync(callerItemId, remoteProject, definition, goal, args!, ct).ConfigureAwait(false);
+                return await DelegateToRemoteAsync(callerItemId, remoteProject, definition, request, ct).ConfigureAwait(false);
             }
-            if (_projects.FindProjectOf(callerItemId)?.Id != projectId)
+            if (_index.FindProjectOf(callerItemId)?.Id != projectId)
             {
                 return ToolError($"project_id '{projectId}' is neither a remote project from list_peers nor your own project.");
             }
         }
 
-        var callerProject = _projects.FindProjectOf(callerItemId);
-        var callerItem = _projects.FindItem(callerItemId);
+        var callerProject = _index.FindProjectOf(callerItemId);
+        var callerItem = _index.FindItem(callerItemId);
         if (callerProject is null || callerItem is null)
         {
             return ToolError("Caller session project could not be resolved.");
@@ -822,9 +719,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             return ToolError("Agents cannot be spawned inside this remote/SSH project.");
         }
 
-        var isolation = ParseIsolation(Str(args, "isolation")) ?? collabCfg.DefaultIsolation;
+        var isolation = ParseIsolation(request.Isolation) ?? collabCfg.DefaultIsolation;
         var isolationKey = IsolationToKey(isolation);
-        var requestedSurface = ParseSurface(Str(args, "surface"));
+        var requestedSurface = ParseSurface(request.Surface);
         var resolvedSurface = AgentSurfaceResolver.Resolve(
             definition,
             _settings.Current.Agents,
@@ -836,9 +733,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             return ToolError($"Agent '{definition.Name}' resolves to Terminal mode, but Terminal CLI collaboration bridge is disabled in settings.");
         }
 
-        var taskIdNew = NextId("task");
-        var threadIdNew = NextId("t");
-        var taskTitle = Str(args, "title")?.Trim();
+        var taskIdNew = _ledger.NextId("task");
+        var threadIdNew = _ledger.NextId("t");
+        var taskTitle = request.Title?.Trim();
         if (string.IsNullOrWhiteSpace(taskTitle))
         {
             taskTitle = $"{definition.Name} · {TruncateTitle(goal, 28)}";
@@ -899,8 +796,10 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         }
 
         var callerLabel = FormatCallerLabel(callerItem);
-        var contextFiles = ReadStringList(args, "context_files");
-        var initialPrompt = BuildDelegationPrompt(taskIdNew, threadIdNew, callerLabel, isolation, worktreeBranch, goal, contextFiles);
+        var contextFiles = request.ContextFiles;
+        var initialPrompt = CollabEnvelope.Delegation(
+            taskIdNew, threadIdNew, callerLabel, goal, contextFiles,
+            worktreeBranch: worktreeBranch, readOnly: isolation == CollabIsolationMode.ReadOnly);
 
         var childItem = new ProjectItem
         {
@@ -914,8 +813,8 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             CollabIsolation = isolationKey,
             Launch = new AgentLaunchOptions
             {
-                Model = Str(args, "model"),
-                Effort = Str(args, "effort"),
+                Model = request.Model,
+                Effort = request.Effort,
                 Permission = isolation == CollabIsolationMode.ReadOnly ? PermissionModes.Plan : null,
                 Surface = resolvedSurface,
                 Prompt = initialPrompt,
@@ -929,12 +828,12 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             InitiatorItemId = callerItemId,
             ParticipantItemIds = [callerItemId, childItem.Id],
             Hops = 1,
-            MaxHops = Math.Clamp(collabCfg.MaxNegotiationHops, CollabSettings.MinNegotiationHops, CollabSettings.MaxAllowedNegotiationHops),
+            MaxHops = _policy.DefaultMaxHops,
             Messages =
             [
                 new CollabMessageRecord
                 {
-                    MessageId = NextId("msg"),
+                    MessageId = _ledger.NextId("msg"),
                     ThreadId = threadIdNew,
                     FromItemId = callerItemId,
                     FromLabel = callerLabel,
@@ -963,13 +862,11 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             LatestActivity = $"Starting {definition.Name} ({resolvedSurface})",
         };
 
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            _threads[threadIdNew] = thread;
-            _tasks[taskIdNew] = record;
-            TouchLocked(thread);
-            TouchLocked(record);
-            _pendingExpectations[childItem.Id] = new PendingExpectation(callerItemId, taskIdNew, threadIdNew, 0, DateTimeOffset.UtcNow);
+            _ledger.Add(thread);
+            _ledger.Add(record);
+            _ledger.Pending[childItem.Id] = new PendingExpectation(callerItemId, taskIdNew, threadIdNew, DateTimeOffset.UtcNow);
         }
 
         // Mount the spawned agent underneath its parent in the sidebar and start its session behind the scenes.
@@ -1007,18 +904,18 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         return ToolOk(response);
     }
 
-    private async Task<JsonObject> HandleSendMessageAsync(string callerItemId, JsonObject? args, CancellationToken ct)
+    public async Task<JsonObject> SendMessageAsync(string callerItemId, CollabSendRequest request, CancellationToken ct)
     {
-        var targetId = Str(args, "target_session_id");
-        var message = Str(args, "message");
+        var targetId = request.TargetSessionId;
+        var message = request.Message;
         if (string.IsNullOrWhiteSpace(targetId) || string.IsNullOrWhiteSpace(message))
         {
             return ToolError("Both 'target_session_id' and 'message' are required.");
         }
-        var threadId = Str(args, "thread_id");
-        var title = Str(args, "title");
-        var expectReply = Bool(args, "expect_reply") ?? true;
-        var maxTurns = Int(args, "max_turns");
+        var threadId = request.ThreadId;
+        var title = request.Title;
+        var expectReply = request.ExpectReply;
+        var maxTurns = request.MaxTurns;
 
         var sent = await SendMessageInternalAsync(
             callerItemId, targetId, message, threadId, title, expectReply, maxTurns, isDirectUserRelay: false, ct).ConfigureAwait(false);
@@ -1039,15 +936,12 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         });
     }
 
-    private async Task<JsonObject> HandleReplyThreadAsync(string callerItemId, JsonObject? args, CancellationToken ct)
+    public async Task<JsonObject> ReplyThreadAsync(string callerItemId, string threadId, string message, string status, CancellationToken ct)
     {
-        var threadId = Str(args, "thread_id");
-        var message = Str(args, "message");
         if (string.IsNullOrWhiteSpace(threadId) || string.IsNullOrWhiteSpace(message))
         {
             return ToolError("Both 'thread_id' and 'message' are required.");
         }
-        var status = (Str(args, "status") ?? "continue").Trim().ToLowerInvariant();
         if (status is not ("continue" or "agreed" or "blocked")) status = "continue";
 
         var result = await RecordReplyAndWakeAsync(callerItemId, threadId, message.Trim(), status, isImplicitFallback: false, ct).ConfigureAwait(false);
@@ -1065,32 +959,31 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         });
     }
 
-    private async Task<JsonObject> HandleAwaitEventsAsync(string callerItemId, JsonObject? args, CancellationToken ct)
+    public async Task<JsonObject> AwaitEventsAsync(string callerItemId, IReadOnlyCollection<string> ids, int timeoutSeconds, CancellationToken ct)
     {
-        var ids = new HashSet<string>(ReadStringList(args, "ids"), StringComparer.Ordinal);
-        var timeoutSec = Math.Clamp(Int(args, "timeout_seconds") ?? 25, 1, 45);
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSec);
+        var watched = new HashSet<string>(ids, StringComparer.Ordinal);
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);
 
         while (true)
         {
             EventWaiter? waiter = null;
             AwaitSnapshot snap;
-            lock (_gate)
+            lock (_ledger.Gate)
             {
-                snap = BuildAwaitSnapshotLocked(callerItemId, ids);
+                snap = BuildAwaitSnapshotLocked(callerItemId, watched);
                 var done = snap.HasUpdate || !snap.HasPending || DateTimeOffset.UtcNow >= deadline;
                 if (done)
                 {
-                    MarkSeenLocked(callerItemId, snap.Reported);
+                    _ledger.MarkSeen(callerItemId, snap.Reported);
                 }
                 else
                 {
                     // Registered under the same lock as the snapshot, so no change can slip in between.
                     waiter = new EventWaiter(
                         callerItemId,
-                        ids,
+                        watched,
                         new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
-                    _eventWaiters.Add(waiter);
+                    _ledger.Waiters.Add(waiter);
                 }
             }
 
@@ -1113,7 +1006,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             }
             finally
             {
-                lock (_gate) { _eventWaiters.Remove(waiter); }
+                lock (_ledger.Gate) { _ledger.Waiters.Remove(waiter); }
             }
         }
     }
@@ -1146,7 +1039,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     /// </summary>
     private AwaitSnapshot BuildAwaitSnapshotLocked(string callerItemId, HashSet<string> filterIds)
     {
-        var seen = _seen.GetValueOrDefault(callerItemId);
+        var seen = _ledger.Seen.GetValueOrDefault(callerItemId);
         var hasUpdate = false;
         var hasPending = false;
         List<(string, long)> reported = [];
@@ -1156,7 +1049,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         var tasksArr = new JsonArray();
         var threadsArr = new JsonArray();
 
-        foreach (var t in _tasks.Values.OrderBy(t => t.CreatedAt))
+        foreach (var t in _ledger.Tasks.Values.OrderBy(t => t.CreatedAt))
         {
             if (t.CallerItemId != callerItemId) continue;
             var explicitlyNamed = filterIds.Contains(t.TaskId) || (t.ThreadId is not null && filterIds.Contains(t.ThreadId));
@@ -1190,7 +1083,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             });
         }
 
-        foreach (var th in _threads.Values.OrderBy(th => th.UpdatedAt))
+        foreach (var th in _ledger.Threads.Values.OrderBy(th => th.UpdatedAt))
         {
             if (!th.ParticipantItemIds.Contains(callerItemId, StringComparer.Ordinal)) continue;
             var explicitlyNamed = filterIds.Contains(th.ThreadId);
@@ -1213,7 +1106,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             {
                 ["thread_id"] = th.ThreadId,
                 ["title"] = th.Title,
-                ["status"] = th.Status,
+                ["status"] = th.StatusKey,
                 ["new"] = isNew,
                 ["hops"] = th.Hops,
                 ["max_hops"] = th.MaxHops,
@@ -1228,7 +1121,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             ["threads"] = threadsArr,
         };
         // A task id from before a restart that was pruned, or a typo: say so rather than waiting on it forever.
-        var unknown = filterIds.Where(id => !matchedIds.Contains(id) && !_tasks.Values.Any(t => t.ThreadId == id)).ToList();
+        var unknown = filterIds.Where(id => !matchedIds.Contains(id) && !_ledger.Tasks.Values.Any(t => t.ThreadId == id)).ToList();
         if (unknown.Count > 0)
         {
             var arr = new JsonArray();
@@ -1238,34 +1131,16 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         return new AwaitSnapshot(payload, hasUpdate, hasPending, reported, updatedThreads, updatedTasks);
     }
 
-    private void MarkSeenLocked(string callerItemId, List<(string Id, long Seq)> reported)
+    public async Task<JsonObject> CancelDelegatedTaskAsync(string callerItemId, string taskId, string? reason, CancellationToken ct)
     {
-        if (reported.Count == 0) return;
-        if (!_seen.TryGetValue(callerItemId, out var map))
-        {
-            map = new Dictionary<string, long>(StringComparer.Ordinal);
-            _seen[callerItemId] = map;
-        }
-        foreach (var (id, seq) in reported)
-        {
-            if (seq > map.GetValueOrDefault(id)) map[id] = seq;
-        }
-        _dirty = true;
-        SchedulePersist();
-    }
-
-    private async Task<JsonObject> HandleCancelTaskAsync(string callerItemId, JsonObject? args, CancellationToken ct)
-    {
-        var taskId = Str(args, "task_id");
         if (string.IsNullOrWhiteSpace(taskId))
         {
             return ToolError("task_id is required.");
         }
-        var reason = Str(args, "reason")?.Trim();
         CollabTaskStatus status;
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            if (!_tasks.TryGetValue(taskId, out var task))
+            if (!_ledger.Tasks.TryGetValue(taskId, out var task))
             {
                 return ToolError($"Unknown task '{taskId}'.");
             }
@@ -1299,7 +1174,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     private void CancelStaleWakeups(string callerItemId, IReadOnlyCollection<string> threadIds, IReadOnlyCollection<string> taskIds)
     {
-        if (!_guiSessions.TryGetValue(callerItemId, out var gui)) return;
+        if (_sessions.Find(callerItemId) is not { } gui) return;
         foreach (var threadId in threadIds.Distinct(StringComparer.Ordinal))
         {
             gui.CancelQueuedCollabPrompts(threadId: threadId);
@@ -1312,12 +1187,12 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     private void CancelStaleWakeupsForPeer(string callerItemId, string peerItemId)
     {
-        if (!_guiSessions.TryGetValue(callerItemId, out var gui)) return;
+        if (_sessions.Find(callerItemId) is not { } gui) return;
         List<string> threadIds = [];
         List<string> taskIds = [];
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            foreach (var t in _tasks.Values)
+            foreach (var t in _ledger.Tasks.Values)
             {
                 if (t.CallerItemId == callerItemId
                     && t.TargetItemId == peerItemId
@@ -1327,7 +1202,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                     if (t.ThreadId is { Length: > 0 } tid) threadIds.Add(tid);
                 }
             }
-            foreach (var th in _threads.Values)
+            foreach (var th in _ledger.Threads.Values)
             {
                 if (th.ParticipantItemIds.Contains(callerItemId, StringComparer.Ordinal)
                     && th.ParticipantItemIds.Contains(peerItemId, StringComparer.Ordinal)
@@ -1362,8 +1237,8 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             return (false, null, $"Target session '{targetItemId}' is not visible in this project/group.");
         }
 
-        var callerItem = _projects.FindItem(callerItemId);
-        var targetItem = _projects.FindItem(targetItemId);
+        var callerItem = _index.FindItem(callerItemId);
+        var targetItem = _index.FindItem(targetItemId);
         if (callerItem is null || targetItem is null)
         {
             return (false, null, "Source or target session no longer exists.");
@@ -1371,13 +1246,13 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
         var callerLabel = isDirectUserRelay ? $"User (via {FormatCallerLabel(callerItem)})" : FormatCallerLabel(callerItem);
         var targetLabel = FormatCallerLabel(targetItem);
-        var defaultMaxHops = Math.Clamp(_settings.Current.Agents.Collab.MaxNegotiationHops, CollabSettings.MinNegotiationHops, CollabSettings.MaxAllowedNegotiationHops);
+        var defaultMaxHops = _policy.DefaultMaxHops;
 
         CollabThreadRecord thread;
         int round;
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            if (!string.IsNullOrWhiteSpace(threadId) && _threads.TryGetValue(threadId, out var existing))
+            if (!string.IsNullOrWhiteSpace(threadId) && _ledger.Threads.TryGetValue(threadId, out var existing))
             {
                 thread = existing;
                 if (!thread.ParticipantItemIds.Contains(callerItemId, StringComparer.Ordinal)) thread.ParticipantItemIds.Add(callerItemId);
@@ -1385,7 +1260,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             }
             else
             {
-                var newId = string.IsNullOrWhiteSpace(threadId) ? NextId("t") : threadId;
+                var newId = string.IsNullOrWhiteSpace(threadId) ? _ledger.NextId("t") : threadId;
                 thread = new CollabThreadRecord
                 {
                     ThreadId = newId,
@@ -1396,23 +1271,22 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                         ? Math.Clamp(m, CollabSettings.MinNegotiationHops, CollabSettings.MaxAllowedNegotiationHops)
                         : defaultMaxHops,
                 };
-                _threads[newId] = thread;
+                _ledger.Add(thread);
             }
 
             if (thread.Hops >= thread.MaxHops)
             {
-                thread.Status = "paused_budget";
-                TouchLocked(thread);
+                _ledger.SetThreadStatus(thread, CollabThreadStatus.PausedBudget);
                 RaiseChanged(callerItemId);
                 return (false, thread, $"Negotiation thread '{thread.ThreadId}' reached its hop budget ({thread.Hops}/{thread.MaxHops}). Ask the user to review or extend the thread.");
             }
 
             thread.Hops++;
             round = thread.Hops;
-            thread.Status = "active";
-            thread.Messages.Add(new CollabMessageRecord
+            thread.Status = CollabThreadStatus.Active;
+            _ledger.AppendMessage(thread, new CollabMessageRecord
             {
-                MessageId = NextId("msg"),
+                MessageId = _ledger.NextId("msg"),
                 ThreadId = thread.ThreadId,
                 FromItemId = isDirectUserRelay ? "user" : callerItemId,
                 FromLabel = callerLabel,
@@ -1423,29 +1297,25 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 Text = message,
                 IsUserInterjection = isDirectUserRelay,
             });
-            TouchLocked(thread);
 
-            foreach (var task in _tasks.Values)
+            foreach (var task in _ledger.Tasks.Values)
             {
                 if (task.ThreadId == thread.ThreadId && task.TargetItemId == targetItemId && task.Status == CollabTaskStatus.Completed)
                 {
-                    task.Status = CollabTaskStatus.Running;
-                    task.LatestActivity = "Follow-up sent";
-                    task.CompletedAt = null;
-                    TouchLocked(task);
+                    _ledger.SetTaskStatus(task, CollabTaskStatus.Running, "Follow-up sent");
                 }
             }
         }
 
-        var targetIsRemote = _projects.FindProjectOf(targetItemId) is { } tp && ProjectLocation.IsOnRemoteHost(tp);
-        var envelope = BuildMessageEnvelope(thread.ThreadId, callerLabel, round, thread.MaxHops, message, expectReply, targetIsRemote);
+        var targetIsRemote = _index.FindProjectOf(targetItemId) is { } tp && ProjectLocation.IsOnRemoteHost(tp);
+        var envelope = CollabEnvelope.Message(thread.ThreadId, callerLabel, round, thread.MaxHops, message, expectReply, targetIsRemote);
         var delivered = await DeliverEnvelopeAsync(targetItemId, envelope, thread.ThreadId, taskId: null, expectReply, callerItemId, ct).ConfigureAwait(false);
         if (!delivered)
         {
             return (false, thread, $"Could not deliver message to '{targetLabel}' (session not running).");
         }
 
-        SignalEventWaiters();
+        _ledger.SignalWaiters();
         RaiseChanged(callerItemId);
         RaiseChanged(targetItemId);
         return (true, thread, null);
@@ -1459,7 +1329,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         bool isImplicitFallback,
         CancellationToken ct)
     {
-        var responderItem = _projects.FindItem(responderItemId);
+        var responderItem = _index.FindItem(responderItemId);
         var responderLabel = responderItem is not null ? FormatCallerLabel(responderItem) : responderItemId;
         string? recipientId = null;
         int round;
@@ -1467,9 +1337,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         string threadTitle;
 
         var callerActivelyAwaiting = false;
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            if (!_threads.TryGetValue(threadId, out var thread))
+            if (!_ledger.Threads.TryGetValue(threadId, out var thread))
             {
                 return (false, 0, null, $"Unknown collaboration thread '{threadId}'.");
             }
@@ -1478,19 +1348,18 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 return (false, 0, null, $"You are not a participant of thread '{threadId}'.");
             }
             // Clear pending implicit expectation so an explicit reply_thread won't fire again at end_turn.
-            if (!isImplicitFallback && _pendingExpectations.TryGetValue(responderItemId, out var pending) && pending.ThreadId == threadId)
+            if (!isImplicitFallback && _ledger.Pending.TryGetValue(responderItemId, out var pending) && pending.ThreadId == threadId)
             {
-                _pendingExpectations.Remove(responderItemId);
+                _ledger.Pending.Remove(responderItemId);
             }
 
-            if (thread.Hops >= thread.MaxHops && status == "continue")
+            thread.Status = status switch
             {
-                thread.Status = "paused_budget";
-            }
-            else
-            {
-                thread.Status = status == "agreed" ? "agreed" : status == "blocked" ? "blocked" : "active";
-            }
+                "continue" when thread.Hops >= thread.MaxHops => CollabThreadStatus.PausedBudget,
+                "agreed" => CollabThreadStatus.Agreed,
+                "blocked" => CollabThreadStatus.Blocked,
+                _ => CollabThreadStatus.Active,
+            };
 
             thread.Hops++;
             round = thread.Hops;
@@ -1498,54 +1367,51 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             threadTitle = thread.Title;
             recipientId = ResolveReplyRecipientLocked(thread, responderItemId);
 
-            thread.Messages.Add(new CollabMessageRecord
+            _ledger.AppendMessage(thread, new CollabMessageRecord
             {
-                MessageId = NextId("msg"),
+                MessageId = _ledger.NextId("msg"),
                 ThreadId = threadId,
                 FromItemId = responderItemId,
                 FromLabel = responderLabel,
                 FromAgentId = responderItem?.AgentId,
                 ToItemId = recipientId,
-                ToLabel = recipientId is not null && _projects.FindItem(recipientId) is { } rec ? FormatCallerLabel(rec) : null,
+                ToLabel = recipientId is not null && _index.FindItem(recipientId) is { } rec ? FormatCallerLabel(rec) : null,
                 Round = round,
-                Text = TruncateBody(message, MaxReplySummaryChars),
+                Text = TruncateBody(message, _policy.MaxReplyChars),
                 Status = status,
             });
-            TouchLocked(thread);
 
             List<string> matchingTaskIds = [];
-            foreach (var task in _tasks.Values)
+            foreach (var task in _ledger.Tasks.Values)
             {
                 if (task.ThreadId == threadId && task.TargetItemId == responderItemId && !task.IsFinished)
                 {
-                    task.Status = status == "blocked" ? CollabTaskStatus.Failed : CollabTaskStatus.Completed;
-                    task.ResultSummary = TruncateBody(message, MaxReplySummaryChars);
-                    task.LatestActivity = isImplicitFallback
-                        ? "Turn ended (reported automatically)"
-                        : status == "agreed" ? "Agreed & completed" : "Replied to parent";
-                    task.CompletedAt = DateTimeOffset.UtcNow;
-                    TouchLocked(task);
+                    _ledger.SetTaskStatus(
+                        task,
+                        status == "blocked" ? CollabTaskStatus.Failed : CollabTaskStatus.Completed,
+                        isImplicitFallback ? "Turn ended (reported automatically)" : status == "agreed" ? "Agreed & completed" : "Replied to parent",
+                        TruncateBody(message, _policy.MaxReplyChars));
                     matchingTaskIds.Add(task.TaskId);
                 }
             }
 
             // If the recipient is already blocked in await_events watching this thread/task,
-            // SignalEventWaiters() will deliver the reply inline — skip queueing a duplicate wakeup turn.
+            // _ledger.SignalWaiters() will deliver the reply inline — skip queueing a duplicate wakeup turn.
             if (recipientId is not null)
             {
-                callerActivelyAwaiting = _eventWaiters.Any(w =>
+                callerActivelyAwaiting = _ledger.Waiters.Any(w =>
                     w.CallerItemId == recipientId && w.Matches(threadId, matchingTaskIds));
             }
         }
 
-        SignalEventWaiters();
+        _ledger.SignalWaiters();
         RaiseChanged(responderItemId);
         if (recipientId is not null) RaiseChanged(recipientId);
 
-        if (recipientId is not null && !callerActivelyAwaiting && _settings.Current.Agents.Collab.AutoWakeupCaller)
+        if (recipientId is not null && !callerActivelyAwaiting && _policy.WakeCallerOnReply)
         {
-            var wakeup = BuildWakeupEnvelope(
-                threadId, threadTitle, responderLabel, round, maxHops, status, TruncateBody(message, MaxReplySummaryChars),
+            var wakeup = CollabEnvelope.Reply(
+                threadId, threadTitle, responderLabel, round, maxHops, status, TruncateBody(message, _policy.MaxReplyChars),
                 autoReportedFromSessionId: isImplicitFallback ? responderItemId : null);
             var shouldExpectFollowUp = status == "continue" && round < maxHops;
             await DeliverEnvelopeAsync(recipientId, wakeup, threadId, taskId: null, expectReply: shouldExpectFollowUp, callerItemId: responderItemId, ct).ConfigureAwait(false);
@@ -1557,66 +1423,35 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     public void NotifyTurnCompleted(string itemId, string? finalAssistantText)
     {
         PendingExpectation? pending;
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            if (!_pendingExpectations.TryGetValue(itemId, out pending)) return;
-            _pendingExpectations.Remove(itemId);
+            if (!_ledger.Pending.TryGetValue(itemId, out pending)) return;
+            _ledger.Pending.Remove(itemId);
         }
 
         var summary = string.IsNullOrWhiteSpace(finalAssistantText)
             ? "(Target session finished its turn with no final text output.)"
-            : TruncateBody(finalAssistantText.Trim(), MaxReplySummaryChars);
+            : TruncateBody(finalAssistantText.Trim(), _policy.MaxReplyChars);
 
         if (pending.ThreadId is { } tid)
         {
-            _ = Task.Run(() => RecordReplyAndWakeAsync(itemId, tid, summary, status: "agreed", isImplicitFallback: true, CancellationToken.None));
+            _ = Task.Run(() => RecordReplyAndWakeAsync(itemId, tid, summary, status: _policy.ImplicitReplyStatus, isImplicitFallback: true, CancellationToken.None));
             return;
         }
 
         if (pending.TaskId is { } taskId)
         {
-            lock (_gate)
+            lock (_ledger.Gate)
             {
-                if (_tasks.TryGetValue(taskId, out var task) && !task.IsFinished)
+                if (_ledger.Tasks.TryGetValue(taskId, out var task) && !task.IsFinished)
                 {
-                    task.Status = CollabTaskStatus.Completed;
-                    task.ResultSummary = summary;
-                    task.LatestActivity = "Completed";
-                    task.CompletedAt = DateTimeOffset.UtcNow;
-                    TouchLocked(task);
+                    _ledger.SetTaskStatus(task, CollabTaskStatus.Completed, "Completed", summary);
                 }
             }
-            SignalEventWaiters();
+            _ledger.SignalWaiters();
             RaiseChanged(pending.CallerItemId);
             RaiseChanged(itemId);
         }
-    }
-
-    private void OnTerminalSignal(AgentSignal signal)
-    {
-        if (string.IsNullOrWhiteSpace(signal.ItemId)) return;
-        var item = _projects.FindItem(signal.ItemId);
-        if (item is null || item.Surface == AgentSurface.Gui) return;
-        var def = item.AgentId is not null ? _catalog.Find(item.AgentId) : null;
-        if (def is null) return;
-        var mapped = SignalStatusMap.Resolve(def, signal);
-        if (mapped != SignalStatus.Done) return;
-
-        PendingExpectation? pending;
-        lock (_gate)
-        {
-            if (!_pendingExpectations.TryGetValue(signal.ItemId, out pending)) return;
-        }
-        // Extract new terminal output delta after baseline and treat as implicit terminal turn completion.
-        var fullText = _terminalSessions?.Find(signal.ItemId)?.ReadText() ?? "";
-        var delta = pending.TerminalBaselineLength < fullText.Length
-            ? fullText[pending.TerminalBaselineLength..].Trim()
-            : fullText.Trim();
-        if (delta.Length > MaxReplySummaryChars)
-        {
-            delta = "…\n" + delta[^MaxReplySummaryChars..];
-        }
-        NotifyTurnCompleted(signal.ItemId, string.IsNullOrWhiteSpace(delta) ? "Terminal session reported turn completion." : delta);
     }
 
     private async Task<bool> DeliverEnvelopeAsync(
@@ -1628,77 +1463,16 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         string callerItemId,
         CancellationToken ct)
     {
-        var targetItem = _projects.FindItem(targetItemId);
-        var targetProject = _projects.FindProjectOf(targetItemId);
-        if (targetItem is null || targetProject is null) return false;
-
-        if (ProjectLocation.IsOnRemoteHost(targetProject)
-            && !await EnsureRemoteSessionAsync(targetProject, targetItem, parentItemId: null, fresh: false, ct).ConfigureAwait(false))
-        {
-            return false;
-        }
-
-        // Ensure the tab control/runtime exists if it was never opened yet.
-        if (!_guiSessions.ContainsKey(targetItemId) && targetItem.Surface == AgentSurface.Gui && !ProjectLocation.IsOnRemoteHost(targetProject))
-        {
-            await InvokeOnUiAsync(() => _tabRegistryFactory?.Invoke()?.GetOrCreate(targetProject, targetItem)).ConfigureAwait(false);
-        }
-
-        if (_guiSessions.TryGetValue(targetItemId, out var guiBridge))
-        {
-            if (expectReply)
-            {
-                lock (_gate)
-                {
-                    _pendingExpectations[targetItemId] = new PendingExpectation(callerItemId, taskId, threadId, 0, DateTimeOffset.UtcNow);
-                }
-            }
-            return await guiBridge.DeliverCollabPromptAsync(envelope, threadId, taskId, ct).ConfigureAwait(false);
-        }
-
-        // Terminal PTY bridge path.
-        if (!_settings.Current.Agents.Collab.EnableTerminalBridge || _terminalSessions is null)
-        {
-            return false;
-        }
-
-        var term = _terminalSessions.Find(targetItemId);
-        if (term is null)
-        {
-            await InvokeOnUiAsync(() => _tabRegistryFactory?.Invoke()?.GetOrCreate(targetProject, targetItem)).ConfigureAwait(false);
-            // Wait briefly for the terminal tab to attach & spawn its PTY.
-            for (var i = 0; i < 15 && term is null; i++)
-            {
-                await Task.Delay(100, ct).ConfigureAwait(false);
-                term = _terminalSessions.Find(targetItemId);
-            }
-        }
-        if (term is null || !term.IsRunning) return false;
-
-        var baselineLen = term.ReadText().Length;
+        if (_index.FindItem(targetItemId) is not { } targetItem || _index.FindProjectOf(targetItemId) is not { } targetProject) return false;
+        if (await _sessions.EnsureAsync(targetProject, targetItem, ct).ConfigureAwait(false) is not { } bridge) return false;
         if (expectReply)
         {
-            lock (_gate)
+            lock (_ledger.Gate)
             {
-                _pendingExpectations[targetItemId] = new PendingExpectation(callerItemId, taskId, threadId, baselineLen, DateTimeOffset.UtcNow);
+                _ledger.Pending[targetItemId] = new PendingExpectation(callerItemId, taskId, threadId, DateTimeOffset.UtcNow);
             }
         }
-
-        // Collapse newlines into clean single submission or wrap in bracketed paste when supported by the CLI TUI.
-        var singleBlock = envelope.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
-        var modes = term.CachedInputModes;
-        if (modes.BracketedPaste)
-        {
-            term.Send($"\x1b[200~{singleBlock}\x1b[201~");
-            await Task.Delay(60, ct).ConfigureAwait(false);
-            term.Send("\r");
-        }
-        else
-        {
-            var inline = singleBlock.Replace("\n", " ", StringComparison.Ordinal);
-            term.Send(inline + "\r");
-        }
-        return true;
+        return await bridge.DeliverCollabPromptAsync(envelope, threadId, taskId, ct).ConfigureAwait(false);
     }
 
     /* ==================== Remote Hosts ==================== */
@@ -1707,14 +1481,14 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     /// Starts <paramref name="definition"/> in a project of a paired host and follows it like a spawned child: same task,
     /// thread and wake-up, its permission cards raised here, its answer taken from the host's timeline.
     /// </summary>
-    private async Task<JsonObject> HandleRemoteDelegateAsync(
+    private async Task<JsonObject> DelegateToRemoteAsync(
         string callerItemId,
         Project project,
         AgentDefinition definition,
-        string goal,
-        JsonObject args,
+        CollabDelegateRequest request,
         CancellationToken ct)
     {
+        var goal = request.Goal;
         var remotes = RemoteHosts;
         if (remotes is null)
         {
@@ -1723,12 +1497,12 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         var hostId = project.RemoteHost!;
         var hostName = remotes.HostName(hostId);
         // The host has no plan mode or collab worktrees over the wire yet; refuse rather than silently widen access.
-        var requestedIsolation = ParseIsolation(Str(args, "isolation"));
-        if (requestedIsolation is CollabIsolationMode.Worktree or CollabIsolationMode.ReadOnly)
+        var requestedIsolation = ParseIsolation(request.Isolation);
+        if (requestedIsolation is { } wanted && !_policy.AllowsRemoteIsolation(wanted))
         {
-            return ToolError($"Delegating to {hostName} supports isolation 'shared' only for now; omit isolation or delegate locally for '{IsolationToKey(requestedIsolation.Value)}'.");
+            return ToolError($"Isolation '{IsolationToKey(wanted)}' cannot be enforced on {hostName}; omit isolation there, or delegate locally to use it.");
         }
-        var callerItem = _projects.FindItem(callerItemId);
+        var callerItem = _index.FindItem(callerItemId);
         if (callerItem is null)
         {
             return ToolError("Caller session could not be resolved.");
@@ -1748,13 +1522,12 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             return ToolError($"{hostName} runs an Octopus version without GUI conversations, so a delegate there cannot be followed. Update Octopus on that computer.");
         }
 
-        var taskId = NextId("task");
-        var threadId = NextId("t");
-        var title = Str(args, "title")?.Trim();
+        var taskId = _ledger.NextId("task");
+        var threadId = _ledger.NextId("t");
+        var title = request.Title?.Trim();
         if (string.IsNullOrWhiteSpace(title)) title = $"{definition.Name} · {TruncateTitle(goal, 28)}";
         var callerLabel = FormatCallerLabel(callerItem);
-        var prompt = BuildDelegationPrompt(taskId, threadId, callerLabel, CollabIsolationMode.Shared, null, goal, ReadStringList(args, "context_files"),
-            remoteFromHost: LocalDeviceName);
+        var prompt = CollabEnvelope.Delegation(taskId, threadId, callerLabel, goal, request.ContextFiles, fromDevice: LocalDeviceName);
 
         ItemMessage created;
         try
@@ -1764,8 +1537,8 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 ProjectId = project.RemoteId!,
                 Kind = ItemKinds.Agent,
                 AgentId = definition.Id,
-                Model = Str(args, "model"),
-                Effort = Str(args, "effort"),
+                Model = request.Model,
+                Effort = request.Effort,
                 Prompt = prompt,
                 Surface = ItemSurfaces.Gui,
                 Title = title,
@@ -1781,7 +1554,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         // Mirror the item here now (the sidebar sync would add it too, without its parent), nested under the caller.
         await InvokeOnUiAsync(() =>
         {
-            if (_projects.FindItem(created.Id) is { } mirrored)
+            if (_index.FindItem(created.Id) is { } mirrored)
             {
                 mirrored.ParentItemId = callerItemId;
                 mirrored.CollabIsolation = "shared";
@@ -1801,8 +1574,8 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             }
         }).ConfigureAwait(false);
 
-        var maxHops = Math.Clamp(_settings.Current.Agents.Collab.MaxNegotiationHops, CollabSettings.MinNegotiationHops, CollabSettings.MaxAllowedNegotiationHops);
-        lock (_gate)
+        var maxHops = _policy.DefaultMaxHops;
+        lock (_ledger.Gate)
         {
             var thread = new CollabThreadRecord
             {
@@ -1816,7 +1589,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 [
                     new CollabMessageRecord
                     {
-                        MessageId = NextId("msg"),
+                        MessageId = _ledger.NextId("msg"),
                         ThreadId = threadId,
                         FromItemId = callerItemId,
                         FromLabel = callerLabel,
@@ -1841,15 +1614,13 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 Status = CollabTaskStatus.Running,
                 LatestActivity = $"Starting {definition.Name} on {hostName}",
             };
-            _threads[threadId] = thread;
-            _tasks[taskId] = record;
-            TouchLocked(thread);
-            TouchLocked(record);
+            _ledger.Add(thread);
+            _ledger.Add(record);
             // Set before following the session, so an answer already in its first snapshot is taken as this task's.
-            _pendingExpectations[created.Id] = new PendingExpectation(callerItemId, taskId, threadId, 0, DateTimeOffset.UtcNow);
+            _ledger.Pending[created.Id] = new PendingExpectation(callerItemId, taskId, threadId, DateTimeOffset.UtcNow);
         }
 
-        var followed = await StartRemoteSessionAsync(host, hostName, project, created.Id, definition.Id, title, callerItemId, fresh: true, ct).ConfigureAwait(false);
+        var followed = await _remoteProvider.FollowAsync(host, hostName, project, created.Id, definition.Id, title, callerItemId, fresh: true, ct).ConfigureAwait(false);
         if (!followed)
         {
             AbortTasksForTarget(created.Id, $"Started {definition.Name} on {hostName}, but could not follow its conversation; check it on that computer.", failed: true, allOpenTasks: false, wakeCaller: false);
@@ -1878,76 +1649,17 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         return ToolOk(response);
     }
 
-    /// <summary>Follows an existing session on a paired host (to message it or read it), unless already followed.</summary>
-    private async Task<bool> EnsureRemoteSessionAsync(Project project, ProjectItem item, string? parentItemId, bool fresh, CancellationToken ct)
-    {
-        if (_remoteSessions.ContainsKey(item.Id)) return true;
-        if (RemoteHosts is not { } remotes || project.RemoteHost is not { Length: > 0 } hostId) return false;
-        ICollabRemoteHost host;
-        try
-        {
-            host = await remotes.ConnectAsync(hostId, ct).ConfigureAwait(false);
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            return false;
-        }
-        if (!host.SupportsAcpGui) return false;
-        return await StartRemoteSessionAsync(host, remotes.HostName(hostId), project, item.Id, item.AgentId ?? "terminal", item.DisplayTitle, parentItemId ?? item.ParentItemId, fresh, ct).ConfigureAwait(false);
-    }
-
-    private async Task<bool> StartRemoteSessionAsync(
-        ICollabRemoteHost host,
-        string hostName,
-        Project project,
-        string itemId,
-        string agentId,
-        string title,
-        string? parentItemId,
-        bool fresh,
-        CancellationToken ct)
-    {
-        var session = new RemoteCollabSession(host, hostName, itemId, agentId, title, $"{hostName}:{project.Path}", parentItemId, fresh, this, closed =>
-        {
-            if (_remoteSessions.TryRemove(new KeyValuePair<string, RemoteCollabSession>(closed.ItemId, closed)))
-            {
-                _guiSessions.TryRemove(new KeyValuePair<string, ICollabSessionBridge>(closed.ItemId, closed));
-                closed.Dispose();
-                RaiseChanged(closed.ItemId);
-            }
-        });
-        if (!_remoteSessions.TryAdd(itemId, session))
-        {
-            session.Dispose();
-            return true; // followed concurrently
-        }
-        _guiSessions[itemId] = session;
-        try
-        {
-            await session.StartAsync(ct).ConfigureAwait(false);
-            return true;
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            // A terminal item has no conversation to follow; a vanished one neither.
-            _remoteSessions.TryRemove(itemId, out _);
-            _guiSessions.TryRemove(new KeyValuePair<string, ICollabSessionBridge>(itemId, session));
-            session.Dispose();
-            return false;
-        }
-    }
-
     /* ==================== Cancellation & Aborted Turns ==================== */
 
     public void NotifyTurnAborted(string itemId, string reason, bool failed, DateTimeOffset? cancelDelegationsSince = null)
     {
         AbortTasksForTarget(itemId, reason, failed, allOpenTasks: false, wakeCaller: true);
 
-        if (cancelDelegationsSince is not { } since) return;
+        if (cancelDelegationsSince is not { } since || !_policy.CancelDelegationsWhenStopped) return;
         List<string> delegated;
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            delegated = _tasks.Values
+            delegated = _ledger.Tasks.Values
                 .Where(t => t.CallerItemId == itemId && !t.IsFinished && t.CreatedAt >= since)
                 .Select(t => t.TaskId)
                 .ToList();
@@ -1972,27 +1684,23 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     private void AbortTasksForTarget(string targetItemId, string reason, bool failed, bool allOpenTasks, bool wakeCaller)
     {
         var newStatus = failed ? CollabTaskStatus.Failed : CollabTaskStatus.Cancelled;
-        var threadStatus = failed ? "blocked" : "cancelled";
+        var threadStatus = failed ? CollabThreadStatus.Blocked : CollabThreadStatus.Cancelled;
         List<(string CallerId, string? ThreadId, string Title, int Round, int MaxHops, bool Awaiting)> notify = [];
-        var responderLabel = _projects.FindItem(targetItemId) is { } responder ? FormatCallerLabel(responder) : targetItemId;
+        var responderLabel = _index.FindItem(targetItemId) is { } responder ? FormatCallerLabel(responder) : targetItemId;
 
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            _pendingExpectations.Remove(targetItemId, out var pending);
+            _ledger.Pending.Remove(targetItemId, out var pending);
             if (pending is null && !allOpenTasks) return;
 
-            foreach (var task in _tasks.Values)
+            foreach (var task in _ledger.Tasks.Values)
             {
                 if (task.TargetItemId != targetItemId || task.IsFinished) continue;
                 var owed = allOpenTasks
                     || (pending!.TaskId is not null && task.TaskId == pending.TaskId)
                     || (pending!.ThreadId is not null && task.ThreadId == pending.ThreadId);
                 if (!owed) continue;
-                task.Status = newStatus;
-                task.LatestActivity = failed ? "Failed" : "Stopped";
-                task.ResultSummary = reason;
-                task.CompletedAt = DateTimeOffset.UtcNow;
-                TouchLocked(task);
+                _ledger.SetTaskStatus(task, newStatus, failed ? "Failed" : "Stopped", reason);
             }
 
             // Close the thread(s) the target owed a reply on, recording why, so the other side sees the outcome.
@@ -2000,43 +1708,42 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             if (pending?.ThreadId is { } pendingThread) threadIds.Add(pendingThread);
             if (allOpenTasks)
             {
-                foreach (var th in _threads.Values)
+                foreach (var th in _ledger.Threads.Values)
                 {
                     if (!th.IsClosed && th.ParticipantItemIds.Contains(targetItemId, StringComparer.Ordinal)) threadIds.Add(th.ThreadId);
                 }
             }
             foreach (var threadId in threadIds)
             {
-                if (!_threads.TryGetValue(threadId, out var thread) || thread.IsClosed) continue;
+                if (!_ledger.Threads.TryGetValue(threadId, out var thread) || thread.IsClosed) continue;
                 var callerId = pending?.ThreadId == threadId ? pending.CallerItemId : ResolveReplyRecipientLocked(thread, targetItemId);
                 thread.Status = threadStatus;
-                thread.Messages.Add(new CollabMessageRecord
+                _ledger.AppendMessage(thread, new CollabMessageRecord
                 {
-                    MessageId = NextId("msg"),
+                    MessageId = _ledger.NextId("msg"),
                     ThreadId = threadId,
                     FromItemId = targetItemId,
                     FromLabel = responderLabel,
                     ToItemId = callerId,
                     Round = thread.Hops,
                     Text = reason,
-                    Status = threadStatus,
+                    Status = threadStatus.ToKey(),
                 });
-                TouchLocked(thread);
                 if (callerId is not null && callerId != "user")
                 {
-                    var awaiting = _eventWaiters.Any(w => w.CallerItemId == callerId && w.Matches(threadId, []));
+                    var awaiting = _ledger.Waiters.Any(w => w.CallerItemId == callerId && w.Matches(threadId, []));
                     notify.Add((callerId, threadId, thread.Title, thread.Hops, thread.MaxHops, awaiting));
                 }
             }
         }
 
-        SignalEventWaiters();
+        _ledger.SignalWaiters();
         RaiseChanged(targetItemId);
         foreach (var n in notify)
         {
             RaiseChanged(n.CallerId);
-            if (!wakeCaller || n.Awaiting || !_settings.Current.Agents.Collab.AutoWakeupCaller) continue;
-            var envelope = BuildWakeupEnvelope(n.ThreadId!, n.Title, responderLabel, n.Round, n.MaxHops, threadStatus, reason);
+            if (!wakeCaller || n.Awaiting || !_policy.WakeCallerOnReply) continue;
+            var envelope = CollabEnvelope.Reply(n.ThreadId!, n.Title, responderLabel, n.Round, n.MaxHops, threadStatus.ToKey(), reason);
             _ = Task.Run(() => DeliverEnvelopeAsync(n.CallerId, envelope, n.ThreadId, taskId: null, expectReply: false, callerItemId: targetItemId, CancellationToken.None));
         }
     }
@@ -2058,33 +1765,28 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             CollabTaskRecord task;
             bool interrupt;
             List<string> nested;
-            lock (_gate)
+            lock (_ledger.Gate)
             {
-                if (!_tasks.TryGetValue(next.TaskId, out var found) || found.IsFinished) continue;
+                if (!_ledger.Tasks.TryGetValue(next.TaskId, out var found) || found.IsFinished) continue;
                 task = found;
-                task.Status = CollabTaskStatus.Cancelled;
-                task.LatestActivity = "Cancelled";
-                task.ResultSummary = next.Reason;
-                task.CompletedAt = DateTimeOffset.UtcNow;
-                TouchLocked(task);
+                _ledger.SetTaskStatus(task, CollabTaskStatus.Cancelled, "Cancelled", next.Reason);
 
-                var wasOwed = _pendingExpectations.TryGetValue(task.TargetItemId, out var pending)
+                var wasOwed = _ledger.Pending.TryGetValue(task.TargetItemId, out var pending)
                     && ((pending.TaskId is not null && pending.TaskId == task.TaskId)
                         || (pending.ThreadId is not null && pending.ThreadId == task.ThreadId));
-                if (wasOwed) _pendingExpectations.Remove(task.TargetItemId);
+                if (wasOwed) _ledger.Pending.Remove(task.TargetItemId);
 
-                if (task.ThreadId is { } tid && _threads.TryGetValue(tid, out var thread) && !thread.IsClosed)
+                if (task.ThreadId is { } tid && _ledger.Threads.TryGetValue(tid, out var thread) && !thread.IsClosed)
                 {
-                    thread.Status = "cancelled";
-                    TouchLocked(thread);
+                    _ledger.SetThreadStatus(thread, CollabThreadStatus.Cancelled);
                 }
 
                 // A spawned child exists only for this task: stop it and everything it delegated. A pre-existing session
                 // that was merely asked something is only interrupted if it is still working on that request.
-                var isDedicatedChild = _projects.FindItem(task.TargetItemId)?.ParentItemId == task.CallerItemId;
+                var isDedicatedChild = _index.FindItem(task.TargetItemId)?.ParentItemId == task.CallerItemId;
                 interrupt = wasOwed || isDedicatedChild;
                 nested = isDedicatedChild
-                    ? _tasks.Values.Where(t => t.CallerItemId == task.TargetItemId && !t.IsFinished).Select(t => t.TaskId).ToList()
+                    ? _ledger.Tasks.Values.Where(t => t.CallerItemId == task.TargetItemId && !t.IsFinished).Select(t => t.TaskId).ToList()
                     : [];
             }
 
@@ -2096,36 +1798,25 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             RaiseChanged(task.TargetItemId);
         }
 
-        if (count > 0) SignalEventWaiters();
+        if (count > 0) _ledger.SignalWaiters();
         return count;
     }
 
     private void StopDelegate(CollabTaskRecord task, bool interrupt)
     {
-        if (_guiSessions.TryGetValue(task.TargetItemId, out var gui))
+        if (_index.FindItem(task.TargetItemId) is not { } item || _index.FindProjectOf(task.TargetItemId) is not { } project) return;
+        if (_sessions.TryAttach(project, item) is not { } bridge) return;
+        bridge.CancelQueuedCollabPrompts(task.ThreadId, task.TaskId);
+        if (!interrupt) return;
+        // Don't wait out the agent's cancel grace period inside an MCP call.
+        _ = Task.Run(async () =>
         {
-            gui.CancelQueuedCollabPrompts(task.ThreadId, task.TaskId);
-            if (interrupt)
-            {
-                // Don't wait out the agent's cancel grace period inside an MCP call.
-                _ = Task.Run(async () =>
-                {
-                    try { await gui.CancelActiveTurnAsync().ConfigureAwait(false); }
-                    catch { /* best effort */ }
-                }, CancellationToken.None);
-            }
-            return;
-        }
-        if (interrupt && _terminalSessions?.Find(task.TargetItemId) is { IsRunning: true } term)
-        {
-            // Esc interrupts the running turn in Claude Code and Codex CLI without quitting the TUI.
-            term.Send("\x1b");
-        }
+            try { await bridge.CancelActiveTurnAsync().ConfigureAwait(false); }
+            catch { /* best effort */ }
+        }, CancellationToken.None);
     }
 
-    /* ==================== Persistence ==================== */
-
-    private bool _dirty;
+    /* ==================== Helpers ==================== */
 
     /// <summary>
     /// Who a reply on <paramref name="thread"/> from <paramref name="responderItemId"/> goes to: the session that last wrote
@@ -2149,272 +1840,21 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         return thread.ParticipantItemIds.FirstOrDefault(id => id != responderItemId);
     }
 
-    private void TouchLocked(CollabTaskRecord task)
-    {
-        task.UpdatedSeq = ++_eventSeq;
-        _dirty = true;
-    }
-
-    private void TouchLocked(CollabThreadRecord thread)
-    {
-        thread.UpdatedSeq = ++_eventSeq;
-        thread.UpdatedAt = DateTimeOffset.UtcNow;
-        _dirty = true;
-    }
-
-    private void SchedulePersist()
-    {
-        if (_store is null || _disposed) return;
-        lock (_gate)
-        {
-            if (!_dirty) return;
-            _persistTimer ??= new Timer(_ => FlushPersist(), null, Timeout.Infinite, Timeout.Infinite);
-            _persistTimer.Change(PersistDebounceMs, Timeout.Infinite);
-        }
-    }
-
-    private void FlushPersist()
-    {
-        if (_store is null) return;
-        string json;
-        lock (_gate)
-        {
-            if (!_dirty) return;
-            _dirty = false;
-            json = SerializeStateLocked().ToJsonString(ToolJsonOptions);
-        }
-        _store.Save(json);
-    }
-
-    private JsonObject SerializeStateLocked()
-    {
-        var cutoff = DateTimeOffset.UtcNow - PersistRetention;
-        var tasks = _tasks.Values
-            .Where(t => !t.IsFinished || (t.CompletedAt ?? t.CreatedAt) >= cutoff)
-            .OrderByDescending(t => t.CreatedAt)
-            .Take(MaxPersistedTasks)
-            .ToList();
-        var threads = _threads.Values
-            .Where(t => t.UpdatedAt >= cutoff)
-            .OrderByDescending(t => t.UpdatedAt)
-            .Take(MaxPersistedThreads)
-            .ToList();
-        var keptIds = new HashSet<string>(tasks.Select(t => t.TaskId).Concat(threads.Select(t => t.ThreadId)), StringComparer.Ordinal);
-
-        var tasksArr = new JsonArray();
-        foreach (var t in tasks)
-        {
-            tasksArr.Add((JsonNode)new JsonObject
-            {
-                ["task_id"] = t.TaskId,
-                ["caller"] = t.CallerItemId,
-                ["target"] = t.TargetItemId,
-                ["agent"] = t.TargetAgentId,
-                ["title"] = t.Title,
-                ["goal"] = t.Goal,
-                ["isolation"] = IsolationToKey(t.Isolation),
-                ["worktree_branch"] = t.WorktreeBranch,
-                ["worktree_path"] = t.WorktreePath,
-                ["thread_id"] = t.ThreadId,
-                ["status"] = t.Status.ToString(),
-                ["activity"] = t.LatestActivity,
-                ["result"] = t.ResultSummary,
-                ["created"] = t.CreatedAt,
-                ["completed"] = t.CompletedAt,
-                ["seq"] = t.UpdatedSeq,
-            });
-        }
-
-        var threadsArr = new JsonArray();
-        foreach (var th in threads)
-        {
-            var participants = new JsonArray();
-            foreach (var p in th.ParticipantItemIds) participants.Add((JsonNode)JsonValue.Create(p));
-            var messages = new JsonArray();
-            foreach (var m in th.Messages.Skip(Math.Max(0, th.Messages.Count - MaxPersistedMessagesPerThread)))
-            {
-                messages.Add((JsonNode)new JsonObject
-                {
-                    ["id"] = m.MessageId,
-                    ["from"] = m.FromItemId,
-                    ["from_label"] = m.FromLabel,
-                    ["from_agent"] = m.FromAgentId,
-                    ["to"] = m.ToItemId,
-                    ["to_label"] = m.ToLabel,
-                    ["round"] = m.Round,
-                    ["text"] = m.Text,
-                    ["status"] = m.Status,
-                    ["user"] = m.IsUserInterjection,
-                    ["at"] = m.Timestamp,
-                });
-            }
-            threadsArr.Add((JsonNode)new JsonObject
-            {
-                ["thread_id"] = th.ThreadId,
-                ["title"] = th.Title,
-                ["initiator"] = th.InitiatorItemId,
-                ["participants"] = participants,
-                ["hops"] = th.Hops,
-                ["max_hops"] = th.MaxHops,
-                ["status"] = th.Status,
-                ["updated"] = th.UpdatedAt,
-                ["seq"] = th.UpdatedSeq,
-                ["messages"] = messages,
-            });
-        }
-
-        var seenObj = new JsonObject();
-        foreach (var (caller, map) in _seen)
-        {
-            var entries = new JsonObject();
-            foreach (var (id, seq) in map)
-            {
-                if (keptIds.Contains(id)) entries[id] = seq;
-            }
-            if (entries.Count > 0) seenObj[caller] = entries;
-        }
-
-        return new JsonObject
-        {
-            ["version"] = 1,
-            ["id_seq"] = _seq,
-            ["event_seq"] = _eventSeq,
-            ["tasks"] = tasksArr,
-            ["threads"] = threadsArr,
-            ["seen"] = seenObj,
-        };
-    }
-
-    /// <summary>
-    /// Loads the persisted ledger. Nothing that was running survives a restart (agent turns are not resumed), so open tasks
-    /// become cancelled and open threads interrupted, with a new sequence so each delegator is told once.
-    /// </summary>
-    private void RestoreState()
-    {
-        if (_store?.Load() is not { } doc) return;
-        try
-        {
-            lock (_gate)
-            {
-                _seq = Math.Max(_seq, doc["id_seq"]?.GetValue<int>() ?? 0);
-                _eventSeq = Math.Max(_eventSeq, doc["event_seq"]?.GetValue<long>() ?? 0);
-
-                foreach (var node in doc["tasks"] as JsonArray ?? [])
-                {
-                    if (node is not JsonObject o || o["task_id"]?.GetValue<string>() is not { Length: > 0 } taskId) continue;
-                    var task = new CollabTaskRecord
-                    {
-                        TaskId = taskId,
-                        CallerItemId = o["caller"]?.GetValue<string>() ?? "",
-                        TargetItemId = o["target"]?.GetValue<string>() ?? "",
-                        TargetAgentId = o["agent"]?.GetValue<string>() ?? "",
-                        Title = o["title"]?.GetValue<string>() ?? taskId,
-                        Goal = o["goal"]?.GetValue<string>() ?? "",
-                        Isolation = ParseIsolation(o["isolation"]?.GetValue<string>()) ?? CollabIsolationMode.Shared,
-                        WorktreeBranch = o["worktree_branch"]?.GetValue<string>(),
-                        WorktreePath = o["worktree_path"]?.GetValue<string>(),
-                        ThreadId = o["thread_id"]?.GetValue<string>(),
-                        Status = Enum.TryParse<CollabTaskStatus>(o["status"]?.GetValue<string>(), out var st) ? st : CollabTaskStatus.Cancelled,
-                        LatestActivity = o["activity"]?.GetValue<string>(),
-                        ResultSummary = o["result"]?.GetValue<string>(),
-                        CreatedAt = o["created"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UtcNow,
-                        CompletedAt = o["completed"]?.GetValue<DateTimeOffset>(),
-                        UpdatedSeq = o["seq"]?.GetValue<long>() ?? 0,
-                    };
-                    if (!task.IsFinished)
-                    {
-                        task.Status = CollabTaskStatus.Cancelled;
-                        task.LatestActivity = "Interrupted by restart";
-                        task.ResultSummary = "Octopus restarted before this task finished; the delegate's turn was not resumed. Delegate it again if it is still needed.";
-                        task.CompletedAt = DateTimeOffset.UtcNow;
-                        TouchLocked(task);
-                    }
-                    _tasks[taskId] = task;
-                }
-
-                foreach (var node in doc["threads"] as JsonArray ?? [])
-                {
-                    if (node is not JsonObject o || o["thread_id"]?.GetValue<string>() is not { Length: > 0 } threadId) continue;
-                    var thread = new CollabThreadRecord
-                    {
-                        ThreadId = threadId,
-                        Title = o["title"]?.GetValue<string>() ?? threadId,
-                        InitiatorItemId = o["initiator"]?.GetValue<string>() ?? "",
-                        ParticipantItemIds = (o["participants"] as JsonArray ?? []).Select(n => n?.GetValue<string>()).OfType<string>().ToList(),
-                        Hops = o["hops"]?.GetValue<int>() ?? 0,
-                        MaxHops = o["max_hops"]?.GetValue<int>() ?? CollabSettings.DefaultMaxNegotiationHops,
-                        Status = o["status"]?.GetValue<string>() ?? "interrupted",
-                        UpdatedAt = o["updated"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UtcNow,
-                        UpdatedSeq = o["seq"]?.GetValue<long>() ?? 0,
-                    };
-                    foreach (var mn in o["messages"] as JsonArray ?? [])
-                    {
-                        if (mn is not JsonObject m) continue;
-                        thread.Messages.Add(new CollabMessageRecord
-                        {
-                            MessageId = m["id"]?.GetValue<string>() ?? "",
-                            ThreadId = threadId,
-                            FromItemId = m["from"]?.GetValue<string>() ?? "",
-                            FromLabel = m["from_label"]?.GetValue<string>() ?? "",
-                            FromAgentId = m["from_agent"]?.GetValue<string>(),
-                            ToItemId = m["to"]?.GetValue<string>(),
-                            ToLabel = m["to_label"]?.GetValue<string>(),
-                            Round = m["round"]?.GetValue<int>() ?? 0,
-                            Text = m["text"]?.GetValue<string>() ?? "",
-                            Status = m["status"]?.GetValue<string>() ?? "continue",
-                            IsUserInterjection = m["user"]?.GetValue<bool>() ?? false,
-                            Timestamp = m["at"]?.GetValue<DateTimeOffset>() ?? DateTimeOffset.UtcNow,
-                        });
-                    }
-                    if (thread.Status is "active")
-                    {
-                        thread.Status = "interrupted";
-                        TouchLocked(thread);
-                    }
-                    _threads[threadId] = thread;
-                }
-
-                foreach (var (caller, node) in doc["seen"] as JsonObject ?? [])
-                {
-                    if (node is not JsonObject entries) continue;
-                    var map = new Dictionary<string, long>(StringComparer.Ordinal);
-                    foreach (var (id, seq) in entries)
-                    {
-                        if (seq is JsonValue v && v.TryGetValue<long>(out var n)) map[id] = n;
-                    }
-                    _seen[caller] = map;
-                }
-            }
-        }
-        catch (Exception e) when (e is InvalidOperationException or FormatException or System.Text.Json.JsonException)
-        {
-            // A damaged ledger must not keep the app from starting; start empty and overwrite it on the next change.
-            lock (_gate)
-            {
-                _tasks.Clear();
-                _threads.Clear();
-                _seen.Clear();
-            }
-        }
-        SchedulePersist();
-    }
-
-    /* ==================== Helpers ==================== */
 
     private IReadOnlyList<Project> ResolveVisibleProjects(string callerItemId, string scope)
     {
-        var current = _projects.FindProjectOf(callerItemId) ?? _projects.Current;
+        var current = _index.FindProjectOf(callerItemId) ?? _index.Current;
         if (current is null) return [];
         if (string.Equals(scope, "project", StringComparison.OrdinalIgnoreCase) || current.GroupId is null)
         {
             return [current];
         }
-        var group = _projects.Groups.FirstOrDefault(g => g.Id == current.GroupId);
+        var group = _index.Groups.FirstOrDefault(g => g.Id == current.GroupId);
         if (group is null || !group.MergeWorkspaces)
         {
             return [current];
         }
-        return _projects.Projects
+        return _index.Projects
             .Where(p => p.GroupId == group.Id && ProjectLocation.IsOnThisComputer(p))
             .ToList();
     }
@@ -2422,30 +1862,31 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     private bool IsPeerVisible(string callerItemId, string targetItemId)
     {
         var visibleProjects = ResolveVisibleProjects(callerItemId, "group");
-        return visibleProjects.Any(p => p.Items.Any(i => i.Id == targetItemId))
-            || VisibleRemoteProjects().Any(p => p.Items.Any(i => i.Id == targetItemId));
+        // One lookup instead of scanning every visible project's items.
+        return _index.FindProjectOf(targetItemId) is { } owner
+            && (visibleProjects.Contains(owner) || VisibleRemoteProjects().Contains(owner));
     }
 
     private int ComputeDelegationDepth(string itemId)
     {
         var depth = 0;
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var cur = _projects.FindItem(itemId);
+        var cur = _index.FindItem(itemId);
         while (cur?.ParentItemId is { Length: > 0 } parentId && seen.Add(parentId) && depth < 16)
         {
             depth++;
-            cur = _projects.FindItem(parentId);
+            cur = _index.FindItem(parentId);
         }
         return depth;
     }
 
     private string DescribeStatus(string itemId)
     {
-        if (_guiSessions.TryGetValue(itemId, out var gui))
+        if (_sessions.Find(itemId) is { } gui)
         {
-            lock (_gate)
+            lock (_ledger.Gate)
             {
-                if (_childApprovals.TryGetValue(itemId, out var apr) && !apr.IsResolved) return "waiting_approval";
+                if (_ledger.Approvals.Any(kv => kv.Key.Child == itemId && !kv.Value.IsResolved)) return "waiting_approval";
             }
             return gui.IsBusy ? "working" : (gui.IsConnected ? "idle" : "disconnected");
         }
@@ -2461,40 +1902,29 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
     private string? BuildOneLineSummary(string itemId)
     {
-        lock (_gate)
+        lock (_ledger.Gate)
         {
-            var task = _tasks.Values.LastOrDefault(t => t.TargetItemId == itemId);
+            var task = _ledger.Tasks.Values.LastOrDefault(t => t.TargetItemId == itemId);
             if (!string.IsNullOrWhiteSpace(task?.LatestActivity)) return task.LatestActivity;
         }
-        if (_guiSessions.TryGetValue(itemId, out var gui) && !string.IsNullOrWhiteSpace(gui.CurrentStatusDetail))
+        if (_sessions.Find(itemId) is { } gui && !string.IsNullOrWhiteSpace(gui.CurrentStatusDetail))
         {
             return gui.CurrentStatusDetail;
         }
         return null;
     }
 
-    private string ReadSessionContent(ProjectItem item, int maxTurns)
-    {
-        if (_guiSessions.TryGetValue(item.Id, out var gui))
-        {
-            return gui.ReadRecentSummary(maxTurns);
-        }
-        if (_terminalSessions?.Find(item.Id) is { } term)
-        {
-            var text = term.ReadText().Trim();
-            if (text.Length == 0) return "(Terminal buffer is currently empty.)";
-            return text.Length > MaxTerminalReadChars ? "…\n" + text[^MaxTerminalReadChars..] : text;
-        }
-        return "(Session is not active in memory yet.)";
-    }
+    private string ReadSessionContent(ProjectItem item, int maxTurns) =>
+        _index.FindProjectOf(item.Id) is { } project && _sessions.TryAttach(project, item) is { } bridge
+            ? bridge.ReadRecentSummary(maxTurns)
+            : "(Session is not active in memory yet.)";
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
-        if (e.Kind == ProjectChangeKind.Items && e.Item is { } removed && _projects.FindItem(removed.Id) is null)
+        if (e.Kind == ProjectChangeKind.Items && e.Item is { } removed && _index.FindItem(removed.Id) is null)
         {
             _cliInjector?.CleanupItem(removed.Id);
-            _guiSessions.TryRemove(removed.Id, out _);
-            if (_remoteSessions.TryRemove(removed.Id, out var remoteSession)) remoteSession.Dispose();
+            _sessions.Remove(removed.Id);
             ClearChildApproval(removed.Id);
             // A removed session can never answer: settle every open task it owed, so its delegator stops waiting on it.
             AbortTasksForTarget(removed.Id, "The delegate session was removed before it answered.", failed: false, allOpenTasks: true, wakeCaller: false);
@@ -2510,199 +1940,22 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             : $"{agent} · {item.DisplayTitle}";
         // A session on another computer says where it runs, in every envelope and thread that names it. Read from the
         // sessions followed here (thread-safe) rather than by walking the projects, which belong to the UI thread.
-        return _remoteSessions.TryGetValue(item.Id, out var remote) ? $"{label} @ {remote.HostName}" : label;
+        return _sessions.Find(item.Id) is RemoteCollabSession remote ? $"{label} @ {remote.HostName}" : label;
     }
 
-    private static string BuildDelegationPrompt(
-        string taskId,
-        string threadId,
-        string callerLabel,
-        CollabIsolationMode isolation,
-        string? worktreeBranch,
-        string goal,
-        IReadOnlyList<string> contextFiles,
-        string? remoteFromHost = null)
-    {
-        var sb = new StringBuilder();
-        sb.Append("[Octopus Collab Task #").Append(taskId)
-          .Append(" · Thread #").Append(threadId)
-          .Append(" · Delegated by @").Append(callerLabel);
-        if (remoteFromHost is not null)
-        {
-            sb.Append(" · From device ").Append(remoteFromHost);
-        }
-        if (worktreeBranch is not null)
-        {
-            sb.Append(" · Git Worktree: ").Append(worktreeBranch);
-        }
-        else if (isolation == CollabIsolationMode.ReadOnly)
-        {
-            sb.Append(" · Read-Only Mode");
-        }
-        sb.AppendLine("]");
-        sb.AppendLine(goal.Trim());
-        if (contextFiles.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("Relevant files:");
-            foreach (var f in contextFiles) sb.Append("- ").AppendLine(f);
-        }
-        sb.AppendLine();
-        if (remoteFromHost is not null)
-        {
-            // The thread lives on the delegating computer; this host's octopus-collab tools cannot reach it.
-            sb.Append("When finished (or if you need clarification from the delegating agent), conclude with a concise summary or your question. ")
-              .Append("This task was delegated from another computer (").Append(remoteFromHost)
-              .Append("); Octopus reports your final response back automatically. Do not call reply_thread for this thread.");
-            return sb.ToString();
-        }
-        sb.Append("When finished (or if you need clarification from the delegating agent), either call `reply_thread(thread_id=\"")
-          .Append(threadId)
-          .Append("\", message=..., status=\"agreed\"|\"continue\")` or simply conclude with a concise summary — Octopus will automatically report your final response back.");
-        return sb.ToString();
-    }
-
-    private static string BuildMessageEnvelope(string threadId, string senderLabel, int round, int maxHops, string message, bool expectReply, bool toRemote = false)
-    {
-        var sb = new StringBuilder();
-        sb.Append("[Octopus Collab · From @").Append(senderLabel)
-          .Append(" · Thread #").Append(threadId)
-          .Append(" · Round ").Append(round).Append('/').Append(maxHops).AppendLine("]");
-        sb.AppendLine(message.Trim());
-        if (expectReply && toRemote)
-        {
-            sb.AppendLine();
-            sb.Append("(This message comes from another computer: conclude this turn with your answer and Octopus relays it back automatically; reply_thread cannot reach this thread.)");
-        }
-        else if (expectReply)
-        {
-            sb.AppendLine();
-            sb.Append("(Reply via `reply_thread(thread_id=\"").Append(threadId)
-              .Append("\", message=..., status=\"continue\"|\"agreed\")` or conclude this turn with your answer for automatic relay.)");
-        }
-        return sb.ToString();
-    }
-
-    private static string BuildWakeupEnvelope(
-        string threadId,
-        string threadTitle,
-        string responderLabel,
-        int round,
-        int maxHops,
-        string status,
-        string message,
-        string? autoReportedFromSessionId = null)
-    {
-        var sb = new StringBuilder();
-        sb.Append("[Octopus Collab Reply · From @").Append(responderLabel)
-          .Append(" · Thread #").Append(threadId).Append(" (").Append(threadTitle).Append(')')
-          .Append(" · Round ").Append(round).Append('/').Append(maxHops)
-          .Append(" · Status: ").Append(status).AppendLine("]");
-        sb.AppendLine(message);
-        if (status == "agreed" && autoReportedFromSessionId is not null)
-        {
-            // An implicit report is the delegate's last message, which may be a question rather than a deliverable.
-            sb.AppendLine();
-            sb.Append("(The other session marked this thread as agreed/completed; this was reported automatically when its turn ended. ")
-              .Append("If it is actually asking you something, answer with `send_message(target_session_id=\"").Append(autoReportedFromSessionId)
-              .Append("\", thread_id=\"").Append(threadId).Append("\", message=...)` and its task reopens; otherwise summarize or integrate the result for the user.)");
-        }
-        else if (status == "agreed")
-        {
-            sb.AppendLine();
-            sb.Append("(The other session marked this thread as agreed/completed; summarize or integrate the result for the user unless further work is needed.)");
-        }
-        return sb.ToString();
-    }
-
-    private static string FormatTaskBody(string taskId, string goal, IReadOnlyList<string> contextFiles)
-    {
-        var sb = new StringBuilder();
-        sb.Append("[Task #").Append(taskId).AppendLine("]");
-        sb.AppendLine(goal.Trim());
-        if (contextFiles.Count > 0)
-        {
-            sb.AppendLine("Relevant files: " + string.Join(", ", contextFiles));
-        }
-        return sb.ToString();
-    }
-
-    private static Task InvokeOnUiAsync(Action action)
-    {
-        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
-        {
-            action();
-            return Task.CompletedTask;
-        }
-        return Dispatcher.UIThread.InvokeAsync(action).GetTask();
-    }
-
-    private void SignalEventWaiters()
-    {
-        List<EventWaiter> copy;
-        lock (_gate)
-        {
-            if (_eventWaiters.Count == 0) return;
-            copy = [.. _eventWaiters];
-        }
-        foreach (var w in copy) w.Tcs.TrySetResult(true);
-    }
+    private static Task InvokeOnUiAsync(Action action) => CollabUi.InvokeAsync(action);
 
     private void RaiseChanged(string? itemId)
     {
-        SchedulePersist();
+        _ledger.SchedulePersist();
         Changed?.Invoke(itemId);
     }
 
-    private string NextId(string prefix) => $"{prefix}_{Interlocked.Increment(ref _seq)}_{Guid.NewGuid().ToString("N")[..4]}";
+    private static JsonObject ToolOk(JsonObject payload) => CollabToolResult.Ok(payload);
 
-    private static JsonObject ToolOk(JsonObject payload) => new()
-    {
-        ["content"] = new JsonArray
-        {
-            (JsonNode)new JsonObject
-            {
-                ["type"] = "text",
-                ["text"] = payload.ToJsonString(ToolJsonOptions),
-            },
-        },
-    };
+    private static JsonObject ToolError(string message) => CollabToolResult.Error(message);
 
-    private static JsonObject ToolError(string message) => new()
-    {
-        ["isError"] = true,
-        ["content"] = new JsonArray
-        {
-            (JsonNode)new JsonObject { ["type"] = "text", ["text"] = message },
-        },
-    };
-
-    private static string? Str(JsonObject? obj, string key) =>
-        obj is not null && obj.TryGetPropertyValue(key, out var node) && node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
-
-    private static int? Int(JsonObject? obj, string key) =>
-        obj is not null && obj.TryGetPropertyValue(key, out var node) && node is JsonValue v && v.TryGetValue<int>(out var n) ? n : null;
-
-    private static bool? Bool(JsonObject? obj, string key) =>
-        obj is not null && obj.TryGetPropertyValue(key, out var node) && node is JsonValue v && v.TryGetValue<bool>(out var b) ? b : null;
-
-    private static List<string> ReadStringList(JsonObject? obj, string key)
-    {
-        var list = new List<string>();
-        if (obj is not null && obj.TryGetPropertyValue(key, out var node) && node is JsonArray arr)
-        {
-            foreach (var item in arr)
-            {
-                if (item is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s))
-                {
-                    list.Add(s.Trim());
-                }
-            }
-        }
-        return list;
-    }
-
-    private static CollabIsolationMode? ParseIsolation(string? raw) => raw?.Trim().ToLowerInvariant() switch
+    internal static CollabIsolationMode? ParseIsolation(string? raw) => raw?.Trim().ToLowerInvariant() switch
     {
         "shared" => CollabIsolationMode.Shared,
         "worktree" => CollabIsolationMode.Worktree,
@@ -2744,11 +1997,9 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         if (_disposed) return;
         _disposed = true;
         _projects.Changed -= OnProjectsChanged;
-        _signalSub?.Dispose();
-        SignalEventWaiters();
-        _persistTimer?.Dispose();
-        FlushPersist();
-        foreach (var session in _remoteSessions.Values) session.Dispose();
-        _remoteSessions.Clear();
+        _index.Dispose();
+        _ledger.SignalWaiters();
+        _ledger.Dispose();
+        _sessions.Dispose();
     }
 }

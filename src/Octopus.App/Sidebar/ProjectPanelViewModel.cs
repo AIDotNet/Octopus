@@ -567,22 +567,24 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     /// </summary>
     private void DescribeOrigin(Project project, ProjectItem item, ItemRowViewModel row)
     {
-        if (item.ParentItemId is { } parentId && project.Items.All(i => i.Id != parentId)
-            && _projects.FindItem(parentId) is { } parent && _projects.FindProjectOf(parentId) is { } parentProject)
+        (string Title, bool SameProject, string? Host)? parent = null;
+        if (item.ParentItemId is { } parentId && _projects.FindItem(parentId) is { } parentItem && _projects.FindProjectOf(parentId) is { } parentProject)
         {
-            var parentHost = _collab?.HostNameOf(parentId);
-            row.OriginText = parentHost is null && ProjectLocation.IsOnThisComputer(parentProject)
-                ? AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedByLocal, parent.DisplayTitle)
-                : AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDevice, parentHost ?? parentProject.Name);
-            row.OriginTip = parentHost is null && ProjectLocation.IsOnThisComputer(parentProject)
-                ? row.OriginText
-                : AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDeviceTip, parentHost ?? parentProject.Name, parent.DisplayTitle);
-            return;
+            var host = _collab?.HostNameOf(parentId) ?? (ProjectLocation.IsOnThisComputer(parentProject) ? null : parentProject.Name);
+            parent = (parentItem.DisplayTitle, ReferenceEquals(parentProject, project), host);
         }
-        if (item.CollabOriginDevice is { Length: > 0 } device)
+        var origin = CollabOrigin.Describe(parent, item.CollabOriginDevice, item.CollabOriginSession);
+        // A parent in the same project needs no text: the row is nested under it.
+        switch (origin.Kind)
         {
-            row.OriginText = AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDevice, device);
-            row.OriginTip = AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDeviceTip, device, item.CollabOriginSession ?? "?");
+            case CollabOriginKind.LocalParentElsewhere:
+                row.OriginText = AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedByLocal, origin.Session ?? "");
+                row.OriginTip = row.OriginText;
+                break;
+            case CollabOriginKind.OtherDevice:
+                row.OriginText = AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDevice, origin.Device ?? "");
+                row.OriginTip = AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDeviceTip, origin.Device ?? "", origin.Session ?? "?");
+                break;
         }
     }
 

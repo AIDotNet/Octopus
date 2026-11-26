@@ -551,5 +551,42 @@
     <unit id="ConversationTaskCompletedAll"><segment><source>All tasks completed</source><target state="translated">全部任务已完成</target></segment></unit>
     <unit id="ConversationTaskBlockedBy"><segment><source>Blocked by {0}</source><target state="translated">等待 {0}</target></segment></unit>
     <unit id="ConversationTaskToggle"><segment><source>Toggle task list</source><target state="translated">展开或收起任务清单</target></segment></unit>
+    <unit id="BotGroupsSectionHeader"><segment><source>Groups</source><target state="translated">协作群组</target></segment></unit>
+    <unit id="BotGroupsSingleBotsHeader"><segment><source>Bots</source><target state="translated">单个 Bot</target></segment></unit>
+    <unit id="BotGroupsNewButton"><segment><source>New Group</source><target state="translated">新建群组</target></segment></unit>
+    <unit id="BotGroupsNewTitle"><segment><source>New Bot Group</source><target state="translated">新建 Bot 群组</target></segment></unit>
+    <unit id="BotGroupsNewNameLabel"><segment><source>Group name</source><target state="translated">群组名称</target></segment></unit>
+    <unit id="BotGroupsNewNamePlaceholder"><segment><source>e.g. Release Crew</source><target state="translated">例如：发布协作组</target></segment></unit>
+    <unit id="BotGroupsNewMembersLabel"><segment><source>Members</source><target state="translated">群组成员</target></segment></unit>
+    <unit id="BotGroupsNewMembersEmpty"><segment><source>No Bots on this computer yet. Create a Bot first.</source><target state="translated">这台电脑还没有 Bot，请先创建一个 Bot。</target></segment></unit>
+    <unit id="BotGroupsNewMembersRequired"><segment><source>Select at least one Bot.</source><target state="translated">请至少选择一个 Bot。</target></segment></unit>
+    <unit id="BotGroupsNewReplyModeLabel"><segment><source>Default reply mode</source><target state="translated">默认回复模式</target></segment></unit>
+    <unit id="BotGroupsNewCreate"><segment><source>Create Group</source><target state="translated">创建群组</target></segment></unit>
+    <unit id="BotGroupsMembersCount"><segment><source>{0} · {1} bots</source><target state="translated">{0} · {1} 个 Bot</target></segment></unit>
+    <unit id="BotGroupsApprovalsBadge"><segment><source>{0} approval</source><target state="translated">{0} 待确认</target></segment></unit>
+    <unit id="BotGroupsMainRoom"><segment><source>Main Room</source><target state="translated">主房间</target></segment></unit>
+    <unit id="BotGroupsNewThread"><segment><source>+ Thread</source><target state="translated">+ 新话题</target></segment></unit>
+    <unit id="BotGroupsUntitledThread"><segment><source>New Thread</source><target state="translated">新话题</target></segment></unit>
+    <unit id="BotGroupsEmptyTranscript"><segment><source>Start a discussion with your Bots. Use @Name to address specific members.</source><target state="translated">在这里与多个 Bot 协作讨论，输入 @名称 可指定成员回复。</target></segment></unit>
+    <unit id="BotGroupsReplyModeBot"><segment><source>Bot</source><target state="translated">指定 Bot</target></segment></unit>
+    <unit id="BotGroupsReplyModeAll"><segment><source>All</source><target state="translated">全部</target></segment></unit>
+    <unit id="BotGroupsReplyModeMentions"><segment><source>@Mentions</source><target state="translated">仅 @提及</target></segment></unit>
+    <unit id="BotGroupsReplyModeBotLabel"><segment><source>Target Bot</source><target state="translated">默认回复的 Bot</target></segment></unit>
+    <unit id="BotGroupsHandoffPaused"><segment><source>Auto-handoff paused at hop limit</source><target state="translated">自动接力已达上限并暂停</target></segment></unit>
+    <unit id="BotGroupsContinueHandoff"><segment><source>Continue (+3)</source><target state="translated">继续 (+3 轮)</target></segment></unit>
+    <unit id="BotGroupsAtReply"><segment><source>@Reply</source><target state="translated">@回复</target></segment></unit>
+    <unit id="BotGroupsComposerPlaceholder"><segment><source>Message group… (@Bot to mention)</source><target state="translated">发消息给群组…（输入 @ 可点名）</target></segment></unit>
+    <unit id="BotGroupsStop"><segment><source>Stop</source><target state="translated">停止</target></segment></unit>
+    <unit id="BotGroupsTurnQueued"><segment><source>Queued</source><target state="translated">排队中</target></segment></unit>
+    <unit id="BotGroupsTurnRunning"><segment><source>Thinking…</source><target state="translated">思考中…</target></segment></unit>
+    <unit id="BotGroupsTurnStopped"><segment><source>Stopped</source><target state="translated">已停止</target></segment></unit>
+    <unit id="BotGroupsTurnFailed"><segment><source>Failed</source><target state="translated">失败</target></segment></unit>
+    <unit id="BotGroupsApprovalsHeader"><segment><source>Pending approvals ({0})</source><target state="translated">待确认审批（{0}）</target></segment></unit>
+    <unit id="BotGroupsMembersSheetTitle"><segment><source>Group Settings</source><target state="translated">群组与成员</target></segment></unit>
+    <unit id="BotGroupsSaveMembers"><segment><source>Save Changes</source><target state="translated">保存更改</target></segment></unit>
+    <unit id="BotGroupsDelete"><segment><source>Delete Group</source><target state="translated">删除群组</target></segment></unit>
+    <unit id="BotGroupsDeleteConfirm"><segment><source>Delete group "{0}"?</source><target state="translated">确定删除群组「{0}」吗？</target></segment></unit>
+    <unit id="BotGroupsLoadEarlier"><segment><source>Load earlier messages</source><target state="translated">加载更早的消息</target></segment></unit>
+    <unit id="BotGroupsYou"><segment><source>You</source><target state="translated">我</target></segment></unit>
   </file>
 </xliff>

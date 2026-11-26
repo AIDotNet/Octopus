@@ -191,12 +191,7 @@ dotnet run --project src/Octopus.Mobile.Desktop
 # 构建并运行全部测试
 dotnet build Octopus.slnx
 dotnet test Octopus.slnx
-
-# 终端层真机冒烟测试（会短暂弹出窗口）
-dotnet run --project tests/Octopus.Terminal.Smoke -- --script
 ```
-
-> 终端冒烟测试在 Windows 上启动本机默认 PowerShell（检查输入输出、窗口缩放、`Ctrl+C`、退出码与重启）；在 macOS / Linux 上使用登录 Shell，并额外检查设备应答、`vim` 与 `terminfo`。
 
 ### 项目结构
 
@@ -217,7 +212,7 @@ src/
 ├── Octopus.Remote(.Host/.Client)             P-256 设备身份、端到端安全通道、局域网与中转传输
 ├── Octopus.App                               跨平台 Avalonia 桌面端主程序与内置插件
 └── Octopus.Mobile(.Desktop/.Android/.iOS)    手机端界面与各平台壳（Android/iOS 位于 Octopus.Mobile.slnx）
-tests/                                        各模块单元测试、无头 UI 测试与终端冒烟测试
+tests/                                        各模块单元测试与无头 UI 测试
 packaging/                                    macOS 配置、Windows（Inno Setup）与 Linux 安装器资源
 tools/                                        打包、图标生成、更新签名与发布辅助脚本
 ```
