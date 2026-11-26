@@ -55,6 +55,8 @@ public sealed class BotDefinition
     public List<BotChat> Chats { get; set; } = [];
     public List<BotConnectorBinding> Connectors { get; set; } = [];
     public List<BotWorkItem> Items { get; set; } = [];
+    /// <summary>Timed runs Octopus delivers to the bot: the built-in automations and the ones the bot or its owner scheduled.</summary>
+    public List<BotSchedule> Schedules { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
@@ -143,6 +145,62 @@ public sealed class BotWorkItem
     public string? Meta { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public static class BotScheduleKinds
+{
+    /// <summary>Scheduled by the bot (through the <c>octopus-bot</c> MCP server) or by its owner.</summary>
+    public const string Custom = "custom";
+    /// <summary>The periodic look-around (巡视) driven by <see cref="BotDefinition.LookAroundEnabled"/>.</summary>
+    public const string LookAround = "look_around";
+    /// <summary>The nightly memory maintenance (记忆维护) driven by <see cref="BotDefinition.TidyUpMemoryEnabled"/>.</summary>
+    public const string MemoryMaintenance = "memory_maintenance";
+}
+
+public static class BotScheduleRunStatus
+{
+    /// <summary>The prompt was handed to the chat (it runs now or right after the current turn).</summary>
+    public const string Sent = "sent";
+    /// <summary>The run was due while Octopus was not running (or the bot was paused) for too long, so it was skipped.</summary>
+    public const string Missed = "missed";
+    /// <summary>The prompt could not be delivered (e.g. the chat's agent cannot be started).</summary>
+    public const string Failed = "failed";
+}
+
+/// <summary>
+/// One timed run Octopus owns and fires itself: at each due time the prompt is sent into a chat of the bot. Unlike an
+/// agent's own in-session cron tools, it is saved with the bot and works for any agent.
+/// </summary>
+public sealed class BotSchedule
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
+    /// <summary>One of <see cref="BotScheduleKinds"/>.</summary>
+    public string Kind { get; set; } = BotScheduleKinds.Custom;
+    /// <summary>Short label shown in the panel; the prompt's first line when empty.</summary>
+    public string? Title { get; set; }
+    /// <summary>What the bot is asked to do at each run.</summary>
+    public string Prompt { get; set; } = "";
+    /// <summary>5-field cron in local time for a recurring run; null for a one-shot run.</summary>
+    public string? Cron { get; set; }
+    /// <summary>When a one-shot run fires.</summary>
+    public DateTimeOffset? RunAt { get; set; }
+    /// <summary>Chat that receives the prompt; the Home chat when null or gone.</summary>
+    public string? ChatId { get; set; }
+    public bool Enabled { get; set; } = true;
+    /// <summary><c>agent</c>, <c>user</c>, or <c>octopus</c> (built-in automations).</summary>
+    public string CreatedBy { get; set; } = "agent";
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? NextRunAt { get; set; }
+    public DateTimeOffset? LastRunAt { get; set; }
+    /// <summary>One of <see cref="BotScheduleRunStatus"/>.</summary>
+    public string? LastRunStatus { get; set; }
+    public string? LastRunError { get; set; }
+    public int RunCount { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsRecurring => !string.IsNullOrWhiteSpace(Cron);
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsBuiltIn => Kind != BotScheduleKinds.Custom;
 }
 
 /// <summary>The persisted content of <c>bots.json</c>.</summary>

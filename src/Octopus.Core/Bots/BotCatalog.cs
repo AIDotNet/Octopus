@@ -40,7 +40,11 @@ public sealed record ConnectorAppDefinition(
     string? McpUrl = null,
     string Transport = "http",
     string AuthMode = "oauth",
-    ConnectorUrlVariable? UrlVariable = null);
+    ConnectorUrlVariable? UrlVariable = null,
+    string? NameZh = null)
+{
+    public string DisplayName(bool isZh) => isZh && !string.IsNullOrWhiteSpace(NameZh) ? NameZh! : Name;
+}
 
 /// <summary>Built-in Bot templates, avatar palette, and connector catalog.</summary>
 public static class BotCatalog
@@ -116,14 +120,21 @@ public static class BotCatalog
         new("docs", "文档和项目", "Docs & Projects", "FileText"),
         new("mail", "邮件和会议", "Mail & Meetings", "Mail"),
         new("support", "销售和支持", "Sales & Support", "Store"),
+        new("maps", "地图与位置", "Maps & Location", "MapPin"),
         new("composio", "通过 Composio", "Via Composio", "Plug"),
     ];
 
     public static IReadOnlyList<ConnectorAppDefinition> ConnectorApps { get; } =
     [
-        // Coding (8) — official Remote MCP endpoints
+        // Coding (11) — official Remote MCP endpoints
         new("github", "GitHub", "coding", "议题和 PR 中的提及与事件", "Mentions and events in issues and PRs", "#24292e", "GH", "GitBranch",
             McpUrl: "https://api.githubcopilot.com/mcp/", Transport: "http", AuthMode: "bearer"),
+        new("gitee", "Gitee", "coding", "管理码云代码仓库、Issue 与 Pull Request", "Manage Gitee repositories, issues and pull requests", "#c71d23", "GT", "GitBranch",
+            McpUrl: "https://api.gitee.com/mcp", Transport: "http", AuthMode: "bearer", NameZh: "Gitee 码云"),
+        new("yunxiao", "Aliyun Yunxiao", "coding", "访问云效 Codeup 代码库、Projex 协作与 Flow 流水线", "Access Yunxiao Codeup repos, Projex and Flow pipelines", "#ff6a00", "YX", "Cloud",
+            McpUrl: "https://openapi-rdc.aliyuncs.com/ai/mcp", Transport: "http", AuthMode: "bearer", NameZh: "阿里云云效"),
+        new("jihulab", "JihuLab", "coding", "连接极狐 GitLab，处理议题、合并请求与流水线", "Connect JihuLab for issues, merge requests and pipelines", "#fc6d26", "JH", "GitMerge",
+            McpUrl: "https://jihulab.com/api/v4/mcp", Transport: "http", AuthMode: "oauth", NameZh: "极狐 GitLab"),
         new("vercel", "Vercel", "coding", "查看部署状态并读取构建日志", "Check deployments and read their logs", "#111111", "▲", "Triangle",
             McpUrl: "https://mcp.vercel.com", Transport: "http", AuthMode: "oauth"),
         new("cloudflare", "Cloudflare", "coding", "管理 Workers、DNS 和账户资源", "Manage Workers, DNS and the rest of an account", "#f38020", "CF", "Cloud",
@@ -135,12 +146,16 @@ public static class BotCatalog
         new("netlify", "Netlify", "coding", "部署站点并检查构建结果", "Deploy sites and check their builds", "#00c7b7", "NL", "Globe",
             McpUrl: "https://mcp.netlify.com/mcp", Transport: "http", AuthMode: "oauth"),
         new("gitlab", "GitLab", "coding", "读取并更新议题与合并请求", "Read and update issues and merge requests", "#fc6d26", "GL", "GitMerge",
-            McpUrl: "https://{host}/api/v4/mcp", Transport: "http", AuthMode: "bearer",
+            McpUrl: "https://{host}/api/v4/mcp", Transport: "http", AuthMode: "oauth",
             UrlVariable: new("host", "GitLab 主机", "GitLab Host", "gitlab.com", "gitlab.com")),
         new("context7", "Context7", "coding", "查询最新文档与代码库示例", "Current docs and examples for code libraries", "#22c55e", "C7", "BookOpen",
             McpUrl: "https://mcp.context7.com/mcp", Transport: "http", AuthMode: "none"),
 
-        // Chat (1)
+        // Chat (3)
+        new("feishu", "Feishu", "chat", "读写飞书云文档、检索群聊消息与通讯录", "Read & edit Feishu docs, search chats and directory", "#3370ff", "FS", "MessageSquare",
+            McpUrl: "https://mcp.feishu.cn/mcp", Transport: "http", AuthMode: "oauth", NameZh: "飞书"),
+        new("dingtalk", "DingTalk", "chat", "接入钉钉 MCP 广场，操作钉钉文档、日程与待办", "Connect DingTalk MCP Plaza for docs, calendar and tasks", "#0089ff", "DT", "MessageSquare",
+            McpUrl: null, Transport: "http", AuthMode: "bearer", NameZh: "钉钉"),
         new("slack", "Slack", "chat", "在频道和私信中接收提及并回复", "Receive mentions and reply in channels and DMs", "#4a154b", "SL", "Hash",
             McpUrl: null, Transport: "http", AuthMode: "bearer"),
 
@@ -154,7 +169,9 @@ public static class BotCatalog
         new("pagerduty", "PagerDuty", "monitoring", "处理值班告警与事件升级", "Handle on-call incidents and escalations", "#06ac38", "PD", "Bell",
             McpUrl: "https://mcp.pagerduty.com/mcp", Transport: "http", AuthMode: "bearer"),
 
-        // Docs & Projects (3)
+        // Docs & Projects (4)
+        new("tencentdocs", "Tencent Docs", "docs", "读取、创建并协作管理腾讯文档", "Read, create and manage Tencent Docs", "#1e6fff", "TD", "FileText",
+            McpUrl: "https://docs.qq.com/openapi/mcp", Transport: "http", AuthMode: "oauth", NameZh: "腾讯文档"),
         new("linear", "Linear", "docs", "同步议题分配、状态和评论", "Sync assigned issues, statuses and comments", "#5e6ad2", "LN", "CheckSquare",
             McpUrl: "https://mcp.linear.app/mcp", Transport: "http", AuthMode: "oauth"),
         new("notion", "Notion", "docs", "检索与更新知识库和文档页面", "Search and update wiki pages and databases", "#1f1f1f", "NO", "FileText",
@@ -169,6 +186,17 @@ public static class BotCatalog
         // Sales & Support (1)
         new("intercom", "Intercom", "support", "跟进客户对话并整理工单", "Follow customer conversations and triage tickets", "#286efa", "IC", "Headphones",
             McpUrl: "https://mcp.intercom.com/mcp", Transport: "http", AuthMode: "oauth"),
+
+        // Maps & Location (3) — domestic official Remote MCP endpoints
+        new("amap", "AMap", "maps", "高德地理编码、POI 搜索、天气与路径规划", "AMap geocoding, POI search, weather and route planning", "#2e7cf6", "AM", "MapPin",
+            McpUrl: "https://mcp.amap.com/mcp?key={key}", Transport: "http", AuthMode: "apikey",
+            UrlVariable: new("key", "高德 API Key", "AMap API Key", "", "高德开放平台 Web 服务 Key"), NameZh: "高德地图"),
+        new("baidumap", "Baidu Maps", "maps", "百度地点检索、地理编码、天气与路线规划", "Baidu place search, geocoding, weather and route planning", "#3385ff", "BM", "MapPin",
+            McpUrl: "https://mcp.map.baidu.com/mcp?ak={ak}", Transport: "http", AuthMode: "apikey",
+            UrlVariable: new("ak", "百度地图 AK", "Baidu Maps AK", "", "百度地图开放平台服务端 AK"), NameZh: "百度地图"),
+        new("tencentmap", "Tencent Maps", "maps", "腾讯位置服务地址解析、周边搜索与路径规划", "Tencent address parsing, nearby search and route planning", "#1e80ff", "TM", "MapPin",
+            McpUrl: "https://mcp.map.qq.com/mcp?key={key}&format=0", Transport: "http", AuthMode: "apikey",
+            UrlVariable: new("key", "腾讯位置服务 Key", "Tencent Maps Key", "", "腾讯位置服务控制台 Key"), NameZh: "腾讯地图"),
     ];
 
     public static BotTemplateDefinition FindTemplate(string? id) =>
@@ -185,10 +213,17 @@ public static class BotCatalog
         if (string.IsNullOrWhiteSpace(app.McpUrl)) return null;
         if (app.UrlVariable is not { } v) return app.McpUrl;
         var val = string.IsNullOrWhiteSpace(variableValue) ? v.DefaultValue : variableValue.Trim();
-        val = val.Replace("https://", "", StringComparison.OrdinalIgnoreCase)
-            .Replace("http://", "", StringComparison.OrdinalIgnoreCase)
-            .TrimEnd('/');
+        if (val.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            val = val[8..];
+        }
+        else if (val.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            val = val[7..];
+        }
+        val = val.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(val)) val = v.DefaultValue;
+        if (string.IsNullOrWhiteSpace(val)) return null;
         return app.McpUrl.Replace("{" + v.Key + "}", val, StringComparison.OrdinalIgnoreCase);
     }
 

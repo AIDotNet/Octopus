@@ -90,6 +90,13 @@ public sealed class ProjectItem
     public string? ParentItemId { get; set; }
     /// <summary>Collaboration: effective isolation mode used when this item was spawned (<c>shared</c>, <c>worktree</c>, or <c>read_only</c>).</summary>
     public string? CollabIsolation { get; set; }
+    /// <summary>
+    /// Collaboration across computers: the name of the device whose agent delegated this session here (for example
+    /// <c>MacBook-Pro</c>); null for a session started on this computer.
+    /// </summary>
+    public string? CollabOriginDevice { get; set; }
+    /// <summary>Collaboration across computers: the delegating session as that device labels it (<c>Claude Code · Lead</c>).</summary>
+    public string? CollabOriginSession { get; set; }
 
     /// <summary>File: absolute path. For a file on an SSH host, the read-only copy kept on this computer.</summary>
     public string? FilePath { get; set; }

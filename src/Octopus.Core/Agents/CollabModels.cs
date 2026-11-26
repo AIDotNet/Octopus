@@ -40,4 +40,10 @@ public sealed class CollabSettings
 
     /// <summary>Injects the local collaboration MCP server into native terminal agent tabs and bridges PTY input/output via signals.</summary>
     public bool EnableTerminalBridge { get; set; } = true;
+
+    /// <summary>
+    /// Lets agents see and delegate to sessions in projects on paired Octopus hosts (projects you added from another
+    /// computer). The remote agent runs on that host with that host's permissions; its permission requests surface here.
+    /// </summary>
+    public bool AllowRemoteHosts { get; set; } = true;
 }
