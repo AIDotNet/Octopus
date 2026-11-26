@@ -39,7 +39,7 @@ public sealed record BotRailAvatarTile(
 }
 
 /// <summary>The 54 px column of project squares and group folders, "+" and settings. Squares and folders can be dragged.</summary>
-public sealed partial class ProjectRailViewModel : ObservableObject
+public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
 {
     /// <summary>Maximum number of Bot avatars shown inside the Bots rail frame (2x2 grid); extras are omitted.</summary>
     public const int MaxBotRailAvatars = 4;
@@ -60,6 +60,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     /// <summary>The open group as the rail last showed it; null before the first build and when all are closed.</summary>
     private string? _shownExpanded;
     private bool _built;
+    private string _agentMenuSignature = "";
 
     public ProjectRailViewModel(
         IProjectService projects,
@@ -93,11 +94,11 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _navigator = navigator;
         _projects.Changed += OnProjectsChanged;
         _accounts?.Changed += (_, _) => UiContext.Run(Rebuild);
-        _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
+        _settings?.Changed += (_, _) => UiContext.Run(OnSettingsChanged);
         _scanner?.Changed += (_, _) => UiContext.Run(Rebuild);
         _bots?.Changed += (_, e) => UiContext.Run(() => RefreshBotState(e.Kind));
         _botGroups?.Changed += (_, _) => UiContext.Run(RefreshBotBadges);
-        ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
+        ArcLanguage.Changed += OnLanguageChanged;
         // The rail lives as long as the shell, like the activity service: no unsubscribe.
         _activity?.Changed += (_, itemId) =>
         {
@@ -113,6 +114,27 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         Rebuild();
         RefreshBotState();
     }
+
+    private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.Run(Rebuild);
+
+    private void OnSettingsChanged()
+    {
+        var signature = AgentMenuSignature();
+        if (string.Equals(signature, _agentMenuSignature, StringComparison.Ordinal))
+        {
+            return;
+        }
+        Rebuild();
+    }
+
+    private string AgentMenuSignature() =>
+        _settings is null
+            ? ""
+            : string.Join("|", _settings.Current.Agents.Profiles
+                .OrderBy(p => p.Key, StringComparer.Ordinal)
+                .Select(p => $"{p.Key}:{p.Value.Enabled}:{p.Value.DefaultAccountId}"));
+
+    public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
 
     /// <summary>Device switcher bound to the top circular badge on the rail (Option B).</summary>
     public DeviceSwitcherViewModel? Devices => _devices;
@@ -302,6 +324,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
 
     private void Rebuild()
     {
+        _agentMenuSignature = AgentMenuSignature();
         var current = IsBotMode ? null : _projects.Current?.Id;
         var activeDeviceKey = _projects.ActiveDeviceKey;
         var choices = _projects.Groups.Select(g => new GroupChoice(g.Id, g.Name)).ToList();

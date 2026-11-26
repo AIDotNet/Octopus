@@ -390,7 +390,7 @@ public sealed partial class BotWorkItemCardViewModel
 /// Right panel in Bot mode with 4 tabs matching the reference design:
 /// <c>主页</c> (Overview + in-panel Settings sub-page) | <c>连接器</c> | <c>聊天</c> | <c>文件</c>.
 /// </summary>
-public sealed partial class BotRightPanelViewModel : ObservableObject
+public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposable
 {
     private static readonly string[] PermissionModes = ["same_as_chat", "ask", "read_only", "auto"];
     private static readonly string[] WhoCanAskModes = ["only_you", "members", "anyone"];
@@ -437,15 +437,19 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
 
         _bots.Changed += (_, _) => UiContext.Run(Refresh);
         _activity?.Changed += (_, _) => UiContext.Run(RefreshStatusAndChats);
-        ArcLanguage.Changed += (_, _) => UiContext.Run(() =>
-        {
-            BuildStaleDayOptions();
-            Refresh();
-        });
+        ArcLanguage.Changed += OnLanguageChanged;
 
         BuildStaleDayOptions();
         Refresh();
     }
+
+    private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.Run(() =>
+    {
+        BuildStaleDayOptions();
+        Refresh();
+    });
+
+    public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
 
     public FileTreeViewModel Files { get; }
     public FileSearchViewModel Search { get; }

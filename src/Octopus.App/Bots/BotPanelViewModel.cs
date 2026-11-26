@@ -264,7 +264,7 @@ public sealed partial class BotTreeNodeViewModel : ObservableObject
 /// Scheme A · Bot Tree left sidebar panel:
 /// top "+ New Bot" CTA button, search box, and an expandable tree of Bots with their chats (Home Chat pinned first).
 /// </summary>
-public sealed partial class BotPanelViewModel : ObservableObject
+public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
 {
     private readonly IBotService _bots;
     private readonly IDialogService _dialogs;
@@ -294,15 +294,19 @@ public sealed partial class BotPanelViewModel : ObservableObject
         _bots.Changed += (_, _) => UiContext.Run(Rebuild);
         _botGroups?.Changed += (_, _) => UiContext.Run(Rebuild);
         _activity?.Changed += (_, _) => UiContext.Run(Rebuild);
-        ArcLanguage.Changed += (_, _) => UiContext.Run(() =>
-        {
-            RebuildTemplates();
-            Rebuild();
-        });
+        ArcLanguage.Changed += OnLanguageChanged;
 
         RebuildTemplates();
         Rebuild();
     }
+
+    private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.Run(() =>
+    {
+        RebuildTemplates();
+        Rebuild();
+    });
+
+    public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
 
     public ObservableCollection<BotGroupTreeNodeViewModel> GroupNodes { get; } = [];
     public ObservableCollection<BotTreeNodeViewModel> BotNodes { get; } = [];

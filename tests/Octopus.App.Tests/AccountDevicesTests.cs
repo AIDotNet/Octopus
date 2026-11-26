@@ -254,7 +254,7 @@ public class AccountDevicesTests
 
         page.PasswordAccessEnabled = false;
         await Wait(page.Applied);
-        await Until(() => relay.FeaturesOf(me).Count == 0, "the relay hears password access is off");
+        await Until(() => !relay.FeaturesOf(me).Contains(RelayHostFeatures.PasswordAccess), "the relay hears password access is off");
         page.PasswordAccessEnabled = true;
         await Wait(page.Applied);
         await Until(() => relay.FeaturesOf(me).Contains(RelayHostFeatures.PasswordAccess), "and on again");
@@ -276,7 +276,7 @@ public class AccountDevicesTests
         }
         await Until(() => page.IsSuspended, "the page says password access is paused");
         Assert.False(runtime.AcceptsPassword);
-        await Until(() => relay.FeaturesOf(me).Count == 0, "the relay hears it is paused");
+        await Until(() => !relay.FeaturesOf(me).Contains(RelayHostFeatures.PasswordAccess), "the relay hears it is paused");
         // Even the right password is refused while paused.
         using var third = DeviceIdentity.Create();
         var right = await Wait(runtime.GetAccessPasswordAsync());

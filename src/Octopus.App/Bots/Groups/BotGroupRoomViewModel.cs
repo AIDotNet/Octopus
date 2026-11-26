@@ -302,7 +302,7 @@ public sealed partial class BotGroupMessageItemViewModel : ObservableObject
 }
 
 /// <summary>Center workspace ViewModel for an active multi-bot Group Room (or thread).</summary>
-public sealed partial class BotGroupRoomViewModel : ObservableObject
+public sealed partial class BotGroupRoomViewModel : ObservableObject, IDisposable
 {
     private const int PageStep = 60;
 
@@ -334,10 +334,15 @@ public sealed partial class BotGroupRoomViewModel : ObservableObject
         _groups.Changed += OnGroupsChanged;
         _groups.StreamingUpdated += OnStreamingUpdated;
         _bots.Changed += (_, _) => UiContext.Run(() => Refresh(scrollToBottomIfNew: false));
-        ArcLanguage.Changed += (_, _) => UiContext.Run(() => Refresh(scrollToBottomIfNew: false));
+        ArcLanguage.Changed += OnLanguageChanged;
 
         Refresh(scrollToBottomIfNew: true);
     }
+
+    private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) =>
+        UiContext.Run(() => Refresh(scrollToBottomIfNew: false));
+
+    public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
 
     public ObservableCollection<BotGroupAvatarTile> GroupAvatars { get; } = [];
     public ObservableCollection<BotGroupRoomTabViewModel> RoomTabs { get; } = [];

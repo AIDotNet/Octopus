@@ -22,7 +22,7 @@ using TKCode.Arc.Localization;
 namespace Octopus.App.Sidebar;
 
 /// <summary>The 230 px panel: project name and path, a filter, and the agents and terminals grouped by workspace when worktrees exist.</summary>
-public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient<RenameProjectRequested>, IRecipient<SubagentPanelClosed>
+public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient<RenameProjectRequested>, IRecipient<SubagentPanelClosed>, IDisposable
 {
     private readonly IProjectService _projects;
     private readonly IItemOpener _opener;
@@ -95,12 +95,15 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         _catalog = catalog;
         _workspace = workspace;
         _projects.Changed += OnProjectsChanged;
-        // The panel lives as long as the shell, so the static language event needs no unsubscribe.
-        ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
+        ArcLanguage.Changed += OnLanguageChanged;
         WeakReferenceMessenger.Default.Register<RenameProjectRequested>(this);
         WeakReferenceMessenger.Default.Register<SubagentPanelClosed>(this);
         Rebuild();
     }
+
+    private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.Run(Rebuild);
+
+    public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
 
     /// <summary>The project's terminals and agents in one list, in the order the user arranged them.</summary>
     public ObservableCollection<ItemRowViewModel> Items { get; } = [];

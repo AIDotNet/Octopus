@@ -68,6 +68,7 @@ public sealed class UserTurnCollapseTests
 
             // Expanding via the control updates the two-way bound ViewModel state and grows height.
             expandable.IsExpanded = true;
+            Frames.Until(() => expandable.Bounds.Height > collapsedHeight, () => Flush(window));
             Flush(window);
             Assert.True(item.IsExpanded);
             Assert.True(expandable.Bounds.Height > collapsedHeight,

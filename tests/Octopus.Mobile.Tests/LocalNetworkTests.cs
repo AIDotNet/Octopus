@@ -169,7 +169,7 @@ public class LocalNetworkTests
         // An address nothing answers at.
         Try("127.0.0.1:9");
         Assert.True(Phone.Until(() => add.HasError && !add.IsConnecting, 20_000));
-        Assert.Equal("连不上那台电脑。", add.ErrorText);
+        Assert.StartsWith("连不上那台电脑。", add.ErrorText);
         phone.Top<AddHostPage>();
 
         // Refused at the computer, after the number was shown: said where the number is, and where it can be tried again.

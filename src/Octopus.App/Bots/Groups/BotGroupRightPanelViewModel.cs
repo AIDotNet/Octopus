@@ -85,7 +85,7 @@ public sealed class BotGroupWorkItemCardViewModel
 /// Right panel shown in Bot mode when a Bot Group is active:
 /// 2 tabs: Overview &amp; Members | Aggregated Work Items.
 /// </summary>
-public sealed partial class BotGroupRightPanelViewModel : ObservableObject
+public sealed partial class BotGroupRightPanelViewModel : ObservableObject, IDisposable
 {
     private static readonly int[] DefaultHopPresets = [2, 4, 6, 8, 12, 16, 20];
 
@@ -111,15 +111,19 @@ public sealed partial class BotGroupRightPanelViewModel : ObservableObject
 
         _groups.Changed += (_, _) => UiContext.Run(Refresh);
         _bots.Changed += (_, _) => UiContext.Run(Refresh);
-        ArcLanguage.Changed += (_, _) => UiContext.Run(() =>
-        {
-            BuildStaticOptions();
-            Refresh();
-        });
+        ArcLanguage.Changed += OnLanguageChanged;
 
         BuildStaticOptions();
         Refresh();
     }
+
+    private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.Run(() =>
+    {
+        BuildStaticOptions();
+        Refresh();
+    });
+
+    public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
 
     public ObservableCollection<BotGroupAvatarTile> GroupAvatars { get; } = [];
     public ObservableCollection<BotGroupRightMemberViewModel> Members { get; } = [];

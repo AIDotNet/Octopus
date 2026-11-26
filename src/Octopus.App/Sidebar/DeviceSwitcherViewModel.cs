@@ -21,7 +21,7 @@ namespace Octopus.App.Sidebar;
 /// the side flyout listing local / paired remote Octopus hosts / SSH hosts, cross-device activity aggregation,
 /// and per-device custom icon/color/picture editing.
 /// </summary>
-public sealed partial class DeviceSwitcherViewModel : ObservableObject
+public sealed partial class DeviceSwitcherViewModel : ObservableObject, IDisposable
 {
     private readonly IProjectService _projects;
     private readonly IDialogService _dialogs;
@@ -63,10 +63,14 @@ public sealed partial class DeviceSwitcherViewModel : ObservableObject
         }
         _sshCatalog?.Changed += (_, _) => UiContext.Run(Rebuild);
         _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
-        ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
+        ArcLanguage.Changed += OnLanguageChanged;
 
         Rebuild();
     }
+
+    private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.Run(Rebuild);
+
+    public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
 
     public ObservableCollection<DeviceEntryViewModel> LocalDevices { get; } = [];
     public ObservableCollection<DeviceEntryViewModel> RemoteDevices { get; } = [];
