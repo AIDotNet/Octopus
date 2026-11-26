@@ -291,6 +291,53 @@ public class RemoteRelayTests
     }
 
     [AvaloniaFact]
+    public async Task Two_processes_of_the_app_sharing_the_keychain_take_turns_with_the_refresh_token()
+    {
+        await using var relay = new FakeRelay();
+        using var page = NewPage();
+        page.RelayUrl = relay.Url;
+        await SignInOnPage(page, relay);
+        var one = AppHost.Get<RelayAccess>();
+        // Another build of the app, started on the same computer: it reads the same keychain item.
+        var other = new RelayAccess(AppHost.Get<ISettingsStore>(), AppHost.Get<ISecretStore>(), AppHost.Get<IAppPaths>(), AppHost.Get<RemoteIdentityProvider>());
+        await Wait(other.LoadAsync());
+        var before = relay.Refreshes;
+
+        // Each spends the refresh token in turn; neither comes back with one the other has already spent.
+        Assert.NotNull(await Wait(other.GetAsync(fresh: true)));
+        Assert.NotNull(await Wait(one.GetAsync(fresh: true)));
+        Assert.NotNull(await Wait(other.GetAsync(fresh: true)));
+
+        Assert.Equal(before + 3, relay.Refreshes);
+        Assert.False(one.SignInEnded);
+        Assert.False(other.SignInEnded);
+        Assert.NotNull(await AppHost.Get<ISecretStore>().GetAsync("Octopus/remote", "relay-session"));
+    }
+
+    [AvaloniaFact]
+    public async Task The_sign_in_is_kept_fresh_while_the_app_runs_even_with_nothing_going_through_the_relay()
+    {
+        await using var relay = new FakeRelay();
+        using var page = NewPage();
+        page.RelayUrl = relay.Url;
+        await SignInOnPage(page, relay);
+        // The app starts again; no connection goes through the relay to ask for a token.
+        var restarted = new RelayAccess(AppHost.Get<ISettingsStore>(), AppHost.Get<ISecretStore>(), AppHost.Get<IAppPaths>(), AppHost.Get<RemoteIdentityProvider>());
+        var before = relay.Refreshes;
+        using var stop = new CancellationTokenSource();
+
+        var keeping = restarted.KeepFreshAsync(TimeSpan.FromMilliseconds(20), stop.Token);
+
+        // The refresh token is used right away (the relay moves its expiry on), and not again while the access token is good.
+        await Until(() => relay.Refreshes == before + 1, "the sign-in is refreshed when the app starts");
+        await Task.Delay(300);
+        Assert.Equal(before + 1, relay.Refreshes);
+        Assert.False(restarted.SignInEnded);
+        await stop.CancelAsync();
+        await Wait(keeping);
+    }
+
+    [AvaloniaFact]
     public async Task A_computer_removed_from_its_account_is_signed_out_here_and_says_so()
     {
         await using var relay = new FakeRelay();

@@ -35,6 +35,19 @@ public interface IRelaySessionStore
     Task<string?> LoadAsync();
     /// <summary>Keeps the value; null removes it.</summary>
     Task SaveAsync(string? value);
+
+    /// <summary>
+    /// Held while a refresh token is spent and its successor kept, where more than one process shares this store (the
+    /// desktop's keychain item is the same for every build of the app on the computer): a refresh token works once,
+    /// and the relay takes an old one coming back as a stolen one. Default: no lock, for a store only one process uses.
+    /// </summary>
+    Task<IDisposable> LockAsync(CancellationToken cancellationToken) => Task.FromResult<IDisposable>(NoLock.Instance);
+
+    private sealed class NoLock : IDisposable
+    {
+        public static readonly NoLock Instance = new();
+        public void Dispose() { }
+    }
 }
 
 /// <summary>What a connection through a relay asks of the sign-in: is there one, and a token that is good right now.</summary>
@@ -74,8 +87,8 @@ public sealed class RelaySession(Func<string?> url, IRelaySessionStore store, Fu
     public RelayAccountInfo? Account => _session is { } session ? new RelayAccountInfo(session.AccountId, session.AccountName, session.AccountEmail) : null;
 
     /// <summary>
-    /// True when the relay ended this device's sign-in (it was removed from the account, signed out everywhere, or
-    /// not used for too long) and nobody has signed in again since.
+    /// True when the relay ended this device's sign-in (it was removed from the account, signed out everywhere, its
+    /// account is gone, or an old refresh token of it was used again) and nobody has signed in again since.
     /// </summary>
     public bool SignInEnded { get; private set; }
 
@@ -87,17 +100,7 @@ public sealed class RelaySession(Func<string?> url, IRelaySessionStore store, Fu
         try
         {
             if (_loaded) return;
-            try
-            {
-                var text = await store.LoadAsync().ConfigureAwait(false);
-                var session = string.IsNullOrWhiteSpace(text) ? null : JsonSerializer.Deserialize(text, RelaySessionJsonContext.Default.RelaySessionData);
-                // A sign-in is good at the relay it was made at, and nowhere else.
-                _session = session is { RefreshToken.Length: > 0, AccountId.Length: > 0 } && RelayAccountClient.ParseUrl(session.Url) is { } at && at == RelayAccountClient.ParseUrl(Url) ? session : null;
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or JsonException)
-            {
-                _session = null;
-            }
+            _session = await ReadKeptAsync().ConfigureAwait(false);
             _loaded = true;
         }
         finally
@@ -122,21 +125,86 @@ public sealed class RelaySession(Func<string?> url, IRelaySessionStore store, Fu
             // One refresh at a time: a refresh token works once, and two requests with the same one would end the sign-in.
             if (_session is not { } session) return null;
             if (!fresh && _accessToken is { } current && DateTimeOffset.UtcNow < _accessExpiresAt - Margin) return new RelayEndpoint(url, current);
-            var tokens = await RelayAccountClient.RefreshAsync(url, session.RefreshToken, cancellationToken).ConfigureAwait(false);
-            if (tokens is null)
+            using (await store.LockAsync(cancellationToken).ConfigureAwait(false))
             {
-                // The relay does not know this sign-in any more.
-                (_session, _accessToken, SignInEnded, ended) = (null, null, true, true);
-                await KeepAsync(null).ConfigureAwait(false);
-                return null;
+                // Another process of the app may have spent the token this one holds since it was read: the one it kept
+                // in its place is the live one. Presenting the old one again would read to the relay as theft.
+                session = await NewerKeptAsync(session).ConfigureAwait(false) ?? session;
+                var tokens = await RelayAccountClient.RefreshAsync(url, session.RefreshToken, cancellationToken).ConfigureAwait(false);
+                if (tokens is null && await NewerKeptAsync(session).ConfigureAwait(false) is { } newer)
+                {
+                    // Spent by a process that did not wait for the lock (an older build): try the one it kept.
+                    session = newer;
+                    tokens = await RelayAccountClient.RefreshAsync(url, session.RefreshToken, cancellationToken).ConfigureAwait(false);
+                }
+                if (tokens is null)
+                {
+                    // The relay does not know this sign-in any more: it was removed, signed out everywhere, or its account is gone.
+                    (_session, _accessToken, SignInEnded, ended) = (null, null, true, true);
+                    await KeepAsync(null).ConfigureAwait(false);
+                    return null;
+                }
+                await AdoptAsync(url, tokens).ConfigureAwait(false);
+                return new RelayEndpoint(url, tokens.AccessToken);
             }
-            await AdoptAsync(url, tokens).ConfigureAwait(false);
-            return new RelayEndpoint(url, tokens.AccessToken);
         }
         finally
         {
             _gate.Release();
             if (ended) Changed?.Invoke();
+        }
+    }
+
+    // The sign-in as kept now, when it is another refresh token of the same account at the same relay than the one in hand.
+    private async Task<RelaySessionData?> NewerKeptAsync(RelaySessionData session) =>
+        await ReadKeptAsync().ConfigureAwait(false) is { } kept && kept.AccountId == session.AccountId && kept.RefreshToken != session.RefreshToken ? kept : null;
+
+    // The kept sign-in, when it is one for the relay set now: a sign-in is good at the relay it was made at, and nowhere else.
+    private async Task<RelaySessionData?> ReadKeptAsync()
+    {
+        try
+        {
+            var text = await store.LoadAsync().ConfigureAwait(false);
+            var session = string.IsNullOrWhiteSpace(text) ? null : JsonSerializer.Deserialize(text, RelaySessionJsonContext.Default.RelaySessionData);
+            return session is { RefreshToken.Length: > 0, AccountId.Length: > 0 } && RelayAccountClient.ParseUrl(session.Url) is { } at && at == RelayAccountClient.ParseUrl(Url) ? session : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException or NotSupportedException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Keeps the sign-in alive for as long as the app runs. A refresh token that goes unused runs out at the relay
+    /// (30 days), and when no connection goes through the relay nothing else asks for a token: so one is asked for
+    /// now, and again every <paramref name="period"/>. A new one is made only when the one at hand is about to run
+    /// out, which keeps the refresh token in use at least as often as an access token lasts. Offline, it tries again
+    /// next time; it never ends a sign-in the relay has not refused.
+    /// </summary>
+    public async Task KeepFreshAsync(TimeSpan period, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            try
+            {
+                await GetAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch (RelayException)
+            {
+                // Offline or busy: next time.
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            try
+            {
+                await Task.Delay(period, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
         }
     }
 

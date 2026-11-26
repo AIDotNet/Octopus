@@ -667,6 +667,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         {
             session.Title = item.Title;
             session.Activity = ActivityOf(item.Activity);
+            ApplyOrigin(session, item);
         }
         else if (_connections.ClientOf(hostId) is { } client)
         {
@@ -774,6 +775,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 session.Title = item.Title;
                 session.Activity = ActivityOf(item.Activity);
                 UpdateSessionWorkspace(project, session, item);
+                ApplyOrigin(session, item);
                 return session;
             }).ToList();
             Replace(project.Sessions, sessions);
@@ -893,7 +895,18 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 : agent?.Name ?? item.AgentId,
             Activity = ActivityOf(item.Activity),
             SizeOwner = project.Host.Name,
+            ParentItemId = item.ParentItemId,
+            OriginDevice = item.OriginDevice,
+            OriginSession = item.OriginSession,
         };
+    }
+
+    /// <summary>Who started the session (an agent of the host, or another computer's agent), as the host says now.</summary>
+    private static void ApplyOrigin(RemoteSession session, ItemMessage item)
+    {
+        session.ParentItemId = item.ParentItemId;
+        session.OriginDevice = item.OriginDevice;
+        session.OriginSession = item.OriginSession;
     }
 
     private static SessionActivity ActivityOf(string activity) => activity switch

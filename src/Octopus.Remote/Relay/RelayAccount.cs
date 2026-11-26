@@ -561,7 +561,7 @@ public static class RelayAccountClient
 
     private static RelayTokens? Tokens(RelayTokenResponse? answer) =>
         answer is { AccessToken: { Length: > 0 and <= 1024 } access, RefreshToken: { Length: > 0 and <= 512 } refresh, Account: { Id: { Length: > 0 } id } account }
-            ? new RelayTokens(access, refresh, DateTimeOffset.UtcNow + TimeSpan.FromSeconds(Math.Clamp(answer.ExpiresIn, 30, 86400)),
+            ? new RelayTokens(access, refresh, DateTimeOffset.UtcNow + TimeSpan.FromSeconds(Math.Clamp(answer.ExpiresIn, 30, 7 * 86400)),
                 new RelayAccountInfo(id, string.IsNullOrWhiteSpace(account.Name) ? id : account.Name!, string.IsNullOrWhiteSpace(account.Email) ? null : account.Email))
             : null;
 

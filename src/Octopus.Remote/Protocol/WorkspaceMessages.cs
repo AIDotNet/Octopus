@@ -347,6 +347,12 @@ public sealed class ItemMessage
     /// <see cref="RemoteMethods.SessionRestart"/>.
     /// </summary>
     public string? Surface { get; set; }
+    /// <summary>Multi-agent collaboration: the item (of the same host) whose agent started this one; null when a person did.</summary>
+    public string? ParentItemId { get; set; }
+    /// <summary>Set when another computer's agent delegated this session: that device's name (see <see cref="CreateItemMessage.OriginDevice"/>).</summary>
+    public string? OriginDevice { get; set; }
+    /// <summary>The delegating session on <see cref="OriginDevice"/>, as that device labels it.</summary>
+    public string? OriginSession { get; set; }
 }
 
 public sealed class ItemListMessage
@@ -368,6 +374,16 @@ public sealed class CreateItemMessage
     public bool InjectTaskPrompt { get; set; }
     /// <summary>Optional requested surface (<see cref="ItemSurfaces.Gui"/> or <see cref="ItemSurfaces.Terminal"/>); null keeps host default behavior.</summary>
     public string? Surface { get; set; }
+    /// <summary>Optional title for the new session; null names it after the agent.</summary>
+    public string? Title { get; set; }
+    /// <summary>
+    /// Set when another computer's agent delegates this session (multi-agent collaboration): that device's name, kept on
+    /// the item and reported back in <see cref="ItemMessage.OriginDevice"/> so every device shows where the work came from.
+    /// Hosts that predate it ignore it.
+    /// </summary>
+    public string? OriginDevice { get; set; }
+    /// <summary>The delegating session as its device labels it (<c>Claude Code · Lead</c>); with <see cref="OriginDevice"/>.</summary>
+    public string? OriginSession { get; set; }
 }
 
 public sealed class ItemRefMessage

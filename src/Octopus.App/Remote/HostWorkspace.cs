@@ -178,7 +178,9 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             {
                 Kind = ProjectItemKind.Agent,
                 AgentId = definition.Id,
-                Title = definition.Name,
+                Title = Blank(request.Title)?.Trim() ?? definition.Name,
+                CollabOriginDevice = Blank(request.OriginDevice)?.Trim(),
+                CollabOriginSession = Blank(request.OriginDevice) is null ? null : Blank(request.OriginSession)?.Trim(),
                 WorkspaceId = workspace?.Id,
                 WorkingDirectory = workspace?.Path,
                 Surface = requestedSurface,
@@ -1178,6 +1180,10 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         },
         IsRunning = _sessions.Find(item.Id)?.IsRunning == true,
         Surface = IsGui(item) ? ItemSurfaces.Gui : item.Kind == ProjectItemKind.Agent ? ItemSurfaces.Terminal : null,
+        // Only a parent of the same host means anything to a device; a cross-computer parent is told by OriginDevice.
+        ParentItemId = item.ParentItemId is { } parent && project.Items.Any(i => i.Id == parent) ? parent : null,
+        OriginDevice = item.CollabOriginDevice,
+        OriginSession = item.CollabOriginSession,
     };
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

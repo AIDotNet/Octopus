@@ -26,6 +26,8 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _signIn;
     private string? _loginPage;
     private bool _disposed;
+    /// <summary>Ends the loop that keeps this computer's relay sign-in from running out while the app is open.</summary>
+    private readonly CancellationTokenSource _keepFresh = new();
 
     public AccountViewModel(
         ISettingsStore settings,
@@ -346,6 +348,7 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _keepFresh.Cancel();
         CancelSignIn();
         _relay.Changed -= OnExternalChanged;
         _runtime.Changed -= OnExternalChanged;
@@ -359,6 +362,7 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
         {
             await _relay.LoadAsync();
             OnExternalChanged();
+            _ = _relay.KeepFreshAsync(TimeSpan.FromHours(1), _keepFresh.Token);
         }
         catch (Exception)
         {

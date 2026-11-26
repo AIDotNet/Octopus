@@ -118,6 +118,9 @@ public sealed class RemoteProjects : IDisposable
                             Title = message.Title,
                             AgentId = message.AgentId,
                             Launch = message.Kind == ItemKinds.Agent ? new AgentLaunchOptions { Model = message.Model, Effort = message.Effort } : null,
+                            ParentItemId = message.ParentItemId,
+                            CollabOriginDevice = message.OriginDevice,
+                            CollabOriginSession = message.OriginSession,
                         }, activate: project.ActiveItemId is null);
                         _customTitles[message.Id] = null;
                     }
@@ -135,6 +138,13 @@ public sealed class RemoteProjects : IDisposable
     private void Apply(ItemMessage message)
     {
         if (_projects.FindItem(message.Id) is not { } item) return;
+        // Who started it, as the host knows. A parent this computer set (its own agent delegated there) is kept.
+        if (message.ParentItemId is { } parent) item.ParentItemId = parent;
+        if (message.OriginDevice is { } device)
+        {
+            item.CollabOriginDevice = device;
+            item.CollabOriginSession = message.OriginSession;
+        }
         if (item.Title != message.Title && string.IsNullOrEmpty(item.CustomTitle)) _projects.SetItemTitle(item.Id, message.Title);
         _activity.ReportRemote(item.Id, message.Activity switch
         {

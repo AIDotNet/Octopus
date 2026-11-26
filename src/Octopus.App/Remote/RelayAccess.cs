@@ -53,6 +53,8 @@ public sealed class RelayAccess : IRelayGate
     public Task<RelaySignInResult> CompleteSignInAsync(RelayDeviceLogin login, CancellationToken cancellationToken = default) => _session.CompleteSignInAsync(login, cancellationToken);
     public Task SignInWithKeyAsync(string accessKey, string deviceName, CancellationToken cancellationToken = default) => _session.SignInWithKeyAsync(accessKey, deviceName, cancellationToken);
     public Task SignOutAsync() => _session.SignOutAsync();
+    /// <summary>See <see cref="RelaySession.KeepFreshAsync"/>.</summary>
+    public Task KeepFreshAsync(TimeSpan period, CancellationToken cancellationToken) => _session.KeepFreshAsync(period, cancellationToken);
 
     /// <summary>Keeps the relay's address. A sign-in belongs to one relay: with another address this computer is signed out (of the old one, too).</summary>
     public async Task SetUrlAsync(string? url)
@@ -82,6 +84,31 @@ public sealed class RelayAccess : IRelayGate
             return await secrets.GetAsync(Service, SessionName).ConfigureAwait(false);
         }
 
+        // The keychain item is one for every build of the app this user runs (release, preview, a build from source),
+        // so the lock is one per user too, not one per data directory.
+        private static string LockFile => Path.Combine(Path.GetTempPath(), $"octopus-relay-session-{Environment.UserName}.lock");
+
+        public async Task<IDisposable> LockAsync(CancellationToken cancellationToken)
+        {
+            // Longer than a refresh can take; past it the holder is taken to be stuck, and the refresh goes ahead without.
+            var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(45);
+            while (true)
+            {
+                try
+                {
+                    return new FileStream(LockFile, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                }
+                catch (IOException) when (DateTimeOffset.UtcNow < deadline)
+                {
+                    await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    return NoLock.Instance;
+                }
+            }
+        }
+
         public async Task SaveAsync(string? value)
         {
             if (secrets.IsAvailable)
@@ -101,6 +128,12 @@ public sealed class RelayAccess : IRelayGate
                 await using var stream = new FileStream(File, options);
                 await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(value)).ConfigureAwait(false);
             }
+        }
+
+        private sealed class NoLock : IDisposable
+        {
+            public static readonly NoLock Instance = new();
+            public void Dispose() { }
         }
     }
 }

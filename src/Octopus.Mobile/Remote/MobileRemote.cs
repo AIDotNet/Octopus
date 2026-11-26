@@ -46,6 +46,9 @@ public sealed class MobileRemote : IDisposable
     internal RemoteHostConnections Connections => _connections;
     internal RelaySession Session => _session;
 
+    /// <summary>The account's server with an access token that is good now; null when this phone is not signed in.</summary>
+    public Task<RelayEndpoint?> GetServerAsync(bool fresh, CancellationToken cancellationToken) => _session.GetAsync(fresh, cancellationToken);
+
     /// <summary>What this app says about itself to a host.</summary>
     public static HelloMessage Hello { get; } = new()
     {

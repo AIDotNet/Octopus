@@ -385,6 +385,43 @@ public class RemoteEndToEndTests
     }
 
     [AvaloniaFact]
+    public async Task An_agent_delegated_from_another_computer_keeps_its_title_and_where_it_came_from()
+    {
+        await using var host = new HostSide();
+        using var device = DeviceIdentity.Create();
+        host.Devices.Add(device.PublicKey, Laptop);
+        var project = AddHostProject();
+        var lead = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Lead" };
+        AppHost.Get<IProjectService>().AddItem(project, lead, activate: false);
+        await using var client = await Connect(host, device);
+
+        var item = await Wait(client.CreateItemAsync(new CreateItemMessage
+        {
+            ProjectId = project.Id,
+            Kind = ItemKinds.Agent,
+            AgentId = "claude",
+            Title = "Integration suite",
+            OriginDevice = "MacBook Pro",
+            OriginSession = "Claude Code · Lead",
+            Prompt = "run the integration suite",
+        }));
+
+        // Kept on the host's item (so its own sidebar says so) and told to every device in the item list.
+        Assert.Equal("Integration suite", item.Title);
+        Assert.Equal(("MacBook Pro", "Claude Code · Lead"), (item.OriginDevice, item.OriginSession));
+        var onHost = project.Items.Single(i => i.Id == item.Id);
+        Assert.Equal(("MacBook Pro", "Claude Code · Lead"), (onHost.CollabOriginDevice, onHost.CollabOriginSession));
+
+        // A session the host's own agent spawned names its parent for devices.
+        var child = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Child", ParentItemId = lead.Id };
+        AppHost.Get<IProjectService>().AddItem(project, child, activate: false);
+        var listed = await Wait(client.ListItemsAsync(project.Id));
+        Assert.Equal(lead.Id, listed.Single(i => i.Id == child.Id).ParentItemId);
+        Assert.Null(listed.Single(i => i.Id == item.Id).ParentItemId);
+        Assert.Equal("MacBook Pro", listed.Single(i => i.Id == item.Id).OriginDevice);
+    }
+
+    [AvaloniaFact]
     public async Task An_agent_is_started_on_the_host_from_the_hosts_own_catalog()
     {
         await using var host = new HostSide();
