@@ -161,6 +161,7 @@ internal sealed class IosSpeechSession(SFSpeechRecognizer recognizer, VoiceSetti
     private static readonly TimeSpan FinalTimeout = TimeSpan.FromSeconds(4);
     private readonly AVAudioEngine _engine = new();
     private readonly TaskCompletionSource<string> _final = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly DictationFailureRelay _failures = new();
     private readonly Lock _gate = new();
     private SFSpeechAudioBufferRecognitionRequest _request = new();
     private SFSpeechRecognitionTask? _task;
@@ -172,7 +173,11 @@ internal sealed class IosSpeechSession(SFSpeechRecognizer recognizer, VoiceSetti
 
     public event Action<float>? LevelChanged;
     public event Action<string, string>? TextChanged;
-    public event Action<DictationException>? Failed;
+    public event Action<DictationException>? Failed
+    {
+        add => _failures.Add(value);
+        remove => _failures.Remove(value);
+    }
 
     public void Start()
     {
@@ -269,7 +274,7 @@ internal sealed class IosSpeechSession(SFSpeechRecognizer recognizer, VoiceSetti
             Recognize();
             return;
         }
-        Failed?.Invoke(new DictationException(DictationErrorKind.Provider, error.LocalizedDescription));
+        _failures.Emit(new DictationException(DictationErrorKind.Provider, error.LocalizedDescription));
     }
 
     private void StopAudio()

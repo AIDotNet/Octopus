@@ -24,13 +24,19 @@ public class VoiceTests
 
     private sealed class FakeSession : IDictationSession
     {
+        private readonly DictationFailureRelay _failures = new();
+
         public string Final { get; set; } = "帮我看看 SendCommand";
         public bool Stopped { get; private set; }
         public bool Cancelled { get; private set; }
 
         public event Action<float>? LevelChanged;
         public event Action<string, string>? TextChanged;
-        public event Action<DictationException>? Failed;
+        public event Action<DictationException>? Failed
+        {
+            add => _failures.Add(value);
+            remove => _failures.Remove(value);
+        }
 
         public void Speak(string settled, string tail, float level = 0.5f)
         {
@@ -38,7 +44,7 @@ public class VoiceTests
             TextChanged?.Invoke(settled, tail);
         }
 
-        public void Fail(DictationException e) => Failed?.Invoke(e);
+        public void Fail(DictationException e) => _failures.Emit(e);
 
         public Task<string> StopAsync(CancellationToken cancellationToken)
         {
@@ -54,16 +60,25 @@ public class VoiceTests
     {
         public DictationProblem Problem { get; set; }
         public TaskCompletionSource? Gate { get; set; }
-        public DictationException? Refusal { get; set; }
+        public Exception? Refusal { get; set; }
+        public DictationException? EarlyFailure { get; set; }
+        public int PrepareCount { get; private set; }
         public FakeSession? Last { get; private set; }
 
         public DictationProblem Check(VoiceSettings settings) => Problem;
+
+        public Task PrepareAsync(CancellationToken cancellationToken)
+        {
+            PrepareCount++;
+            return Task.CompletedTask;
+        }
 
         public async Task<IDictationSession> StartAsync(VoiceSettings settings, CancellationToken cancellationToken)
         {
             if (Gate is { } gate) await gate.Task;
             if (Refusal is { } refusal) throw refusal;
             Last = new FakeSession();
+            if (EarlyFailure is { } early) Last.Fail(early);
             return Last;
         }
     }
@@ -233,6 +248,46 @@ public class VoiceTests
         Assert.True(session.Cancelled);
         Assert.Equal("", vm.SettledText);
         Assert.Empty(composer.Filled);
+    }
+
+    [AvaloniaFact]
+    public void Failure_raised_before_events_are_attached_still_ends_recording_and_shows_problem()
+    {
+        var engine = new FakeEngine { EarlyFailure = new DictationException(DictationErrorKind.Unavailable, "NoMatch") };
+        var composer = new Composer(engine);
+        var vm = composer.ViewModel;
+
+        vm.Press();
+        Assert.True(Phone.Until(() => !vm.IsRecording));
+        Assert.True(vm.HasProblem);
+        Assert.Contains("系统语音识别", vm.ProblemText);
+        Assert.True(engine.Last!.Cancelled);
+    }
+
+    [AvaloniaFact]
+    public void Entering_voice_mode_prepares_permissions_before_holding_to_talk()
+    {
+        var engine = new FakeEngine();
+        var composer = new Composer(engine);
+        var vm = composer.ViewModel;
+
+        vm.ToggleVoiceModeCommand.Execute(null);
+        Assert.True(Phone.Until(() => engine.PrepareCount == 1));
+        vm.ToggleVoiceModeCommand.Execute(null);
+        Phone.Pump();
+        Assert.Equal(1, engine.PrepareCount);
+    }
+
+    [AvaloniaFact]
+    public void Unexpected_platform_exception_during_start_resets_recording()
+    {
+        var engine = new FakeEngine { Refusal = new InvalidOperationException("binder dead") };
+        var composer = new Composer(engine);
+        var vm = composer.ViewModel;
+
+        vm.Press();
+        Assert.True(Phone.Until(() => !vm.IsRecording));
+        Assert.Contains(composer.Notices, notice => notice.Contains("binder dead", StringComparison.Ordinal));
     }
 
     [Fact]

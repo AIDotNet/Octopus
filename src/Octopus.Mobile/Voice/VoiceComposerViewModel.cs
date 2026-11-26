@@ -131,6 +131,22 @@ public sealed partial class VoiceComposerViewModel : ObservableObject, IDisposab
         if (IsRecording) return;
         ProblemText = null;
         IsVoiceMode = !IsVoiceMode;
+        if (IsVoiceMode && _voice.Check() == DictationProblem.None)
+        {
+            _ = PrepareAsync();
+        }
+    }
+
+    private async Task PrepareAsync()
+    {
+        try
+        {
+            await _voice.PrepareAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Warm-up is best-effort; Press() enforces permissions and surfaces errors clearly.
+        }
     }
 
     [RelayCommand]
@@ -185,6 +201,11 @@ public sealed partial class VoiceComposerViewModel : ObservableObject, IDisposab
         {
             return;
         }
+        catch (Exception e)
+        {
+            if (generation == _generation) Fail(new DictationException(DictationErrorKind.Provider, e.Message, e));
+            return;
+        }
         finally
         {
             if (ReferenceEquals(_start, start)) _start = null;
@@ -205,7 +226,9 @@ public sealed partial class VoiceComposerViewModel : ObservableObject, IDisposab
             SettledText = settled;
             TailText = tail;
         });
+        // Attaching Failed may synchronously replay an error that occurred during StartAsync, calling Fail() and Reset().
         session.Failed += error => Post(generation, () => Fail(error));
+        if (generation != _generation || _disposed) return;
         // Released (or past the limit) while the engine was still starting: finish now.
         if (!_held) await FinishAsync(generation, _releasedIn);
     }
@@ -278,6 +301,11 @@ public sealed partial class VoiceComposerViewModel : ObservableObject, IDisposab
         catch (OperationCanceledException)
         {
             if (generation == _generation) Fail(new DictationException(DictationErrorKind.Network, Text(MobileLangResourceKind.VoiceErrorTimeout)));
+            return;
+        }
+        catch (Exception e)
+        {
+            if (generation == _generation) Fail(new DictationException(DictationErrorKind.Provider, e.Message, e));
             return;
         }
         finally

@@ -60,6 +60,12 @@ public interface IDictationEngine
     DictationProblem Check(VoiceSettings settings);
 
     /// <summary>
+    /// Optional warm-up when the person switches into voice mode (e.g. requesting microphone permission before they
+    /// hold "hold to talk", so the system permission dialog does not steal pointer capture).
+    /// </summary>
+    Task PrepareAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
     /// Starts listening. Asks for the microphone (and speech) permission the first time; throws
     /// <see cref="DictationException"/> when that is refused or the engine cannot start.
     /// </summary>
@@ -97,10 +103,62 @@ public interface IAudioCapture : IAsyncDisposable
     /// <summary>Raised on a background thread with each chunk.</summary>
     event Action<byte[]>? Captured;
 
+    /// <summary>Optional permission warm-up when switching to voice mode before holding to talk.</summary>
+    Task PrepareAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>Asks for the microphone the first time; <see cref="DictationException"/> with PermissionDenied when refused.</summary>
     Task StartAsync(CancellationToken cancellationToken);
 
     Task StopAsync();
+}
+
+/// <summary>
+/// Buffers a dictation failure that fires before the caller attaches <see cref="IDictationSession.Failed"/>, and
+/// replays it as soon as a subscriber arrives so early engine errors are never silently dropped.
+/// </summary>
+public sealed class DictationFailureRelay
+{
+    private readonly Lock _gate = new();
+    private Action<DictationException>? _handlers;
+    private DictationException? _pending;
+
+    /// <summary>The first failure emitted so far, if any.</summary>
+    public DictationException? LastFailure { get; private set; }
+
+    public void Add(Action<DictationException>? handler)
+    {
+        if (handler is null) return;
+        DictationException? pending;
+        lock (_gate)
+        {
+            _handlers += handler;
+            pending = _pending;
+            _pending = null;
+        }
+        if (pending is not null) handler(pending);
+    }
+
+    public void Remove(Action<DictationException>? handler)
+    {
+        if (handler is null) return;
+        lock (_gate) _handlers -= handler;
+    }
+
+    public void Emit(DictationException failure)
+    {
+        Action<DictationException>? handlers;
+        lock (_gate)
+        {
+            LastFailure ??= failure;
+            handlers = _handlers;
+            if (handlers is null)
+            {
+                _pending ??= failure;
+                return;
+            }
+        }
+        handlers(failure);
+    }
 }
 
 /// <summary>A tap the phone can feel; a head without haptics ignores it.</summary>

@@ -14,6 +14,7 @@ internal abstract class CloudDictationSession : IDictationSession
     private readonly IAudioCapture _capture;
     private readonly Channel<byte[]> _audio = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true });
     private readonly CancellationTokenSource _stop = new();
+    private readonly DictationFailureRelay _failures = new();
     private Task<string>? _run;
     // 0 listening, 1 stopping (finger lifted), 2 thrown away.
     private int _state;
@@ -29,7 +30,11 @@ internal abstract class CloudDictationSession : IDictationSession
 
     public event Action<float>? LevelChanged;
     public event Action<string, string>? TextChanged;
-    public event Action<DictationException>? Failed;
+    public event Action<DictationException>? Failed
+    {
+        add => _failures.Add(value);
+        remove => _failures.Remove(value);
+    }
 
     /// <summary>Starts the microphone, then the provider's side in the background.</summary>
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -136,7 +141,7 @@ internal abstract class CloudDictationSession : IDictationSession
         if (Volatile.Read(ref _state) == 0)
         {
             _ = _capture.StopAsync();
-            Failed?.Invoke(e);
+            _failures.Emit(e);
         }
     }
 

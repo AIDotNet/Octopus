@@ -13,6 +13,7 @@ public sealed class VoiceService
     private readonly VoiceSettingsStore _store;
     private readonly Dictionary<VoiceEngineKind, IDictationEngine> _engines = [];
     private readonly Task _loaded;
+    private readonly Func<IAudioCapture>? _audio;
     private readonly AccountEndpoint? _account;
     private readonly Func<HttpMessageHandler> _http = () => Octopus.Remote.Relay.RelayHttp.CreateHandler();
 
@@ -25,6 +26,7 @@ public sealed class VoiceService
     public VoiceService(IMobileStore? store = null, IDictationEngine? system = null, Func<IAudioCapture>? audio = null, Func<HttpMessageHandler>? http = null,
         AccountEndpoint? account = null, Func<bool>? signedIn = null)
     {
+        _audio = audio;
         _account = account;
         _http = http ?? (() => Octopus.Remote.Relay.RelayHttp.CreateHandler());
         _store = new VoiceSettingsStore(store);
@@ -81,6 +83,20 @@ public sealed class VoiceService
     /// <summary>The account server's voice status (<c>GET /v1/voice</c>); null when it cannot be asked.</summary>
     public Task<OctopusVoiceStatus?> GetOctopusStatusAsync(CancellationToken cancellationToken) =>
         _account is null ? Task.FromResult<OctopusVoiceStatus?>(null) : OctopusDictationEngine.StatusAsync(_account, _http, cancellationToken);
+
+    /// <summary>Warms up permissions for the active engine when entering voice mode, before holding to talk.</summary>
+    public async Task PrepareAsync(CancellationToken cancellationToken = default)
+    {
+        await _loaded.ConfigureAwait(false);
+        var kind = Settings.Engine;
+        if (!_engines.TryGetValue(kind, out var engine)) return;
+        await engine.PrepareAsync(cancellationToken).ConfigureAwait(false);
+        if (kind != VoiceEngineKind.System && _audio is not null)
+        {
+            await using var capture = _audio();
+            await capture.PrepareAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     /// <param name="hotwords">Words of the conversation the engine should expect.</param>
     public async Task<IDictationSession> StartAsync(IReadOnlyList<string> hotwords, CancellationToken cancellationToken)
