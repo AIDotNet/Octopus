@@ -7,5 +7,7 @@ public enum ExplorerTab
     /// <summary>The port forwards of a project on an SSH host (design/11-SSH隧道.md).</summary>
     Tunnels,
     /// <summary>The agents' saved sessions of the project's folder (design/ui/会话管理方案.html).</summary>
-    Sessions
+    Sessions,
+    /// <summary>Dynamic singleton message panel for inspecting an active or finished subagent (Scheme A).</summary>
+    Subagent
 }

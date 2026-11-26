@@ -42,6 +42,18 @@
                 <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
             </Style>
         </Style>
+        <Style Selector="lucide|LucideIcon.sectionChevron">
+            <Setter Property="RenderTransform" Value="rotate(0deg)" />
+            <Setter Property="RenderTransformOrigin" Value="50%,50%" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="lucide|LucideIcon.sectionChevron.expanded">
+            <Setter Property="RenderTransform" Value="rotate(90deg)" />
+        </Style>
     </UserControl.Styles>
     <UserControl.DataTemplates>
         <DataTemplate DataType="agents:CommandFieldViewModel">
@@ -422,6 +434,39 @@
                 <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                     <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpUrlElicitation}" />
+                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpUrlElicitationHint}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <arc:Switch Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsAcpUrlElicitation}"
+                                IsChecked="{Binding AcpEnableUrlElicitation, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpClientFileSystem}" />
+                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpClientFileSystemHint}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <arc:Switch Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsAcpClientFileSystem}"
+                                IsChecked="{Binding AcpEnableClientFileSystem, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpClientTerminal}" />
+                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpClientTerminalHint}" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <arc:Switch Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsAcpClientTerminal}"
+                                IsChecked="{Binding AcpEnableClientTerminal, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
                         <TextBlock Classes="name" Text="{l:AppLangResource SettingsUseSystemProxy}" />
                         <TextBlock Classes="hint" Text="{l:AppLangResource SettingsUseSystemProxyHint}" />
                     </StackPanel>
@@ -460,11 +505,28 @@
         </StackPanel>
 
         <StackPanel Spacing="6" IsVisible="{Binding HasNotInstalled}">
-            <TextBlock Classes="group" Margin="2,12,0,0" Text="{Binding NotInstalledTitle}" />
-            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+            <Button x:Name="NotInstalledToggleButton"
+                    Classes="row"
+                    Margin="0,8,0,0"
+                    Padding="4,6"
+                    Command="{Binding ToggleNotInstalledCommand}"
+                    AutomationProperties.Name="{Binding NotInstalledTitle}">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <lucide:LucideIcon Classes="sectionChevron"
+                                       Classes.expanded="{Binding IsNotInstalledExpanded}"
+                                       Kind="ChevronRight"
+                                       Size="14"
+                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                       VerticalAlignment="Center" />
+                    <TextBlock Classes="group" Text="{Binding NotInstalledTitle}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+            <Border x:Name="NotInstalledListBorder"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                     BorderThickness="1"
                     CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
-                    ClipToBounds="True">
+                    ClipToBounds="True"
+                    IsVisible="{Binding IsNotInstalledExpanded}">
                 <ItemsControl ItemsSource="{Binding NotInstalled}" Margin="0,-1,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="agents:UninstalledAgentViewModel">

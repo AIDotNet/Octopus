@@ -15,6 +15,7 @@ using Octopus.Agents.Accounts;
 using Octopus.Agents.Subagents;
 using Octopus.App.Activity;
 using Octopus.App.Common;
+using Octopus.App.Explorer.Subagent;
 using Octopus.App.Files;
 using Octopus.App.Localization;
 using Octopus.App.Services;
@@ -22,6 +23,7 @@ using Octopus.App.Sidebar;
 using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
+using Octopus.Platform;
 using Octopus.Storage;
 using TKCode.Arc.Icons.Lucide;
 
@@ -196,6 +198,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private readonly Func<IWorkspaceCommands?>? _workspaceCommands;
     private readonly ISubagentService? _subagents;
     private readonly IModelDiscovery? _modelDiscovery;
+    private readonly IFileOpener? _fileOpener;
+    private readonly Dictionary<string, UrlElicitationCardItem> _urlElicitations = new(StringComparer.Ordinal);
 
     private IAcpSession? _session;
     private AssistantTurnItem? _activeTurn;
@@ -262,7 +266,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         IAgentAccountService? accounts = null,
         Func<IWorkspaceCommands?>? workspaceCommands = null,
         ISubagentService? subagents = null,
-        IModelDiscovery? modelDiscovery = null)
+        IModelDiscovery? modelDiscovery = null,
+        IFileOpener? fileOpener = null)
     {
         _project = project;
         _item = item;
@@ -281,6 +286,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _workspaceCommands = workspaceCommands;
         _subagents = subagents;
         _modelDiscovery = modelDiscovery;
+        _fileOpener = fileOpener;
 
         var profile = settings.Current.Agents.ProfileOf(definition.Id);
         var effectivePerm = compiler.ResolvePermission(definition, profile, settings.Current.Agents.DefaultPermission)
@@ -340,6 +346,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public ObservableCollection<SubagentRunViewModel> Subagents { get; } = [];
     /// <summary>Persistent background Bash shells running or recently exited across turns.</summary>
     public ObservableCollection<BackgroundBashViewModel> BackgroundShells { get; } = [];
+    /// <summary>Advertised ACP auth methods surfaced when authentication is required.</summary>
+    public ObservableCollection<AuthMethodActionViewModel> AuthMethods { get; } = [];
+    /// <summary>Saved ACP sessions fetched via <c>session/list</c>.</summary>
+    public ObservableCollection<AcpSessionListEntryViewModel> RemoteSessions { get; } = [];
     /// <summary>Modal viewer for collapsed multi-line Bash scripts (Bash Style 2).</summary>
     public ScriptPreviewViewModel ScriptPreview { get; } = new();
 
@@ -348,6 +358,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     [ObservableProperty] public partial string InputText { get; set; } = "";
     [ObservableProperty] public partial string? ErrorBanner { get; private set; }
     [ObservableProperty] public partial bool IsAuthRequired { get; private set; }
+    [ObservableProperty] public partial bool IsSessionHistoryOpen { get; set; }
+    [ObservableProperty] public partial bool IsLoadingSessionHistory { get; private set; }
     [ObservableProperty] public partial string SourceLabel { get; private set; } = "";
     [ObservableProperty] public partial long ContextUsed { get; private set; }
     [ObservableProperty] public partial long ContextSize { get; private set; }
@@ -563,10 +575,20 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public string StopButtonLabel => IsCancelling
         ? AppLangResources.Get(AppLangResourceKind.AgentGuiStopping)
         : AppLangResources.Get(AppLangResourceKind.AgentGuiStop);
-    public bool HasContextUsage => ContextSize > 0;
+    public bool HasContextUsage => ContextSize > 0 || ContextUsed > 0;
     public bool HasDiagnostics => !string.IsNullOrWhiteSpace(DiagnosticsText);
     public bool ShowReconnect => State is AgentGuiState.Disconnected or AgentGuiState.Error || IsAuthRequired;
     public bool ShowJumpToBottom => !IsPinnedToBottom && Timeline.Count > 0;
+    public bool HasAuthMethods => AuthMethods.Count > 0;
+    public bool CanLogout => _session?.Initialized?.AgentCapabilities.AuthCapabilities.Logout == true
+        && State is AgentGuiState.Ready or AgentGuiState.Working;
+    public bool CanForkSession => _session?.Initialized?.AgentCapabilities.SessionCapabilities.SupportsFork == true
+        && !string.IsNullOrWhiteSpace(_session.SessionId)
+        && !IsConnecting;
+    public bool CanListSessions => _session?.Initialized?.AgentCapabilities.SessionCapabilities.SupportsList == true
+        && !IsConnecting;
+    public bool HasRemoteSessions => RemoteSessions.Count > 0;
+    public bool ShowEmptyRemoteSessions => !IsLoadingSessionHistory && RemoteSessions.Count == 0;
 
     public string EmptyTitle => AppLangResources.Format(AppLangResourceKind.AgentGuiEmptyTitle, AgentName);
     public string ComposerPlaceholder => AppLangResources.Format(AppLangResourceKind.AgentGuiComposerPlaceholder, AgentName);
@@ -575,7 +597,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         get
         {
             if (!HasContextUsage) return "";
-            var baseText = AppLangResources.Format(AppLangResourceKind.AgentGuiContextUsage, FormatTokens(ContextUsed), FormatTokens(ContextSize));
+            var baseText = ContextSize > 0
+                ? AppLangResources.Format(AppLangResourceKind.AgentGuiContextUsage, FormatTokens(ContextUsed), FormatTokens(ContextSize))
+                : $"{FormatTokens(ContextUsed)} tok";
             if (ContextCostAmount is > 0)
             {
                 var symbol = string.Equals(ContextCostCurrency, "USD", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(ContextCostCurrency)
@@ -645,9 +669,14 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         OnPropertyChanged(nameof(ShowResumeQueueButton));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(ShowReconnect));
+        OnPropertyChanged(nameof(CanLogout));
+        OnPropertyChanged(nameof(CanForkSession));
+        OnPropertyChanged(nameof(CanListSessions));
         NotifyComposerActionStateChanged();
         CancelTurnCommand.NotifyCanExecuteChanged();
         ResumeQueueCommand.NotifyCanExecuteChanged();
+        ForkSessionCommand.NotifyCanExecuteChanged();
+        LogoutCommand.NotifyCanExecuteChanged();
 
         var mapped = value switch
         {
@@ -720,12 +749,20 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
             SetUi(() => StatusDetail = null);
 
+            var additionalDirectories = ResolveAdditionalDirectories();
             var callbacks = new AcpSessionCallbacks
             {
                 EnableFormElicitation = agentSettings.AcpEnableFormElicitation,
+                EnableUrlElicitation = agentSettings.AcpEnableUrlElicitation,
+                EnableClientFileSystem = agentSettings.AcpEnableClientFileSystem,
+                EnableClientTerminal = agentSettings.AcpEnableClientTerminal,
+                McpServers = agentSettings.AcpMcpServers,
+                AllowedFileSystemRoots = BuildAllowedFileSystemRoots(additionalDirectories),
                 GetActivePermissionMode = () => Composer.SelectedPermissionId ?? PermissionModes.Default,
                 OnPermissionRequest = HandlePermissionRequestAsync,
                 OnQuestionRequest = HandleQuestionRequestAsync,
+                OnFormElicitationRequest = HandleFormElicitationRequestAsync,
+                OnUrlElicitationRequest = HandleUrlElicitationRequestAsync,
             };
 
             var session = _sessionFactory.Create(plan, callbacks);
@@ -751,7 +788,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
             var started = await session.StartAsync(
                 WorkingDirectory,
-                additionalDirectories: null,
+                additionalDirectories: additionalDirectories,
                 resumeSessionId: requestedResumeId,
                 cancellationToken: ct).ConfigureAwait(false);
 
@@ -759,6 +796,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                AuthMethods.Clear();
+                OnPropertyChanged(nameof(HasAuthMethods));
                 _projects.SetItemSessionId(_item.Id, started.SessionId, isAcp: true);
                 InitAgyTranscriptMonitor(started.SessionId);
                 if (!string.IsNullOrWhiteSpace(requestedResumeId) && started.Kind == "new" && _acceptReplay)
@@ -777,6 +816,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     preserveConfiguredPermission: true);
                 _confirmedModelId = Composer.SelectedModelId;
                 State = AgentGuiState.Ready;
+                OnPropertyChanged(nameof(CanLogout));
+                OnPropertyChanged(nameof(CanForkSession));
+                OnPropertyChanged(nameof(CanListSessions));
+                ForkSessionCommand.NotifyCanExecuteChanged();
+                LogoutCommand.NotifyCanExecuteChanged();
                 RefreshDiagnostics();
             });
 
@@ -817,10 +861,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             // Cancelled due to close/reconnect.
         }
-        catch (AcpAuthRequiredException)
+        catch (AcpAuthRequiredException authEx)
         {
             SetUi(() =>
             {
+                PopulateAuthMethods(authEx.AuthMethods.Count > 0 ? authEx.AuthMethods : _session?.Initialized?.AuthMethods);
                 IsAuthRequired = true;
                 State = AgentGuiState.Disconnected;
                 RefreshDiagnostics();
@@ -1113,7 +1158,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _isTurnActive = true;
 
         var userTurn = new UserTurnItem(text, attached, ReusePrompt);
-        var assistantTurn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript);
+        var assistantTurn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript, workingDirectory: WorkingDirectory);
         _activeTurn = assistantTurn;
         EnsureLiveTickTimer();
         PruneFinishedForegroundSubagents();
@@ -1138,11 +1183,19 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         try
         {
-            await session.PromptAsync(text, attached, _turnCts.Token);
+            var promptResult = await session.PromptAsync(text, attached, _turnCts.Token);
+            var stopNotice = FormatStopReasonNotice(promptResult.StopReason);
             SetUi(() =>
             {
                 FlushPendingTextDeltas();
-                assistantTurn.Complete();
+                if (promptResult.Usage is { TotalTokens: > 0 } turnUsage && ContextSize == 0)
+                {
+                    ContextUsed = turnUsage.TotalTokens;
+                    OnPropertyChanged(nameof(HasContextUsage));
+                    OnPropertyChanged(nameof(ContextUsageText));
+                    OnPropertyChanged(nameof(ContextUsagePercent));
+                }
+                assistantTurn.Complete(stopReasonNotice: stopNotice);
                 if (State is AgentGuiState.Working or AgentGuiState.Waiting) State = AgentGuiState.Ready;
                 RefreshDiagnostics();
                 if (Subagents.Any(s => s.IsRunning && s.RunsAsynchronously))
@@ -1171,11 +1224,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
         }
-        catch (AcpAuthRequiredException)
+        catch (AcpAuthRequiredException authEx)
         {
             SetUi(() =>
             {
                 FlushPendingTextDeltas();
+                PopulateAuthMethods(authEx.AuthMethods.Count > 0 ? authEx.AuthMethods : _session?.Initialized?.AuthMethods);
                 assistantTurn.Complete(AppLangResources.Get(AppLangResourceKind.AgentGuiAuthRequiredTitle));
                 IsAuthRequired = true;
                 State = AgentGuiState.Disconnected;
@@ -1247,7 +1301,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private void ClearTimeline()
     {
         if (IsTurnActive) return;
-        Timeline.Clear();
+        DisposeAndClearTimeline();
         IsPinnedToBottom = true;
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(HasTimeline));
@@ -1261,7 +1315,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (IsTurnActive || _isTurnActive) await CancelTurnAsync();
         _projects.SetItemSessionId(_item.Id, null, isAcp: true);
         _item.AcpSessionId = null;
-        if (_item.Launch is not null) _item.Launch.SessionId = null;
+        _item.Launch?.SessionId = null;
         _titledFromPrompt = false;
         _urgentPrompt = null;
         _cancellingTurn = null;
@@ -1269,7 +1323,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         QueuedPrompts.Clear();
         IsQueuePaused = false;
         IsQueueExpanded = true;
-        Timeline.Clear();
+        DisposeAndClearTimeline();
         ResetOrchestrationState();
         ContextUsed = 0;
         ContextSize = 0;
@@ -1538,7 +1592,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             if (_subagentsById.TryGetValue(message.SubagentId, out var run))
             {
-                SelectedSubagent = run;
+                OpenSubagentInRightPanel(run);
             }
         });
     }
@@ -1561,13 +1615,21 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     }
 
     [RelayCommand]
-    private void CloseSubagentDrawer() => SelectedSubagent = null;
-
-    [RelayCommand]
     private void SelectSubagent(SubagentRunViewModel? sub)
     {
         if (sub is null) return;
+        OpenSubagentInRightPanel(sub);
+    }
+
+    private void OpenSubagentInRightPanel(SubagentRunViewModel sub)
+    {
         SelectedSubagent = sub;
+        WeakReferenceMessenger.Default.Send(new OpenSubagentPanelRequested(
+            _item.Id,
+            sub.Id,
+            WorkingDirectory,
+            sub,
+            Subagents));
     }
 
     [RelayCommand]
@@ -1845,6 +1907,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             FlushPendingTextDeltas();
             switch (evt)
             {
+                case AcpImageEvent img:
+                    EnsureActiveTurn().AddGeneratedImage(img.Image, img.MessageId);
+                    RequestAutoScrollIfPinned();
+                    break;
+
                 case AcpToolCallEvent tc:
                     HandleToolCallUpdate(tc.Update);
                     RequestAutoScrollIfPinned();
@@ -1857,6 +1924,24 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                         SyncWorkflowTasksFromEntries(plan.Entries);
                     }
                     RequestAutoScrollIfPinned();
+                    break;
+
+                case AcpPlanRemovedEvent:
+                    WorkflowTasks.Clear();
+                    _activeTurn?.ClearPlan();
+                    NotifyOrchestrationProperties();
+                    break;
+
+                case AcpCompactionEvent comp:
+                    EnsureActiveTurn().SetCompactionNotice(comp.Update.Summary);
+                    RequestAutoScrollIfPinned();
+                    break;
+
+                case AcpElicitationCompletedEvent done:
+                    if (_urlElicitations.Remove(done.ElicitationId, out var activeUrlCard))
+                    {
+                        activeUrlCard.MarkCompletedFromServer();
+                    }
                     break;
 
                 case AcpUsageEvent usage:
@@ -2045,7 +2130,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 OpenToolFile,
                 _workspaceCommands is null ? null : OpenToolDiff,
                 OpenToolScript,
-                isReplay: true);
+                isReplay: true,
+                workingDirectory: WorkingDirectory);
             built.Add(currentAssistant);
             return currentAssistant;
         }
@@ -2055,11 +2141,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             switch (evt)
             {
                 case AcpUserMessageEvent user:
-                    if (currentAssistant is not null)
-                    {
-                        currentAssistant.Complete(showDuration: false);
-                        currentAssistant = null;
-                    }
+                    currentAssistant?.Complete(showDuration: false);
+                    currentAssistant = null;
                     if (currentUser is not null
                         && (string.IsNullOrEmpty(user.MessageId) || user.MessageId == currentUser.MessageId))
                     {
@@ -2073,6 +2156,21 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     }
                     break;
 
+                case AcpUserImageEvent userImg:
+                {
+                    currentAssistant?.Complete(showDuration: false);
+                    currentAssistant = null;
+                    currentUser ??= new UserTurnItem("", null, ReusePrompt) { MessageId = userImg.MessageId };
+                    currentUser.Attachments.Add(new AttachmentChipViewModel(new AcpPromptAttachment
+                    {
+                        Kind = "image",
+                        Path = userImg.Image.FilePath ?? userImg.Image.Uri ?? "",
+                        DisplayName = userImg.Image.AltText ?? "image",
+                        MimeType = userImg.Image.MimeType,
+                    }));
+                    break;
+                }
+
                 case AcpTextDeltaEvent delta:
                 {
                     var turn = EnsureReplayAssistant();
@@ -2080,6 +2178,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     else turn.AppendMessage(delta.Text, delta.MessageId);
                     break;
                 }
+
+                case AcpImageEvent img:
+                    EnsureReplayAssistant().AddGeneratedImage(img.Image, img.MessageId);
+                    break;
 
                 case AcpToolCallEvent tc:
                 {
@@ -2102,6 +2204,14 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
                 case AcpPlanEvent plan:
                     EnsureReplayAssistant().SetPlan(plan.Entries, plan.Markdown);
+                    break;
+
+                case AcpPlanRemovedEvent:
+                    currentAssistant?.ClearPlan();
+                    break;
+
+                case AcpCompactionEvent comp:
+                    EnsureReplayAssistant().SetCompactionNotice(comp.Update.Summary);
                     break;
             }
         }
@@ -2141,7 +2251,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private AssistantTurnItem EnsureActiveTurn()
     {
         if (_activeTurn is not null) return _activeTurn;
-        var turn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript);
+        var turn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript, workingDirectory: WorkingDirectory);
         _activeTurn = turn;
         EnsureLiveTickTimer();
         Timeline.Add(turn);
@@ -2154,6 +2264,26 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         var now = DateTimeOffset.Now;
 
+        // Hydrate client-hosted ACP terminal snapshots for tool calls referencing type="terminal" blocks.
+        if (update.TerminalIds.Count > 0 && _session is not null)
+        {
+            foreach (var termId in update.TerminalIds)
+            {
+                if (_session.TryGetTerminalSnapshot(termId) is { } snap)
+                {
+                    update.Command ??= snap.Command;
+                    if (string.IsNullOrEmpty(update.Stdout) && !string.IsNullOrEmpty(snap.Output))
+                    {
+                        update.Stdout = snap.Output;
+                    }
+                    if (!update.ExitCode.HasValue && snap.ExitStatus?.ExitCode is { } code)
+                    {
+                        update.ExitCode = code;
+                    }
+                }
+            }
+        }
+
         // 1. SubAgent launch / update (Claude Code Agent / Task tool, Antigravity invoke_subagent)
         if (update.IsSubagentLaunch)
         {
@@ -2165,7 +2295,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     update.SubagentType ?? "general-purpose",
                     update.Description ?? update.Title,
                     now,
-                    onSelect: s => SelectedSubagent = s,
+                    onSelect: OpenSubagentInRightPanel,
                     onStop: StopSubagent);
                 _subagentsById[id] = sub;
                 Subagents.Add(sub);
@@ -2402,7 +2532,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         if (_subagentsById.TryGetValue(subagentId, out var sub))
         {
-            SelectedSubagent = sub;
+            OpenSubagentInRightPanel(sub);
         }
     }
 
@@ -2924,14 +3054,22 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    private Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?> HandleQuestionRequestAsync(AcpQuestionRequest request, CancellationToken ct)
+    private Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?> HandleQuestionRequestAsync(AcpQuestionRequest request, CancellationToken ct) =>
+        HandleFormElicitationRequestAsync(request, ct)
+            .ContinueWith(
+                t => t.Result.Action == AcpElicitationAction.Accept ? t.Result.Answers : null,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+    private Task<AcpFormElicitationResponse> HandleFormElicitationRequestAsync(AcpQuestionRequest request, CancellationToken ct)
     {
-        var tcs = new TaskCompletionSource<IReadOnlyDictionary<string, IReadOnlyList<string>>?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs = new TaskCompletionSource<AcpFormElicitationResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
         QuestionCardItem? card = null;
         CancellationTokenRegistration reg = default;
         reg = ct.Register(() =>
         {
-            tcs.TrySetResult(null);
+            tcs.TrySetResult(new AcpFormElicitationResponse(AcpElicitationAction.Cancel));
             SetUi(() =>
             {
                 if (card is { IsResolved: false }) card.CancelCommand.Execute(null);
@@ -2943,11 +3081,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             FlushPendingTextDeltas();
             var prev = State;
             State = AgentGuiState.Waiting;
-            card = new QuestionCardItem(request, answers =>
+            card = new QuestionCardItem(request, response =>
             {
                 reg.Dispose();
                 if (State == AgentGuiState.Waiting) State = prev == AgentGuiState.Working ? AgentGuiState.Working : AgentGuiState.Ready;
-                tcs.TrySetResult(answers);
+                tcs.TrySetResult(response);
             });
             Timeline.Add(card);
             OnPropertyChanged(nameof(ShowEmptyState));
@@ -2956,6 +3094,286 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         });
         return tcs.Task;
     }
+
+    private Task<AcpElicitationAction> HandleUrlElicitationRequestAsync(AcpUrlElicitationRequest request, CancellationToken ct)
+    {
+        var tcs = new TaskCompletionSource<AcpElicitationAction>(TaskCreationOptions.RunContinuationsAsynchronously);
+        UrlElicitationCardItem? card = null;
+        CancellationTokenRegistration reg = default;
+        reg = ct.Register(() =>
+        {
+            tcs.TrySetResult(AcpElicitationAction.Cancel);
+            SetUi(() =>
+            {
+                if (card is not null)
+                {
+                    _urlElicitations.Remove(request.ElicitationId);
+                    if (!card.IsResolved) card.CancelCommand.Execute(null);
+                }
+            });
+        });
+
+        SetUi(() =>
+        {
+            FlushPendingTextDeltas();
+            var prev = State;
+            State = AgentGuiState.Waiting;
+            card = new UrlElicitationCardItem(
+                request,
+                action =>
+                {
+                    reg.Dispose();
+                    _urlElicitations.Remove(request.ElicitationId);
+                    if (State == AgentGuiState.Waiting) State = prev == AgentGuiState.Working ? AgentGuiState.Working : AgentGuiState.Ready;
+                    tcs.TrySetResult(action);
+                },
+                url => _fileOpener?.OpenUrl(url));
+            _urlElicitations[request.ElicitationId] = card;
+            Timeline.Add(card);
+            OnPropertyChanged(nameof(ShowEmptyState));
+            OnPropertyChanged(nameof(HasTimeline));
+            ScrollToBottomRequested?.Invoke(this, true);
+        });
+        return tcs.Task;
+    }
+
+    private void PopulateAuthMethods(IReadOnlyList<AcpAuthMethod>? methods)
+    {
+        AuthMethods.Clear();
+        if (methods is { Count: > 0 })
+        {
+            foreach (var m in methods)
+            {
+                AuthMethods.Add(new AuthMethodActionViewModel(m, RunAuthMethodAsync));
+            }
+        }
+        OnPropertyChanged(nameof(HasAuthMethods));
+    }
+
+    private async Task RunAuthMethodAsync(AcpAuthMethod method)
+    {
+        if (string.Equals(method.Type, "terminal", StringComparison.OrdinalIgnoreCase))
+        {
+            ContinueInTerminal();
+            return;
+        }
+        if (_session is null)
+        {
+            await ConnectAsync();
+            return;
+        }
+        try
+        {
+            await _session.AuthenticateAsync(method.Id);
+            await ConnectAsync();
+        }
+        catch (Exception ex)
+        {
+            SetUi(() =>
+            {
+                ErrorBanner = ex.Message;
+                OnPropertyChanged(nameof(HasErrorBanner));
+            });
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanLogout))]
+    public async Task LogoutAsync()
+    {
+        if (_session is null || !CanLogout) return;
+        try
+        {
+            await _session.LogoutAsync();
+            SetUi(() =>
+            {
+                PopulateAuthMethods(_session.Initialized?.AuthMethods);
+                IsAuthRequired = true;
+                State = AgentGuiState.Disconnected;
+                OnPropertyChanged(nameof(ShowEmptyState));
+            });
+        }
+        catch (Exception ex)
+        {
+            SetUi(() =>
+            {
+                ErrorBanner = ex.Message;
+                OnPropertyChanged(nameof(HasErrorBanner));
+            });
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanForkSession))]
+    public async Task ForkSessionAsync()
+    {
+        if (_session is null || !CanForkSession) return;
+        try
+        {
+            var forked = await _session.ForkSessionAsync(WorkingDirectory);
+            if (string.IsNullOrWhiteSpace(forked.SessionId)) return;
+            var opts = new AgentLaunchOptions
+            {
+                Surface = AgentSurface.Gui,
+                Model = Composer.SelectedModelId,
+                Effort = Composer.SelectedEffortId,
+                Fast = Composer.ShowFastToggle ? Composer.FastMode : null,
+                AccountId = _item.Launch?.AccountId,
+                SessionId = forked.SessionId,
+            };
+            _opener.OpenAgent(_definition.Id, opts, _item.WorkspaceId, _item.WorkingDirectory);
+        }
+        catch (Exception ex)
+        {
+            SetUi(() =>
+            {
+                ErrorBanner = ex.Message;
+                OnPropertyChanged(nameof(HasErrorBanner));
+            });
+        }
+    }
+
+    partial void OnIsSessionHistoryOpenChanged(bool value)
+    {
+        if (value)
+        {
+            _ = RefreshSessionHistoryAsync();
+        }
+    }
+
+    [RelayCommand]
+    public async Task RefreshSessionHistoryAsync()
+    {
+        if (_session is null || !CanListSessions || IsLoadingSessionHistory) return;
+        SetUi(() =>
+        {
+            IsLoadingSessionHistory = true;
+            OnPropertyChanged(nameof(ShowEmptyRemoteSessions));
+        });
+        try
+        {
+            var result = await _session.ListSessionsAsync(WorkingDirectory);
+            var currentId = _session.SessionId;
+            var canDelete = _session.Initialized?.AgentCapabilities.SessionCapabilities.SupportsDelete == true;
+            SetUi(() =>
+            {
+                RemoteSessions.Clear();
+                foreach (var info in result.Sessions)
+                {
+                    RemoteSessions.Add(new AcpSessionListEntryViewModel(
+                        info,
+                        isCurrent: string.Equals(info.SessionId, currentId, StringComparison.Ordinal),
+                        canDelete: canDelete,
+                        onLoad: LoadSessionByIdAsync,
+                        onDelete: DeleteRemoteSessionAsync));
+                }
+                OnPropertyChanged(nameof(HasRemoteSessions));
+                OnPropertyChanged(nameof(ShowEmptyRemoteSessions));
+            });
+        }
+        catch (Exception ex)
+        {
+            SetUi(() =>
+            {
+                ErrorBanner = ex.Message;
+                OnPropertyChanged(nameof(HasErrorBanner));
+            });
+        }
+        finally
+        {
+            SetUi(() =>
+            {
+                IsLoadingSessionHistory = false;
+                OnPropertyChanged(nameof(ShowEmptyRemoteSessions));
+            });
+        }
+    }
+
+    public async Task LoadSessionByIdAsync(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return;
+        IsSessionHistoryOpen = false;
+        if (IsTurnActive || _isTurnActive) await CancelTurnAsync();
+        _projects.SetItemSessionId(_item.Id, sessionId, isAcp: true);
+        _item.AcpSessionId = sessionId;
+        DisposeAndClearTimeline();
+        ResetOrchestrationState();
+        OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(HasTimeline));
+        await ConnectAsync();
+    }
+
+    private async Task DeleteRemoteSessionAsync(string sessionId)
+    {
+        if (_session is null || string.IsNullOrWhiteSpace(sessionId)) return;
+        try
+        {
+            await _session.DeleteSessionAsync(sessionId);
+            SetUi(() =>
+            {
+                var found = RemoteSessions.FirstOrDefault(s => string.Equals(s.SessionId, sessionId, StringComparison.Ordinal));
+                if (found is not null) RemoteSessions.Remove(found);
+                OnPropertyChanged(nameof(HasRemoteSessions));
+                OnPropertyChanged(nameof(ShowEmptyRemoteSessions));
+            });
+        }
+        catch (Exception ex)
+        {
+            SetUi(() =>
+            {
+                ErrorBanner = ex.Message;
+                OnPropertyChanged(nameof(HasErrorBanner));
+            });
+        }
+    }
+
+    /// <summary>Resolves other existing local project directories in the same group when <c>MergeWorkspaces</c> is enabled.</summary>
+    private IReadOnlyList<string>? ResolveAdditionalDirectories()
+    {
+        if (!ProjectLocation.IsOnThisComputer(_project) || _project.GroupId is not { } groupId)
+        {
+            return null;
+        }
+        var group = _projects.Groups.FirstOrDefault(g => g.Id == groupId);
+        if (group is null || !group.MergeWorkspaces)
+        {
+            return null;
+        }
+        var comparer = OperatingSystem.IsMacOS() || OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var seen = new HashSet<string>(comparer);
+        if (!string.IsNullOrWhiteSpace(WorkingDirectory))
+        {
+            seen.Add(Path.GetFullPath(WorkingDirectory));
+        }
+        var result = new List<string>();
+        foreach (var member in _projects.Projects)
+        {
+            if (member.GroupId != groupId || !ProjectLocation.IsOnThisComputer(member)) continue;
+            if (string.IsNullOrWhiteSpace(member.Path) || !Directory.Exists(member.Path)) continue;
+            var full = Path.GetFullPath(member.Path);
+            if (seen.Add(full))
+            {
+                result.Add(member.Path);
+            }
+        }
+        return result.Count == 0 ? null : result;
+    }
+
+    private IReadOnlyList<string> BuildAllowedFileSystemRoots(IReadOnlyList<string>? additionalDirectories)
+    {
+        var roots = new List<string>();
+        if (!string.IsNullOrWhiteSpace(WorkingDirectory)) roots.Add(WorkingDirectory);
+        if (additionalDirectories is { Count: > 0 }) roots.AddRange(additionalDirectories);
+        return roots;
+    }
+
+    private static string? FormatStopReasonNotice(string? stopReason) => stopReason switch
+    {
+        "max_tokens" => AppLangResources.Get(AppLangResourceKind.AgentGuiStopReasonMaxTokens),
+        "max_turn_requests" => AppLangResources.Get(AppLangResourceKind.AgentGuiStopReasonMaxTurnRequests),
+        "refusal" => AppLangResources.Get(AppLangResourceKind.AgentGuiStopReasonRefusal),
+        _ => null,
+    };
 
     private async Task ApplyModeAsync(string modeId)
     {
@@ -3316,12 +3734,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (old is not null)
         {
             old.EventReceived -= OnSessionEvent;
-            _ = old.DisposeAsync();
+            _ = old.DisposeAsync().AsTask();
         }
         // Release collections & transient buffers promptly when a tab closes.
         UiContext.Run(() =>
         {
-            Timeline.Clear();
+            DisposeAndClearTimeline();
             QueuedPrompts.Clear();
             Attachments.Clear();
             FilteredCommands.Clear();
@@ -3331,6 +3749,15 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         });
         _workspaceFiles = [];
         _promptHistory.Clear();
+    }
+
+    private void DisposeAndClearTimeline()
+    {
+        foreach (var item in Timeline)
+        {
+            if (item is AssistantTurnItem turn) turn.Dispose();
+        }
+        Timeline.Clear();
     }
 
     private static void SetUi(Action action) => UiContext.Run(action);

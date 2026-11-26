@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Octopus.Acp.Client;
 using Octopus.Acp.Dialects;
 using Octopus.Acp.Process;
 using Octopus.Acp.Protocol;
@@ -43,12 +44,19 @@ public sealed class FakeAcpSession : IAcpSession
     public List<string> SetModels { get; } = [];
     public List<(string Id, string Value)> SetConfigs { get; } = [];
     public List<(string Id, bool Value)> SetBoolConfigs { get; } = [];
+    public IReadOnlyList<string>? LastAdditionalDirectories { get; private set; }
+    public List<string> AuthenticatedMethods { get; } = [];
+    public int LogoutCount { get; private set; }
+    public List<string> DeletedSessions { get; } = [];
     public int CancelCount { get; private set; }
 
     public Func<FakeAcpSession, string, IReadOnlyList<AcpPromptAttachment>?, CancellationToken, Task<AcpPromptResult>>? PromptHandler { get; set; }
     public Func<FakeAcpSession, Task>? CancelHandler { get; set; }
     public Func<FakeAcpSession, string, CancellationToken, Task>? SetModelHandler { get; set; }
     public Func<FakeAcpSession, string, string, CancellationToken, Task>? SetConfigOptionHandler { get; set; }
+    public Func<FakeAcpSession, string?, string?, CancellationToken, Task<AcpSessionListResult>>? ListSessionsHandler { get; set; }
+    public Func<FakeAcpSession, string?, string?, CancellationToken, Task<AcpSessionStartResult>>? ForkSessionHandler { get; set; }
+    public Func<string, AcpTerminalSnapshot?>? TerminalSnapshotHandler { get; set; }
 
     public event Action<AcpRuntimeEvent>? EventReceived;
 
@@ -82,6 +90,7 @@ public sealed class FakeAcpSession : IAcpSession
         string? resumeSessionId = null,
         CancellationToken cancellationToken = default)
     {
+        LastAdditionalDirectories = additionalDirectories;
         StartHandler?.Invoke(this, resumeSessionId);
         return Task.FromResult(new AcpSessionStartResult
         {
@@ -135,6 +144,37 @@ public sealed class FakeAcpSession : IAcpSession
         SetBoolConfigs.Add((configId, value));
         return Task.CompletedTask;
     }
+
+    public Task AuthenticateAsync(string methodId, IReadOnlyDictionary<string, string>? meta = null, CancellationToken cancellationToken = default)
+    {
+        AuthenticatedMethods.Add(methodId);
+        return Task.CompletedTask;
+    }
+
+    public Task LogoutAsync(CancellationToken cancellationToken = default)
+    {
+        LogoutCount++;
+        return Task.CompletedTask;
+    }
+
+    public Task<AcpSessionListResult> ListSessionsAsync(string? workingDirectory = null, string? cursor = null, CancellationToken cancellationToken = default) =>
+        ListSessionsHandler is not null
+            ? ListSessionsHandler(this, workingDirectory, cursor, cancellationToken)
+            : Task.FromResult(new AcpSessionListResult());
+
+    public Task<AcpSessionStartResult> ForkSessionAsync(string? workingDirectory = null, string? cursorId = null, CancellationToken cancellationToken = default) =>
+        ForkSessionHandler is not null
+            ? ForkSessionHandler(this, workingDirectory, cursorId, cancellationToken)
+            : Task.FromResult(new AcpSessionStartResult { Kind = "fork", SessionId = $"{SessionId}-fork" });
+
+    public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        DeletedSessions.Add(sessionId);
+        return Task.CompletedTask;
+    }
+
+    public AcpTerminalSnapshot? TryGetTerminalSnapshot(string terminalId) =>
+        TerminalSnapshotHandler?.Invoke(terminalId);
 
     public ValueTask DisposeAsync()
     {
@@ -781,24 +821,37 @@ public class AgentGuiTests
             Assert.True(turn.HasWorkFailures);
             Assert.False(string.IsNullOrWhiteSpace(turn.WorkHeaderCounts));
 
-            // 2) Scheme C fixed 3-line sliding live ticker shows last 2 completed + 1 running step with fading opacity.
+            // 2) Scheme C fixed 5-line sliding live ticker shows all 5 steps (4 completed + 1 running at bottom) with fading opacity.
             Assert.True(turn.ShowLiveTicker);
             Assert.NotNull(turn.LiveTicker);
             Assert.True(turn.LiveTicker!.Line0.IsVisible);
             Assert.True(turn.LiveTicker.Line1.IsVisible);
             Assert.True(turn.LiveTicker.Line2.IsVisible);
+            Assert.True(turn.LiveTicker.Line3.IsVisible);
+            Assert.True(turn.LiveTicker.Line4.IsVisible);
             Assert.True(turn.LiveTicker.Line0.RowOpacity < turn.LiveTicker.Line1.RowOpacity);
             Assert.True(turn.LiveTicker.Line1.RowOpacity < turn.LiveTicker.Line2.RowOpacity);
-            Assert.True(turn.LiveTicker.Line2.IsRunning);
-            Assert.Equal("dotnet test", turn.LiveTicker.Line2.Target);
+            Assert.True(turn.LiveTicker.Line2.RowOpacity < turn.LiveTicker.Line3.RowOpacity);
+            Assert.True(turn.LiveTicker.Line3.RowOpacity < turn.LiveTicker.Line4.RowOpacity);
+            Assert.True(turn.LiveTicker.Line4.IsRunning);
+            Assert.Equal("dotnet test", turn.LiveTicker.Line4.Target);
 
-            // Waiting for user input hides the spinning ticker and shows waiting badge.
+            // Reassuring bottom live loading status with rotating i18n whimsical phrases is visible while streaming.
+            Assert.True(turn.ShowLiveStatus);
+            var firstPhrase = turn.LiveStatusText;
+            Assert.False(string.IsNullOrWhiteSpace(firstPhrase));
+            turn.AdvanceLiveStatus();
+            Assert.NotEqual(firstPhrase, turn.LiveStatusText);
+
+            // Waiting for user input hides the spinning ticker and bottom live status, and shows waiting badge.
             turn.SetWaitingForInput(true);
             Assert.False(turn.ShowLiveTicker);
+            Assert.False(turn.ShowLiveStatus);
             Assert.Null(turn.LiveTicker);
             Assert.True(turn.ShowWaitingBadge);
             turn.SetWaitingForInput(false);
             Assert.True(turn.ShowLiveTicker);
+            Assert.True(turn.ShowLiveStatus);
             Assert.NotNull(turn.LiveTicker);
 
             // 3) Manually expanding work area hides ticker and lazy-mounts pure-text steps; expanding thought caps height <= 240.
@@ -824,6 +877,7 @@ public class AgentGuiTests
             Assert.False(turn.IsWorkExpanded);
             Assert.Null(turn.ExpandedWorkSteps);
             Assert.False(turn.ShowLiveTicker);
+            Assert.False(turn.ShowLiveStatus);
             Assert.Null(turn.LiveTicker);
             Assert.Contains("All checks reviewed.", turn.MarkdownText);
         }
@@ -880,7 +934,7 @@ public class AgentGuiTests
             var stepY = rowH + viewport.Spacing;
             Assert.Equal(rowH, viewport.Bounds.Height, 1.0);
 
-            // Grow 1 -> 2 -> 3 rows smoothly.
+            // Grow 1 -> 2 -> 3 -> 4 -> 5 rows smoothly.
             turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t2", Kind = "edit", Title = "File B.cs", Status = "completed" });
             var growthHeights = new List<double>();
             Assert.True(StepUntil(() => !viewport.IsRunning, () => growthHeights.Add(viewport.Bounds.Height)));
@@ -888,21 +942,25 @@ public class AgentGuiTests
             Assert.Contains(growthHeights, h => h > rowH + 0.5 && h < twoRowHeight - 0.5);
             Assert.Equal(twoRowHeight, viewport.Bounds.Height, 1.0);
 
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t3", Kind = "edit", Title = "File C.cs", Status = "in_progress" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t3", Kind = "edit", Title = "File C.cs", Status = "completed" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t4", Kind = "edit", Title = "File D.cs", Status = "completed" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t5", Kind = "edit", Title = "File E.cs", Status = "in_progress" });
             Assert.True(StepUntil(() => !viewport.IsRunning));
-            var threeRowHeight = 3 * rowH + 2 * viewport.Spacing;
-            Assert.Equal(threeRowHeight, viewport.Bounds.Height, 1.0);
+            var fiveRowHeight = 5 * rowH + 4 * viewport.Spacing;
+            Assert.Equal(fiveRowHeight, viewport.Bounds.Height, 1.0);
             Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
             Assert.Equal(stepY, viewport.GetSlotOffsetY(1), 0.5);
             Assert.Equal(2 * stepY, viewport.GetSlotOffsetY(2), 0.5);
+            Assert.Equal(3 * stepY, viewport.GetSlotOffsetY(3), 0.5);
+            Assert.Equal(4 * stepY, viewport.GetSlotOffsetY(4), 0.5);
 
-            // In-place update of t3 must NOT trigger a slide animation.
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t3", Kind = "edit", Title = "File C.cs", Status = "completed" });
+            // In-place update of t5 must NOT trigger a slide animation.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t5", Kind = "edit", Title = "File E.cs", Status = "completed" });
             Assert.False(viewport.IsRunning);
             Assert.Equal(0.0, viewport.RemainingShift, 0.01);
 
-            // 3 -> 3 upward shift: t4 enters at bottom, t1 exits at top with smooth upward slide and constant height.
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t4", Kind = "edit", Title = "File D.cs", Status = "in_progress" });
+            // 5 -> 5 upward shift: t6 enters at bottom, t1 exits at top with smooth upward slide and constant height.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t6", Kind = "edit", Title = "File F.cs", Status = "in_progress" });
             Assert.True(viewport.IsRunning);
             Assert.True(viewport.IsExitVisible(0));
             Assert.Equal("File A.cs", turn.LiveTicker!.Exit0.Target);
@@ -922,39 +980,71 @@ public class AgentGuiTests
             Assert.True(line0Ys.Count >= 3, $"expected smooth upward frames, got {line0Ys.Count}");
             Assert.Contains(line0Ys, y => y > 0.5 && y < stepY - 0.5);
             Assert.Contains(exit0Ys, y => y < -0.5 && y > -stepY + 0.5);
-            Assert.All(heights, h => Assert.Equal(threeRowHeight, h, 1.0));
+            Assert.All(heights, h => Assert.Equal(fiveRowHeight, h, 1.0));
 
-            // Settled: exiting ghost hidden and slots rest at exact positions & opacities.
+            // Settled: exiting ghost hidden and slots rest at exact positions & 5-row opacities.
             Assert.False(viewport.IsExitVisible(0));
             Assert.False(turn.LiveTicker.Exit0.IsVisible);
             Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
             Assert.Equal(stepY, viewport.GetSlotOffsetY(1), 0.5);
             Assert.Equal(2 * stepY, viewport.GetSlotOffsetY(2), 0.5);
-            Assert.Equal(0.38, viewport.GetSlotOpacity(0), 0.02);
-            Assert.Equal(0.66, viewport.GetSlotOpacity(1), 0.02);
-            Assert.Equal(1.0, viewport.GetSlotOpacity(2), 0.02);
+            Assert.Equal(3 * stepY, viewport.GetSlotOffsetY(3), 0.5);
+            Assert.Equal(4 * stepY, viewport.GetSlotOffsetY(4), 0.5);
+            Assert.Equal(0.28, viewport.GetSlotOpacity(0), 0.02);
+            Assert.Equal(0.40, viewport.GetSlotOpacity(1), 0.02);
+            Assert.Equal(0.56, viewport.GetSlotOpacity(2), 0.02);
+            Assert.Equal(0.76, viewport.GetSlotOpacity(3), 0.02);
+            Assert.Equal(1.00, viewport.GetSlotOpacity(4), 0.02);
 
-            // Mid-flight rapid shift: t5 starts sliding, then t6 arrives mid-flight without jumping backwards.
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t4", Kind = "edit", Title = "File D.cs", Status = "completed" });
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t5", Kind = "edit", Title = "File E.cs", Status = "in_progress" });
+            // The ArcSpinner on the newly shifted bottom row MUST actually spin (EffectiveViewport refreshed after slide)!
+            var activeSpinner = viewport.GetVisualDescendants()
+                .OfType<TKCode.Arc.Primitives.ArcSpinner>()
+                .First(s => s.IsVisible && s.IsEffectivelyVisible);
+            var startAngle = activeSpinner.Angle;
+            Assert.True(StepUntil(() => activeSpinner.IsSpinning && Math.Abs(activeSpinner.Angle - startAngle) > 1.0, milliseconds: 1500),
+                $"Expected bottom row ArcSpinner to spin after 5->5 shift (IsSpinning={activeSpinner.IsSpinning}, start={startAngle}, now={activeSpinner.Angle}).");
+
+            // Active thought updates inside the bottom ticker slot animate smoothly on prefix continuation AND line switch.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t6", Kind = "edit", Title = "File F.cs", Status = "completed" });
+            turn.AppendThought("Initial observation: checking tokens");
+            Assert.True(StepUntil(() => !viewport.IsRunning));
+
+            var thoughtTarget = viewport.GetVisualDescendants()
+                .OfType<TickerTargetText>()
+                .Last(t => t.AnimateUpdates);
+            Assert.Equal("Initial observation: checking tokens", thoughtTarget.CurrentDisplayText);
+
+            // 1) Prefix continuation triggers smooth streaming tail reveal.
+            turn.AppendThought(" and layout viewport");
+            Assert.True(thoughtTarget.IsRevealAnimating);
+            Assert.True(StepUntil(() => !thoughtTarget.IsRevealAnimating));
+
+            // 2) Newline switch triggers smooth vertical roll + crossfade.
+            turn.AppendThought("\nNext step: verify spinner rotation.");
+            Assert.True(thoughtTarget.IsSwapAnimating);
+            Assert.True(StepUntil(() => !thoughtTarget.IsSwapAnimating));
+            Assert.Equal("Next step: verify spinner rotation.", thoughtTarget.CurrentDisplayText);
+
+            // Mid-flight rapid shift: t7 starts sliding, then t8 arrives mid-flight without jumping backwards.
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t7", Kind = "edit", Title = "File G.cs", Status = "in_progress" });
             Assert.True(StepUntil(() => viewport.RemainingShift < 0.75 && viewport.RemainingShift > 0.15));
-            var midVisualYOfSlot1 = viewport.GetSlotOffsetY(1); // File D.cs is currently at slot 1
+            var midVisualYOfSlot1 = viewport.GetSlotOffsetY(1);
 
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t5", Kind = "edit", Title = "File E.cs", Status = "completed" });
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t6", Kind = "edit", Title = "File F.cs", Status = "in_progress" });
-            // File D.cs shifted from slot 1 -> slot 0; its visual Y on screen stays continuous!
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t7", Kind = "edit", Title = "File G.cs", Status = "completed" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t8", Kind = "edit", Title = "File H.cs", Status = "in_progress" });
+            // Slot 1 shifted to slot 0; its visual Y on screen stays continuous!
             Assert.Equal(midVisualYOfSlot1, viewport.GetSlotOffsetY(0), 1.5);
             Assert.True(StepUntil(() => !viewport.IsRunning));
             Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
 
-            // Motion off: shifts settle immediately without waiting for spring frames.
+            // Motion off: shifts and thought updates settle immediately without waiting for spring frames.
             ArcMotion.SetLevel(window, ArcMotionLevel.Off);
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t6", Kind = "edit", Title = "File F.cs", Status = "completed" });
-            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t7", Kind = "edit", Title = "File G.cs", Status = "in_progress" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t8", Kind = "edit", Title = "File H.cs", Status = "completed" });
+            turn.UpsertToolCall(new AcpToolCallUpdate { ToolCallId = "t9", Kind = "edit", Title = "File I.cs", Status = "in_progress" });
             Assert.False(viewport.IsRunning);
             Assert.False(viewport.IsExitVisible(0));
             Assert.Equal(0.0, viewport.GetSlotOffsetY(0), 0.5);
-            Assert.Equal("File G.cs", turn.LiveTicker.Line2.Target);
+            Assert.Equal("File I.cs", turn.LiveTicker.Line4.Target);
         }
         finally
         {
@@ -1126,71 +1216,71 @@ public class AgentGuiTests
         {
             var projects = AppHost.Get<IProjectService>();
             var project = projects.AddProject(tempDir, "acp-sessions-test");
-        var sessionsService = AppHost.Get<FakeAgentSessionService>();
-        var catalog = AppHost.Get<IAgentCatalog>();
+            var sessionsService = AppHost.Get<FakeAgentSessionService>();
+            var catalog = AppHost.Get<IAgentCatalog>();
 
-        var now = DateTimeOffset.UtcNow;
-        sessionsService.Groups["opencode"] = new AgentSessionGroup(
-            catalog.Find("opencode")!,
-            true,
-            [
-                new AgentSessionAccount("/tmp/oc", "Default", true,
+            var now = DateTimeOffset.UtcNow;
+            sessionsService.Groups["opencode"] = new AgentSessionGroup(
+                catalog.Find("opencode")!,
+                true,
+                [
+                    new AgentSessionAccount("/tmp/oc", "Default", true,
                 [
                     new AgentSessionInfo("opencode", "/tmp/oc", "oc-sess-1", "Refactor parser", now, now, 6, null, null, "/tmp/oc/1.json"),
                     new AgentSessionInfo("opencode", "/tmp/oc", "oc-sess-2", "Investigate crash", now.AddMinutes(-5), now.AddMinutes(-5), 4, null, null, "/tmp/oc/2.json"),
                 ]),
-            ]);
-        sessionsService.Groups["aider"] = new AgentSessionGroup(
-            catalog.Find("aider")!,
-            true,
-            [
-                new AgentSessionAccount("/tmp/aider", "Default", true,
+                ]);
+            sessionsService.Groups["aider"] = new AgentSessionGroup(
+                catalog.Find("aider")!,
+                true,
+                [
+                    new AgentSessionAccount("/tmp/aider", "Default", true,
                 [
                     new AgentSessionInfo("aider", "/tmp/aider", "ai-sess-1", "CLI only session", now, now, 2, null, null, "/tmp/aider/1.json"),
                 ]),
-            ]);
+                ]);
 
-        var opener = AppHost.Get<IItemOpener>();
-        var liveGui = opener.OpenAgent("opencode", new AgentLaunchOptions { Surface = AgentSurface.Gui })!;
-        liveGui.AcpSessionId = "oc-sess-1";
+            var opener = AppHost.Get<IItemOpener>();
+            var liveGui = opener.OpenAgent("opencode", new AgentLaunchOptions { Surface = AgentSurface.Gui })!;
+            liveGui.AcpSessionId = "oc-sess-1";
 
-        var panel = new Octopus.App.Explorer.Sessions.SessionsPanelViewModel(
-            sessionsService,
-            catalog,
-            new FakeAgentScanner("opencode", "aider"),
-            AppHost.Get<ISettingsStore>(),
-            projects,
-            opener,
-            new DummyMigrationDialog(),
-            AppHost.Get<IDialogService>(),
-            AppHost.Get<IAppPaths>());
-        panel.SetProject(project.Path);
-        panel.IsActive = true;
-        await panel.LoadAsync();
+            var panel = new Octopus.App.Explorer.Sessions.SessionsPanelViewModel(
+                sessionsService,
+                catalog,
+                new FakeAgentScanner("opencode", "aider"),
+                AppHost.Get<ISettingsStore>(),
+                projects,
+                opener,
+                new DummyMigrationDialog(),
+                AppHost.Get<IDialogService>(),
+                AppHost.Get<IAppPaths>());
+            panel.SetProject(project.Path);
+            panel.IsActive = true;
+            await panel.LoadAsync();
 
-        var agentRow = Assert.Single(panel.Agents, a => a.AgentId == "opencode");
-        agentRow.OpenCommand.Execute(null);
-        var rows = panel.Groups.SelectMany(g => g.Rows).ToList();
-        var liveRow = Assert.Single(rows, r => r.Info.SessionId == "oc-sess-1");
-        var savedRow = Assert.Single(rows, r => r.Info.SessionId == "oc-sess-2");
+            var agentRow = Assert.Single(panel.Agents, a => a.AgentId == "opencode");
+            agentRow.OpenCommand.Execute(null);
+            var rows = panel.Groups.SelectMany(g => g.Rows).ToList();
+            var liveRow = Assert.Single(rows, r => r.Info.SessionId == "oc-sess-1");
+            var savedRow = Assert.Single(rows, r => r.Info.SessionId == "oc-sess-2");
 
-        Assert.True(liveRow.IsLive);
-        Assert.False(liveRow.CanContinueInAlternateSurface);
+            Assert.True(liveRow.IsLive);
+            Assert.False(liveRow.CanContinueInAlternateSurface);
 
-        Assert.False(savedRow.IsLive);
-        Assert.True(savedRow.CanContinueInAlternateSurface);
-        Assert.True(savedRow.AlternateSurfaceIsGui); // default surface is Terminal -> alternate is GUI (ACP)!
+            Assert.False(savedRow.IsLive);
+            Assert.True(savedRow.CanContinueInAlternateSurface);
+            Assert.True(savedRow.AlternateSurfaceIsGui); // default surface is Terminal -> alternate is GUI (ACP)!
 
-        await savedRow.ContinueAlternateCommand.ExecuteAsync(null);
-        var resumed = project.Items.Last();
-        Assert.Equal("opencode", resumed.AgentId);
-        Assert.Equal(AgentSurface.Gui, resumed.Surface);
-        Assert.Equal("oc-sess-2", resumed.Launch?.SessionId);
+            await savedRow.ContinueAlternateCommand.ExecuteAsync(null);
+            var resumed = project.Items.Last();
+            Assert.Equal("opencode", resumed.AgentId);
+            Assert.Equal(AgentSurface.Gui, resumed.Surface);
+            Assert.Equal("oc-sess-2", resumed.Launch?.SessionId);
 
-        // Non-ACP agent (aider) NEVER offers GUI resume in the Sessions panel.
-        panel.BackCommand.Execute(null);
-        var aiderAgentRow = Assert.Single(panel.Agents, a => a.AgentId == "aider");
-        aiderAgentRow.OpenCommand.Execute(null);
+            // Non-ACP agent (aider) NEVER offers GUI resume in the Sessions panel.
+            panel.BackCommand.Execute(null);
+            var aiderAgentRow = Assert.Single(panel.Agents, a => a.AgentId == "aider");
+            aiderAgentRow.OpenCommand.Execute(null);
             var aiderRow = Assert.Single(panel.Groups.SelectMany(g => g.Rows));
             Assert.False(aiderRow.CanContinueInAlternateSurface);
         }
@@ -1862,7 +1952,7 @@ public class AgentGuiTests
         var opener = AppHost.Get<IItemOpener>();
         var registry = AppHost.Get<ITabContentRegistry>();
 
-        string? firstResumeArg = "unset";
+        var firstResumeArg = "unset";
         fakeFactory.ConfigureNext = session =>
         {
             session.SessionId = "acp-persisted-42";
@@ -1908,7 +1998,7 @@ public class AgentGuiTests
         var restoredItem = Assert.Single(reloadedProject.Items);
         Assert.True(projects.WasRestored(restoredItem.Id));
 
-        string? resumedArg = "unset";
+        var resumedArg = "unset";
         fakeFactory.ConfigureNext = session =>
         {
             session.SessionId = "acp-persisted-42";
@@ -1939,7 +2029,7 @@ public class AgentGuiTests
         var reloadedProject2 = projects.Projects.Single(p => p.Id == project.Id);
         var restoredItem2 = Assert.Single(reloadedProject2.Items);
 
-        string? freshArg = "unset";
+        var freshArg = "unset";
         fakeFactory.ConfigureNext = session =>
         {
             session.SessionId = "acp-fresh-99";
@@ -2370,7 +2460,7 @@ public class AgentGuiTests
         {
             // Mirror real codex-acp behavior: honors CODEX_CONFIG["model"] on start/resume,
             // and throws -32602 Invalid params when set_config_option requests a model outside its built-in catalog.
-            string activeModel = "gpt-6.2-sol";
+            var activeModel = "gpt-6.2-sol";
             if (session.Plan.Environment.TryGetValue("CODEX_CONFIG", out var cfgJson))
             {
                 using var doc = JsonDocument.Parse(cfgJson);
@@ -2670,6 +2760,477 @@ public class AgentGuiTests
             window.Close();
             Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Agent_gui_renders_codex_and_acp_generated_images_with_ImageReveal_and_opens_files()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("octopus-acp-imggen-").FullName;
+        var savedImagePath = Path.Combine(tempDir, "saved-render.png");
+        var previewBytes = Files.TestImages.Png(160, 90);
+        var finalBytes = Files.TestImages.Png(320, 180);
+        var squareBytes = Files.TestImages.Png(128, 128);
+        await File.WriteAllBytesAsync(savedImagePath, finalBytes);
+
+        var previewB64 = Convert.ToBase64String(previewBytes);
+        var finalB64 = Convert.ToBase64String(finalBytes);
+        var squareB64 = Convert.ToBase64String(squareBytes);
+
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        var installer = AppHost.Get<AcpAdapterInstaller>();
+        // Seed a cached fake codex-acp executable so AcpLaunchResolver resolves offline without npm/npx.
+        var binDir = Path.Combine(installer.AdapterRoot("codex"), "npm", "node_modules", ".bin");
+        Directory.CreateDirectory(binDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(binDir, OperatingSystem.IsWindows() ? "codex-acp.cmd" : "codex-acp"),
+            "#!/bin/sh\n");
+
+        settings.Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(tempDir, "acp-image-gen");
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        var step1Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var step2Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finishGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            // Replay a historical turn with a direct ACP image block -> settles immediately with Status == null.
+            session.StartHandler = (s, _) =>
+            {
+                s.Emit(new AcpUserMessageEvent("Draw a square icon", "u-replay") { IsReplay = true });
+                s.Emit(new AcpImageEvent(new AcpImageContent
+                {
+                    Base64Data = squareB64,
+                    MimeType = "image/png",
+                    AltText = "Replayed icon",
+                }, "a-replay")
+                { IsReplay = true });
+            };
+
+            session.PromptHandler = async (s, _, _, ct) =>
+            {
+                // 1) Queued Codex image_generation tool call
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "ig_live_1",
+                    Kind = "image",
+                    Name = "image_generation",
+                    Title = "Generating image",
+                    Status = "pending",
+                    IsImageGeneration = true,
+                    ImagePrompt = "Minimalist sunset workspace",
+                    ImageAspectRatio = 16d / 9d,
+                }));
+                await step1Gate.Task.WaitAsync(ct);
+
+                // 2) Streaming partial preview + explicit progress
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "ig_live_1",
+                    Kind = "image",
+                    Name = "image_generation",
+                    Title = "Generating image",
+                    Status = "in_progress",
+                    IsImageGeneration = true,
+                    ImagePrompt = "Minimalist sunset workspace",
+                    ImageProgress = 0.45,
+                    Images = [new AcpImageContent { Base64Data = previewB64, MimeType = "image/png" }],
+                }));
+                await step2Gate.Task.WaitAsync(ct);
+
+                // 3) Completed image with saved local file path + failed second image + direct ACP image chunk
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "ig_live_1",
+                    Kind = "image",
+                    Name = "image_generation",
+                    Title = "Generating image",
+                    Status = "completed",
+                    IsImageGeneration = true,
+                    ImagePrompt = "Minimalist sunset workspace (revised)",
+                    Images = [new AcpImageContent { FilePath = savedImagePath, MimeType = "image/png" }],
+                }));
+                s.Emit(new AcpToolCallEvent(new AcpToolCallUpdate
+                {
+                    ToolCallId = "ig_failed_2",
+                    Kind = "image",
+                    Name = "image_generation",
+                    Title = "Generate blocked image",
+                    Status = "failed",
+                    IsImageGeneration = true,
+                    ImagePrompt = "Blocked prompt",
+                    Stderr = "Content policy rejected",
+                }));
+                s.Emit(new AcpImageEvent(new AcpImageContent
+                {
+                    Base64Data = finalB64,
+                    MimeType = "image/png",
+                    AltText = "Inline PNG result",
+                }, "live-msg-1"));
+                s.Emit(new AcpTextDeltaEvent("assistant", "Here are your generated images.", "live-msg-1"));
+
+                await finishGate.Task.WaitAsync(ct);
+                return new AcpPromptResult { StopReason = "end_turn" };
+            };
+        };
+
+        var item = opener.OpenAgent("codex")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(project, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 1040, Height = 760, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready && vm.Timeline.OfType<AssistantTurnItem>().Any());
+            PumpLayout(window);
+
+            // Replayed historical image settled cleanly (no stuck spinner: RevealStatus == null, Source != null).
+            var replayedTurn = vm.Timeline.OfType<AssistantTurnItem>().First();
+            Assert.True(replayedTurn.HasGeneratedImages);
+            var replayedImg = Assert.Single(replayedTurn.GeneratedImages);
+            Assert.Null(replayedImg.RevealStatus);
+            Assert.NotNull(replayedImg.Source);
+            Assert.Equal("Replayed icon", replayedImg.AltText);
+
+            // Start a live turn with progressive Codex image generation.
+            vm.InputText = "Generate a sunset workspace illustration";
+            var sendTask = vm.SendPromptAsync();
+
+            await WaitUntilAsync(() => vm.Timeline.OfType<AssistantTurnItem>().Count() == 2
+                && vm.Timeline.OfType<AssistantTurnItem>().Last().GeneratedImages.Count == 1);
+            PumpLayout(window);
+
+            var liveTurn = vm.Timeline.OfType<AssistantTurnItem>().Last();
+            var genVm = Assert.Single(liveTurn.GeneratedImages);
+            Assert.Equal(TKCode.Arc.ImageRevealStatus.Queued, genVm.RevealStatus);
+            Assert.Equal("Minimalist sunset workspace", genVm.Prompt);
+            Assert.Equal(16d / 9d, genVm.AspectRatio, precision: 2);
+
+            // Verify TKCode.Arc.ImageReveal controls are actually instantiated in the visual tree.
+            var revealControls = view.GetVisualDescendants().OfType<TKCode.Arc.ImageReveal>().ToList();
+            Assert.True(revealControls.Count >= 2, $"Expected at least 2 ImageReveal controls in visual tree, found {revealControls.Count}");
+
+            // Advance to partial streaming preview.
+            step1Gate.TrySetResult();
+            await WaitUntilAsync(() => genVm.RevealStatus == TKCode.Arc.ImageRevealStatus.Generating && genVm.Source is not null);
+            PumpLayout(window);
+            Assert.Equal(0.45, genVm.Progress!.Value, precision: 3);
+            Assert.NotNull(genVm.Source);
+
+            // Advance to completion + failed card + inline Base64 image.
+            step2Gate.TrySetResult();
+            await WaitUntilAsync(() => liveTurn.GeneratedImages.Count == 3 && genVm.RevealStatus == TKCode.Arc.ImageRevealStatus.Done);
+            PumpLayout(window);
+
+            Assert.Equal("Minimalist sunset workspace (revised)", genVm.Prompt);
+            Assert.Equal(savedImagePath, genVm.FilePath);
+            Assert.NotNull(genVm.Source);
+            Assert.Equal(16d / 9d, genVm.AspectRatio, precision: 2);
+
+            var failedVm = Assert.Single(liveTurn.GeneratedImages, i => i.Id == "ig_failed_2");
+            Assert.Equal(TKCode.Arc.ImageRevealStatus.Error, failedVm.RevealStatus);
+            Assert.Equal("Content policy rejected", failedVm.ErrorMessage);
+
+            var inlineVm = liveTurn.GeneratedImages[2];
+            Assert.Equal(TKCode.Arc.ImageRevealStatus.Done, inlineVm.RevealStatus);
+            Assert.NotNull(inlineVm.Source);
+            Assert.Equal("Inline PNG result", inlineVm.AltText);
+
+            // Finish turn: Work Area collapses, yet generated images remain visible outside the collapsed Work Area.
+            finishGate.TrySetResult();
+            await sendTask;
+            PumpLayout(window);
+
+            Assert.False(liveTurn.IsWorkExpanded);
+            Assert.True(liveTurn.HasGeneratedImages);
+            var finalReveals = view.GetVisualDescendants().OfType<TKCode.Arc.ImageReveal>().ToList();
+            Assert.True(finalReveals.Count >= 4, $"Expected 4 ImageReveal controls after completion, found {finalReveals.Count}");
+            Assert.Contains(finalReveals, r => r.Status == TKCode.Arc.ImageRevealStatus.Done && r.Source is not null);
+            Assert.Contains(finalReveals, r => r.Status == TKCode.Arc.ImageRevealStatus.Error);
+
+            // Clicking OpenImageCommand on a file-backed image opens it in the project workspace.
+            Assert.True(genVm.CanOpenImage);
+            genVm.OpenImageCommand.Execute(null);
+            PumpLayout(window);
+            Assert.Contains(project.Items, i => i.FilePath == savedImagePath);
+
+            // Clicking OpenImageCommand on an inline Base64 image materializes a temp PNG and opens it.
+            Assert.True(inlineVm.CanOpenImage);
+            var itemsBeforeInlineOpen = project.Items.Count;
+            inlineVm.OpenImageCommand.Execute(null);
+            PumpLayout(window);
+            Assert.True(project.Items.Count > itemsBeforeInlineOpen);
+            var openedTempPath = project.Items[^1].FilePath;
+            Assert.False(string.IsNullOrEmpty(openedTempPath));
+            Assert.True(File.Exists(openedTempPath));
+            Assert.EndsWith(".png", openedTempPath, StringComparison.OrdinalIgnoreCase);
+            try { File.Delete(openedTempPath!); } catch (IOException) { }
+        }
+        finally
+        {
+            step1Gate.TrySetResult();
+            step2Gate.TrySetResult();
+            finishGate.TrySetResult();
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(tempDir, true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public void Agents_settings_exposes_acp_url_elicitation_and_opt_in_client_fs_terminal_toggles()
+    {
+        var settings = AppHost.Get<ISettingsStore>();
+        var catalog = AppHost.Get<IAgentCatalog>();
+        var scanner = new FakeAgentScanner("opencode");
+        var vm = new AgentsSettingsViewModel(
+            settings,
+            catalog,
+            scanner,
+            AppHost.Get<IAgentCommandCompiler>(),
+            AppHost.Get<IModelDiscovery>(),
+            AppHost.Get<IFileOpener>(),
+            AppHost.Get<IPathPicker>());
+
+        var origUrl = settings.Current.Agents.AcpEnableUrlElicitation;
+        var origFs = settings.Current.Agents.AcpEnableClientFileSystem;
+        var origTerm = settings.Current.Agents.AcpEnableClientTerminal;
+        try
+        {
+            // Defaults: URL elicitation ON, client fs/* and terminal/* OFF by default.
+            Assert.True(vm.AcpEnableUrlElicitation);
+            Assert.False(vm.AcpEnableClientFileSystem);
+            Assert.False(vm.AcpEnableClientTerminal);
+
+            vm.AcpEnableUrlElicitation = false;
+            vm.AcpEnableClientFileSystem = true;
+            vm.AcpEnableClientTerminal = true;
+
+            Assert.False(settings.Current.Agents.AcpEnableUrlElicitation);
+            Assert.True(settings.Current.Agents.AcpEnableClientFileSystem);
+            Assert.True(settings.Current.Agents.AcpEnableClientTerminal);
+        }
+        finally
+        {
+            settings.Update(s =>
+            {
+                s.Agents.AcpEnableUrlElicitation = origUrl;
+                s.Agents.AcpEnableClientFileSystem = origFs;
+                s.Agents.AcpEnableClientTerminal = origTerm;
+            });
+            vm.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Agent_gui_wires_additional_dirs_custom_options_url_elicitation_decline_fork_history_logout_stop_reason_and_compaction()
+    {
+        var dirA = Directory.CreateTempSubdirectory("octopus-acp-ext-a-").FullName;
+        var dirB = Directory.CreateTempSubdirectory("octopus-acp-ext-b-").FullName;
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        var settings = AppHost.Get<ISettingsStore>();
+        settings.Update(s =>
+        {
+            s.Agents.DefaultSurface = AgentSurface.Gui;
+            s.Agents.AcpEnableUrlElicitation = true;
+            s.Agents.AcpEnableClientFileSystem = false;
+            s.Agents.AcpEnableClientTerminal = false;
+        });
+
+        var projects = AppHost.Get<IProjectService>();
+        var projB = projects.AddProject(dirB, "acp-ext-b");
+        var projA = projects.AddProject(dirA, "acp-ext-a");
+        var group = projects.AddGroup("MergedACP", [projA.Id, projB.Id]);
+        projects.SetGroupMergeWorkspaces(group.Id, true);
+
+        var opener = AppHost.Get<IItemOpener>();
+        var registry = AppHost.Get<ITabContentRegistry>();
+
+        AcpElicitationAction? observedUrlAction = null;
+        AcpFormElicitationResponse? observedFormResponse = null;
+
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.SessionId = "sess-ext-1";
+            session.Initialized = new AcpInitializeResult
+            {
+                ProtocolVersion = 2,
+                AgentCapabilities = new()
+                {
+                    LoadSession = true,
+                    PromptCapabilities = new() { Image = true },
+                    AuthCapabilities = new() { Logout = true },
+                    SessionCapabilities = new()
+                    {
+                        SupportsList = true,
+                        SupportsFork = true,
+                        SupportsDelete = true,
+                        SupportsAdditionalDirectories = true,
+                        SupportsCompaction = true,
+                    },
+                },
+                AuthMethods =
+                [
+                    new AcpAuthMethod { Id = "oauth", Name = "Sign in with OAuth", Type = "agent" },
+                ],
+            };
+            session.MutableConfigOptions =
+            [
+                new AcpSessionConfigOption
+                {
+                    Id = "sandbox_profile",
+                    Name = "Sandbox",
+                    Type = "select",
+                    CurrentValue = "strict",
+                    Options = [new() { Value = "strict", Name = "Strict" }, new() { Value = "relaxed", Name = "Relaxed" }],
+                },
+                new AcpSessionConfigOption
+                {
+                    Id = "verbose_trace",
+                    Name = "Verbose Trace",
+                    Type = "boolean",
+                    CurrentBoolValue = false,
+                },
+            ];
+            session.ListSessionsHandler = (_, _, _, _) => Task.FromResult(new AcpSessionListResult
+            {
+                Sessions =
+                [
+                    new AcpSessionInfo { SessionId = "sess-ext-1", Title = "Current Session", Cwd = dirA },
+                    new AcpSessionInfo { SessionId = "sess-old-2", Title = "Older Session", Cwd = dirA },
+                ],
+            });
+            session.ForkSessionHandler = (_, _, _, _) => Task.FromResult(new AcpSessionStartResult
+            {
+                Kind = "fork",
+                SessionId = "sess-forked-99",
+            });
+            session.PromptHandler = async (s, _, _, ct) =>
+            {
+                s.Emit(new AcpPlanEvent([new AcpPlanEntry { Content = "Step 1", Status = "in_progress" }]));
+                s.Emit(new AcpPlanRemovedEvent());
+                s.Emit(new AcpCompactionEvent(new AcpCompactionUpdate { Status = "completed", Summary = "Context compacted" }));
+
+                observedUrlAction = await s.Callbacks.OnUrlElicitationRequest!(new AcpUrlElicitationRequest
+                {
+                    RequestId = "url-1",
+                    ElicitationId = "el-url-gui-1",
+                    Url = "https://oauth.example.com/authorize",
+                    Message = "Please authorize",
+                }, ct);
+
+                observedFormResponse = await s.Callbacks.OnFormElicitationRequest!(new AcpQuestionRequest
+                {
+                    RequestId = "form-1",
+                    Title = "Optional survey",
+                    Questions =
+                    [
+                        new AcpQuestionItem { Id = "note", Prompt = "Any note?", AllowFreeText = true, DefaultValue = "hello" },
+                    ],
+                }, ct);
+
+                s.Emit(new AcpTextDeltaEvent("assistant", "Partial output...", null));
+                return new AcpPromptResult
+                {
+                    StopReason = "max_tokens",
+                    Usage = new AcpUsage { InputTokens = 3000, OutputTokens = 1200, TotalTokens = 4200 },
+                };
+            };
+        };
+
+        var item = opener.OpenAgent("opencode")!;
+        var view = Assert.IsType<AgentGuiTabView>(registry.GetOrCreate(projA, item));
+        var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+        var window = new Window { Width = 1000, Height = 720, Content = view };
+        window.Show();
+        try
+        {
+            await WaitUntilAsync(() => vm.State == AgentGuiState.Ready);
+            var session = fakeFactory.Created[^1];
+
+            // 1. Merged workspaces forwarded as additionalDirectories & client fs/terminal default OFF.
+            Assert.NotNull(session.LastAdditionalDirectories);
+            Assert.Contains(dirB, session.LastAdditionalDirectories!);
+            Assert.False(session.Callbacks.EnableClientFileSystem);
+            Assert.False(session.Callbacks.EnableClientTerminal);
+            Assert.True(session.Callbacks.EnableUrlElicitation);
+
+            // 2. Generic custom configOptions populated in Composer.
+            Assert.True(vm.Composer.ShowCustomOptionsButton);
+            Assert.Equal(2, vm.Composer.CustomConfigOptions.Count);
+            var selectOpt = Assert.Single(vm.Composer.CustomConfigOptions, o => o.Id == "sandbox_profile");
+            var boolOpt = Assert.Single(vm.Composer.CustomConfigOptions, o => o.Id == "verbose_trace");
+            selectOpt.SelectedValue = "relaxed";
+            boolOpt.BoolValue = true;
+            await WaitUntilAsync(() => session.SetConfigs.Contains(("sandbox_profile", "relaxed"))
+                && session.SetBoolConfigs.Contains(("verbose_trace", true)));
+
+            // 3. Prompt turn: plan_removed, compaction, URL elicitation auto-complete, Form Decline, stopReason & fallback Usage.
+            vm.InputText = "Run extended turn";
+            var promptTask = vm.SendPromptAsync();
+
+            await WaitUntilAsync(() => vm.Timeline.OfType<UrlElicitationCardItem>().Any());
+            var urlCard = vm.Timeline.OfType<UrlElicitationCardItem>().Single();
+            Assert.Equal("https://oauth.example.com/authorize", urlCard.Url);
+            session.Emit(new AcpElicitationCompletedEvent("el-url-gui-1"));
+            await WaitUntilAsync(() => urlCard.IsResolved);
+
+            await WaitUntilAsync(() => vm.Timeline.OfType<QuestionCardItem>().Any());
+            var qCard = vm.Timeline.OfType<QuestionCardItem>().Single();
+            Assert.Equal("hello", qCard.Fields[0].FreeText);
+            qCard.DeclineCommand.Execute(null);
+
+            await promptTask;
+
+            Assert.Equal(AcpElicitationAction.Accept, observedUrlAction);
+            Assert.Equal(AcpElicitationAction.Decline, observedFormResponse!.Action);
+            Assert.Equal(4200, vm.ContextUsed);
+
+            var turn = vm.Timeline.OfType<AssistantTurnItem>().Single();
+            Assert.Empty(turn.PlanEntries);
+            Assert.True(turn.HasCompactionNotice);
+            Assert.Contains("Context compacted", turn.CompactionNotice);
+            Assert.True(turn.HasStopReasonNotice);
+
+            // 4. Session History (list + delete), Fork, and Logout.
+            Assert.True(vm.CanListSessions);
+            Assert.True(vm.CanForkSession);
+            Assert.True(vm.CanLogout);
+
+            await vm.RefreshSessionHistoryAsync();
+            Assert.Equal(2, vm.RemoteSessions.Count);
+            var oldRow = Assert.Single(vm.RemoteSessions, r => r.SessionId == "sess-old-2");
+            Assert.True(oldRow.CanDelete);
+            await oldRow.DeleteCommand.ExecuteAsync(null);
+            Assert.Contains("sess-old-2", session.DeletedSessions);
+            Assert.Single(vm.RemoteSessions);
+
+            var itemsBeforeFork = projA.Items.Count;
+            await vm.ForkSessionAsync();
+            Assert.Equal(itemsBeforeFork + 1, projA.Items.Count);
+            Assert.Equal("sess-forked-99", projA.Items[^1].Launch?.SessionId);
+
+            await vm.LogoutAsync();
+            Assert.Equal(1, session.LogoutCount);
+            Assert.True(vm.IsAuthRequired);
+            Assert.Single(vm.AuthMethods, a => a.Id == "oauth");
+        }
+        finally
+        {
+            await vm.CloseAsync();
+            vm.Dispose();
+            window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            try { Directory.Delete(dirA, true); } catch (IOException) { }
+            try { Directory.Delete(dirB, true); } catch (IOException) { }
         }
     }
 

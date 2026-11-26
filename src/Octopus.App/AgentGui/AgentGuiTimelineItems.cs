@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Acp.Protocol;
@@ -1074,13 +1076,17 @@ public sealed partial class WorkStepViewModel : ObservableObject
         ("think", false, true) => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbThinkDone),
         ("think", _, _) => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbThink),
 
+        ("image", true, _) => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbImageActive),
+        ("image", false, true) => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbImageDone),
+        ("image", _, _) => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbImage),
+
         (_, true, _) => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbOtherActive),
         (_, false, true) => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbOtherDone),
         _ => AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbOther),
     };
 }
 
-/// <summary>One fixed slot inside the Scheme C 3-line sliding live ticker window (mutated in place, zero allocation).</summary>
+/// <summary>One fixed slot inside the Scheme C 5-line sliding live ticker window (mutated in place, zero allocation).</summary>
 public sealed partial class WorkTickerLineViewModel : ObservableObject
 {
     [ObservableProperty] public partial bool IsVisible { get; set; }
@@ -1088,23 +1094,27 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
     [ObservableProperty] public partial bool IsRunning { get; set; }
     [ObservableProperty] public partial bool IsFailed { get; set; }
     [ObservableProperty] public partial bool IsThought { get; set; }
+    [ObservableProperty] public partial object? StepKey { get; set; }
     [ObservableProperty] public partial string Verb { get; set; } = "";
     [ObservableProperty] public partial string Target { get; set; } = "";
     [ObservableProperty] public partial string StatText { get; set; } = "";
 
     public bool IsCompleted => !IsRunning && !IsFailed;
+    public bool IsActiveThought => IsThought && IsRunning;
     public bool HasStat => !string.IsNullOrEmpty(StatText);
 
     public void SetFrom(WorkStepViewModel step, double opacity)
     {
         var running = step.IsRunning;
         var failed = step.IsFailed;
+        var thought = step.IsThought;
         var verb = running ? step.ActiveVerb : step.DoneVerb;
         var target = step.Target;
         var stat = step.TickerStatText;
 
         IsVisible = true;
         RowOpacity = opacity;
+        var activeThoughtChanged = IsActiveThought != (thought && running);
         if (IsRunning != running)
         {
             IsRunning = running;
@@ -1115,7 +1125,16 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
             IsFailed = failed;
             OnPropertyChanged(nameof(IsCompleted));
         }
-        IsThought = step.IsThought;
+        if (IsThought != thought)
+        {
+            IsThought = thought;
+        }
+        if (activeThoughtChanged)
+        {
+            OnPropertyChanged(nameof(IsActiveThought));
+        }
+        // Assign StepKey before Target so TickerTargetText knows whether this is the same step updating in place.
+        StepKey = step;
         Verb = verb;
         Target = target;
         if (StatText != stat)
@@ -1125,10 +1144,11 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
         }
     }
 
-    public void SetPreparing()
+    public void SetPreparing(object preparingKey)
     {
         IsVisible = true;
         RowOpacity = 1.0;
+        var activeThoughtChanged = !IsActiveThought;
         if (!IsRunning)
         {
             IsRunning = true;
@@ -1139,7 +1159,15 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
             IsFailed = false;
             OnPropertyChanged(nameof(IsCompleted));
         }
-        IsThought = true;
+        if (!IsThought)
+        {
+            IsThought = true;
+        }
+        if (activeThoughtChanged)
+        {
+            OnPropertyChanged(nameof(IsActiveThought));
+        }
+        StepKey = preparingKey;
         Verb = AppLangResources.Get(AppLangResourceKind.AgentGuiStepVerbThinkActive);
         Target = AppLangResources.Get(AppLangResourceKind.AgentGuiWorkPreparing);
         if (StatText.Length > 0)
@@ -1153,6 +1181,7 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
     {
         IsVisible = source.IsVisible;
         RowOpacity = source.RowOpacity;
+        var activeThoughtChanged = IsActiveThought != source.IsActiveThought;
         if (IsRunning != source.IsRunning)
         {
             IsRunning = source.IsRunning;
@@ -1163,7 +1192,15 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
             IsFailed = source.IsFailed;
             OnPropertyChanged(nameof(IsCompleted));
         }
-        IsThought = source.IsThought;
+        if (IsThought != source.IsThought)
+        {
+            IsThought = source.IsThought;
+        }
+        if (activeThoughtChanged)
+        {
+            OnPropertyChanged(nameof(IsActiveThought));
+        }
+        StepKey = source.StepKey;
         Verb = source.Verb;
         Target = source.Target;
         if (StatText != source.StatText)
@@ -1176,62 +1213,77 @@ public sealed partial class WorkTickerLineViewModel : ObservableObject
     public void Clear()
     {
         IsVisible = false;
+        var activeThoughtChanged = IsActiveThought;
         if (IsRunning)
         {
             IsRunning = false;
             OnPropertyChanged(nameof(IsCompleted));
         }
+        if (activeThoughtChanged)
+        {
+            OnPropertyChanged(nameof(IsActiveThought));
+        }
+        StepKey = null;
     }
 }
 
 /// <summary>
-/// Fixed 3-slot live ticker window (Scheme C) materialized ONLY while a turn is actively running and collapsed.
+/// Fixed 5-slot live ticker window (Scheme C) materialized ONLY while a turn is actively running and collapsed.
 /// Immediately detached (set to <c>null</c>) once the turn finishes or expands so idle turns keep zero ticker visuals.
 /// </summary>
 public sealed class WorkTickerViewModel : IWorkTickerSource
 {
+    public const int MaxLines = WorkTickerViewport.MaxVisibleRows;
+
     private static readonly object PreparingKey = new();
+
+    private readonly WorkTickerLineViewModel[] _lines = CreateSlots(MaxLines);
+    private readonly WorkTickerLineViewModel[] _exits = CreateSlots(MaxLines);
+    private readonly object?[] _prevKeys = new object?[MaxLines];
+    private readonly object?[] _nextKeys = new object?[MaxLines];
+    private readonly WorkStepViewModel?[] _selected = new WorkStepViewModel?[MaxLines];
 
     private bool _hasSynced;
     private int _prevCount;
-    private object? _prevKey0;
-    private object? _prevKey1;
-    private object? _prevKey2;
 
-    public WorkTickerLineViewModel Line0 { get; } = new();
-    public WorkTickerLineViewModel Line1 { get; } = new();
-    public WorkTickerLineViewModel Line2 { get; } = new();
+    private static WorkTickerLineViewModel[] CreateSlots(int count)
+    {
+        var slots = new WorkTickerLineViewModel[count];
+        for (var i = 0; i < count; i++) slots[i] = new WorkTickerLineViewModel();
+        return slots;
+    }
 
-    internal WorkTickerLineViewModel Exit0 { get; } = new();
-    internal WorkTickerLineViewModel Exit1 { get; } = new();
-    internal WorkTickerLineViewModel Exit2 { get; } = new();
+    public WorkTickerLineViewModel Line0 => _lines[0];
+    public WorkTickerLineViewModel Line1 => _lines[1];
+    public WorkTickerLineViewModel Line2 => _lines[2];
+    public WorkTickerLineViewModel Line3 => _lines[3];
+    public WorkTickerLineViewModel Line4 => _lines[4];
+
+    internal WorkTickerLineViewModel Exit0 => _exits[0];
+    internal WorkTickerLineViewModel Exit1 => _exits[1];
+    internal WorkTickerLineViewModel Exit2 => _exits[2];
+    internal WorkTickerLineViewModel Exit3 => _exits[3];
+    internal WorkTickerLineViewModel Exit4 => _exits[4];
 
     public int VisibleCount => _prevCount;
 
-    object IWorkTickerSource.Line0 => Line0;
-    object IWorkTickerSource.Line1 => Line1;
-    object IWorkTickerSource.Line2 => Line2;
-    object IWorkTickerSource.Exit0 => Exit0;
-    object IWorkTickerSource.Exit1 => Exit1;
-    object IWorkTickerSource.Exit2 => Exit2;
+    object IWorkTickerSource.GetLine(int index) => _lines[index];
+    object IWorkTickerSource.GetExit(int index) => _exits[index];
 
     public event Action<int, int>? Updated;
 
     public void ClearExiting()
     {
-        Exit0.Clear();
-        Exit1.Clear();
-        Exit2.Clear();
+        for (var i = 0; i < _exits.Length; i++) _exits[i].Clear();
     }
 
     public void Sync(IReadOnlyList<WorkStepViewModel> steps)
     {
-        WorkStepViewModel? s0 = null;
-        WorkStepViewModel? s1 = null;
-        WorkStepViewModel? s2 = null;
+        Array.Clear(_selected);
+        Array.Clear(_nextKeys);
         var count = 0;
 
-        // Intermediate text steps stay in the expanded work area only; the 3-line live ticker focuses on work operations.
+        // Intermediate text steps stay in the expanded work area only; the 5-line live ticker focuses on work operations.
         var nonTextCount = 0;
         var runningCount = 0;
         for (var i = 0; i < steps.Count; i++)
@@ -1246,23 +1298,23 @@ public sealed class WorkTickerViewModel : IWorkTickerSource
         if (preparing)
         {
             count = 1;
+            _nextKeys[0] = PreparingKey;
         }
         else
         {
-            // Pick up to 3 items: prioritize currently running steps at the bottom (newest = opacity 1.0),
-            // filled above with the most recent completed steps so height stays strictly O(1) <= 3 rows.
+            // Pick up to 5 items: prioritize currently running steps at the bottom (newest = opacity 1.0),
+            // filled above with the most recent completed steps so height stays strictly O(1) <= 5 rows.
             void Push(WorkStepViewModel item)
             {
-                if (count == 0) s0 = item;
-                else if (count == 1) s1 = item;
-                else s2 = item;
+                _selected[count] = item;
+                _nextKeys[count] = item;
                 count++;
             }
 
-            if (runningCount >= 3)
+            if (runningCount >= MaxLines)
             {
-                var skipped = runningCount - 3;
-                for (var i = 0; i < steps.Count && count < 3; i++)
+                var skipped = runningCount - MaxLines;
+                for (var i = 0; i < steps.Count && count < MaxLines; i++)
                 {
                     if (steps[i].StepKind == WorkStepKind.Text || !steps[i].IsRunning) continue;
                     if (skipped > 0) { skipped--; continue; }
@@ -1271,7 +1323,7 @@ public sealed class WorkTickerViewModel : IWorkTickerSource
             }
             else if (runningCount > 0)
             {
-                var doneSlots = 3 - runningCount;
+                var doneSlots = MaxLines - runningCount;
                 // Collect last `doneSlots` non-running steps in chronological order.
                 var totalDone = nonTextCount - runningCount;
                 var skipDone = Math.Max(0, totalDone - doneSlots);
@@ -1281,15 +1333,15 @@ public sealed class WorkTickerViewModel : IWorkTickerSource
                     if (skipDone > 0) { skipDone--; continue; }
                     Push(steps[i]);
                 }
-                for (var i = 0; i < steps.Count && count < 3; i++)
+                for (var i = 0; i < steps.Count && count < MaxLines; i++)
                 {
                     if (steps[i].StepKind != WorkStepKind.Text && steps[i].IsRunning) Push(steps[i]);
                 }
             }
             else
             {
-                var skip = Math.Max(0, nonTextCount - 3);
-                for (var i = 0; i < steps.Count && count < 3; i++)
+                var skip = Math.Max(0, nonTextCount - MaxLines);
+                for (var i = 0; i < steps.Count && count < MaxLines; i++)
                 {
                     if (steps[i].StepKind == WorkStepKind.Text) continue;
                     if (skip > 0) { skip--; continue; }
@@ -1298,12 +1350,8 @@ public sealed class WorkTickerViewModel : IWorkTickerSource
             }
         }
 
-        object? n0 = preparing ? PreparingKey : s0;
-        object? n1 = preparing ? null : s1;
-        object? n2 = preparing ? null : s2;
-
         var shift = _hasSynced
-            ? WorkTickerShift.Compute(_prevCount, _prevKey0, _prevKey1, _prevKey2, count, n0, n1, n2)
+            ? WorkTickerShift.Compute(_prevKeys, _prevCount, _nextKeys, count)
             : 0;
         var prevCount = _prevCount;
 
@@ -1314,35 +1362,22 @@ public sealed class WorkTickerViewModel : IWorkTickerSource
 
         if (preparing)
         {
-            Line0.SetPreparing();
-            Line1.Clear();
-            Line2.Clear();
-        }
-        else if (count == 1)
-        {
-            Line0.SetFrom(s0!, 1.0);
-            Line1.Clear();
-            Line2.Clear();
-        }
-        else if (count == 2)
-        {
-            Line0.SetFrom(s0!, 0.65);
-            Line1.SetFrom(s1!, 1.0);
-            Line2.Clear();
+            _lines[0].SetPreparing(PreparingKey);
+            for (var i = 1; i < MaxLines; i++) _lines[i].Clear();
         }
         else
         {
-            Line0.SetFrom(s0!, 0.38);
-            Line1.SetFrom(s1!, 0.66);
-            Line2.SetFrom(s2!, 1.0);
+            for (var i = 0; i < count; i++)
+            {
+                _lines[i].SetFrom(_selected[i]!, WorkTickerViewport.ComputeRowOpacity(i, count));
+            }
+            for (var i = count; i < MaxLines; i++) _lines[i].Clear();
         }
 
         var wasSynced = _hasSynced;
         _hasSynced = true;
         _prevCount = count;
-        _prevKey0 = n0;
-        _prevKey1 = n1;
-        _prevKey2 = n2;
+        Array.Copy(_nextKeys, _prevKeys, MaxLines);
 
         if (wasSynced && (shift > 0 || prevCount != count))
         {
@@ -1352,23 +1387,14 @@ public sealed class WorkTickerViewModel : IWorkTickerSource
 
     private void ShiftExiting(int shift)
     {
-        if (shift == 1)
+        var clamped = Math.Clamp(shift, 1, MaxLines);
+        for (var dst = MaxLines - 1; dst >= clamped; dst--)
         {
-            Exit2.CopyFrom(Exit1);
-            Exit1.CopyFrom(Exit0);
-            Exit0.CopyFrom(Line0);
+            _exits[dst].CopyFrom(_exits[dst - clamped]);
         }
-        else if (shift == 2)
+        for (var i = 0; i < clamped; i++)
         {
-            Exit2.CopyFrom(Exit0);
-            Exit1.CopyFrom(Line0);
-            Exit0.CopyFrom(Line1);
-        }
-        else
-        {
-            Exit2.CopyFrom(Line0);
-            Exit1.CopyFrom(Line1);
-            Exit0.CopyFrom(Line2);
+            _exits[clamped - 1 - i].CopyFrom(_lines[i]);
         }
     }
 }
@@ -1539,18 +1565,402 @@ public sealed partial class MarkdownBlockViewModel : ObservableObject
 }
 
 /// <summary>
+/// An inline generated image canvas rendered by <see cref="ImageReveal"/> inside an <see cref="AssistantTurnItem"/>.
+/// Supports live queued / generating / progress / preview / done / error transitions as well as direct ACP image blocks.
+/// </summary>
+public sealed partial class ImageGenerationItemViewModel : ObservableObject, IDisposable
+{
+    private readonly Action<string>? _openFile;
+    private readonly string? _workingDirectory;
+    private readonly List<Bitmap> _ownedBitmaps = [];
+    private string? _lastSourceKey;
+    private string? _cachedBase64;
+    private string? _cachedMimeType;
+    private string? _materializedTempPath;
+    private bool _disposed;
+
+    public ImageGenerationItemViewModel(
+        string id,
+        Action<string>? openFile = null,
+        string? workingDirectory = null,
+        bool isReplay = false)
+    {
+        Id = id;
+        _openFile = openFile;
+        _workingDirectory = workingDirectory;
+        IsReplay = isReplay;
+        Seed = Math.Abs(StringComparer.Ordinal.GetHashCode(id)) % 997 + 1;
+        Labels = CreateLocalizedLabels();
+    }
+
+    public string Id { get; }
+    public bool IsReplay { get; }
+    public int Seed { get; }
+    public ImageRevealLabels Labels { get; }
+
+    [ObservableProperty] public partial IImage? Source { get; private set; }
+    [ObservableProperty] public partial ImageRevealStatus? RevealStatus { get; private set; }
+    [ObservableProperty] public partial double? Progress { get; private set; }
+    [ObservableProperty] public partial double AspectRatio { get; private set; } = 1.0;
+    [ObservableProperty] public partial string? Prompt { get; private set; }
+    [ObservableProperty] public partial string? AltText { get; private set; }
+    [ObservableProperty] public partial string? ErrorMessage { get; private set; }
+    [ObservableProperty] public partial string? FilePath { get; private set; }
+
+    public bool HasPrompt => !string.IsNullOrWhiteSpace(Prompt);
+    public bool HasFilePath => !string.IsNullOrWhiteSpace(FilePath);
+    public bool CanOpenImage => _openFile is not null
+        && (RevealStatus is null or ImageRevealStatus.Done)
+        && (!string.IsNullOrWhiteSpace(FilePath) || !string.IsNullOrWhiteSpace(_cachedBase64));
+
+    public string FileDisplayName => string.IsNullOrWhiteSpace(FilePath)
+        ? ""
+        : Path.GetFileName(FilePath);
+
+    [RelayCommand]
+    private void OpenImage()
+    {
+        if (!CanOpenImage || _openFile is null) return;
+        if (ResolveExistingFilePath(FilePath, _workingDirectory) is { } existing)
+        {
+            _openFile(existing);
+            return;
+        }
+        if (TryMaterializeBase64ToTempFile() is { } tempPath)
+        {
+            _openFile(tempPath);
+        }
+    }
+
+    public void ApplyToolUpdate(AcpToolCallUpdate update, AcpImageContent? image)
+    {
+        if (_disposed) return;
+
+        if (!string.IsNullOrWhiteSpace(update.ImagePrompt))
+        {
+            SetPrompt(update.ImagePrompt!);
+        }
+        else if (string.IsNullOrWhiteSpace(Prompt) && !string.IsNullOrWhiteSpace(update.Description))
+        {
+            SetPrompt(update.Description!);
+        }
+
+        if (update.ImageAspectRatio is > 0.2 and <= 4.0)
+        {
+            AspectRatio = Math.Clamp(update.ImageAspectRatio.Value, 0.45, 2.4);
+        }
+        if (update.ImageProgress is >= 0.0 and <= 1.0)
+        {
+            Progress = update.ImageProgress.Value;
+        }
+
+        if (image is not null)
+        {
+            ApplyImageContent(image);
+        }
+
+        var status = update.Status?.Trim().ToLowerInvariant();
+        if (status == "failed")
+        {
+            ErrorMessage = FirstNonEmpty(update.Stderr, update.TextOutputs.FirstOrDefault(), AppLangResources.Get(AppLangResourceKind.AgentGuiImageFailed));
+            RevealStatus = ImageRevealStatus.Error;
+        }
+        else if (status == "completed")
+        {
+            if (Source is not null)
+            {
+                ErrorMessage = null;
+                Progress = null;
+                RevealStatus = IsReplay ? null : ImageRevealStatus.Done;
+            }
+            else
+            {
+                ErrorMessage = FirstNonEmpty(update.Stderr, update.TextOutputs.FirstOrDefault(), AppLangResources.Get(AppLangResourceKind.AgentGuiImageFailed));
+                RevealStatus = ImageRevealStatus.Error;
+            }
+        }
+        else if (status == "pending")
+        {
+            if (RevealStatus is null or ImageRevealStatus.Queued)
+            {
+                RevealStatus = ImageRevealStatus.Queued;
+            }
+        }
+        else
+        {
+            RevealStatus = ImageRevealStatus.Generating;
+        }
+
+        NotifyComputedProperties();
+    }
+
+    public void ApplyDirectImage(AcpImageContent image)
+    {
+        if (_disposed) return;
+        ApplyImageContent(image);
+        if (Source is not null)
+        {
+            ErrorMessage = null;
+            Progress = null;
+            RevealStatus = IsReplay ? null : ImageRevealStatus.Done;
+        }
+        else
+        {
+            ErrorMessage = AppLangResources.Get(AppLangResourceKind.AgentGuiImageFailed);
+            RevealStatus = ImageRevealStatus.Error;
+        }
+        NotifyComputedProperties();
+    }
+
+    public void SettleOnTurnComplete(string? turnError)
+    {
+        if (_disposed) return;
+        if (RevealStatus is ImageRevealStatus.Queued or ImageRevealStatus.Generating)
+        {
+            if (Source is not null && string.IsNullOrWhiteSpace(turnError))
+            {
+                ErrorMessage = null;
+                Progress = null;
+                RevealStatus = ImageRevealStatus.Done;
+            }
+            else
+            {
+                ErrorMessage = string.IsNullOrWhiteSpace(turnError)
+                    ? AppLangResources.Get(AppLangResourceKind.AgentGuiImageFailed)
+                    : turnError;
+                RevealStatus = ImageRevealStatus.Error;
+            }
+            NotifyComputedProperties();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        Source = null;
+        for (var i = 0; i < _ownedBitmaps.Count; i++)
+        {
+            try { _ownedBitmaps[i].Dispose(); } catch { }
+        }
+        _ownedBitmaps.Clear();
+    }
+
+    private void SetPrompt(string value)
+    {
+        var single = ToolCallItemViewModel.ToSingleLine(value);
+        if (string.IsNullOrWhiteSpace(single)) return;
+        if (Prompt != single)
+        {
+            Prompt = single;
+            OnPropertyChanged(nameof(HasPrompt));
+        }
+        if (string.IsNullOrWhiteSpace(AltText))
+        {
+            AltText = single;
+        }
+    }
+
+    private void ApplyImageContent(AcpImageContent image)
+    {
+        if (!string.IsNullOrWhiteSpace(image.AltText))
+        {
+            AltText = image.AltText;
+            if (string.IsNullOrWhiteSpace(Prompt))
+            {
+                SetPrompt(image.AltText!);
+            }
+        }
+        if (image.Width is > 0 && image.Height is > 0)
+        {
+            AspectRatio = Math.Clamp((double)image.Width.Value / image.Height.Value, 0.45, 2.4);
+        }
+        if (!string.IsNullOrWhiteSpace(image.FilePath))
+        {
+            FilePath = image.FilePath;
+            OnPropertyChanged(nameof(HasFilePath));
+            OnPropertyChanged(nameof(FileDisplayName));
+        }
+        if (!string.IsNullOrWhiteSpace(image.Base64Data))
+        {
+            _cachedBase64 = image.Base64Data;
+            _cachedMimeType = image.MimeType ?? _cachedMimeType;
+        }
+
+        // Compute a lightweight fingerprint so identical updates don't re-decode bitmaps unnecessarily.
+        var key = !string.IsNullOrEmpty(image.Base64Data)
+            ? $"b64:{image.Base64Data.Length}:{(image.Base64Data.Length > 24 ? image.Base64Data[^24..] : image.Base64Data)}"
+            : !string.IsNullOrEmpty(image.FilePath)
+                ? $"file:{image.FilePath}"
+                : null;
+        if (key is null || string.Equals(key, _lastSourceKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var decoded = TryDecodeBitmap(image, _workingDirectory);
+        if (decoded is not null)
+        {
+            _lastSourceKey = key;
+            _ownedBitmaps.Add(decoded);
+            if (decoded.PixelSize.Width > 0 && decoded.PixelSize.Height > 0)
+            {
+                AspectRatio = Math.Clamp((double)decoded.PixelSize.Width / decoded.PixelSize.Height, 0.45, 2.4);
+            }
+            Source = decoded;
+        }
+    }
+
+    private void NotifyComputedProperties()
+    {
+        OnPropertyChanged(nameof(HasPrompt));
+        OnPropertyChanged(nameof(HasFilePath));
+        OnPropertyChanged(nameof(FileDisplayName));
+        OnPropertyChanged(nameof(CanOpenImage));
+    }
+
+    private string? TryMaterializeBase64ToTempFile()
+    {
+        if (!string.IsNullOrEmpty(_materializedTempPath) && File.Exists(_materializedTempPath))
+        {
+            return _materializedTempPath;
+        }
+        if (string.IsNullOrWhiteSpace(_cachedBase64)) return null;
+        try
+        {
+            var bytes = Convert.FromBase64String(_cachedBase64);
+            var ext = _cachedMimeType?.ToLowerInvariant() switch
+            {
+                "image/jpeg" or "image/jpg" => ".jpg",
+                "image/webp" => ".webp",
+                "image/gif" => ".gif",
+                "image/bmp" => ".bmp",
+                _ => ".png",
+            };
+            var dir = Path.Combine(Path.GetTempPath(), "octopus-acp-images");
+            Directory.CreateDirectory(dir);
+            var safe = new StringBuilder(Id.Length);
+            foreach (var ch in Id)
+            {
+                safe.Append(char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '_');
+            }
+            var path = Path.Combine(dir, $"{safe}-{Seed}{ext}");
+            File.WriteAllBytes(path, bytes);
+            _materializedTempPath = path;
+            return path;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static Bitmap? TryDecodeBitmap(AcpImageContent image, string? workingDirectory)
+    {
+        if (!string.IsNullOrWhiteSpace(image.Base64Data))
+        {
+            try
+            {
+                var bytes = Convert.FromBase64String(image.Base64Data);
+                if (bytes.Length > 0)
+                {
+                    using var ms = new MemoryStream(bytes, writable: false);
+                    return new Bitmap(ms);
+                }
+            }
+            catch
+            {
+                // Fall back to file path if Base64 payload is incomplete or malformed.
+            }
+        }
+        if (ResolveExistingFilePath(image.FilePath, workingDirectory) is { } resolved)
+        {
+            try
+            {
+                var bytes = File.ReadAllBytes(resolved);
+                if (bytes.Length > 0)
+                {
+                    using var ms = new MemoryStream(bytes, writable: false);
+                    return new Bitmap(ms);
+                }
+            }
+            catch
+            {
+                // Ignore unreadable or unsupported file formats.
+            }
+        }
+        return null;
+    }
+
+    private static string? ResolveExistingFilePath(string? path, string? workingDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        var candidate = path.Trim();
+        if (Path.IsPathRooted(candidate))
+        {
+            return File.Exists(candidate) ? candidate : null;
+        }
+        if (!string.IsNullOrWhiteSpace(workingDirectory))
+        {
+            var combined = Path.Combine(workingDirectory, candidate);
+            if (File.Exists(combined)) return combined;
+        }
+        return File.Exists(candidate) ? Path.GetFullPath(candidate) : null;
+    }
+
+    private static string FirstNonEmpty(params string?[] candidates)
+    {
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            if (!string.IsNullOrWhiteSpace(candidates[i])) return candidates[i]!.Trim();
+        }
+        return "";
+    }
+
+    private static ImageRevealLabels CreateLocalizedLabels() => new()
+    {
+        Queued = AppLangResources.Get(AppLangResourceKind.AgentGuiImageQueued),
+        Generating = AppLangResources.Get(AppLangResourceKind.AgentGuiImageGenerating),
+        Done = AppLangResources.Get(AppLangResourceKind.AgentGuiImageDone),
+        Failed = AppLangResources.Get(AppLangResourceKind.AgentGuiImageFailed),
+        GeneratedImage = AppLangResources.Get(AppLangResourceKind.AgentGuiImageAltDefault),
+    };
+}
+
+/// <summary>
 /// An assistant response turn rendered with Scheme C:
 /// 1) One unified pure-text Work Area (running summary + fixed 3-line sliding live ticker, auto-collapsed on finish),
-/// 2) Clean Markdown final response directly underneath.
+/// 2) Inline generated images rendered with <see cref="ImageReveal"/>,
+/// 3) Clean Markdown final response directly underneath.
 /// Zero cards, zero per-turn timers, lazy-mounted expanded step details.
 /// </summary>
-public sealed partial class AssistantTurnItem : AgentTimelineItem
+public sealed partial class AssistantTurnItem : AgentTimelineItem, IDisposable
 {
+    private static readonly AppLangResourceKind[] WorkingPhrases =
+    [
+        AppLangResourceKind.AgentGuiWorkingPhrase01,
+        AppLangResourceKind.AgentGuiWorkingPhrase02,
+        AppLangResourceKind.AgentGuiWorkingPhrase03,
+        AppLangResourceKind.AgentGuiWorkingPhrase04,
+        AppLangResourceKind.AgentGuiWorkingPhrase05,
+        AppLangResourceKind.AgentGuiWorkingPhrase06,
+        AppLangResourceKind.AgentGuiWorkingPhrase07,
+        AppLangResourceKind.AgentGuiWorkingPhrase08,
+        AppLangResourceKind.AgentGuiWorkingPhrase09,
+        AppLangResourceKind.AgentGuiWorkingPhrase10,
+        AppLangResourceKind.AgentGuiWorkingPhrase11,
+        AppLangResourceKind.AgentGuiWorkingPhrase12,
+    ];
+
+    private const int PhraseRotateIntervalSeconds = 4;
+
     private readonly Dictionary<string, (ToolCallItemViewModel Tool, WorkStepViewModel Step)> _toolsById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ImageGenerationItemViewModel> _imagesById = new(StringComparer.Ordinal);
     private readonly List<WorkStepViewModel> _workSteps = [];
     private readonly Action<string>? _openFile;
     private readonly Action<string>? _openDiff;
     private readonly Action<ToolCallItemViewModel>? _openScript;
+    private readonly string? _workingDirectory;
     private readonly Stopwatch? _elapsed;
     private readonly bool _isReplay;
 
@@ -1559,6 +1969,8 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     private MarkdownBlockViewModel? _markdown;
     private WorkTickerViewModel? _ticker;
     private ObservableCollection<WorkStepViewModel>? _expandedWorkSteps;
+    private int _phraseIndex = Random.Shared.Next(WorkingPhrases.Length);
+    private int _statusTicks;
     private bool _hasThoughtContent;
     private bool _hasMarkdownContent;
     private bool _isWritingReply;
@@ -1573,13 +1985,15 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         Action<string>? openFile = null,
         Action<string>? openDiff = null,
         Action<ToolCallItemViewModel>? openScript = null,
-        bool isReplay = false)
+        bool isReplay = false,
+        string? workingDirectory = null)
     {
         AgentId = agentId;
         AgentName = agentName;
         _openFile = openFile;
         _openDiff = openDiff;
         _openScript = openScript;
+        _workingDirectory = workingDirectory;
         _isReplay = isReplay;
         if (isReplay)
         {
@@ -1641,26 +2055,33 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     /// <summary>Lazy UI collection: null when collapsed (zero visual controls), materialized on manual expand.</summary>
     public ObservableCollection<WorkStepViewModel>? ExpandedWorkSteps => _expandedWorkSteps;
 
-    /// <summary>Fixed 3-line sliding ticker bound ONLY while running and collapsed; null otherwise.</summary>
+    /// <summary>Fixed 5-line sliding ticker bound ONLY while running and collapsed; null otherwise.</summary>
     public WorkTickerViewModel? LiveTicker => ShowLiveTicker ? _ticker : null;
 
     /// <summary>Retained for remote mobile sync (<see cref="Remote.HostConversations"/>) and tool callbacks; not bound to cards.</summary>
     public ObservableCollection<ToolCallItemViewModel> ToolCalls { get; } = [];
     public ObservableCollection<PlanEntryViewModel> PlanEntries { get; } = [];
+    /// <summary>Inline image generation outputs rendered with <see cref="ImageReveal"/> directly inside the turn.</summary>
+    public ObservableCollection<ImageGenerationItemViewModel> GeneratedImages { get; } = [];
 
     [ObservableProperty] public partial string? PlanMarkdown { get; set; }
     [ObservableProperty] public partial bool IsStreaming { get; set; } = true;
     [ObservableProperty] public partial bool IsWaitingForInput { get; set; }
     [ObservableProperty] public partial bool IsWorkExpanded { get; set; }
     [ObservableProperty] public partial string? ErrorText { get; set; }
+    [ObservableProperty] public partial string? StopReasonNotice { get; set; }
+    [ObservableProperty] public partial string? CompactionNotice { get; set; }
     [ObservableProperty] public partial string DurationText { get; set; } = "";
     [ObservableProperty] public partial string LiveElapsedText { get; set; } = "";
 
     public bool HasThought => _hasThoughtContent;
     public bool HasPlan => PlanEntries.Count > 0 || !string.IsNullOrWhiteSpace(PlanMarkdown);
     public bool HasToolCalls => ToolCalls.Count > 0;
+    public bool HasGeneratedImages => GeneratedImages.Count > 0;
     public bool HasMarkdown => _hasMarkdownContent;
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorText);
+    public bool HasStopReasonNotice => !string.IsNullOrWhiteSpace(StopReasonNotice);
+    public bool HasCompactionNotice => !string.IsNullOrWhiteSpace(CompactionNotice);
     public bool HasDuration => !string.IsNullOrEmpty(DurationText);
     public bool HasLiveElapsed => !string.IsNullOrEmpty(LiveElapsedText);
     public bool CanCopyReply => !IsStreaming && _hasMarkdownContent;
@@ -1669,7 +2090,9 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     public bool HasWorkArea => IsStreaming || _workSteps.Count > 0;
     public bool CanExpandWork => _workSteps.Count > 0;
     public bool ShowLiveTicker => IsStreaming && !IsWorkExpanded && !IsWaitingForInput && !_isWritingReply;
+    public bool ShowLiveStatus => IsStreaming && !IsWaitingForInput;
     public bool ShowWaitingBadge => IsStreaming && IsWaitingForInput;
+    public string LiveStatusText => AppLangResources.Get(WorkingPhrases[_phraseIndex]);
 
     public string WorkHeaderTitle => _workHeaderTitle;
     public string WorkHeaderCounts => _workHeaderCounts;
@@ -1711,8 +2134,17 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
     {
         if (IsWaitingForInput == waiting) return;
         IsWaitingForInput = waiting;
+        OnPropertyChanged(nameof(ShowLiveStatus));
         OnPropertyChanged(nameof(ShowWaitingBadge));
         SyncLiveTicker();
+    }
+
+    /// <summary>Advances the rotating whimsical live status phrase immediately.</summary>
+    public void AdvanceLiveStatus()
+    {
+        if (!IsStreaming) return;
+        _phraseIndex = (_phraseIndex + 1) % WorkingPhrases.Length;
+        OnPropertyChanged(nameof(LiveStatusText));
     }
 
     /// <summary>Called once per second by the tab's single shared timer while this turn is streaming.</summary>
@@ -1732,6 +2164,15 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             OnPropertyChanged(nameof(HasLiveElapsed));
             OnPropertyChanged(nameof(WorkHeaderDurationText));
             OnPropertyChanged(nameof(HasWorkHeaderDuration));
+        }
+        if (!IsWaitingForInput)
+        {
+            _statusTicks++;
+            if (_statusTicks % PhraseRotateIntervalSeconds == 0)
+            {
+                _phraseIndex = (_phraseIndex + 1) % WorkingPhrases.Length;
+                OnPropertyChanged(nameof(LiveStatusText));
+            }
         }
     }
 
@@ -1849,11 +2290,64 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
 
         _isWritingReply = false;
 
+        if (update.IsImageGeneration || update.Images.Count > 0)
+        {
+            UpsertImageGeneration(id, update);
+        }
+
         RefreshWorkSummary();
         SyncLiveTicker();
 
         if (hadWork != HasWorkArea) OnPropertyChanged(nameof(HasWorkArea));
         if (hadExpandable != CanExpandWork) OnPropertyChanged(nameof(CanExpandWork));
+    }
+
+    public void AddGeneratedImage(AcpImageContent image, string? messageId = null)
+    {
+        var key = !string.IsNullOrWhiteSpace(messageId)
+            ? $"msg-img:{messageId}:{GeneratedImages.Count + 1}"
+            : $"msg-img:{GeneratedImages.Count + 1}";
+        var vm = new ImageGenerationItemViewModel(key, _openFile, _workingDirectory, isReplay: _isReplay);
+        vm.ApplyDirectImage(image);
+        _imagesById[key] = vm;
+        var hadImages = HasGeneratedImages;
+        GeneratedImages.Add(vm);
+        if (!hadImages) OnPropertyChanged(nameof(HasGeneratedImages));
+    }
+
+    private void UpsertImageGeneration(string toolCallId, AcpToolCallUpdate update)
+    {
+        var hadImages = HasGeneratedImages;
+        if (update.Images.Count <= 1)
+        {
+            var vm = GetOrCreateImageItem(toolCallId);
+            vm.ApplyToolUpdate(update, update.Images.Count == 1 ? update.Images[0] : null);
+        }
+        else
+        {
+            for (var i = 0; i < update.Images.Count; i++)
+            {
+                var slotId = i == 0 ? toolCallId : $"{toolCallId}#{i + 1}";
+                var vm = GetOrCreateImageItem(slotId);
+                vm.ApplyToolUpdate(update, update.Images[i]);
+            }
+        }
+        if (hadImages != HasGeneratedImages)
+        {
+            OnPropertyChanged(nameof(HasGeneratedImages));
+        }
+    }
+
+    private ImageGenerationItemViewModel GetOrCreateImageItem(string key)
+    {
+        if (_imagesById.TryGetValue(key, out var existing))
+        {
+            return existing;
+        }
+        var created = new ImageGenerationItemViewModel(key, _openFile, _workingDirectory, isReplay: _isReplay);
+        _imagesById[key] = created;
+        GeneratedImages.Add(created);
+        return created;
     }
 
     public void SetPlan(IReadOnlyList<AcpPlanEntry> entries, string? markdown)
@@ -1886,13 +2380,42 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
         if (hadExpandable != CanExpandWork) OnPropertyChanged(nameof(CanExpandWork));
     }
 
-    public void Complete(string? error = null, bool showDuration = true)
+    public void ClearPlan()
+    {
+        PlanEntries.Clear();
+        PlanMarkdown = null;
+        if (_planStep is not null)
+        {
+            _workSteps.Remove(_planStep);
+            _expandedWorkSteps?.Remove(_planStep);
+            _planStep = null;
+            OnPropertyChanged(nameof(WorkStepCount));
+        }
+        RefreshWorkSummary();
+        SyncLiveTicker();
+        OnPropertyChanged(nameof(HasPlan));
+        OnPropertyChanged(nameof(HasWorkArea));
+        OnPropertyChanged(nameof(CanExpandWork));
+    }
+
+    public void SetCompactionNotice(string? summary)
+    {
+        var label = AppLangResources.Get(AppLangResourceKind.AgentGuiCompactionNotice);
+        CompactionNotice = string.IsNullOrWhiteSpace(summary) ? label : $"{label}: {summary.Trim()}";
+        OnPropertyChanged(nameof(HasCompactionNotice));
+    }
+
+    public void Complete(string? error = null, bool showDuration = true, string? stopReasonNotice = null)
     {
         _activeThoughtStep?.FinishThought();
         _activeThoughtStep = null;
         for (var i = 0; i < _workSteps.Count; i++)
         {
             _workSteps[i].Seal();
+        }
+        for (var i = 0; i < GeneratedImages.Count; i++)
+        {
+            GeneratedImages[i].SettleOnTurnComplete(error);
         }
         _markdown?.Seal();
 
@@ -1927,11 +2450,17 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             ErrorText = error;
             OnPropertyChanged(nameof(HasError));
         }
+        if (!string.IsNullOrWhiteSpace(stopReasonNotice))
+        {
+            StopReasonNotice = stopReasonNotice;
+            OnPropertyChanged(nameof(HasStopReasonNotice));
+        }
 
         RefreshWorkSummary();
         OnPropertyChanged(nameof(HasWorkArea));
         OnPropertyChanged(nameof(CanCopyReply));
         OnPropertyChanged(nameof(CopyReplyValue));
+        OnPropertyChanged(nameof(ShowLiveStatus));
         OnPropertyChanged(nameof(ShowWaitingBadge));
         OnPropertyChanged(nameof(ShowLiveTicker));
         OnPropertyChanged(nameof(LiveTicker));
@@ -2016,7 +2545,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
 
     private void RefreshWorkSummary()
     {
-        int exec = 0, search = 0, read = 0, edit = 0, fetch = 0, think = 0, plan = 0, other = 0, failed = 0;
+        int exec = 0, search = 0, read = 0, edit = 0, fetch = 0, think = 0, plan = 0, image = 0, other = 0, failed = 0;
         for (var i = 0; i < _workSteps.Count; i++)
         {
             var step = _workSteps[i];
@@ -2038,6 +2567,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
                         case "edit" or "delete" or "move": edit++; break;
                         case "fetch": fetch++; break;
                         case "think": think++; break;
+                        case "image": image++; break;
                         default: other++; break;
                     }
                     break;
@@ -2047,7 +2577,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             }
         }
 
-        var countedSteps = exec + search + read + edit + fetch + think + plan + other;
+        var countedSteps = exec + search + read + edit + fetch + think + plan + image + other;
 
         string nextTitle;
         string nextCounts;
@@ -2060,6 +2590,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             if (read > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCountRead, read));
             if (edit > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCountEdit, edit));
             if (fetch > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCountFetch, fetch));
+            if (image > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCountImage, image));
             if (think > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCountThink, think));
             if (plan > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCountPlan, plan));
             if (other > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkCountOther, other));
@@ -2081,6 +2612,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             if (read > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortRead, read));
             if (edit > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortEdit, edit));
             if (fetch > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortFetch, fetch));
+            if (image > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortImage, image));
             if (think > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortThink, think));
             if (plan > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortPlan, plan));
             if (other > 0) parts.Add(AppLangResources.Format(AppLangResourceKind.AgentGuiWorkShortOther, other));
@@ -2108,6 +2640,16 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem
             OnPropertyChanged(nameof(WorkHeaderFailedText));
             OnPropertyChanged(nameof(HasWorkFailures));
         }
+    }
+
+    public void Dispose()
+    {
+        for (var i = 0; i < GeneratedImages.Count; i++)
+        {
+            GeneratedImages[i].Dispose();
+        }
+        GeneratedImages.Clear();
+        _imagesById.Clear();
     }
 
     private static bool CanContinueMessage(string? existingId, string? incomingId) =>
@@ -2226,13 +2768,27 @@ public sealed partial class QuestionFieldViewModel : ObservableObject
     {
         Id = item.Id;
         Prompt = item.Prompt;
+        ValueType = item.ValueType;
+        Required = item.Required;
         MultiSelect = item.MultiSelect;
         AllowFreeText = item.AllowFreeText || item.Options.Count == 0;
         foreach (var opt in item.Options)
         {
             Choices.Add(new QuestionChoiceViewModel(opt, OnChoiceToggled));
         }
-        if (Choices.Count > 0 && !MultiSelect)
+        if (!string.IsNullOrEmpty(item.DefaultValue))
+        {
+            var matched = Choices.FirstOrDefault(c => string.Equals(c.Id, item.DefaultValue, StringComparison.OrdinalIgnoreCase));
+            if (matched is not null)
+            {
+                matched.IsSelected = true;
+            }
+            else if (AllowFreeText)
+            {
+                FreeText = item.DefaultValue;
+            }
+        }
+        else if (Choices.Count > 0 && !MultiSelect)
         {
             Choices[0].IsSelected = true;
         }
@@ -2240,6 +2796,8 @@ public sealed partial class QuestionFieldViewModel : ObservableObject
 
     public string Id { get; }
     public string Prompt { get; }
+    public string ValueType { get; }
+    public bool Required { get; }
     public bool MultiSelect { get; }
     public bool AllowFreeText { get; }
     public bool HasChoices => Choices.Count > 0;
@@ -2270,12 +2828,17 @@ public sealed partial class QuestionFieldViewModel : ObservableObject
     }
 }
 
-/// <summary>Interactive inline elicitation / question prompt (ACP <c>elicitation/create</c> or dialect questions).</summary>
+/// <summary>Interactive inline elicitation / question prompt (ACP <c>elicitation/create</c> mode=form or dialect questions).</summary>
 public sealed partial class QuestionCardItem : AgentTimelineItem
 {
-    private readonly Action<IReadOnlyDictionary<string, IReadOnlyList<string>>?> _resolve;
+    private readonly Action<AcpFormElicitationResponse> _resolve;
 
     public QuestionCardItem(AcpQuestionRequest request, Action<IReadOnlyDictionary<string, IReadOnlyList<string>>?> resolve)
+        : this(request, resp => resolve(resp.Action == AcpElicitationAction.Accept ? resp.Answers : null))
+    {
+    }
+
+    public QuestionCardItem(AcpQuestionRequest request, Action<AcpFormElicitationResponse> resolve)
     {
         _resolve = resolve;
         Title = string.IsNullOrWhiteSpace(request.Title) ? "Question" : request.Title;
@@ -2308,7 +2871,16 @@ public sealed partial class QuestionCardItem : AgentTimelineItem
         }
         IsResolved = true;
         ResolvedSummary = summaryParts.Count > 0 ? string.Join(" · ", summaryParts) : AppLangResources.Get(AppLangResourceKind.AgentGuiQuestionSubmit);
-        _resolve(answers);
+        _resolve(new AcpFormElicitationResponse(AcpElicitationAction.Accept, answers));
+    }
+
+    [RelayCommand]
+    private void Decline()
+    {
+        if (IsResolved) return;
+        IsResolved = true;
+        ResolvedSummary = AppLangResources.Get(AppLangResourceKind.AgentGuiQuestionDecline);
+        _resolve(new AcpFormElicitationResponse(AcpElicitationAction.Decline));
     }
 
     [RelayCommand]
@@ -2317,6 +2889,103 @@ public sealed partial class QuestionCardItem : AgentTimelineItem
         if (IsResolved) return;
         IsResolved = true;
         ResolvedSummary = AppLangResources.Get(AppLangResourceKind.AgentGuiQuestionCancel);
-        _resolve(null);
+        _resolve(new AcpFormElicitationResponse(AcpElicitationAction.Cancel));
     }
+}
+
+/// <summary>Interactive out-of-band URL elicitation card (ACP <c>elicitation/create</c> mode=url).</summary>
+public sealed partial class UrlElicitationCardItem : AgentTimelineItem
+{
+    private readonly Action<AcpElicitationAction> _resolve;
+    private readonly Action<string>? _openUrl;
+
+    public UrlElicitationCardItem(
+        AcpUrlElicitationRequest request,
+        Action<AcpElicitationAction> resolve,
+        Action<string>? openUrl = null)
+    {
+        _resolve = resolve;
+        _openUrl = openUrl;
+        ElicitationId = request.ElicitationId;
+        Title = AppLangResources.Get(AppLangResourceKind.AgentGuiUrlElicitationTitle);
+        Message = request.Message;
+        Url = request.Url;
+    }
+
+    public string ElicitationId { get; }
+    public string Title { get; }
+    public string Message { get; }
+    public string Url { get; }
+
+    [ObservableProperty] public partial bool IsResolved { get; set; }
+    [ObservableProperty] public partial string ResolvedSummary { get; set; } = "";
+
+    [RelayCommand]
+    private void OpenUrl() => _openUrl?.Invoke(Url);
+
+    [RelayCommand]
+    private void Confirm()
+    {
+        if (IsResolved) return;
+        IsResolved = true;
+        ResolvedSummary = AppLangResources.Get(AppLangResourceKind.AgentGuiUrlElicitationConfirm);
+        _resolve(AcpElicitationAction.Accept);
+    }
+
+    [RelayCommand]
+    private void Decline()
+    {
+        if (IsResolved) return;
+        IsResolved = true;
+        ResolvedSummary = AppLangResources.Get(AppLangResourceKind.AgentGuiUrlElicitationDecline);
+        _resolve(AcpElicitationAction.Decline);
+    }
+
+    [RelayCommand]
+    private void Cancel()
+    {
+        if (IsResolved) return;
+        IsResolved = true;
+        ResolvedSummary = AppLangResources.Get(AppLangResourceKind.AgentGuiPermissionCancel);
+        _resolve(AcpElicitationAction.Cancel);
+    }
+
+    public void MarkCompletedFromServer()
+    {
+        if (IsResolved) return;
+        IsResolved = true;
+        ResolvedSummary = AppLangResources.Get(AppLangResourceKind.AgentGuiUrlElicitationConfirm);
+        _resolve(AcpElicitationAction.Accept);
+    }
+}
+
+/// <summary>Action button representing one ACP <c>authMethods</c> entry in the Auth Required banner.</summary>
+public sealed class AuthMethodActionViewModel(AcpAuthMethod method, Func<AcpAuthMethod, Task> run)
+{
+    public AcpAuthMethod Method { get; } = method;
+    public string Id => Method.Id;
+    public string Label => string.IsNullOrWhiteSpace(Method.Name) ? Method.Id : Method.Name;
+    public string? Description => Method.Description;
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+    public bool IsTerminalAuth => string.Equals(Method.Type, "terminal", StringComparison.OrdinalIgnoreCase);
+    public IAsyncRelayCommand RunCommand { get; } = new AsyncRelayCommand(() => run(method));
+}
+
+/// <summary>One ACP saved session row returned by <c>session/list</c>.</summary>
+public sealed class AcpSessionListEntryViewModel(
+    AcpSessionInfo info,
+    bool isCurrent,
+    bool canDelete,
+    Func<string, Task> onLoad,
+    Func<string, Task> onDelete)
+{
+    public string SessionId { get; } = info.SessionId;
+    public string Title { get; } = string.IsNullOrWhiteSpace(info.Title) ? info.SessionId : info.Title!;
+    public string? Cwd { get; } = info.Cwd;
+    public string UpdatedAtText { get; } = info.UpdatedAt?.ToLocalTime().ToString("g") ?? "";
+    public bool HasUpdatedAt => !string.IsNullOrEmpty(UpdatedAtText);
+    public bool IsCurrent { get; } = isCurrent;
+    public bool CanDelete { get; } = canDelete && !isCurrent;
+    public IAsyncRelayCommand LoadCommand { get; } = new AsyncRelayCommand(() => onLoad(info.SessionId));
+    public IAsyncRelayCommand DeleteCommand { get; } = new AsyncRelayCommand(() => onDelete(info.SessionId));
 }

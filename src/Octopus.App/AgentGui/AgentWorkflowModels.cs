@@ -248,6 +248,7 @@ public sealed partial class SubagentRunViewModel : ObservableObject
 
     [ObservableProperty] public partial string AgentType { get; set; } = "general-purpose";
     [ObservableProperty] public partial string Description { get; set; } = "";
+    [ObservableProperty] public partial string? Prompt { get; set; }
     [ObservableProperty] public partial string? Model { get; set; }
     [ObservableProperty] public partial bool IsBackground { get; set; }
     [ObservableProperty] public partial string? WorktreeIsolation { get; set; }
@@ -295,6 +296,7 @@ public sealed partial class SubagentRunViewModel : ObservableObject
             ? ToolCallItemViewModel.ToSingleLine(update.Description)
             : ToolCallItemViewModel.ToSingleLine(update.Title);
         if (!string.IsNullOrWhiteSpace(desc)) Description = desc!;
+        if (!string.IsNullOrWhiteSpace(update.SubagentPrompt)) Prompt = update.SubagentPrompt;
         if (!string.IsNullOrWhiteSpace(update.SubagentModel)) Model = update.SubagentModel;
         if (update.IsBackground) IsBackground = true;
         if (update.SubagentRunsAsynchronously)

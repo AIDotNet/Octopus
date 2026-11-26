@@ -2,13 +2,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Common;
 using Octopus.App.Explorer.Files;
-using Octopus.App.Files;
 using Octopus.App.Explorer.Git;
 using Octopus.App.Explorer.Search;
 using Octopus.App.Explorer.Sessions;
+using Octopus.App.Explorer.Subagent;
 using Octopus.App.Explorer.Tunnels;
+using Octopus.App.Files;
 using Octopus.App.Localization;
+using Octopus.App.Plugins;
 using Octopus.App.Services;
+using Octopus.Core.Projects;
 using Octopus.FileSystem;
 using Octopus.Git;
 using Octopus.Ssh;
@@ -26,6 +29,9 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private readonly UiContext _ui = new();
     private IRemoteFileTree? _remoteTree;
     private readonly Octopus.App.Remote.RemoteProjectAccess? _access;
+    private readonly PluginPanels? _pluginPanels;
+    private readonly IProjectService? _projectService;
+    private string _activeDeviceKey = DeviceKeys.Local;
     private IDisposable? _watch;
     private IDisposable? _changeWatch;
     private IDisposable? _gitWatch;
@@ -41,6 +47,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private readonly Lock _pendingDirsLock = new();
     private readonly HashSet<string> _pendingDirs = new(StringComparer.Ordinal);
     private bool _pendingDirsScheduled;
+    private ExplorerTab _lastNonSubagentTab = ExplorerTab.Files;
 
     public ExplorerPanelViewModel(
         FileTreeViewModel files,
@@ -52,31 +59,59 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         IGitService git,
         ISettingsStore settings,
         RemoteFiles remote,
-        Octopus.App.Remote.RemoteProjectAccess? access = null)
+        Octopus.App.Remote.RemoteProjectAccess? access = null,
+        PluginPanels? pluginPanels = null,
+        IProjectService? projectService = null,
+        SubagentPanelViewModel? subagent = null)
     {
         _remote = remote;
         _access = access;
+        _pluginPanels = pluginPanels;
+        _projectService = projectService;
         Files = files;
         Search = search;
         Git = gitPanel;
         Tunnels = tunnels;
         Sessions = sessions;
+        Subagent = subagent ?? new SubagentPanelViewModel();
         _tree = tree;
         _git = git;
         _settings = settings;
-        Tab = settings.Current.RightPanel.Tab switch
+        var savedTab = settings.Current.RightPanel.Tab;
+        if (PluginPanels.TryParseKey(savedTab, out var savedPanelId))
         {
-            "git" => ExplorerTab.Git,
-            "tunnels" => ExplorerTab.Tunnels,
-            "sessions" => ExplorerTab.Sessions,
-            _ => ExplorerTab.Files,
-        };
+            ActivePluginPanelId = savedPanelId;
+            Tab = ExplorerTab.Files;
+        }
+        else
+        {
+            Tab = savedTab switch
+            {
+                "git" => ExplorerTab.Git,
+                "tunnels" => ExplorerTab.Tunnels,
+                "sessions" => ExplorerTab.Sessions,
+                _ => ExplorerTab.Files,
+            };
+        }
+        _lastNonSubagentTab = Tab;
+
+        if (_projectService is not null)
+        {
+            _activeDeviceKey = DeviceKeys.Normalize(_projectService.ActiveDeviceKey);
+            _projectService.Changed += OnProjectServiceChanged;
+        }
+        _pluginPanels?.Changed += OnPluginPanelsChanged;
+        RefreshPluginPanels();
 
         files.OpenRequested += (_, path) => FileOpenRequested?.Invoke(this, path);
         search.OpenRequested += (_, path) => FileOpenRequested?.Invoke(this, path);
         gitPanel.OpenRequested += (_, path) => FileOpenRequested?.Invoke(this, path);
         gitPanel.DiffRequested += (_, request) => DiffRequested?.Invoke(this, request);
         gitPanel.StatusChanged += OnGitStatusChanged;
+        Subagent.FileOpenRequested += (_, path) => FileOpenRequested?.Invoke(this, path);
+        Subagent.DiffRequested += (_, request) => DiffRequested?.Invoke(this, request);
+        Subagent.CloseRequested += (_, _) => OnSubagentClosed();
+        Subagent.PropertyChanged += OnSubagentPropertyChanged;
         tunnels.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(TunnelsPanelViewModel.RunningCount)) NotifyTunnelCount();
@@ -91,6 +126,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     public GitPanelViewModel Git { get; }
     public TunnelsPanelViewModel Tunnels { get; }
     public SessionsPanelViewModel Sessions { get; }
+    public SubagentPanelViewModel Subagent { get; }
 
     [ObservableProperty] public partial string? ProjectPath { get; private set; }
 
@@ -127,13 +163,28 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     /// <summary>The tab the person chose; it falls back to files when the folder is not in a repository.</summary>
     [ObservableProperty] public partial ExplorerTab Tab { get; private set; }
 
+    /// <summary>The plugin panel id currently selected, or null when a built-in tab is active.</summary>
+    [ObservableProperty] public partial string? ActivePluginPanelId { get; private set; }
+
+    /// <summary>Plugin-contributed right panels eligible for the current device/project context.</summary>
+    public IReadOnlyList<PluginPanelItem> VisiblePluginPanels { get; private set; } = [];
+
+    /// <summary>Raised when the list or badges of visible plugin panels changed.</summary>
+    public event EventHandler? PluginPanelsChanged;
+
     public bool HasProject => ProjectPath is not null;
-    public bool HasNoProject => ProjectPath is null;
-    public bool IsFilesTab => HasProject && !IsGitTab && !IsTunnelsTab && !IsSessionsTab;
-    public bool IsGitTab => HasProject && IsGitRepository && Tab == ExplorerTab.Git;
-    public bool IsTunnelsTab => HasProject && IsSshProject && Tab == ExplorerTab.Tunnels;
+    public bool HasSubagentTab => Subagent.HasTarget;
+    public bool HasAnyTab => HasProject || HasSubagentTab || VisiblePluginPanels.Count > 0;
+    public bool IsPluginPanelTab => ActivePluginPanelId is { Length: > 0 } id && VisiblePluginPanels.Any(p => p.Id == id);
+    public bool IsSubagentTab => HasSubagentTab && !IsPluginPanelTab && Tab == ExplorerTab.Subagent;
+    /// <summary>Lazy-mounted singleton subagent view model: null while hidden or on another tab so zero visual nodes remain resident.</summary>
+    public SubagentPanelViewModel? MountedSubagent => _isActive && IsSubagentTab ? Subagent : null;
+    public bool HasNoProject => ProjectPath is null && !IsPluginPanelTab && !IsSubagentTab;
+    public bool IsFilesTab => HasProject && !IsGitTab && !IsTunnelsTab && !IsSessionsTab && !IsSubagentTab && !IsPluginPanelTab;
+    public bool IsGitTab => HasProject && IsGitRepository && !IsPluginPanelTab && Tab == ExplorerTab.Git;
+    public bool IsTunnelsTab => HasProject && IsSshProject && !IsPluginPanelTab && Tab == ExplorerTab.Tunnels;
     /// <summary>Sessions are read from this computer: a project on an SSH host has none here.</summary>
-    public bool IsSessionsTab => HasProject && !IsSshProject && !IsHostProject && Tab == ExplorerTab.Sessions;
+    public bool IsSessionsTab => HasProject && !IsSshProject && !IsHostProject && !IsPluginPanelTab && Tab == ExplorerTab.Sessions;
     public bool HasChanges => ChangeCount > 0;
     /// <summary>Shown above Files and Git tabs when the right panel is following a non-default git worktree.</summary>
     public bool HasWorkspaceBanner => !string.IsNullOrEmpty(WorkspaceBranch) && (IsFilesTab || IsGitTab);
@@ -141,17 +192,28 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         ? ""
         : AppLangResources.Format(AppLangResourceKind.WorkspaceScopeFollowing, WorkspaceBranch);
 
-    /// <summary>The numbers next to the tab icons: changed files, running tunnels.</summary>
+    /// <summary>The numbers next to the tab icons: changed files, running tunnels, active subagents.</summary>
     public string ChangeCountText => ChangeCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
     public string RunningTunnelsText => Tunnels.RunningCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
+    public string SubagentCountText => Subagent.SiblingCountText;
+    public bool HasSubagentCount => Subagent.HasCountBadge;
+    public string SubagentTabTooltip => Subagent.TabTooltip;
 
-    /// <summary>The key of the tab showing ("files", "git", "tunnels" or "sessions"), for the tab switch; setting it chooses that tab.</summary>
+    /// <summary>The key of the tab showing ("files", "git", "tunnels", "sessions", "subagent" or "panel:&lt;id&gt;"), for the tab switch; setting it chooses that tab.</summary>
     public string TabKey
     {
-        get => IsGitTab ? "git" : IsTunnelsTab ? "tunnels" : IsSessionsTab ? "sessions" : "files";
+        get => IsPluginPanelTab ? PluginPanels.KeyFor(ActivePluginPanelId!)
+            : IsSubagentTab ? "subagent"
+            : IsGitTab ? "git"
+            : IsTunnelsTab ? "tunnels"
+            : IsSessionsTab ? "sessions"
+            : !HasProject && VisiblePluginPanels.Count > 0 ? VisiblePluginPanels[0].TabKey
+            : "files";
         set
         {
-            if (value == "git") ShowGit();
+            if (PluginPanels.TryParseKey(value, out var panelId)) ShowPluginPanel(panelId);
+            else if (value == "subagent") ShowSubagentTab();
+            else if (value == "git") ShowGit();
             else if (value == "tunnels") ShowTunnels();
             else if (value == "sessions") ShowSessions();
             else if (value == "files") ShowFiles();
@@ -179,15 +241,32 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     partial void OnProjectPathChanged(string? value)
     {
+        RefreshPluginPanels();
         OnPropertyChanged(nameof(HasProject));
+        OnPropertyChanged(nameof(HasAnyTab));
         OnPropertyChanged(nameof(HasNoProject));
         NotifyTabs();
     }
 
-    partial void OnIsGitRepositoryChanged(bool value) => NotifyTabs();
+    partial void OnIsGitRepositoryChanged(bool value)
+    {
+        RefreshPluginPanels();
+        NotifyTabs();
+    }
 
-    partial void OnIsSshProjectChanged(bool value) => NotifyTabs();
-    partial void OnIsHostProjectChanged(bool value) => NotifyTabs();
+    partial void OnIsSshProjectChanged(bool value)
+    {
+        RefreshPluginPanels();
+        NotifyTabs();
+    }
+
+    partial void OnIsHostProjectChanged(bool value)
+    {
+        RefreshPluginPanels();
+        NotifyTabs();
+    }
+
+    partial void OnActivePluginPanelIdChanged(string? value) => NotifyTabs();
 
     partial void OnRemoteStatusChanged(string? value)
     {
@@ -206,6 +285,11 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     private void NotifyTabs()
     {
+        OnPropertyChanged(nameof(HasSubagentTab));
+        OnPropertyChanged(nameof(HasAnyTab));
+        OnPropertyChanged(nameof(HasNoProject));
+        OnPropertyChanged(nameof(IsPluginPanelTab));
+        OnPropertyChanged(nameof(IsSubagentTab));
         OnPropertyChanged(nameof(IsFilesTab));
         OnPropertyChanged(nameof(IsGitTab));
         OnPropertyChanged(nameof(IsTunnelsTab));
@@ -213,6 +297,95 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         OnPropertyChanged(nameof(HasWorkspaceBanner));
         OnPropertyChanged(nameof(TabKey));
         Sessions.IsActive = _isActive && IsSessionsTab;
+        Subagent.IsActive = _isActive && IsSubagentTab;
+        OnPropertyChanged(nameof(MountedSubagent));
+    }
+
+    private void OnSubagentPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SubagentPanelViewModel.HasTarget))
+        {
+            NotifyTabs();
+        }
+        else if (e.PropertyName is nameof(SubagentPanelViewModel.SiblingCountText) or nameof(SubagentPanelViewModel.HasCountBadge))
+        {
+            OnPropertyChanged(nameof(SubagentCountText));
+            OnPropertyChanged(nameof(HasSubagentCount));
+        }
+        else if (e.PropertyName is nameof(SubagentPanelViewModel.TabTooltip) or nameof(SubagentPanelViewModel.DisplayTitle))
+        {
+            OnPropertyChanged(nameof(SubagentTabTooltip));
+        }
+    }
+
+    private void OnSubagentClosed()
+    {
+        if (Tab == ExplorerTab.Subagent)
+        {
+            Tab = _lastNonSubagentTab;
+        }
+        NotifyTabs();
+    }
+
+    /// <summary>Opens the requested subagent in the singleton right-panel tab (Scheme A).</summary>
+    public void ShowSubagent(OpenSubagentPanelRequested request)
+    {
+        var effectiveDir = request.WorkingDirectory ?? ProjectPath;
+        var enriched = string.Equals(effectiveDir, request.WorkingDirectory, StringComparison.Ordinal)
+            ? request
+            : request with { WorkingDirectory = effectiveDir };
+        Subagent.Open(enriched);
+        if (!Subagent.HasTarget) return;
+        ActivePluginPanelId = null;
+        Tab = ExplorerTab.Subagent;
+        NotifyTabs();
+    }
+
+    /// <summary>Switches to the dynamic Subagent tab if a target is currently active.</summary>
+    [RelayCommand]
+    public void ShowSubagentTab()
+    {
+        if (!HasSubagentTab) return;
+        if (Tab == ExplorerTab.Subagent && ActivePluginPanelId is null) return;
+        ActivePluginPanelId = null;
+        Tab = ExplorerTab.Subagent;
+        NotifyTabs();
+    }
+
+    private void OnProjectServiceChanged(object? sender, ProjectChangedEventArgs e)
+    {
+        if (e.Kind is ProjectChangeKind.Device or ProjectChangeKind.CurrentProject)
+        {
+            _activeDeviceKey = DeviceKeys.Normalize(_projectService?.ActiveDeviceKey);
+            _ui.Post(RefreshPluginPanels);
+        }
+    }
+
+    private void OnPluginPanelsChanged(object? sender, EventArgs e) => _ui.Post(RefreshPluginPanels);
+
+    private void RefreshPluginPanels()
+    {
+        if (_pluginPanels is null) return;
+        var next = _pluginPanels.Items
+            .Where(item => PluginPanels.MatchesContext(item.Contribution, HasProject, IsGitRepository, _activeDeviceKey))
+            .ToList();
+        VisiblePluginPanels = next;
+        // When there is no project open but a device/global plugin panel exists, select the first one automatically.
+        if (!HasProject && ActivePluginPanelId is null && next.Count > 0)
+        {
+            ActivePluginPanelId = next[0].Id;
+        }
+        OnPropertyChanged(nameof(VisiblePluginPanels));
+        NotifyTabs();
+        PluginPanelsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void ShowPluginPanel(string panelId)
+    {
+        if (!VisiblePluginPanels.Any(p => p.Id == panelId)) return;
+        if (ActivePluginPanelId == panelId) return;
+        ActivePluginPanelId = panelId;
+        _settings.Update(s => s.RightPanel.Tab = PluginPanels.KeyFor(panelId));
     }
 
     private void NotifyTunnelCount()
@@ -248,15 +421,23 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
 
     private void SelectTab(ExplorerTab tab)
     {
-        if (Tab == tab) return;
-        Tab = tab;
-        _settings.Update(s => s.RightPanel.Tab = tab switch
+        if (Tab == tab && ActivePluginPanelId is null) return;
+        ActivePluginPanelId = null;
+        if (tab != ExplorerTab.Subagent)
         {
-            ExplorerTab.Git => "git",
-            ExplorerTab.Tunnels => "tunnels",
-            ExplorerTab.Sessions => "sessions",
-            _ => "files",
-        });
+            _lastNonSubagentTab = tab;
+        }
+        Tab = tab;
+        if (tab != ExplorerTab.Subagent)
+        {
+            _settings.Update(s => s.RightPanel.Tab = tab switch
+            {
+                ExplorerTab.Git => "git",
+                ExplorerTab.Tunnels => "tunnels",
+                ExplorerTab.Sessions => "sessions",
+                _ => "files",
+            });
+        }
         if (tab == ExplorerTab.Git) _ = Git.RefreshAsync();
     }
 
@@ -274,6 +455,8 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
             if (_isActive == value) return;
             _isActive = value;
             Sessions.IsActive = value && IsSessionsTab;
+            Subagent.IsActive = value && IsSubagentTab;
+            OnPropertyChanged(nameof(MountedSubagent));
             if (value) _ = ResumeAsync();
             else Pause();
         }
@@ -333,6 +516,9 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         WorkspaceBranch = workspaceBranch;
         // Without the service that reaches hosts there is nothing to read the folder through: no project is shown.
         if (remoteHost is not null && _access is null) path = null;
+        _activeDeviceKey = remoteHost is { Length: > 0 } ? DeviceKeys.Remote(remoteHost)
+            : sshHost is { Length: > 0 } ? DeviceKeys.Ssh(sshHost)
+            : DeviceKeys.Normalize(_projectService?.ActiveDeviceKey);
         IsSshProject = path is not null && sshHost is not null;
         // Sessions always aggregate the whole project (default + all worktrees), so it receives the main project root.
         var sessionsRoot = rootPath ?? path;
@@ -565,7 +751,11 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     public void Dispose()
     {
         _version++; // prevent an in-flight SetProjectAsync from starting new watches after Dispose
+        _projectService?.Changed -= OnProjectServiceChanged;
+        _pluginPanels?.Changed -= OnPluginPanelsChanged;
         StopWatching();
+        Subagent.PropertyChanged -= OnSubagentPropertyChanged;
+        Subagent.Dispose();
         // It listens to the projects and the tunnels, which live longer than the panel.
         Tunnels.Dispose();
     }

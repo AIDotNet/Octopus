@@ -29,6 +29,9 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     private bool _isScanning;
 
     [ObservableProperty]
+    private bool _isNotInstalledExpanded;
+
+    [ObservableProperty]
     private IReadOnlyList<SelectOption> _permissionOptions = [];
 
     [ObservableProperty]
@@ -105,6 +108,9 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     [RelayCommand]
     private void SelectTerminalSurface() => DefaultSurface = AgentSurface.Terminal;
 
+    [RelayCommand]
+    private void ToggleNotInstalled() => IsNotInstalledExpanded = !IsNotInstalledExpanded;
+
     /// <summary>Selected ACP adapter resolution policy key.</summary>
     public string AcpAdapterPolicyKey
     {
@@ -133,6 +139,51 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
                 return;
             }
             _settings.Update(s => s.Agents.AcpEnableFormElicitation = value);
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Whether ACP agents may trigger out-of-band URL authorization prompts inside the GUI.</summary>
+    public bool AcpEnableUrlElicitation
+    {
+        get => _settings.Current.Agents.AcpEnableUrlElicitation;
+        set
+        {
+            if (value == AcpEnableUrlElicitation)
+            {
+                return;
+            }
+            _settings.Update(s => s.Agents.AcpEnableUrlElicitation = value);
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Whether Octopus advertises client-hosted <c>fs/read_text_file</c> and <c>fs/write_text_file</c> callbacks (default off).</summary>
+    public bool AcpEnableClientFileSystem
+    {
+        get => _settings.Current.Agents.AcpEnableClientFileSystem;
+        set
+        {
+            if (value == AcpEnableClientFileSystem)
+            {
+                return;
+            }
+            _settings.Update(s => s.Agents.AcpEnableClientFileSystem = value);
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Whether Octopus advertises client-hosted <c>terminal/*</c> callbacks (default off).</summary>
+    public bool AcpEnableClientTerminal
+    {
+        get => _settings.Current.Agents.AcpEnableClientTerminal;
+        set
+        {
+            if (value == AcpEnableClientTerminal)
+            {
+                return;
+            }
+            _settings.Update(s => s.Agents.AcpEnableClientTerminal = value);
             OnPropertyChanged();
         }
     }
@@ -293,7 +344,10 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
             {
                 NotInstalled.Add(new UninstalledAgentViewModel(definition, _opener)
                 {
-                    OriginBadge = badge, CanRemove = canRemove, RemoveText = removeText, CanEdit = CanEditAgents,
+                    OriginBadge = badge,
+                    CanRemove = canRemove,
+                    RemoveText = removeText,
+                    CanEdit = CanEditAgents,
                 });
                 continue;
             }
@@ -355,6 +409,9 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         OnPropertyChanged(nameof(IsTerminalDefault));
         OnPropertyChanged(nameof(AcpAdapterPolicyKey));
         OnPropertyChanged(nameof(AcpEnableFormElicitation));
+        OnPropertyChanged(nameof(AcpEnableUrlElicitation));
+        OnPropertyChanged(nameof(AcpEnableClientFileSystem));
+        OnPropertyChanged(nameof(AcpEnableClientTerminal));
     });
 
     private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.PostToUi(() =>

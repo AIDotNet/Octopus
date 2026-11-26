@@ -20,6 +20,13 @@ internal static class SettingsNormalizer
             : settings.Workspaces.RootDirectory.Trim();
         settings.WorkspaceCleanup ??= new();
         settings.Experiments ??= new();
+        settings.StarPrompt ??= new();
+        settings.StarPrompt.ActiveDaysCount = Math.Max(0, settings.StarPrompt.ActiveDaysCount);
+        settings.StarPrompt.CompletedAgentTurns = Math.Max(0, settings.StarPrompt.CompletedAgentTurns);
+        settings.StarPrompt.SessionStartCount = Math.Max(0, settings.StarPrompt.SessionStartCount);
+        settings.StarPrompt.PromptCount = Math.Max(0, settings.StarPrompt.PromptCount);
+        if (string.IsNullOrWhiteSpace(settings.StarPrompt.LastActiveDate))
+            settings.StarPrompt.LastActiveDate = null;
         settings.WorkspaceCleanup.InactiveDays = settings.WorkspaceCleanup.InactiveDays <= 0
             ? WorkspaceCleanupSettings.DefaultInactiveDays
             : Math.Clamp(settings.WorkspaceCleanup.InactiveDays, WorkspaceCleanupSettings.MinInactiveDays, WorkspaceCleanupSettings.MaxInactiveDays);
@@ -39,6 +46,14 @@ internal static class SettingsNormalizer
             settings.Updates.Channel = null;
         settings.Agents.Profiles ??= [];
         settings.Agents.ExpansionStates ??= [];
+        settings.Agents.AcpMcpServers ??= [];
+        settings.Agents.AcpMcpServers.RemoveAll(s => s is null);
+        foreach (var mcp in settings.Agents.AcpMcpServers)
+        {
+            mcp.Args ??= [];
+            mcp.Env ??= [];
+            mcp.Headers ??= [];
+        }
         foreach (var key in settings.Agents.Profiles.Where(p => p.Value is null).Select(p => p.Key).ToList())
             settings.Agents.Profiles[key] = new();
         foreach (var profile in settings.Agents.Profiles.Values)

@@ -1,0 +1,259 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:gui="using:Octopus.App.AgentGui"
+             xmlns:sub="using:Octopus.App.Explorer.Subagent"
+             x:Class="Octopus.App.Explorer.Subagent.SubagentPanelView"
+             x:DataType="sub:SubagentPanelViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.saSwitcher">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,3" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            </Style>
+        </Style>
+
+        <Style Selector="Button.saSiblingRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            </Style>
+            <Style Selector="^.selected">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            </Style>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Background="{arc:ArcDesignTokenResource Background}" RowDefinitions="Auto,*,Auto">
+        <!-- Scheme A: Compact single-line context header with sibling dropdown switcher -->
+        <Border Grid.Row="0"
+                Background="{arc:ArcDesignTokenResource Background}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="0,1,0,1"
+                Padding="8,5,6,5">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <Button x:Name="SwitcherButton"
+                        Grid.Column="0"
+                        Classes="saSwitcher"
+                        Command="{Binding ToggleSwitcherCommand}"
+                        IsHitTestVisible="{Binding HasMultipleSiblings}"
+                        arc:Tooltip.Tip="{Binding DisplayTitle}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                        <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
+                            <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}"
+                                            Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <lucide:LucideIcon Kind="Check" Size="12" IsVisible="{Binding IsDone}"
+                                               Foreground="{arc:ArcDesignTokenResource Success}" />
+                            <lucide:LucideIcon Kind="X" Size="12" IsVisible="{Binding IsFailed}"
+                                               Foreground="{arc:ArcDesignTokenResource Danger}" />
+                            <lucide:LucideIcon Kind="Minus" Size="12" IsVisible="{Binding IsInterrupted}"
+                                               Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                        </Panel>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding DisplayTitle}"
+                                   FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                   FontWeight="SemiBold"
+                                   MaxLines="1"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                        <lucide:LucideIcon Grid.Column="2"
+                                           Kind="ChevronDown"
+                                           Size="12"
+                                           IsVisible="{Binding HasMultipleSiblings}"
+                                           Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                           VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ElapsedText}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               VerticalAlignment="Center" />
+                    <arc:Button Classes="icon" Variant="Ghost"
+                                Command="{Binding CloseCommand}"
+                                AutomationProperties.Name="{l:AppLangResource SubagentPanelCloseTooltip}"
+                                arc:Tooltip.Tip="{l:AppLangResource SubagentPanelCloseTooltip}">
+                        <lucide:LucideIcon Kind="X" Size="13" />
+                    </arc:Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Main Message Panel: 100% shared AgentTimelineView (lazy-mounted ONLY while IsMounted) -->
+        <Grid Grid.Row="1">
+            <gui:AgentTimelineView x:Name="SubagentTimeline"
+                                   IsVisible="{Binding IsMounted}"
+                                   ItemsSource="{Binding Timeline}"
+                                   StreamPadding="12,10,12,14"
+                                   MaxContentWidth="760"
+                                   IsPinnedToBottom="{Binding IsPinnedToBottom, Mode=TwoWay}"
+                                   ShowJumpToBottom="{Binding ShowJumpToBottom}"
+                                   JumpToBottomCommand="{Binding JumpToBottomCommand}"
+                                   WorkingDirectory="{Binding WorkingDirectory}" />
+
+            <StackPanel IsVisible="{Binding ShowEmptyHint}"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="6"
+                        Margin="16">
+                <arc:ArcSpinner Width="14" Height="14" IsVisible="{Binding IsRunning}" HorizontalAlignment="Center" />
+                <TextBlock Classes="hint"
+                           Text="{l:AppLangResource SubagentPanelNoMessages}"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <!-- Compact sibling switcher dropdown overlay (only visible when opened) -->
+            <Border IsVisible="{Binding IsSwitcherOpen}"
+                    VerticalAlignment="Top"
+                    Margin="8,4,8,0"
+                    Padding="4"
+                    CornerRadius="8"
+                    Background="{arc:ArcDesignTokenResource Surface}"
+                    BorderBrush="{arc:ArcDesignTokenResource Border}"
+                    BorderThickness="1"
+                    BoxShadow="0 10 28 0 #44000000">
+                <arc:ScrollArea MaxHeight="240" Orientation="Vertical" FadeLength="0">
+                    <ItemsControl ItemsSource="{Binding Siblings}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="sub:SubagentSiblingItem">
+                                <Button Classes="saSiblingRow"
+                                        Classes.selected="{Binding IsSelected}"
+                                        Command="{Binding SelectCommand}">
+                                    <Grid ColumnDefinitions="14,Auto,*,Auto" ColumnSpacing="6">
+                                        <Panel Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center">
+                                            <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsRunning}" />
+                                            <lucide:LucideIcon Kind="Check" Size="11" IsVisible="{Binding IsDone}"
+                                                               Foreground="{arc:ArcDesignTokenResource Success}" />
+                                            <lucide:LucideIcon Kind="X" Size="11" IsVisible="{Binding IsFailed}"
+                                                               Foreground="{arc:ArcDesignTokenResource Danger}" />
+                                            <lucide:LucideIcon Kind="Minus" Size="11" IsVisible="{Binding IsInterrupted}"
+                                                               Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                        </Panel>
+                                        <Border Grid.Column="1" Padding="4,0" CornerRadius="4"
+                                                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding AgentType}"
+                                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                       FontSize="10"
+                                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                        </Border>
+                                        <TextBlock Grid.Column="2" Text="{Binding Title}"
+                                                   FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                   MaxLines="1" TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding MetaText}"
+                                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                   FontSize="10"
+                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </arc:ScrollArea>
+            </Border>
+        </Grid>
+
+        <!-- Minimal status & quick-action footer (zero heavy composer) -->
+        <Border Grid.Row="2"
+                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                BorderThickness="0,1,0,0"
+                Padding="10,5">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding AgentType}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                               Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                               VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding HasModel}" Text="·" Classes="hint" VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding HasModel}" Text="{Binding Model}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               MaxWidth="110" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding HasToolsText}" Text="·" Classes="hint" VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding HasToolsText}" Text="{Binding ToolsText}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding HasWorktree}" Text="·" Classes="hint" VerticalAlignment="Center" />
+                    <TextBlock IsVisible="{Binding HasWorktree}" Text="{Binding WorktreeIsolation}"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                               Foreground="#0D9488"
+                               MaxWidth="96" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <arc:Button Size="Small" Variant="Secondary"
+                                IsVisible="{Binding CanStop}"
+                                Command="{Binding StopCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <lucide:LucideIcon Kind="Square" Size="10" Foreground="#DC2626" />
+                            <TextBlock FontSize="11" Text="{l:AppLangResource AgentGuiSubagentStop}" />
+                        </StackPanel>
+                    </arc:Button>
+                    <arc:CopyButton IsIconOnly="True"
+                                    IsVisible="{Binding HasCopyableConclusion}"
+                                    VerticalAlignment="Center"
+                                    Value="{Binding CopyableConclusion}"
+                                    AutomationProperties.Name="{l:AppLangResource SubagentPanelCopyConclusion}"
+                                    arc:Tooltip.Tip="{l:AppLangResource SubagentPanelCopyConclusion}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

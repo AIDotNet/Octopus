@@ -18,6 +18,38 @@ public sealed class AppSettingsModel
     public WorkspaceSettings Workspaces { get; set; } = new();
     public WorkspaceCleanupSettings WorkspaceCleanup { get; set; } = new();
     public ExperimentalSettings Experiments { get; set; } = new();
+    public StarPromptSettings StarPrompt { get; set; } = new();
+}
+
+/// <summary>Local-only state for the non-intrusive GitHub Star reminder pill (no telemetry).</summary>
+public sealed class StarPromptSettings
+{
+    public const int DefaultMinInstallDays = 3;
+    public const int DefaultMinActiveDays = 3;
+    public const int DefaultMinCompletedTurns = 5;
+    public const int DefaultMinSessionStarts = 8;
+    public const int DefaultFirstSnoozeDays = 14;
+    public const int DefaultSecondSnoozeDays = 30;
+    public const int DefaultMaxPromptCount = 3;
+
+    /// <summary>When Octopus first recorded local usage for this user (UTC).</summary>
+    public DateTimeOffset? FirstSeenUtc { get; set; }
+    /// <summary>Last local calendar date (<c>yyyy-MM-dd</c>) when the app was used.</summary>
+    public string? LastActiveDate { get; set; }
+    /// <summary>Number of distinct calendar days the app has been used.</summary>
+    public int ActiveDaysCount { get; set; }
+    /// <summary>Cumulative number of agent turns completed without error.</summary>
+    public int CompletedAgentTurns { get; set; }
+    /// <summary>Cumulative number of non-restored terminal or agent tabs started by the user.</summary>
+    public int SessionStartCount { get; set; }
+    /// <summary>Number of times the reminder has been shown and snoozed/dismissed.</summary>
+    public int PromptCount { get; set; }
+    /// <summary>Earliest UTC timestamp when the reminder may appear again after a snooze.</summary>
+    public DateTimeOffset? SnoozeUntilUtc { get; set; }
+    /// <summary>True once the user clicked Star on GitHub; permanently silences the reminder.</summary>
+    public bool Starred { get; set; }
+    /// <summary>True once the user dismissed the reminder forever or reached the prompt cap.</summary>
+    public bool DismissedForever { get; set; }
 }
 
 /// <summary>Opt-in / preview capabilities controlled from the Experiments settings page.</summary>
@@ -192,6 +224,14 @@ public sealed class AgentSettings
     public AcpAdapterPolicy AcpAdapterPolicy { get; set; } = AcpAdapterPolicy.UseLocalRunners;
     /// <summary>Advertises <c>elicitation.form</c> to ACP agents whose dialect supports structured form questions.</summary>
     public bool AcpEnableFormElicitation { get; set; } = true;
+    /// <summary>Advertises <c>elicitation.url</c> so ACP agents can request out-of-band browser/OAuth authorization.</summary>
+    public bool AcpEnableUrlElicitation { get; set; } = true;
+    /// <summary>Advertises <c>fs.readTextFile</c>/<c>fs.writeTextFile</c> so ACP agents can read/write workspace files through Octopus (default off).</summary>
+    public bool AcpEnableClientFileSystem { get; set; }
+    /// <summary>Advertises <c>terminal: true</c> so ACP agents can run commands inside Octopus-hosted terminals (default off).</summary>
+    public bool AcpEnableClientTerminal { get; set; }
+    /// <summary>Global MCP servers forwarded to ACP agents in <c>session/new</c>, <c>session/load</c>, <c>session/resume</c>, and <c>session/fork</c>.</summary>
+    public List<AcpMcpServerConfig> AcpMcpServers { get; set; } = [];
     /// <summary>The permission level of every agent that has none of its own.</summary>
     public string DefaultPermission { get; set; } = PermissionModes.Default;
     /// <summary>

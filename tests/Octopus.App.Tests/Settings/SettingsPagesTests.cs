@@ -10,7 +10,6 @@ using Octopus.App.Settings.Appearance;
 using Octopus.App.Settings.General;
 using Octopus.App.Settings.Shortcuts;
 using Octopus.App.Settings.Terminal;
-using Octopus.Core.Agents;
 using Octopus.Platform;
 using Octopus.Storage;
 using TKCode.Arc;
@@ -96,6 +95,40 @@ public class SettingsPagesTests
         Assert.Empty(agents.Installed);
         Assert.False(agents.HasInstalled);
         Assert.Equal(AppHost.Get<Octopus.Agents.IAgentCatalog>().Definitions.Count, agents.NotInstalled.Count);
+        Assert.False(agents.IsNotInstalledExpanded);
+        agents.Dispose();
+    }
+
+    [AvaloniaFact]
+    public void Not_installed_agents_are_collapsed_by_default_and_toggle_on_click()
+    {
+        var agents = NewAgentsPage(new SettingsTestSupport.FakeScanner("claude"));
+        var view = new AgentsPageView { DataContext = agents };
+        var window = new Window { Width = 1280, Height = 800, Content = view };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var listBorder = view.FindControl<Border>("NotInstalledListBorder");
+        Assert.NotNull(listBorder);
+        Assert.False(agents.IsNotInstalledExpanded);
+        Assert.False(listBorder.IsVisible);
+
+        agents.ToggleNotInstalledCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(agents.IsNotInstalledExpanded);
+        Assert.True(listBorder.IsVisible);
+
+        agents.Rebuild();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(agents.IsNotInstalledExpanded);
+        Assert.True(listBorder.IsVisible);
+
+        agents.ToggleNotInstalledCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(agents.IsNotInstalledExpanded);
+        Assert.False(listBorder.IsVisible);
+
+        window.Close();
         agents.Dispose();
     }
 

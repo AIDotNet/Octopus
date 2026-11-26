@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
-using Avalonia.VisualTree;
 using TKCode.Arc;
 using TKCode.Arc.Motion;
 using TKCode.Arc.Primitives;
@@ -172,11 +171,8 @@ public sealed class ExplorerTabGroup : ToggleGroup
 
     private void DetachIndicator()
     {
-        if (_indicator is not null)
-        {
-            _indicator.PropertyChanged -= OnWatchedBoundsChanged;
-            _indicator = null;
-        }
+        _indicator?.PropertyChanged -= OnWatchedBoundsChanged;
+        _indicator = null;
     }
 
     private void OnTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -239,9 +235,9 @@ public sealed class ExplorerTabGroup : ToggleGroup
     private void WatchContainer(Control? container)
     {
         if (ReferenceEquals(_watchedContainer, container)) return;
-        if (_watchedContainer is not null) _watchedContainer.PropertyChanged -= OnWatchedBoundsChanged;
+        _watchedContainer?.PropertyChanged -= OnWatchedBoundsChanged;
         _watchedContainer = container;
-        if (_watchedContainer is not null) _watchedContainer.PropertyChanged += OnWatchedBoundsChanged;
+        _watchedContainer?.PropertyChanged += OnWatchedBoundsChanged;
     }
 
     private void StartGlide()

@@ -686,6 +686,10 @@
     <unit id="TunnelsFailShared"><segment><source>The terminal's connection did not take the forward: {0}</source><target state="translated">终端的连接没有接受这个转发：{0}</target></segment></unit>
     <unit id="ExplorerTabSessions"><segment><source>Sessions</source><target state="translated">会话</target></segment></unit>
     <unit id="ExplorerTabChanges"><segment><source>Changes</source><target state="translated">变更</target></segment></unit>
+    <unit id="ExplorerTabSubagent"><segment><source>Subagent</source><target state="translated">子智能体</target></segment></unit>
+    <unit id="SubagentPanelCloseTooltip"><segment><source>Close subagent panel</source><target state="translated">关闭子智能体面板</target></segment></unit>
+    <unit id="SubagentPanelCopyConclusion"><segment><source>Copy result</source><target state="translated">复制结论</target></segment></unit>
+    <unit id="SubagentPanelNoMessages"><segment><source>Waiting for subagent output…</source><target state="translated">等待子智能体输出…</target></segment></unit>
     <unit id="SessionsAgentsCaption"><segment><source>Agents on this computer</source><target state="translated">本项目识别到的智能体</target></segment></unit>
     <unit id="SessionsInstalledCount"><segment><source>{0} installed</source><target state="translated">{0} 个已安装</target></segment></unit>
     <unit id="SessionsAgentSummary"><segment><source>{0} sessions · latest {1}</source><target state="translated">{0} 个会话 · 最近 {1}</target></segment></unit>
@@ -1399,5 +1403,47 @@
     <unit id="AgentGuiStepVerbOther"><segment><source>Tool</source><target state="translated">调用</target></segment></unit>
     <unit id="AgentGuiStepVerbOtherActive"><segment><source>Running</source><target state="translated">正在调用</target></segment></unit>
     <unit id="AgentGuiStepVerbOtherDone"><segment><source>Done</source><target state="translated">已调用</target></segment></unit>
+    <unit id="AgentGuiStepVerbImage"><segment><source>Generate image</source><target state="translated">生成图片</target></segment></unit>
+    <unit id="AgentGuiStepVerbImageActive"><segment><source>Generating image</source><target state="translated">正在生成图片</target></segment></unit>
+    <unit id="AgentGuiStepVerbImageDone"><segment><source>Generated image</source><target state="translated">已生成图片</target></segment></unit>
+    <unit id="AgentGuiWorkCountImage"><segment><source>{0} image</source><target state="translated">{0} 张图片</target></segment></unit>
+    <unit id="AgentGuiWorkShortImage"><segment><source>{0} img</source><target state="translated">{0} 图</target></segment></unit>
+    <unit id="AgentGuiImageQueued"><segment><source>Queued</source><target state="translated">排队中</target></segment></unit>
+    <unit id="AgentGuiImageGenerating"><segment><source>Generating</source><target state="translated">生成中</target></segment></unit>
+    <unit id="AgentGuiImageDone"><segment><source>Done</source><target state="translated">已完成</target></segment></unit>
+    <unit id="AgentGuiImageFailed"><segment><source>Image generation failed</source><target state="translated">图片生成失败</target></segment></unit>
+    <unit id="AgentGuiImageAltDefault"><segment><source>Generated image</source><target state="translated">生成的图片</target></segment></unit>
+    <unit id="AgentGuiImageOpen"><segment><source>Open image</source><target state="translated">打开图片</target></segment></unit>
+    <unit id="StarPromptTitle"><segment><source>Enjoying Octopus? Star us on GitHub</source><target state="translated">喜欢 Octopus 吗？点个 Star 支持开源</target></segment></unit>
+    <unit id="StarPromptStar"><segment><source>Star</source><target state="translated">Star</target></segment></unit>
+    <unit id="StarPromptClose"><segment><source>Close</source><target state="translated">关闭</target></segment></unit>
+    <unit id="StarPromptSnoozeDays"><segment><source>Remind in {0}d</source><target state="translated">{0} 天后再提醒</target></segment></unit>
+    <unit id="StarPromptDismissForever"><segment><source>Don't show again</source><target state="translated">不再提示</target></segment></unit>
+    <unit id="StarPromptThanksTitle"><segment><source>Thank you for your support!</source><target state="translated">非常感谢你的支持！</target></segment></unit>
+    <unit id="StarPromptThanksDetail"><segment><source>Opened GitHub repo · won't ask again</source><target state="translated">已打开 GitHub 仓库，之后不再提醒</target></segment></unit>
+    <unit id="SettingsAcpUrlElicitation"><segment><source>URL authorization prompts (ACP)</source><target state="translated">URL 授权弹窗（ACP）</target></segment></unit>
+    <unit id="SettingsAcpUrlElicitationHint"><segment><source>Allow ACP agents to request out-of-band browser or OAuth authorization links.</source><target state="translated">允许 ACP 智能体发起浏览器或 OAuth 外带授权链接请求。</target></segment></unit>
+    <unit id="SettingsAcpClientFileSystem"><segment><source>Client-hosted file access (ACP fs/*)</source><target state="translated">客户端托管文件读写（ACP fs/*）</target></segment></unit>
+    <unit id="SettingsAcpClientFileSystemHint"><segment><source>Advertise fs/read_text_file and fs/write_text_file so ACP agents can read or write workspace files through Octopus. Off by default.</source><target state="translated">声明 fs/read_text_file 与 fs/write_text_file，允许 ACP 智能体经由 Octopus 读写工作区文件（默认关闭）。</target></segment></unit>
+    <unit id="SettingsAcpClientTerminal"><segment><source>Client-hosted terminals (ACP terminal/*)</source><target state="translated">客户端托管终端执行（ACP terminal/*）</target></segment></unit>
+    <unit id="SettingsAcpClientTerminalHint"><segment><source>Advertise terminal/* callbacks so ACP agents can spawn and monitor commands inside Octopus. Off by default.</source><target state="translated">声明 terminal/* 回调，允许 ACP 智能体通过 Octopus 创建与监控命令执行（默认关闭）。</target></segment></unit>
+    <unit id="AgentGuiForkSession"><segment><source>Fork session</source><target state="translated">分叉会话</target></segment></unit>
+    <unit id="AgentGuiSessionHistory"><segment><source>ACP sessions</source><target state="translated">ACP 会话历史</target></segment></unit>
+    <unit id="AgentGuiSessionHistoryEmpty"><segment><source>No saved ACP sessions found for this workspace.</source><target state="translated">当前工作区暂无可恢复的 ACP 会话。</target></segment></unit>
+    <unit id="AgentGuiSessionDelete"><segment><source>Delete session</source><target state="translated">删除会话</target></segment></unit>
+    <unit id="AgentGuiSessionSwitch"><segment><source>Load session</source><target state="translated">加载会话</target></segment></unit>
+    <unit id="AgentGuiSessionForkedNotice"><segment><source>Forked into a new tab.</source><target state="translated">已分叉到新标签页。</target></segment></unit>
+    <unit id="AgentGuiAuthMethodRun"><segment><source>Authenticate</source><target state="translated">开始认证</target></segment></unit>
+    <unit id="AgentGuiAuthLogout"><segment><source>Sign out</source><target state="translated">退出登录</target></segment></unit>
+    <unit id="AgentGuiUrlElicitationTitle"><segment><source>External authorization required</source><target state="translated">需要外部授权</target></segment></unit>
+    <unit id="AgentGuiUrlElicitationOpen"><segment><source>Open link</source><target state="translated">打开链接</target></segment></unit>
+    <unit id="AgentGuiUrlElicitationConfirm"><segment><source>Completed</source><target state="translated">已完成授权</target></segment></unit>
+    <unit id="AgentGuiUrlElicitationDecline"><segment><source>Decline</source><target state="translated">拒绝</target></segment></unit>
+    <unit id="AgentGuiQuestionDecline"><segment><source>Decline</source><target state="translated">拒绝</target></segment></unit>
+    <unit id="AgentGuiCustomOptionsLabel"><segment><source>Options</source><target state="translated">选项</target></segment></unit>
+    <unit id="AgentGuiStopReasonMaxTokens"><segment><source>Stopped: reached maximum output tokens.</source><target state="translated">已停止：达到单轮最大输出 Token 限制。</target></segment></unit>
+    <unit id="AgentGuiStopReasonMaxTurnRequests"><segment><source>Stopped: reached maximum tool requests for this turn.</source><target state="translated">已停止：达到单轮最大工具调用次数限制。</target></segment></unit>
+    <unit id="AgentGuiStopReasonRefusal"><segment><source>Stopped: the agent declined to complete this request.</source><target state="translated">已停止：智能体拒绝继续处理该请求。</target></segment></unit>
+    <unit id="AgentGuiCompactionNotice"><segment><source>Context compacted</source><target state="translated">上下文已压缩</target></segment></unit>
   </file>
 </xliff>

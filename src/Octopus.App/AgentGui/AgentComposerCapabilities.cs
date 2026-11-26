@@ -77,6 +77,72 @@ public sealed partial class ComposerChoiceItem : ObservableObject
     private void Select() => _select(Id);
 }
 
+/// <summary>Generic custom ACP <c>session/configOptions</c> item rendered inside the Composer Options popover.</summary>
+public sealed partial class CustomConfigOptionViewModel : ObservableObject
+{
+    private readonly Func<string, string, Task>? _onSelectChanged;
+    private readonly Func<string, bool, Task>? _onBoolChanged;
+
+    public CustomConfigOptionViewModel(
+        AcpSessionConfigOption option,
+        Func<string, string, Task>? onSelectChanged,
+        Func<string, bool, Task>? onBoolChanged)
+    {
+        Id = option.Id;
+        Name = string.IsNullOrWhiteSpace(option.Name) ? option.Id : option.Name;
+        Description = option.Description;
+        IsBoolean = string.Equals(option.Type, "boolean", StringComparison.OrdinalIgnoreCase);
+
+        // Assign initial values before wiring callbacks so seeding does not emit outbound RPCs.
+        BoolValue = option.CurrentBoolValue ?? string.Equals(option.CurrentValue, "true", StringComparison.OrdinalIgnoreCase);
+        SelectedValue = option.CurrentValue ?? option.Options.FirstOrDefault()?.Value ?? "";
+        foreach (var opt in option.Options)
+        {
+            Choices.Add(new ComposerChoiceItem(opt.Value, opt.Name, ChooseValue, opt.Description, opt.GroupName)
+            {
+                IsSelected = opt.Value == SelectedValue,
+            });
+        }
+
+        _onSelectChanged = onSelectChanged;
+        _onBoolChanged = onBoolChanged;
+    }
+
+    public string Id { get; }
+    public string Name { get; }
+    public string? Description { get; }
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+    public bool IsBoolean { get; }
+    public bool IsSelect => !IsBoolean && Choices.Count > 0;
+    public ObservableCollection<ComposerChoiceItem> Choices { get; } = [];
+
+    [ObservableProperty] public partial bool BoolValue { get; set; }
+    [ObservableProperty] public partial string SelectedValue { get; set; } = "";
+
+    public string SelectedLabel =>
+        Choices.FirstOrDefault(c => c.Id == SelectedValue)?.Label ?? SelectedValue;
+
+    private void ChooseValue(string value)
+    {
+        if (SelectedValue == value) return;
+        SelectedValue = value;
+    }
+
+    partial void OnBoolValueChanged(bool value)
+    {
+        if (!IsBoolean) return;
+        if (_onBoolChanged is not null) _ = _onBoolChanged(Id, value);
+    }
+
+    partial void OnSelectedValueChanged(string value)
+    {
+        foreach (var c in Choices) c.IsSelected = c.Id == value;
+        OnPropertyChanged(nameof(SelectedLabel));
+        if (IsBoolean || string.IsNullOrEmpty(value)) return;
+        if (_onSelectChanged is not null) _ = _onSelectChanged(Id, value);
+    }
+}
+
 /// <summary>
 /// Reactive capability model for the compact Style A composer.
 /// Every button, selector, and toggle in the input box is dynamically computed from the current agent's catalog
@@ -149,6 +215,7 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
     [ObservableProperty] public partial bool ShowEffortSelector { get; private set; }
     [ObservableProperty] public partial bool ShowFastToggle { get; private set; }
     [ObservableProperty] public partial bool ShowThinkingToggle { get; private set; }
+    [ObservableProperty] public partial bool ShowCustomOptionsButton { get; private set; }
 
     // Option collections (kept as SelectOption for API/test compatibility alongside rich popover choices)
     [ObservableProperty] public partial IReadOnlyList<SelectOption> ModeOptions { get; private set; } = [];
@@ -162,12 +229,14 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
     public ObservableCollection<ComposerChoiceItem> ModelChoices { get; } = [];
     public ObservableCollection<ComposerChoiceItem> FilteredModelChoices { get; } = [];
     public ObservableCollection<ComposerChoiceItem> EffortChoices { get; } = [];
+    public ObservableCollection<CustomConfigOptionViewModel> CustomConfigOptions { get; } = [];
 
     // Popover open states & model filter query
     [ObservableProperty] public partial bool IsModePickerOpen { get; set; }
     [ObservableProperty] public partial bool IsPermissionPickerOpen { get; set; }
     [ObservableProperty] public partial bool IsModelPickerOpen { get; set; }
     [ObservableProperty] public partial bool IsEffortPickerOpen { get; set; }
+    [ObservableProperty] public partial bool IsCustomOptionsPickerOpen { get; set; }
     [ObservableProperty] public partial string ModelSearchQuery { get; set; } = "";
 
     // Selected values
@@ -637,6 +706,25 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
                 ShowThinkingToggle = false;
             }
 
+            // Expose any remaining ACP session configOptions not bound to dedicated composer slots.
+            CustomConfigOptions.Clear();
+            foreach (var opt in configOptions)
+            {
+                if (ReferenceEquals(opt, modeOpt)
+                    || ReferenceEquals(opt, modelOpt)
+                    || ReferenceEquals(opt, effortOpt)
+                    || ReferenceEquals(opt, fastOpt)
+                    || ReferenceEquals(opt, thinkingOpt))
+                {
+                    continue;
+                }
+                if (string.Equals(opt.Type, "boolean", StringComparison.OrdinalIgnoreCase) || opt.Options.Count > 0)
+                {
+                    CustomConfigOptions.Add(new CustomConfigOptionViewModel(opt, _onConfigSelectChanged, _onConfigBoolChanged));
+                }
+            }
+            ShowCustomOptionsButton = CustomConfigOptions.Count > 0;
+
             SyncAllSelectionStates();
             RebuildCapabilityBadges();
         }
@@ -841,6 +929,7 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
         if (ShowEffortSelector) CapabilityBadges.Add("Effort");
         if (ShowFastToggle) CapabilityBadges.Add("Fast");
         if (ShowThinkingToggle) CapabilityBadges.Add("Thinking");
+        if (ShowCustomOptionsButton) CapabilityBadges.Add($"+{CustomConfigOptions.Count} opts");
     }
 
     partial void OnModelSearchQueryChanged(string value) => ApplyModelFilter();
@@ -852,6 +941,7 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
             IsModePickerOpen = false;
             IsPermissionPickerOpen = false;
             IsEffortPickerOpen = false;
+            IsCustomOptionsPickerOpen = false;
         }
         else if (!string.IsNullOrEmpty(ModelSearchQuery))
         {
@@ -865,6 +955,7 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
         IsPermissionPickerOpen = false;
         IsModelPickerOpen = false;
         IsEffortPickerOpen = false;
+        IsCustomOptionsPickerOpen = false;
     }
 
     partial void OnIsPermissionPickerOpenChanged(bool value)
@@ -873,6 +964,7 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
         IsModePickerOpen = false;
         IsModelPickerOpen = false;
         IsEffortPickerOpen = false;
+        IsCustomOptionsPickerOpen = false;
     }
 
     partial void OnIsEffortPickerOpenChanged(bool value)
@@ -881,6 +973,16 @@ public sealed partial class AgentComposerCapabilities : ObservableObject
         IsModePickerOpen = false;
         IsPermissionPickerOpen = false;
         IsModelPickerOpen = false;
+        IsCustomOptionsPickerOpen = false;
+    }
+
+    partial void OnIsCustomOptionsPickerOpenChanged(bool value)
+    {
+        if (!value) return;
+        IsModePickerOpen = false;
+        IsPermissionPickerOpen = false;
+        IsModelPickerOpen = false;
+        IsEffortPickerOpen = false;
     }
 
     partial void OnSelectedModeIdChanged(string? value)

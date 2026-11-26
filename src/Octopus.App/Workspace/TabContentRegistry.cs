@@ -40,7 +40,7 @@ public sealed class TabContentRegistry(
         {
             return existing;
         }
-        Control control = item.Kind switch
+        var control = item.Kind switch
         {
             ProjectItemKind.File => new FileTabView { DataContext = new FileTabViewModel(item, files, settings, dialogs: dialogs) },
             // Resolved here, not injected: the plugin workbench needs the item opener, which needs this registry's peers.
@@ -104,7 +104,8 @@ public sealed class TabContentRegistry(
             services.GetService<IAgentAccountService>(),
             () => services.GetService<IWorkspaceCommands>(),
             services.GetService<ISubagentService>(),
-            services.GetService<IModelDiscovery>());
+            services.GetService<IModelDiscovery>(),
+            services.GetService<Octopus.Platform.IFileOpener>());
         return new AgentGuiTabView { DataContext = vm };
     }
 
