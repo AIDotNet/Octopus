@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 
 namespace Octopus.Updates.Tests;
@@ -127,9 +128,151 @@ public sealed class DownloaderTests : IDisposable
         Assert.False(File.Exists(Path.Combine(Directory, "Octopus-1.1.0-osx-arm64.zip")));
     }
 
+    [Fact]
+    public async Task ProgressIsReportedAtMostOncePerSecond()
+    {
+        var clock = new StepTimeProvider();
+        // 5 chunks of 60_000 bytes; each read advances the clock by 400 ms.
+        // Expected ticks: initial (0), chunk 3 at 1.2s (180_000), final on completion (300_000).
+        using var http = new HttpClient(new ChunkedHttp(_content, chunkSize: 60_000, onRead: () => clock.Advance(TimeSpan.FromMilliseconds(400))));
+        var reports = new List<DownloadProgress>();
+        var downloader = new UpdateDownloader(http, clock);
+        await downloader.DownloadAsync(Asset(), Directory, new SyncProgress(reports.Add), CancellationToken.None);
+
+        Assert.Equal([0, 180_000, 300_000], reports.Select(r => r.Received).ToArray());
+        Assert.Equal(0, reports[0].BytesPerSecond);
+        Assert.Equal(180_000 / 1.2, reports[1].BytesPerSecond, precision: 3);
+    }
+
+    [Fact]
+    public async Task PrematureEofWithContentLengthIsNetworkErrorAndKeepsPartForResume()
+    {
+        var handler = new TruncatingThenResumingHttp(_content, cutAt: 100_000);
+        using var http = new HttpClient(handler);
+        var downloader = new UpdateDownloader(http);
+
+        var e = await Assert.ThrowsAsync<UpdateException>(() => downloader.DownloadAsync(Asset(), Directory, null, CancellationToken.None));
+        Assert.Equal(UpdateErrorKind.Network, e.Kind);
+        var part = Path.Combine(Directory, "Octopus-1.1.0-osx-arm64.zip.part");
+        Assert.True(File.Exists(part));
+        Assert.Equal(100_000, new FileInfo(part).Length);
+
+        // Retry resumes from the saved .part via HTTP Range and completes cleanly.
+        var path = await downloader.DownloadAsync(Asset(), Directory, null, CancellationToken.None);
+        Assert.Equal(_content, File.ReadAllBytes(path));
+        Assert.Equal(100_000, handler.LastRangeFrom);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MidStreamSocketAndDisposedErrorsMapToNetworkErrorAndKeepPart(bool throwDisposed)
+    {
+        using var http = new HttpClient(new FaultingStreamHttp(
+            _content,
+            failAfter: 80_000,
+            errorFactory: () => throwDisposed
+                ? new ObjectDisposedException("SslStream")
+                : new SocketException((int)SocketError.ConnectionReset)));
+        var downloader = new UpdateDownloader(http);
+
+        var e = await Assert.ThrowsAsync<UpdateException>(() => downloader.DownloadAsync(Asset(), Directory, null, CancellationToken.None));
+        Assert.Equal(UpdateErrorKind.Network, e.Kind);
+        var part = Path.Combine(Directory, "Octopus-1.1.0-osx-arm64.zip.part");
+        Assert.True(File.Exists(part));
+        Assert.True(new FileInfo(part).Length > 0);
+    }
+
+    private sealed class TruncatingThenResumingHttp(byte[] content, int cutAt) : HttpMessageHandler
+    {
+        private int _calls;
+        public long? LastRangeFrom { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            _calls++;
+            var from = (int)(request.Headers.Range?.Ranges.FirstOrDefault()?.From ?? 0);
+            LastRangeFrom = request.Headers.Range?.Ranges.FirstOrDefault()?.From;
+            if (_calls == 1)
+            {
+                // Advertises the full Content-Length, but closes the stream early at cutAt (simulating TCP FIN on network drop).
+                var response = new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StreamContent(new MemoryStream(content, 0, cutAt, writable: false)),
+                };
+                response.Content.Headers.ContentLength = content.Length;
+                return Task.FromResult(response);
+            }
+
+            var remaining = content.Length - from;
+            var partial = new HttpResponseMessage(HttpStatusCode.PartialContent)
+            {
+                Content = new ByteArrayContent(content, from, remaining),
+            };
+            partial.Content.Headers.ContentLength = remaining;
+            partial.Content.Headers.ContentRange = new System.Net.Http.Headers.ContentRangeHeaderValue(from, content.Length - 1, content.Length);
+            return Task.FromResult(partial);
+        }
+    }
+
+    private sealed class FaultingStreamHttp(byte[] content, int failAfter, Func<Exception> errorFactory) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new FaultingStream(content, failAfter, errorFactory)),
+            };
+            response.Content.Headers.ContentLength = content.Length;
+            return Task.FromResult(response);
+        }
+
+        private sealed class FaultingStream(byte[] data, int failAfter, Func<Exception> errorFactory) : MemoryStream(data)
+        {
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                if (Position >= failAfter) throw errorFactory();
+                var count = (int)Math.Min(Math.Min(buffer.Length, 32_768), failAfter - Position);
+                return base.ReadAsync(buffer[..count], cancellationToken);
+            }
+        }
+    }
+
     /// <summary>Unlike Progress&lt;T&gt;, reports on the calling thread at once.</summary>
     private sealed class SyncProgress(Action<DownloadProgress> report) : IProgress<DownloadProgress>
     {
         public void Report(DownloadProgress value) => report(value);
+    }
+
+    private sealed class StepTimeProvider : TimeProvider
+    {
+        private long _ticks;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => _ticks;
+        public void Advance(TimeSpan delta) => _ticks += delta.Ticks;
+    }
+
+    private sealed class ChunkedHttp(byte[] content, int chunkSize, Action onRead) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new ChunkedStream(content, chunkSize, onRead)),
+            };
+            response.Content.Headers.ContentLength = content.Length;
+            return Task.FromResult(response);
+        }
+
+        private sealed class ChunkedStream(byte[] data, int chunkSize, Action onRead) : MemoryStream(data)
+        {
+            public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                if (Position >= Length) return ValueTask.FromResult(0);
+                onRead();
+                var count = (int)Math.Min(Math.Min(buffer.Length, chunkSize), Length - Position);
+                return base.ReadAsync(buffer[..count], cancellationToken);
+            }
+        }
     }
 }
