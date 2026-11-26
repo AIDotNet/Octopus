@@ -1,9 +1,7 @@
 using System.Text.Json;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
-using Octopus.Core.Settings;
 using Octopus.Platform;
-using Octopus.Storage;
 using Xunit;
 
 namespace Octopus.Storage.Tests;
@@ -27,7 +25,11 @@ public class ProjectStoreTests
         var terminal = new ProjectItem { Id = "t1", Kind = ProjectItemKind.Terminal, Title = "zsh", WorkingDirectory = "/Users/张三/代码" };
         var agent = new ProjectItem
         {
-            Id = "a1", Kind = ProjectItemKind.Agent, Title = "Claude", CustomTitle = "重构任务", AgentId = "claude",
+            Id = "a1",
+            Kind = ProjectItemKind.Agent,
+            Title = "Claude",
+            CustomTitle = "重构任务",
+            AgentId = "claude",
             Launch = new AgentLaunchOptions { Model = "opus", Effort = "high", Prompt = "SECRET-PROMPT", Resume = true }
         };
         var file = new ProjectItem { Id = "f1", Kind = ProjectItemKind.File, Title = "说明.md", FilePath = "/Users/张三/代码/说明.md" };
@@ -78,7 +80,13 @@ public class ProjectStoreTests
         var local = new TunnelSpec { Id = "t1", Name = "前端", Kind = TunnelKind.Local, ListenPort = 5173, TargetHost = "localhost", TargetPort = 5173, AutoStart = true };
         var remote = new TunnelSpec
         {
-            Id = "t2", Kind = TunnelKind.Remote, BindAddress = "0.0.0.0", ListenPort = 9000, TargetHost = "127.0.0.1", TargetPort = 3000, AutoReconnect = false,
+            Id = "t2",
+            Kind = TunnelKind.Remote,
+            BindAddress = "0.0.0.0",
+            ListenPort = 9000,
+            TargetHost = "127.0.0.1",
+            TargetPort = 3000,
+            AutoReconnect = false,
         };
         var document = new ProjectsDocument { Projects = [new Project { Id = "r1", Name = "web", Path = "/srv/app", SshHost = "prod", Tunnels = [local, remote] }] };
 
@@ -304,7 +312,10 @@ public class SettingsStoreTests
             s.Terminal.FontFamily = "JetBrains Mono";
             s.Agents.Profiles["claude"] = new AgentProfile
             {
-                Command = "claude --x", Effort = "high", Permission = "plan", Fast = true,
+                Command = "claude --x",
+                Effort = "high",
+                Permission = "plan",
+                Fast = true,
                 ExtraArgs = ["--a", "b c"],
                 Env = new() { ["K"] = "V" },
                 Features = new() { ["web"] = "true" }

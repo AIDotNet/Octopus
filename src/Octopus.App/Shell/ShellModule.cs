@@ -59,6 +59,8 @@ internal static class ShellModule
         services.AddSingleton<ProjectRailViewModel>();
         services.AddSingleton<ProjectPanelViewModel>();
         services.AddSingleton<LauncherViewModel>();
+        services.AddSingleton<Octopus.App.StarPrompt.StarPromptOptions>();
+        services.AddSingleton<Octopus.App.StarPrompt.StarPromptViewModel>();
         services.AddSingleton<ShellViewModel>();
     }
 }

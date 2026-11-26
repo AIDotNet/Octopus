@@ -1,7 +1,11 @@
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using Octopus.App.Activity;
 using Octopus.App.Appearance;
+using Octopus.App.Common;
+using Octopus.App.Explorer.Subagent;
 using Octopus.App.Launcher;
 using Octopus.App.Services;
 using Octopus.App.Shell.Chrome;
@@ -13,12 +17,13 @@ using Octopus.Storage;
 namespace Octopus.App.Shell;
 
 /// <summary>The main window: sidebar state, the settings overlay, and the keyboard shortcuts.</summary>
-public sealed partial class ShellViewModel : ObservableObject
+public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSubagentPanelRequested>, IRecipient<FocusSubagentRequested>
 {
     public const double MinPanelWidth = 200;
     public const double MaxPanelWidth = 420;
     public const double MinRightPanelWidth = 220;
-    public const double MaxRightPanelWidth = 520;
+    public const double MinSubagentPanelWidth = 400;
+    public const double MaxRightPanelWidth = 680;
 
     private readonly ISettingsStore _settings;
     private readonly ThemeService _theme;
@@ -27,6 +32,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IWorkspaceCommands _workspaceCommands;
     private readonly ISettingsNavigator _navigator;
     private readonly IProjectService _projects;
+    private readonly ISubagentService? _subagents;
 
     public ShellViewModel(
         ISettingsStore settings,
@@ -43,7 +49,10 @@ public sealed partial class ShellViewModel : ObservableObject
         ProjectPanelViewModel panel,
         WorkspaceViewModel workspace,
         LauncherViewModel launcher,
-        Octopus.App.Updates.UpdateCardViewModel updateCard)
+        Octopus.App.Updates.UpdateCardViewModel updateCard,
+        Octopus.App.StarPrompt.StarPromptViewModel starPrompt,
+        Octopus.App.Plugins.PluginPanels? pluginPanels = null,
+        ISubagentService? subagents = null)
     {
         _settings = settings;
         _theme = theme;
@@ -52,6 +61,7 @@ public sealed partial class ShellViewModel : ObservableObject
         _workspaceCommands = workspaceCommands;
         _navigator = navigator;
         _projects = projects;
+        _subagents = subagents;
         _theme.DensityChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(RailWidth));
@@ -68,6 +78,11 @@ public sealed partial class ShellViewModel : ObservableObject
         IsRightPanelOpen = settings.Current.RightPanel.IsOpen;
         RightPanelWidth = Math.Clamp(settings.Current.RightPanel.Width, MinRightPanelWidth, MaxRightPanelWidth);
         navigator.Requested += (_, section) => SettingsRequested?.Invoke(this, section);
+        pluginPanels?.OpenRequested += (_, panelId) =>
+            {
+                IsRightPanelOpen = true;
+                PluginPanelOpenRequested?.Invoke(this, panelId);
+            };
         DeviceSwitcher = deviceSwitcher;
         Account = account;
         Rail = rail;
@@ -75,10 +90,13 @@ public sealed partial class ShellViewModel : ObservableObject
         Workspace = workspace;
         Launcher = launcher;
         UpdateCard = updateCard;
+        StarPrompt = starPrompt;
         LeftInset = chrome.LeftInset;
         ShowsCaptionButtons = chrome.ShowsCaptionButtons;
         IsSidebarCollapsed = settings.Current.Sidebar.IsCollapsed;
         PanelWidth = Math.Clamp(settings.Current.Sidebar.Width, MinPanelWidth, MaxPanelWidth);
+        WeakReferenceMessenger.Default.Register<OpenSubagentPanelRequested>(this);
+        WeakReferenceMessenger.Default.Register<FocusSubagentRequested>(this);
     }
 
     public DeviceSwitcherViewModel DeviceSwitcher { get; }
@@ -90,6 +108,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public LauncherViewModel Launcher { get; }
     /// <summary>The update card at the bottom right (design/10-自动更新.md §10).</summary>
     public Octopus.App.Updates.UpdateCardViewModel UpdateCard { get; }
+    /// <summary>The non-intrusive GitHub Star floating pill at the bottom right (Scheme C).</summary>
+    public Octopus.App.StarPrompt.StarPromptViewModel StarPrompt { get; }
 
     /// <summary>Room kept free at the top left for the system's window buttons.</summary>
     public double LeftInset { get; }
@@ -142,10 +162,43 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public void OpenDiffFromPanel(Octopus.App.Files.DiffTabRequest request) => _workspaceCommands.OpenDiff(request);
 
+    /// <summary>Raised when a plugin asks to open one of its right-panel tabs (<c>panels.open</c>).</summary>
+    public event EventHandler<string>? PluginPanelOpenRequested;
+
+    /// <summary>Raised when a subagent should be opened in the right panel's dynamic Subagent tab (Scheme A).</summary>
+    public event EventHandler<OpenSubagentPanelRequested>? SubagentOpenRequested;
+
+    public void Receive(OpenSubagentPanelRequested message)
+    {
+        UiContext.Run(() => OpenSubagentInRightPanel(message));
+    }
+
+    public void Receive(FocusSubagentRequested message)
+    {
+        if (_subagents is null) return;
+        // Hook-tracked terminal subagents (Claude Code hooks) carry a local TranscriptPath and have no AgentGuiTabViewModel;
+        // ACP GUI subagents are enriched and dispatched by AgentGuiTabViewModel via OpenSubagentPanelRequested.
+        var hookRun = _subagents.Of(message.ItemId)
+            .FirstOrDefault(r => string.Equals(r.Id, message.SubagentId, StringComparison.Ordinal));
+        if (hookRun is null || string.IsNullOrWhiteSpace(hookRun.TranscriptPath)) return;
+        UiContext.Run(() => OpenSubagentInRightPanel(
+            new OpenSubagentPanelRequested(message.ItemId, message.SubagentId, CurrentProjectPath)));
+    }
+
+    private void OpenSubagentInRightPanel(OpenSubagentPanelRequested request)
+    {
+        if (RightPanelWidth < MinSubagentPanelWidth)
+        {
+            RightPanelWidth = MinSubagentPanelWidth;
+        }
+        IsRightPanelOpen = true;
+        SubagentOpenRequested?.Invoke(this, request);
+    }
+
     private void ReadProject()
     {
         var project = _projects.Current;
-        string? effectivePath = project?.Path;
+        var effectivePath = project?.Path;
         string? activeBranch = null;
         if (project is not null
             && Octopus.Core.Projects.ProjectLocation.IsOnThisComputer(project)

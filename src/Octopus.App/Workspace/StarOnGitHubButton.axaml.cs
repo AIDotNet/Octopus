@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Octopus.App.Composition;
 using Octopus.Updates;
 
 namespace Octopus.App.Workspace;
@@ -11,6 +12,7 @@ public partial class StarOnGitHubButton : UserControl
 
     private async void OnClick(object? sender, RoutedEventArgs e)
     {
+        AppHost.Get<StarPrompt.StarPromptViewModel>().MarkStarredExternally();
         if (TopLevel.GetTopLevel(this) is { } top)
         {
             await top.Launcher.LaunchUriAsync(new Uri(UpdateEndpoints.RepositoryUrl));

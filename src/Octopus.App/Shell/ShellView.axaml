@@ -10,6 +10,7 @@
              xmlns:chrome="using:Octopus.App.Shell.Chrome"
              xmlns:account="using:Octopus.App.Account"
              xmlns:plugins="using:Octopus.App.Plugins"
+             xmlns:star="using:Octopus.App.StarPrompt"
              xmlns:updates="using:Octopus.App.Updates"
              xmlns:vm="using:Octopus.App.Shell"
              x:Class="Octopus.App.Shell.ShellView"
@@ -162,6 +163,10 @@
         <account:AccountSignInOverlay x:Name="AccountSignInModal"
                                       DataContext="{Binding Account}"
                                       IsVisible="{Binding IsSignInDialogOpen}" />
+
+        <!-- Non-intrusive GitHub Star floating pill at the bottom right (Scheme C); yields to UpdateCard and Settings. -->
+        <star:StarPromptView x:Name="StarPrompt" DataContext="{Binding StarPrompt}"
+                             HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,24" />
 
         <!-- The settings page covers the whole window. -->
         <Grid x:Name="Overlay" />

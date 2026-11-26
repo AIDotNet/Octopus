@@ -1,7 +1,6 @@
-using Avalonia.VisualTree;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Interactivity;
+using Octopus.App.Explorer.Subagent;
 using Octopus.App.Launcher;
 using Octopus.App.Settings;
 using Octopus.App.Sidebar;
@@ -46,6 +45,8 @@ public partial class ShellView : UserControl
         if (_model is not null)
         {
             _model.SettingsRequested -= OnSettingsRequested;
+            _model.PluginPanelOpenRequested -= OnPluginPanelOpenRequested;
+            _model.SubagentOpenRequested -= OnSubagentOpenRequested;
             _model.Launcher.CloseRequested -= OnLauncherCloseRequested;
             _model.DeviceSwitcher.CloseRequested -= OnDeviceSwitcherCloseRequested;
             _model.Account.MenuRequested -= OnAccountMenuRequested;
@@ -56,6 +57,8 @@ public partial class ShellView : UserControl
         if (_model is not null)
         {
             _model.SettingsRequested += OnSettingsRequested;
+            _model.PluginPanelOpenRequested += OnPluginPanelOpenRequested;
+            _model.SubagentOpenRequested += OnSubagentOpenRequested;
             _model.Launcher.CloseRequested += OnLauncherCloseRequested;
             _model.DeviceSwitcher.CloseRequested += OnDeviceSwitcherCloseRequested;
             _model.Account.MenuRequested += OnAccountMenuRequested;
@@ -70,6 +73,10 @@ public partial class ShellView : UserControl
         }
         UpdateInsets();
     }
+
+    private void OnPluginPanelOpenRequested(object? sender, string panelId) => RightPanel.Model.ShowPluginPanel(panelId);
+
+    private void OnSubagentOpenRequested(object? sender, OpenSubagentPanelRequested request) => RightPanel.Model.ShowSubagent(request);
 
     private void OnModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -363,10 +370,12 @@ public partial class ShellView : UserControl
             return;
         }
         var view = _settings = new SettingsView { InitialSection = section };
+        _model?.StarPrompt.SetSettingsOpen(true);
         view.CloseRequested += (_, _) =>
         {
             Overlay.Children.Remove(view);
             _settings = null;
+            _model?.StarPrompt.SetSettingsOpen(false);
             _model?.Workspace.FocusActive();
         };
         Overlay.Children.Add(view);

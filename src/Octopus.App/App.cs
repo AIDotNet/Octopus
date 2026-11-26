@@ -1,11 +1,10 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Markup.Xaml.Styling;
+using Octopus.Agents;
 using Octopus.App.Appearance;
 using Octopus.App.Composition;
 using Octopus.App.Services;
 using Octopus.App.Shell;
-using Octopus.Agents;
 
 namespace Octopus.App;
 
@@ -98,6 +97,13 @@ public class App : Application
                 StartupTrace.Log("app:background:cleanup:begin");
                 AppHost.Get<Octopus.App.Services.Workspaces.IWorkspaceCleanupService>().Start();
                 StartupTrace.Log("app:background:cleanup:end");
+            }, Avalonia.Threading.DispatcherPriority.Background);
+            // Non-intrusive GitHub Star reminder tracking starts once the window is up.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                StartupTrace.Log("app:background:star-prompt:begin");
+                AppHost.Get<StarPrompt.StarPromptViewModel>().Start();
+                StartupTrace.Log("app:background:star-prompt:end");
             }, Avalonia.Threading.DispatcherPriority.Background);
             StartupTrace.Log("app:initialize:scheduled-background-work");
             // SIGTERM (kill, logout, an installer) quits like the Quit menu item, so Exit below still runs and saves.

@@ -1,0 +1,200 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.StarPrompt"
+             x:Class="Octopus.App.StarPrompt.StarPromptView"
+             x:DataType="vm:StarPromptViewModel"
+             IsVisible="{Binding IsOpen}">
+    <UserControl.Styles>
+        <Style Selector="Border.star-pill">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Background}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+            <Setter Property="BoxShadow" Value="0 10 28 0 #33000000" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.star-pill:pointerover">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Warning}" />
+        </Style>
+
+        <Style Selector="Button.star-pill-cta">
+            <Setter Property="Height" Value="28" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="11,0" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentForeground}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="Center"
+                                          VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#PART_Bg">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            </Style>
+        </Style>
+
+        <Style Selector="Button.star-pill-close">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_CloseBg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="{arc:ArcDesignTokenResource RadiusPill}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="Center"
+                                          VerticalContentAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Border#PART_CloseBg">
+                <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            </Style>
+        </Style>
+    </UserControl.Styles>
+
+    <!-- Scheme C: Compact floating pill at bottom-right with a quiet dismiss choice bar above it. -->
+    <StackPanel x:Name="PillContainer" Spacing="6" HorizontalAlignment="Right">
+        <StackPanel.RenderTransform>
+            <TranslateTransform Y="0" />
+        </StackPanel.RenderTransform>
+
+        <!-- Secondary choice bar revealed when clicking the pill's close button. -->
+        <Border x:Name="CloseMenuCard"
+                IsVisible="{Binding IsCloseMenuOpen}"
+                HorizontalAlignment="Right"
+                Background="{arc:ArcDesignTokenResource Background}"
+                BorderBrush="{arc:ArcDesignTokenResource Border}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
+                BoxShadow="0 8 24 0 #2B000000"
+                Padding="4">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <arc:Button x:Name="SnoozeButton"
+                            Variant="Ghost"
+                            Size="Small"
+                            IsVisible="{Binding CanSnooze}"
+                            Command="{Binding SnoozeCommand}"
+                            Content="{Binding SnoozeLabel}" />
+                <arc:Button x:Name="DismissForeverButton"
+                            Variant="Ghost"
+                            Size="Small"
+                            Command="{Binding DismissForeverCommand}"
+                            Content="{l:AppLangResource StarPromptDismissForever}" />
+            </StackPanel>
+        </Border>
+
+        <!-- Primary floating pill. -->
+        <Border x:Name="PromptPill"
+                Classes="star-pill"
+                IsVisible="{Binding IsPromptVisible}"
+                Padding="10,6,7,6">
+            <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+                <Border Width="26" Height="26"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                        Background="#24F59E0B"
+                        VerticalAlignment="Center">
+                    <Path Width="13" Height="13" Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Fill="{arc:ArcDesignTokenResource Warning}"
+                          Data="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                </Border>
+
+                <StackPanel Spacing="1" VerticalAlignment="Center" Margin="0,0,2,0">
+                    <TextBlock x:Name="TitleText"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{arc:ArcDesignTokenResource Foreground}"
+                               Text="{l:AppLangResource StarPromptTitle}" />
+                    <TextBlock x:Name="RepoText"
+                               FontSize="10.5"
+                               FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               Text="{Binding RepositoryDisplay}" />
+                </StackPanel>
+
+                <Button x:Name="StarButton"
+                        Classes="star-pill-cta"
+                        VerticalAlignment="Center"
+                        Command="{Binding StarCommand}"
+                        AutomationProperties.Name="{l:AppLangResource StarOnGitHub}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <Path Width="11.5" Height="11.5" Stretch="Uniform"
+                              VerticalAlignment="Center"
+                              Fill="{Binding #StarButtonLabel.Foreground}"
+                              Data="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                        <TextBlock x:Name="StarButtonLabel"
+                                   FontSize="11.5"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Text="{l:AppLangResource StarPromptStar}" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="CloseButton"
+                        Classes="star-pill-close"
+                        VerticalAlignment="Center"
+                        Command="{Binding ToggleCloseMenuCommand}"
+                        AutomationProperties.Name="{l:AppLangResource StarPromptClose}"
+                        arc:Tooltip.Tip="{l:AppLangResource StarPromptClose}"
+                        arc:Tooltip.Side="Top">
+                    <lucide:LucideIcon Kind="X" Size="13" />
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- Brief confirmation pill shown right after clicking Star. -->
+        <Border x:Name="ThanksPill"
+                IsVisible="{Binding IsThanksVisible}"
+                Background="{arc:ArcDesignTokenResource Background}"
+                BorderBrush="{arc:ArcDesignTokenResource Success}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                BoxShadow="0 10 28 0 #33000000"
+                Padding="10,6,14,6">
+            <StackPanel Orientation="Horizontal" Spacing="9" VerticalAlignment="Center">
+                <Border Width="26" Height="26"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                        Background="#242F9E63"
+                        VerticalAlignment="Center">
+                    <lucide:LucideIcon Kind="Check" Size="13"
+                                       Foreground="{arc:ArcDesignTokenResource Success}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Spacing="1" VerticalAlignment="Center">
+                    <TextBlock FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{arc:ArcDesignTokenResource Foreground}"
+                               Text="{l:AppLangResource StarPromptThanksTitle}" />
+                    <TextBlock FontSize="10.5"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               Text="{l:AppLangResource StarPromptThanksDetail}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

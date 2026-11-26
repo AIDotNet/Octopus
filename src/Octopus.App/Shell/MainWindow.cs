@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform;
@@ -7,6 +8,7 @@ using Octopus.App.Services;
 using Octopus.App.Shell.Keymap;
 using Octopus.Platform;
 using Octopus.Storage;
+using SkiaSharp;
 using TKCode.Arc;
 
 namespace Octopus.App.Shell;
@@ -57,16 +59,46 @@ public class MainWindow : ArcWindow
 
         // Tunnel phase: the shortcuts work while a terminal has the focus.
         AddHandler(KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, OnAnyPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         // A press in the top row that no tab, button or field took moves the window.
         AddHandler(PointerPressedEvent, OnTopRowPressed, Avalonia.Interactivity.RoutingStrategies.Bubble);
+        Activated += (_, _) => _shell.StarPrompt.SetWindowState(true, Bounds.Width);
+        Deactivated += (_, _) => _shell.StarPrompt.SetWindowState(false, Bounds.Width);
+        SizeChanged += (_, e) => _shell.StarPrompt.SetWindowState(IsActive, e.NewSize.Width);
+        PropertyChanged += OnWindowPropertyChanged;
         WindowPlacementTracker.Track(this, AppHost.Get<ISettingsStore>());
+    }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == WindowStateProperty && WindowState == WindowState.Minimized)
+        {
+            TrimGraphicsCaches();
+        }
+    }
+
+    private static void TrimGraphicsCaches()
+    {
+        try
+        {
+            SKGraphics.PurgeResourceCache();
+            SKGraphics.PurgeFontCache();
+        }
+        catch (Exception)
+        {
+            // Non-critical hint; ignore on environments without Skia initialized.
+        }
     }
 
     private void OnDensityChanged(object? sender, UiDensityMetrics metrics) =>
         ExtendClientAreaTitleBarHeightHint = metrics.TopRowHeight;
 
+    private void OnAnyPointerPressed(object? sender, PointerPressedEventArgs e) =>
+        _shell.StarPrompt.NotifyUserInput();
+
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
+        _shell.StarPrompt.NotifyUserInput();
         if (e.Key == Key.Escape && _shell.Account.IsSignInDialogOpen)
         {
             _shell.Account.CloseSignInDialogCommand.Execute(null);
@@ -110,6 +142,7 @@ public class MainWindow : ArcWindow
         {
             e.Cancel = true;
             Hide();
+            TrimGraphicsCaches();
             return;
         }
         // The first close request only starts the shutdown (it may ask, and ending terminals takes a moment); the window
