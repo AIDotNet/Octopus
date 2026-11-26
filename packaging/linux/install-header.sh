@@ -56,7 +56,7 @@ fi
 mkdir -p "$PREFIX"
 ARCHIVE_LINE="$(awk '/^__ARCHIVE_BELOW__$/ { print NR + 1; exit }' "$0")"
 echo "Installing to $PREFIX ..."
-tail -n +"$ARCHIVE_LINE" "$0" | tar -xzf - -C "$PREFIX"
+tail -n +"$ARCHIVE_LINE" "$0" | tar -xJf - -C "$PREFIX"
 chmod +x "$PREFIX/Octopus" "$PREFIX/uninstall.sh"
 
 LINK=""; ENTRY=""

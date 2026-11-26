@@ -17,6 +17,9 @@
         <AnalysisLevel>latest-recommended</AnalysisLevel>
         <!-- IDE0005（未使用的 using）只有生成 XML 文档时才在构建中报告；CS1591 等文档注释警告已在 .editorconfig 关闭。 -->
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- XML 文档仅供编译期分析，不要打包进发布目录。 -->
+        <PublishDocumentationFiles>false</PublishDocumentationFiles>
+        <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
         <!-- The address of the official Octopus service (https://…), compiled into the desktop and phone apps:
              sign-in, default relay, and update checks go here. Override with -p:OctopusServiceUrl=… -->

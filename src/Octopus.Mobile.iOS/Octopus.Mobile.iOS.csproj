@@ -20,6 +20,17 @@
     <!-- On a device, iOS allows no JIT: the release build is NativeAOT, as every head of the phone app is (§9.2, item 6). -->
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">
         <PublishAot>true</PublishAot>
+        <OptimizationPreference>Size</OptimizationPreference>
+        <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+        <StripSymbols>true</StripSymbols>
+        <HybridGlobalization>true</HybridGlobalization>
+        <EventSourceSupport>false</EventSourceSupport>
+        <DebuggerSupport>false</DebuggerSupport>
+        <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+        <MetricsSupport>false</MetricsSupport>
+        <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+        <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+        <UseSystemResourceKeys>true</UseSystemResourceKeys>
     </PropertyGroup>
 
     <ItemGroup>

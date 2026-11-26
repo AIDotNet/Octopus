@@ -20,6 +20,20 @@
         <IsPackable>false</IsPackable>
     </PropertyGroup>
 
+    <!-- Release APKs target arm64-v8a by default instead of bundling x86_64 (~16 MB saved); override with -p:RuntimeIdentifiers=... if needed. -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <RuntimeIdentifiers Condition="'$(RuntimeIdentifiers)' == ''">android-arm64</RuntimeIdentifiers>
+        <AndroidLinkTool>r8</AndroidLinkTool>
+        <HybridGlobalization>true</HybridGlobalization>
+        <EventSourceSupport>false</EventSourceSupport>
+        <DebuggerSupport>false</DebuggerSupport>
+        <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+        <MetricsSupport>false</MetricsSupport>
+        <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+        <DebugSymbols>false</DebugSymbols>
+        <DebugType>none</DebugType>
+    </PropertyGroup>
+
     <ItemGroup>
         <AndroidResource Include="Resources/**" />
     </ItemGroup>

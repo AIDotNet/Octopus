@@ -6,9 +6,18 @@
         <AssemblyName>octopus-signal</AssemblyName>
         <RootNamespace>Octopus.SignalForwarder</RootNamespace>
         <PublishAot>true</PublishAot>
+        <OptimizationPreference>Size</OptimizationPreference>
+        <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+        <StripSymbols>true</StripSymbols>
         <InvariantGlobalization>true</InvariantGlobalization>
         <UseSystemResourceKeys>true</UseSystemResourceKeys>
-        <OptimizationPreference>Speed</OptimizationPreference>
+        <EventSourceSupport>false</EventSourceSupport>
+        <DebuggerSupport>false</DebuggerSupport>
+        <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+        <MetricsSupport>false</MetricsSupport>
+        <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+        <StackTraceSupport>false</StackTraceSupport>
+        <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
         <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
     <ItemGroup>

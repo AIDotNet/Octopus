@@ -18,13 +18,14 @@ OUT="$(cd "$OUT" && pwd)"
 
 mkdir -p "$WORK/payload"
 cp -R "$PUBLISH/." "$WORK/payload/"
+rm -f "$WORK/payload/"*.dbg "$WORK/payload/"*.pdb "$WORK/payload/"*.xml
 cp "$ROOT/src/Octopus.App/Assets/Icon/octopus.png" "$WORK/payload/octopus.png"
 cp "$ROOT/packaging/linux/uninstall.sh" "$WORK/payload/uninstall.sh"
 chmod +x "$WORK/payload/Octopus" "$WORK/payload/uninstall.sh"
-tar -C "$WORK/payload" -czf "$WORK/payload.tar.gz" .
+XZ_OPT="-6 -T0" tar -C "$WORK/payload" -cJf "$WORK/payload.tar.xz" .
 
 RUN="$OUT/Octopus-$VERSION-linux-x64.run"
 sed "s|@VERSION@|$VERSION|g" "$ROOT/packaging/linux/install-header.sh" > "$RUN"
-cat "$WORK/payload.tar.gz" >> "$RUN"
+cat "$WORK/payload.tar.xz" >> "$RUN"
 chmod +x "$RUN"
 echo "==> $RUN"

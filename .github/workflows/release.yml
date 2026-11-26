@@ -113,7 +113,7 @@ jobs:
           # NativeAOT (Octopus.App.csproj); the stripped symbols (.pdb) are not shipped.
           dotnet publish src/Octopus.App -c Release -r win-x64 \
             -p:Version="$V" -p:DebugType=None -p:DebugSymbols=false -o build/win-x64
-          rm -f build/win-x64/*.pdb
+          rm -f build/win-x64/*.pdb build/win-x64/*.xml
 
       - name: Portable zip
         shell: pwsh
@@ -121,7 +121,15 @@ jobs:
           $v = $env:VERSION.TrimStart('v')
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item build/win-x64 "build/Octopus-$v-win-x64" -Recurse
-          Compress-Archive -Path "build/Octopus-$v-win-x64" -DestinationPath "dist/Octopus-$v-win-x64.zip"
+          $zipPath = "$PWD/dist/Octopus-$v-win-x64.zip"
+          if (Get-Command 7z -ErrorAction SilentlyContinue) {
+            Push-Location build
+            7z a -tzip -mx=9 "$zipPath" "Octopus-$v-win-x64"
+            if ($LASTEXITCODE -ne 0) { throw "7z failed with $LASTEXITCODE" }
+            Pop-Location
+          } else {
+            Compress-Archive -Path "build/Octopus-$v-win-x64" -DestinationPath $zipPath -CompressionLevel Optimal
+          }
 
       - name: Installer (Inno Setup)
         shell: pwsh
@@ -184,11 +192,11 @@ jobs:
           # NativeAOT (Octopus.App.csproj); the stripped symbols (.dbg) are not shipped.
           dotnet publish src/Octopus.App -c Release -r linux-x64 \
             -p:Version="$V" -p:DebugType=None -p:DebugSymbols=false -o build/linux-x64
-          rm -f build/linux-x64/*.dbg
+          rm -f build/linux-x64/*.dbg build/linux-x64/*.pdb build/linux-x64/*.xml
           mkdir -p dist
-          # Portable archive
+          # Portable archive (keep .tar.gz filename for release server / website compatibility; use max gzip level)
           cp -R build/linux-x64 "build/Octopus-$V-linux-x64"
-          tar -C build -czf "dist/Octopus-$V-linux-x64.tar.gz" "Octopus-$V-linux-x64"
+          GZIP=-9 tar -C build -czf "dist/Octopus-$V-linux-x64.tar.gz" "Octopus-$V-linux-x64"
           # Installer that asks for the install directory
           tools/package-linux.sh "$V" build/linux-x64 dist
 

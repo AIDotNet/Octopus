@@ -23,11 +23,17 @@
          On macOS, .NET 10 NativeAOT links with minos 12.0 on modern Xcode (CI macos-latest), running on macOS 13+. -->
     <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' And '$(Configuration)' == 'Release'">
         <PublishAot>true</PublishAot>
+        <OptimizationPreference>Size</OptimizationPreference>
+        <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
         <!-- Symbols go into a separate file next to the executable (.dSYM, .dbg, .pdb); the packaging leaves them out. -->
         <StripSymbols>true</StripSymbols>
         <EventSourceSupport>false</EventSourceSupport>
         <DebuggerSupport>false</DebuggerSupport>
         <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+        <MetricsSupport>false</MetricsSupport>
+        <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+        <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+        <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
         <UseSystemResourceKeys>true</UseSystemResourceKeys>
     </PropertyGroup>
     <ItemGroup>

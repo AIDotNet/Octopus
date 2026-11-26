@@ -31,8 +31,8 @@ echo "==> publish ($RID)"
 # would count as unsigned nested code in Contents/MacOS; the native libraries stay beside it as real Mach-O files.
 dotnet publish "$ROOT/src/Octopus.App" -c Release -r "$RID" \
   -p:Version="$VERSION" -p:DebugType=None -p:DebugSymbols=false -o "$WORK/publish"
-# The stripped symbols (Octopus.dSYM) are not shipped.
-rm -rf "$WORK/publish/"*.dSYM
+# The stripped symbols (Octopus.dSYM), project PDBs and XML docs are not shipped.
+rm -rf "$WORK/publish/"*.dSYM "$WORK/publish/"*.pdb "$WORK/publish/"*.xml
 
 echo "==> assemble Octopus.app"
 APP="$WORK/Octopus.app"
@@ -99,7 +99,8 @@ mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 rm -f "$DMG"
-hdiutil create -volname "Octopus" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG"
+# ULMO uses LZMA (supported since macOS 10.15; Octopus targets macOS 13+), ~30% smaller than UDZO.
+hdiutil create -volname "Octopus" -srcfolder "$STAGE" -fs HFS+ -format ULMO -ov "$DMG"
 if [ "$SIGN_IDENTITY" != "-" ]; then
   codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
 fi
