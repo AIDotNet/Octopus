@@ -53,7 +53,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
     }
 
     public async Task PromptAsync(Project project, ProjectItem item, string text, IReadOnlyList<string> attachments,
-        IReadOnlyList<AcpMentionMessage>? mentions = null)
+        IReadOnlyList<AcpMentionMessage>? mentions = null, bool immediate = false)
     {
         var model = ModelOf(project, item);
         // Only sessions and agents, and only tokens the text really contains: the rest of the prompt path trusts them.
@@ -62,7 +62,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
                 && m.Text.StartsWith('@') && text.Contains(m.Text, StringComparison.Ordinal))
             .Select(m => new MentionToken(m.Kind, m.TargetId, m.Text, m.AgentId))
             .ToList();
-        if (!await model.SendExternalPromptAsync(text, attachments, tokens))
+        if (!await model.SendExternalPromptAsync(text, attachments, tokens, immediate))
         {
             throw new RemoteException(RemoteMethods.NotAllowed, "The agent is not connected on the host yet.");
         }

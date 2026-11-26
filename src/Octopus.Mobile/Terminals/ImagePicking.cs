@@ -35,4 +35,26 @@ public static class ImagePicking
         await stream.CopyToAsync(bytes);
         return new PickedImage(file.Name, bytes.ToArray());
     }
+
+    /// <summary>
+    /// One arbitrary file from the system's file picker (Documents/Files on iOS, system file picker on Android).
+    /// Null when nothing was chosen or the picker is not available.
+    /// </summary>
+    public static async Task<PickedImage?> PickFileWithStorageAsync(TopLevel? topLevel)
+    {
+        if (topLevel?.StorageProvider is not { CanOpen: true } storage) return null;
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            AllowMultiple = false,
+            FileTypeFilter = [FilePickerFileTypes.All],
+        });
+        if (files.Count == 0) return null;
+        using var file = files[0];
+        if ((await file.GetBasicPropertiesAsync()).Size is ulong size && size > MaxReadBytes)
+            throw new ImageTooLargeException();
+        await using var stream = await file.OpenReadAsync();
+        using var bytes = new MemoryStream();
+        await stream.CopyToAsync(bytes);
+        return new PickedImage(file.Name, bytes.ToArray());
+    }
 }

@@ -32,13 +32,12 @@ public class ConversationMentionTests
         var field = page.FindControl<TextField>("PromptField")!;
 
         Assert.True(vm.SupportsMentions);
-        Assert.True(page.FindControl<Control>("MentionButton")!.IsVisible);
+        // No dedicated @ button on the left; users trigger mentions by typing '@' directly in the input field.
+        Assert.Null(page.FindControl<Control>("MentionButton"));
 
-        // The @ button types the @ (a phone keyboard needs a layer switch for it) and the strip offers targets.
-        vm.PromptText = "请";
-        vm.PromptCaretIndex = 1;
-        vm.StartMentionCommand.Execute(null);
-        Assert.Equal("请 @", vm.PromptText);
+        // Typing '@' opens the mention suggestion strip and writes the token.
+        vm.PromptText = "请 @";
+        vm.PromptCaretIndex = vm.PromptText.Length;
         Assert.True(Phone.Until(() => vm.IsMentionStripOpen));
         vm.InsertMentionCommand.Execute(vm.MentionSuggestions.First(t => t.TargetId == "claude"));
         Assert.Equal("请 @Claude Code ", vm.PromptText);

@@ -588,5 +588,17 @@
     <unit id="BotGroupsDeleteConfirm"><segment><source>Delete group "{0}"?</source><target state="translated">确定删除群组「{0}」吗？</target></segment></unit>
     <unit id="BotGroupsLoadEarlier"><segment><source>Load earlier messages</source><target state="translated">加载更早的消息</target></segment></unit>
     <unit id="BotGroupsYou"><segment><source>You</source><target state="translated">我</target></segment></unit>
+    <unit id="ConversationSendNow"><segment><source>Send now</source><target state="translated">立即发送</target></segment></unit>
+    <unit id="ConversationAttach"><segment><source>Attach photo or file</source><target state="translated">添加图片或文件</target></segment></unit>
+    <unit id="ConversationAttachImage"><segment><source>Choose photo</source><target state="translated">选择图片</target></segment></unit>
+    <unit id="ConversationAttachFile"><segment><source>Choose file</source><target state="translated">选择文件</target></segment></unit>
+    <unit id="ConversationRemoveAttachment"><segment><source>Remove attachment</source><target state="translated">移除附件</target></segment></unit>
+    <unit id="FilesSearchPlaceholder"><segment><source>Filter files…</source><target state="translated">筛选文件…</target></segment></unit>
+    <unit id="ChangesSearchPlaceholder"><segment><source>Filter changed files…</source><target state="translated">筛选变更文件…</target></segment></unit>
+    <unit id="LoadingFiles"><segment><source>Loading files…</source><target state="translated">正在加载文件…</target></segment></unit>
+    <unit id="LoadingChanges"><segment><source>Loading changes…</source><target state="translated">正在加载改动…</target></segment></unit>
+    <unit id="LoadingFile"><segment><source>Loading file…</source><target state="translated">正在读取文件…</target></segment></unit>
+    <unit id="LoadingDiff"><segment><source>Loading diff…</source><target state="translated">正在加载差异…</target></segment></unit>
+    <unit id="LoadingFolders"><segment><source>Loading folders…</source><target state="translated">正在加载目录…</target></segment></unit>
   </file>
 </xliff>

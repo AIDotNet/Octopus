@@ -1983,7 +1983,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     /// queued like the composer's while a turn runs, and whatever the person here is typing stays where it is.
     /// Returns once the prompt is sent or queued, not when the turn ends; false when there is no session to send to.
     /// </summary>
-    internal async Task<bool> SendExternalPromptAsync(string text, IEnumerable<string> attachmentPaths, IReadOnlyList<MentionToken>? mentions = null)
+    internal async Task<bool> SendExternalPromptAsync(string text, IEnumerable<string> attachmentPaths, IReadOnlyList<MentionToken>? mentions = null, bool immediate = false)
     {
         if (_disposed || _session is null) return false;
         var attached = await ReadAttachmentsAsync(attachmentPaths);
@@ -2005,13 +2005,19 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             _promptHistory.Add(text);
         }
+        var prompt = CreateQueuedPrompt(text, attached);
         if (_isTurnActive || IsTurnActive)
         {
+            if (immediate)
+            {
+                _ = InterruptAndSendAsync(prompt);
+                return true;
+            }
             EnqueuePrompt(text, attached);
             return true;
         }
         // The turn runs on; the timeline shows the prompt before this returns.
-        _ = StartPumpAsync(CreateQueuedPrompt(text, attached));
+        _ = StartPumpAsync(prompt);
         return true;
     }
 

@@ -326,17 +326,23 @@ public sealed class RemoteHostClient : IAsyncDisposable
         CallAsync(RemoteMethods.AcpDetach, new AcpRefMessage { ItemId = itemId }, RemoteJsonContext.Default.AcpRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
     public Task SendPromptAsync(string itemId, string text, IReadOnlyList<string>? attachments = null, CancellationToken cancellationToken = default) =>
-        SendPromptAsync(itemId, text, attachments, mentions: null, cancellationToken);
+        SendPromptAsync(itemId, text, attachments, mentions: null, immediate: false, cancellationToken);
 
     /// <summary>Sends a prompt with inline @mentions (<see cref="RemoteMethods.CapabilityAcpMentions"/>).</summary>
     public Task SendPromptAsync(string itemId, string text, IReadOnlyList<string>? attachments, IReadOnlyList<AcpMentionMessage>? mentions,
         CancellationToken cancellationToken = default) =>
+        SendPromptAsync(itemId, text, attachments, mentions, immediate: false, cancellationToken);
+
+    /// <summary>Sends a prompt with optional inline @mentions and immediate-interrupt delivery.</summary>
+    public Task SendPromptAsync(string itemId, string text, IReadOnlyList<string>? attachments, IReadOnlyList<AcpMentionMessage>? mentions,
+        bool immediate, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.AcpPrompt, new AcpPromptMessage
         {
             ItemId = itemId,
             Text = text,
             Attachments = attachments is { Count: > 0 } ? [.. attachments] : null,
             Mentions = mentions is { Count: > 0 } ? [.. mentions] : null,
+            Immediate = immediate,
         }, RemoteJsonContext.Default.AcpPromptMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
     /// <summary>Sessions and agents a prompt of the conversation may @-mention (<see cref="RemoteMethods.CapabilityAcpMentions"/>).</summary>

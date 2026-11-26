@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Voice;
 using Octopus.Mobile.Workspace;
@@ -26,7 +27,11 @@ public partial class ConversationPage : Page, IClosablePage
         _viewModel = viewModel;
         InitializeComponent();
         DataContext = viewModel;
+        viewModel.SetPickers(
+            () => MobileHost.PickImage(Avalonia.Controls.TopLevel.GetTopLevel(this)),
+            () => MobileHost.PickFile(Avalonia.Controls.TopLevel.GetTopLevel(this)));
         viewModel.OptionPickerRequested += OnOptionPickerRequested;
+        viewModel.AttachPickerRequested += OnAttachPickerRequested;
         viewModel.TimelineChanged += OnTimelineChanged;
         viewModel.ScrollToBottomRequested += ScrollToBottomOnEntry;
         TimelineScroll.ScrollChanged += OnTimelineScrollChanged;
@@ -48,6 +53,7 @@ public partial class ConversationPage : Page, IClosablePage
     public void OnClosed()
     {
         _viewModel.OptionPickerRequested -= OnOptionPickerRequested;
+        _viewModel.AttachPickerRequested -= OnAttachPickerRequested;
         _viewModel.TimelineChanged -= OnTimelineChanged;
         _viewModel.ScrollToBottomRequested -= ScrollToBottomOnEntry;
         TimelineScroll.ScrollChanged -= OnTimelineScrollChanged;
@@ -88,6 +94,23 @@ public partial class ConversationPage : Page, IClosablePage
                 CommandParameter = new ConversationOptionChoice(kind, option.Id),
             });
         }
+        OptionSheet.IsOpen = true;
+    }
+
+    private void OnAttachPickerRequested()
+    {
+        OptionSheet.Title = MobileLangResources.Get(MobileLangResourceKind.ConversationAttach);
+        OptionSheet.Actions.Clear();
+        OptionSheet.Actions.Add(new ActionSheetItem
+        {
+            Content = MobileLangResources.Get(MobileLangResourceKind.ConversationAttachImage),
+            Command = _viewModel.AttachImageCommand,
+        });
+        OptionSheet.Actions.Add(new ActionSheetItem
+        {
+            Content = MobileLangResources.Get(MobileLangResourceKind.ConversationAttachFile),
+            Command = _viewModel.AttachFileCommand,
+        });
         OptionSheet.IsOpen = true;
     }
 
@@ -185,7 +208,9 @@ public partial class ConversationPage : Page, IClosablePage
 
     private void OnPromptKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter || e.KeyModifiers != KeyModifiers.None) return;
+        // Enter inserts a newline for multi-line prompts; Ctrl+Enter / Cmd+Enter sends on hardware keyboards.
+        if (e.Key != Key.Enter) return;
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) && !e.KeyModifiers.HasFlag(KeyModifiers.Meta)) return;
         if (_viewModel.CanSend)
         {
             _viewModel.SendCommand.Execute(null);

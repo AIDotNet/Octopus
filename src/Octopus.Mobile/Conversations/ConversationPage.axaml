@@ -27,6 +27,7 @@
         <StreamGeometry x:Key="KeyboardGlyph">M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z M6 10h.01 M10 10h.01 M14 10h.01 M18 10h.01 M7 14h10</StreamGeometry>
         <StreamGeometry x:Key="CloseGlyph">M18 6L6 18 M6 6l12 12</StreamGeometry>
         <StreamGeometry x:Key="SendUpGlyph">M12 19V5 M5 12l7-7 7 7</StreamGeometry>
+        <StreamGeometry x:Key="ZapGlyph">M13 2L3 14h9l-1 8 10-12h-9l1-8z</StreamGeometry>
     </arcm:Page.Resources>
 
     <arcm:Page.Styles>
@@ -341,6 +342,40 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
             <Setter Property="Padding" Value="10,4" />
+        </Style>
+
+        <!-- Staged composer attachment chips (images & files) and Send Now pill. -->
+        <Style Selector="Border.pendingAttachChip">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="8,4" />
+        </Style>
+        <Style Selector="Button.sendNowBtn">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.sendNowBtn:pressed">
+            <Setter Property="Opacity" Value="0.72" />
         </Style>
 
         <!-- Docked collapsible workflow task list tray above the composer (Scheme A). -->
@@ -662,6 +697,11 @@
                                      Command="{Binding ReloadCommand}" />
                     </StackPanel>
                 </Border>
+
+                <common:MobileLoadingView Name="LoadingView"
+                                          Variant="Conversation"
+                                          Label="{Binding StatusText}"
+                                          IsVisible="{Binding ShowInitialLoading}" />
 
                 <TextBlock Name="EmptyNotice"
                            Classes="muted"
@@ -1253,9 +1293,61 @@
                     </Grid>
                 </Border>
 
+                <!-- Upload progress indicator while sending an image or file to the host. -->
+                <StackPanel Name="UploadStatusRow"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            IsVisible="{Binding IsUploading}">
+                    <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+                    <TextBlock Name="UploadStatusText"
+                               Classes="secondary"
+                               FontSize="12"
+                               Text="{Binding UploadText}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Staged image & file attachment chips waiting to go out with the next prompt. -->
+                <ScrollViewer Name="PendingAttachmentsStrip"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled"
+                              IsVisible="{Binding HasPendingAttachments}">
+                    <ItemsControl ItemsSource="{Binding PendingAttachments}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:ConversationAttachmentItem">
+                                <Border Classes="pendingAttachChip">
+                                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                        <arc:ArcGlyph Data="{Binding Icon}" Size="13"
+                                                      Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                      VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontSize="12"
+                                                   MaxWidth="160"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <Button Classes="inlineLinkBtn"
+                                                Padding="2,0"
+                                                Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).RemoveAttachmentCommand}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{l:MobileLangResource ConversationRemoveAttachment}">
+                                            <arc:ArcGlyph Data="{StaticResource CloseGlyph}" Size="12"
+                                                          Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                          VerticalAlignment="Center" />
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
                 <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6">
                     <!-- Microphone / keyboard: switches the field for the "hold to talk" bar and back. -->
-                    <Panel Grid.Column="0" IsVisible="{Binding Voice.IsSupported}">
+                    <Panel Grid.Column="0" VerticalAlignment="Bottom" IsVisible="{Binding Voice.IsSupported}">
                         <arcm:IconButton Name="VoiceModeButton"
                                          Variant="Plain"
                                          Icon="{StaticResource MicGlyph}"
@@ -1269,22 +1361,24 @@
                                          IsVisible="{Binding Voice.IsVoiceMode}"
                                          AutomationProperties.Name="{l:MobileLangResource VoiceSwitchToKeyboard}" />
                     </Panel>
-                    <Panel Grid.Column="1" IsVisible="{Binding !Voice.IsVoiceMode}">
-                        <arcm:IconButton Name="MentionButton"
+                    <!-- Attach image or file (typing '@' in the field triggers inline @mentions directly). -->
+                    <Panel Grid.Column="1" VerticalAlignment="Bottom" IsVisible="{Binding !Voice.IsVoiceMode}">
+                        <arcm:IconButton Name="AttachButton"
                                          Variant="Plain"
-                                         Icon="{StaticResource AtGlyph}"
-                                         Command="{Binding StartMentionCommand}"
-                                         IsVisible="{Binding SupportsMentions}"
-                                         AutomationProperties.Name="{l:MobileLangResource ConversationMention}" />
+                                         Icon="{StaticResource ClipGlyph}"
+                                         Command="{Binding OpenAttachPickerCommand}"
+                                         IsVisible="{Binding CanAttach}"
+                                         IsEnabled="{Binding !IsUploading}"
+                                         AutomationProperties.Name="{l:MobileLangResource ConversationAttach}" />
                     </Panel>
-                    <!-- Grows to a few lines so a sentence with several @tokens stays readable; tokens are plain text
-                         kept atomic by MentionEditing, so the system keyboard, IME and selection work as usual. -->
+                    <!-- Multi-line composer: grows up to ~5 lines and scrolls internally; '@' triggers inline mention strip. -->
                     <arcm:TextField Name="PromptField"
                                     Grid.Column="2"
                                     Text="{Binding PromptText, Mode=TwoWay}"
                                     CaretIndex="{Binding PromptCaretIndex, Mode=TwoWay}"
                                     mentions:MentionEditing.Tokens="{Binding MentionTokens}"
                                     mentions:MentionEditing.HighlightBrush="{arc:ArcDesignTokenResource AccentSubtle}"
+                                    AcceptsReturn="True"
                                     TextWrapping="Wrap"
                                     Height="NaN"
                                     MinHeight="44"
@@ -1301,20 +1395,42 @@
                             AutomationProperties.Name="{l:MobileLangResource VoiceHoldToTalk}">
                         <TextBlock Text="{Binding Voice.HoldText}" />
                     </Border>
-                    <arcm:IconButton Name="StopButton"
-                                     Grid.Column="3"
-                                     Variant="Tinted"
-                                     Icon="{StaticResource StopGlyph}"
-                                     Command="{Binding CancelCommand}"
-                                     IsVisible="{Binding CanStop}"
-                                     AutomationProperties.Name="{l:MobileLangResource ConversationStop}" />
-                    <Panel Grid.Column="4" IsVisible="{Binding !Voice.IsVoiceMode}">
-                        <arcm:IconButton Name="SendButton"
-                                         Variant="Filled"
-                                         Icon="{x:Static arc:ArcIcons.ArrowUp}"
-                                         Command="{Binding SendCommand}"
-                                         IsEnabled="{Binding CanSend}"
-                                         AutomationProperties.Name="{l:MobileLangResource Send}" />
+                    <!-- Shown while active + input has content: interrupts the active turn and sends immediately instead of queueing. -->
+                    <Panel Grid.Column="3" VerticalAlignment="Bottom" IsVisible="{Binding !Voice.IsVoiceMode}">
+                        <Button Name="SendNowButton"
+                                Classes="sendNowBtn"
+                                Command="{Binding SendNowCommand}"
+                                IsVisible="{Binding CanSendNow}"
+                                AutomationProperties.Name="{l:MobileLangResource ConversationSendNow}">
+                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                <arc:ArcGlyph Data="{StaticResource ZapGlyph}" Size="12"
+                                              Foreground="{arc:ArcDesignTokenResource Accent}"
+                                              VerticalAlignment="Center" />
+                                <TextBlock Text="{l:MobileLangResource ConversationSendNow}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="{arc:ArcDesignTokenResource Accent}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Panel>
+                    <!-- Merged right-side primary action: Stop when active & empty; Send (queue when active) when input has text/attachments or idle. -->
+                    <Panel Grid.Column="4" VerticalAlignment="Bottom">
+                        <arcm:IconButton Name="StopButton"
+                                         Variant="Tinted"
+                                         Icon="{StaticResource StopGlyph}"
+                                         Command="{Binding CancelCommand}"
+                                         IsVisible="{Binding ShowComposerStop}"
+                                         AutomationProperties.Name="{l:MobileLangResource ConversationStop}" />
+                        <Panel IsVisible="{Binding !Voice.IsVoiceMode}">
+                            <arcm:IconButton Name="SendButton"
+                                             Variant="Filled"
+                                             Icon="{x:Static arc:ArcIcons.ArrowUp}"
+                                             Command="{Binding SendCommand}"
+                                             IsVisible="{Binding ShowComposerSend}"
+                                             IsEnabled="{Binding CanSend}"
+                                             AutomationProperties.Name="{l:MobileLangResource Send}" />
+                        </Panel>
                     </Panel>
                 </Grid>
             </StackPanel>

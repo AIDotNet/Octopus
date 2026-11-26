@@ -282,15 +282,21 @@
                             </StackPanel>
                         </Grid>
 
-                        <ItemsControl Name="GitBranchesList" ItemsSource="{Binding GitBranches}" IsVisible="{Binding HasGitBranches}">
-                            <ItemsControl.ItemsPanel>
+                        <ListBox Name="GitBranchesList"
+                                 Classes="virtualList"
+                                 ItemsSource="{Binding GitBranches}"
+                                 IsVisible="{Binding HasGitBranches}"
+                                 MaxHeight="300"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListBox.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <StackPanel Spacing="6" />
+                                    <VirtualizingStackPanel />
                                 </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="common:SessionGitBranchItemViewModel">
-                                    <Border Classes="sessionSheetCard" Padding="10,7">
+                                    <Border Classes="sessionSheetCard" Padding="10,7" Margin="0,0,0,6">
                                         <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
                                             <arc:ArcGlyph Grid.Column="0" Data="{x:Static arc:ArcIcons.GitBranch}" Size="14"
                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
@@ -309,8 +315,8 @@
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </StackPanel>
 
                     <TextBlock Classes="muted"

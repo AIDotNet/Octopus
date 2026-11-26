@@ -35,7 +35,7 @@ public sealed partial class DemoWorkspace
         private readonly DemoWorkspace _workspace;
         private readonly List<AcpEntryMessage> _entries;
         private readonly AcpComposerMessage _composer;
-        private readonly Queue<string> _queued = new();
+        private readonly Queue<(string Text, List<string>? Attachments)> _queued = new();
         private long _sequence;
         private int _nextId = 1;
         private string _state;
@@ -74,6 +74,12 @@ public sealed partial class DemoWorkspace
         /// <summary>The @mentions sent with each prompt of <see cref="Sent"/> (empty when there were none), for tests.</summary>
         public List<IReadOnlyList<MentionToken>> SentMentions { get; } = [];
 
+        /// <summary>The attachment paths sent with each prompt of <see cref="Sent"/>, for tests.</summary>
+        public List<IReadOnlyList<string>> SentAttachments { get; } = [];
+
+        /// <summary>Whether each prompt of <see cref="Sent"/> requested immediate delivery, for tests.</summary>
+        public List<bool> SentImmediate { get; } = [];
+
         public override bool SupportsMentions => true;
 
         public override Task<IReadOnlyList<ConversationMentionTarget>> ListMentionTargetsAsync(string query, CancellationToken cancellationToken = default)
@@ -95,25 +101,50 @@ public sealed partial class DemoWorkspace
         }
 
         public override Task SendAsync(string text, IReadOnlyList<string>? attachments, IReadOnlyList<MentionToken> mentions,
-            CancellationToken cancellationToken = default)
+            bool immediate, CancellationToken cancellationToken = default)
         {
-            var sent = SendAsync(text, attachments, cancellationToken);
-            SentMentions[^1] = mentions;
+            var sent = SendInternal(text, attachments, mentions, immediate);
             return sent;
         }
 
-        public override Task SendAsync(string text, IReadOnlyList<string>? attachments = null, CancellationToken cancellationToken = default)
+        public override Task SendAsync(string text, IReadOnlyList<string>? attachments = null, CancellationToken cancellationToken = default) =>
+            SendInternal(text, attachments, [], immediate: false);
+
+        private Task SendInternal(string text, IReadOnlyList<string>? attachments, IReadOnlyList<MentionToken> mentions, bool immediate)
         {
             Sent.Add(text);
-            SentMentions.Add([]);
-            // A turn runs: the host queues it, as the desktop's tab does.
+            SentMentions.Add(mentions);
+            SentAttachments.Add(attachments is { Count: > 0 } ? [.. attachments] : []);
+            SentImmediate.Add(immediate);
             if (_state is AcpStates.Working or AcpStates.Waiting)
             {
-                _queued.Enqueue(text);
+                if (immediate)
+                {
+                    var update = new AcpUpdateMessage { State = AcpStates.Ready };
+                    foreach (var entry in _entries)
+                    {
+                        if (entry.Permission is { IsResolved: false } permission)
+                        {
+                            permission.IsResolved = true;
+                            permission.ResolvedSummary = "已取消";
+                            update.Upserts.Add(entry);
+                        }
+                        else if (entry.IsStreaming)
+                        {
+                            entry.IsStreaming = false;
+                            entry.ErrorText = "已停止";
+                            update.Upserts.Add(entry);
+                        }
+                    }
+                    Send(update);
+                    StartTurn(text, attachments);
+                    return Task.CompletedTask;
+                }
+                _queued.Enqueue((text, attachments is { Count: > 0 } ? [.. attachments] : null));
                 Send(new AcpUpdateMessage { QueuedCount = _queued.Count });
                 return Task.CompletedTask;
             }
-            StartTurn(text);
+            StartTurn(text, attachments);
             return Task.CompletedTask;
         }
 
@@ -260,10 +291,11 @@ public sealed partial class DemoWorkspace
             base.Dispose();
         }
 
-        private void StartTurn(string text)
+        private void StartTurn(string text, IReadOnlyList<string>? attachments = null)
         {
             var user = NewEntry(AcpEntryKinds.User);
             user.Text = text;
+            if (attachments is { Count: > 0 }) user.Attachments = [.. attachments.Select(Path.GetFileName).OfType<string>().Where(n => n.Length > 0)];
             var turn = NewEntry(AcpEntryKinds.Assistant);
             turn.IsStreaming = true;
             turn.Thought = "先看一下现在的文档和路由，再决定怎么改。";
@@ -285,7 +317,7 @@ public sealed partial class DemoWorkspace
         {
             if (!_queued.TryDequeue(out var next)) return;
             Send(new AcpUpdateMessage { QueuedCount = _queued.Count });
-            StartTurn(next);
+            StartTurn(next.Text, next.Attachments);
         }
 
         // What a host sends: the next sequence number, applied through the same timeline as a real host's updates.

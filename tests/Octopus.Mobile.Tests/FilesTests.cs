@@ -420,4 +420,78 @@ public class FilesTests
         Assert.True(Phone.Until(() => !changes.IsLoading && changes.HasError));
         Assert.Contains("更新", changes.ErrorText);
     }
+
+    [AvaloniaFact]
+    public void Files_and_changes_pages_use_virtualized_lists_and_support_instant_filtering()
+    {
+        using var phone = new Phone();
+        var octopus = phone.Workspace.Hosts[0].Projects[0];
+
+        // FilesPage uses a ListBox with VirtualizingStackPanel and filters client-side.
+        phone.Shell.ShowFiles(octopus);
+        var filesPage = phone.Top<FilesPage>();
+        var files = (FilesViewModel)filesPage.DataContext!;
+        Assert.True(Phone.Until(() => !files.IsLoading && files.Entries.Count > 1));
+        var filesList = filesPage.FindControl<ListBox>("Entries");
+        Assert.NotNull(filesList);
+        Assert.IsType<VirtualizingStackPanel>(filesList!.ItemsPanelRoot);
+
+        var totalFiles = files.Entries.Count;
+        files.SearchQuery = "README";
+        Assert.Single(files.Entries);
+        Assert.Equal("README.md", files.Entries[0].Name);
+        files.SearchQuery = "";
+        Assert.Equal(totalFiles, files.Entries.Count);
+        phone.Shell.Back();
+
+        // ChangesPage uses a ListBox with VirtualizingStackPanel and filters client-side.
+        phone.Shell.ShowChanges(octopus);
+        var changesPage = phone.Top<ChangesPage>();
+        var changes = (ChangesViewModel)changesPage.DataContext!;
+        Assert.True(Phone.Until(() => !changes.IsLoading && changes.Rows.Count == 6));
+        var changeList = changesPage.FindControl<ListBox>("ChangeList");
+        Assert.NotNull(changeList);
+        Assert.IsType<VirtualizingStackPanel>(changeList!.ItemsPanelRoot);
+
+        changes.SearchQuery = "TokenService";
+        Assert.Single(changes.Rows);
+        Assert.Equal("TokenService.cs", changes.Rows[0].Name);
+        changes.SearchQuery = "";
+        Assert.Equal(6, changes.Rows.Count);
+    }
+
+    [AvaloniaFact]
+    public void Mobile_loading_view_animates_only_while_visible_attached_and_motion_enabled()
+    {
+        var view = new MobileLoadingView { Variant = MobileLoadingVariant.List, Label = "正在加载文件…" };
+        var window = new Window { Width = 390, Height = 500, Content = view };
+        window.Show();
+        try
+        {
+            Phone.Pump();
+            Assert.True(view.IsTimerRunning);
+
+            // Hiding pauses the animation timer immediately (zero idle CPU/battery).
+            view.IsVisible = false;
+            Phone.Pump();
+            Assert.False(view.IsTimerRunning);
+
+            view.IsVisible = true;
+            Phone.Pump();
+            Assert.True(view.IsTimerRunning);
+
+            // Exercise all layout variants to verify measure/render cleanly.
+            foreach (var variant in Enum.GetValues<MobileLoadingVariant>())
+            {
+                view.Variant = variant;
+                window.UpdateLayout();
+            }
+        }
+        finally
+        {
+            window.Close();
+            Phone.Pump();
+        }
+        Assert.False(view.IsTimerRunning);
+    }
 }

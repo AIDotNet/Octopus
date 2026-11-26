@@ -462,18 +462,20 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             var (project, item) = FindConversation(prompt.ItemId);
             return (project, item, project.Workspaces.Select(w => w.Path).Prepend(project.Path).ToList());
         }).ConfigureAwait(false);
-        // What is attached must be the conversation's own project: a device uploads a picture there first.
+        // What is attached must be inside the conversation's project or the host's session upload folder.
+        var uploadFolder = Path.GetFullPath(ClipboardImages.DefaultFolder);
         var paths = new List<string>();
         foreach (var path in prompt.Attachments ?? [])
         {
             string full;
             try { full = Path.GetFullPath(ExpandHome(path.Trim())); }
             catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { throw new RemoteException(RemoteProtocol.InvalidParams, e.Message); }
-            if (!roots.Any(root => IsWithin(root, full))) throw new RemoteException(RemoteMethods.NotAllowed, "Only files of the conversation's project can be attached.");
+            if (!roots.Any(root => IsWithin(root, full)) && !IsWithin(uploadFolder, full))
+                throw new RemoteException(RemoteMethods.NotAllowed, "Only files of the conversation's project or uploaded attachments can be attached.");
             if (!File.Exists(full)) throw new RemoteException(RemoteMethods.NotFound, $"The file '{full}' does not exist on the host.");
             paths.Add(full);
         }
-        await OnUiAsync(() => _conversations.PromptAsync(project, item, prompt.Text, paths, prompt.Mentions)).ConfigureAwait(false);
+        await OnUiAsync(() => _conversations.PromptAsync(project, item, prompt.Text, paths, prompt.Mentions, prompt.Immediate)).ConfigureAwait(false);
     }
 
     public Task<AcpMentionTargetsMessage> ListMentionTargetsAsync(AcpMentionTargetsRequestMessage request) => OnUi(() =>
@@ -569,15 +571,13 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
 
     public async Task<string?> UploadAsync(string itemId, string upload, string name, byte[] data, bool last)
     {
-        // Only for a terminal of this computer: the picture's path is handed to its program, which reads it from here.
-        await OnUi(() =>
-        {
-            if (IsGui(FindItem(itemId).Item)) throw NoTerminal();
-            return true;
-        }).ConfigureAwait(false);
+        // Terminal sessions take pictures (path pasted into the PTY); GUI conversations take both pictures and files.
+        var isGui = await OnUi(() => IsGui(FindItem(itemId).Item)).ConfigureAwait(false);
         if (!upload.All(char.IsAsciiLetterOrDigit)) throw new RemoteException(RemoteProtocol.InvalidParams, "The upload id may only have letters and digits.");
-        var extension = ClipboardImages.ImageExtension(name)
-            ?? throw new RemoteException(RemoteProtocol.InvalidParams, "Only pictures (png, jpg, gif or webp) can be uploaded.");
+        var imageExtension = ClipboardImages.ImageExtension(name);
+        if (!isGui && imageExtension is null)
+            throw new RemoteException(RemoteProtocol.InvalidParams, "Only pictures (png, jpg, gif or webp) can be uploaded.");
+        var safeFileName = isGui && imageExtension is null ? SanitizeUploadedFileName(name) : null;
         return await IoAsync(() =>
         {
             var folder = ClipboardImages.DefaultFolder;
@@ -589,16 +589,35 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                 {
                     stream.Dispose();
                     File.Delete(partial);
-                    throw new RemoteException(RemoteProtocol.InvalidParams, "The picture is too large.");
+                    throw new RemoteException(RemoteProtocol.InvalidParams, "The file is too large.");
                 }
                 stream.Write(data);
             }
             if (!last) return null;
             ClipboardImages.Cleanup(folder);
-            var path = ClipboardImages.NewPath(folder, extension);
+            var path = imageExtension is not null
+                ? ClipboardImages.NewPath(folder, imageExtension)
+                : Path.Combine(folder, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..8]}-{safeFileName}");
             File.Move(partial, path);
             return path;
         }).ConfigureAwait(false);
+    }
+
+    private static string SanitizeUploadedFileName(string name)
+    {
+        var raw = Path.GetFileName(name?.Trim() ?? "");
+        if (string.IsNullOrEmpty(raw)) return "attachment.bin";
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new char[Math.Min(raw.Length, 120)];
+        var count = 0;
+        foreach (var ch in raw)
+        {
+            if (count >= cleaned.Length) break;
+            if (ch is '/' or '\\' or '\0' || Array.IndexOf(invalid, ch) >= 0) continue;
+            cleaned[count++] = ch;
+        }
+        var result = new string(cleaned, 0, count).Trim('.', ' ');
+        return result.Length > 0 ? result : "attachment.bin";
     }
 
     public async Task CreateFileAsync(string path) => await Wrap(_files.CreateFileAsync(await InsideProjectAsync(path).ConfigureAwait(false))).ConfigureAwait(false);

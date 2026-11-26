@@ -14,13 +14,16 @@ namespace Octopus.Mobile.Files;
 /// The files and folders of a project's folder on the host, one folder at a time (design/ui/移动端功能扩展方案.html, ⑤).
 /// The folders walked into show as tappable parts above the list; a file opens read-only.
 /// </summary>
-public sealed partial class FilesViewModel : ObservableObject
+public sealed partial class FilesViewModel : ObservableObject, IDisposable
 {
-    /// <summary>More entries than this are not listed: a phone list of thousands (node_modules) only crawls.</summary>
-    public const int MaxEntries = 500;
+    /// <summary>Upper bound on entries kept per folder; virtualization keeps thousands of rows smooth on a phone.</summary>
+    public const int MaxEntries = 5000;
+    private const int SearchThreshold = 12;
 
     private readonly IRemoteWorkspace _workspace;
     private readonly INavigator _navigator;
+    private readonly CancellationTokenSource _lifetime = new();
+    private IReadOnlyList<FileRowViewModel> _allEntries = [];
     private int _loads;
 
     /// <param name="root">The folder to start in: the project's own, a branch workspace's, or one inside them.</param>
@@ -40,9 +43,11 @@ public sealed partial class FilesViewModel : ObservableObject
     [ObservableProperty] public partial bool IsLoading { get; private set; }
     [ObservableProperty] public partial string? ErrorText { get; private set; }
     [ObservableProperty] public partial string? CappedText { get; private set; }
+    [ObservableProperty] public partial string SearchQuery { get; set; } = "";
+    /// <summary>Atomically swapped row list bound to the virtualized <c>ListBox</c> (avoids N per-item collection events).</summary>
+    [ObservableProperty] public partial IReadOnlyList<FileRowViewModel> Entries { get; private set; } = [];
 
     public string Title => Crumbs[0].Name;
-    public ObservableCollection<FileRowViewModel> Entries { get; } = [];
     /// <summary>The folder started in, then each one walked into; each opens that folder again.</summary>
     public ObservableCollection<FileCrumbViewModel> Crumbs { get; } = [];
 
@@ -50,6 +55,7 @@ public sealed partial class FilesViewModel : ObservableObject
     public bool HasEntries => !IsLoading && !HasError && Entries.Count > 0;
     public bool IsEmpty => !IsLoading && !HasError && Entries.Count == 0;
     public bool IsCapped => CappedText is not null;
+    public bool ShowSearch => !IsLoading && !HasError && (_allEntries.Count > SearchThreshold || !string.IsNullOrEmpty(SearchQuery));
 
     /// <summary>Reads <see cref="Folder"/> again.</summary>
     public async Task LoadAsync()
@@ -61,27 +67,41 @@ public sealed partial class FilesViewModel : ObservableObject
         Refresh();
         try
         {
-            var entries = await _workspace.ListFilesAsync(Project, folder);
-            if (load != _loads) return;
-            Entries.Clear();
-            foreach (var entry in entries.Take(MaxEntries)) Entries.Add(new FileRowViewModel(entry, Open));
+            var entries = await _workspace.ListFilesAsync(Project, folder, _lifetime.Token);
+            if (load != _loads || _lifetime.IsCancellationRequested) return;
+            var count = Math.Min(entries.Count, MaxEntries);
+            var rows = new FileRowViewModel[count];
+            for (var i = 0; i < count; i++) rows[i] = new FileRowViewModel(entries[i], Open);
+            _allEntries = rows;
+            ApplyFilter();
             CappedText = entries.Count > MaxEntries ? string.Format(MobileLangResources.Get(MobileLangResourceKind.FilesCapped), MaxEntries) : null;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
         catch (IOException e)
         {
             if (load != _loads) return;
-            Entries.Clear();
+            _allEntries = [];
+            Entries = [];
             CappedText = null;
             ErrorText = e.Message;
         }
         finally
         {
-            if (load == _loads)
+            if (load == _loads && !_lifetime.IsCancellationRequested)
             {
                 IsLoading = false;
                 Refresh();
             }
         }
+    }
+
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
     }
 
     [RelayCommand]
@@ -93,6 +113,7 @@ public sealed partial class FilesViewModel : ObservableObject
         if (row.IsDirectory)
         {
             Crumbs.Add(new FileCrumbViewModel(row.Name, row.Path, OpenCrumb));
+            SearchQuery = "";
             Folder = row.Path;
             _ = LoadAsync();
         }
@@ -109,8 +130,31 @@ public sealed partial class FilesViewModel : ObservableObject
         var index = Crumbs.IndexOf(crumb);
         if (index < 0) return;
         while (Crumbs.Count > index + 1) Crumbs.RemoveAt(Crumbs.Count - 1);
+        SearchQuery = "";
         Folder = crumb.Path;
         _ = LoadAsync();
+    }
+
+    partial void OnSearchQueryChanged(string value)
+    {
+        ApplyFilter();
+        Refresh();
+    }
+
+    private void ApplyFilter()
+    {
+        var query = SearchQuery.Trim();
+        if (query.Length == 0)
+        {
+            Entries = _allEntries;
+            return;
+        }
+        var filtered = new List<FileRowViewModel>();
+        foreach (var row in _allEntries)
+        {
+            if (row.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) filtered.Add(row);
+        }
+        Entries = filtered;
     }
 
     private void Refresh()
@@ -119,6 +163,7 @@ public sealed partial class FilesViewModel : ObservableObject
         OnPropertyChanged(nameof(HasEntries));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(IsCapped));
+        OnPropertyChanged(nameof(ShowSearch));
     }
 
     /// <summary>The last part of a host path, with either separator.</summary>

@@ -235,13 +235,15 @@ public sealed class AcpPromptMessage
 {
     public string ItemId { get; set; } = "";
     public string Text { get; set; } = "";
-    /// <summary>Paths inside the item's project to attach (a picture uploaded with <c>fs/write</c> first, for example).</summary>
+    /// <summary>Paths inside the item's project (or uploaded for the session via <c>fs/upload</c>) to attach.</summary>
     public List<string>? Attachments { get; set; }
     /// <summary>
     /// Sessions and agents @-mentioned inline in <see cref="Text"/>, in order of appearance; each one's
     /// <see cref="AcpMentionMessage.Text"/> appears verbatim in the text. Sent only to hosts with the acp.mentions capability.
     /// </summary>
     public List<AcpMentionMessage>? Mentions { get; set; }
+    /// <summary>When true and a turn is active, interrupts the active turn gracefully and sends this prompt immediately instead of queueing it.</summary>
+    public bool Immediate { get; set; }
 }
 
 /// <summary>One inline mention of a prompt: the token as written (<c>@Codex（重构登录）</c>) and what it points at.</summary>

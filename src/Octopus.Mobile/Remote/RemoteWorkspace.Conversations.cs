@@ -283,10 +283,10 @@ internal sealed partial class RemoteWorkspace
         public override bool SupportsMentions => workspace.Shares(Host, RemoteMethods.CapabilityAcpMentions);
 
         public override Task SendAsync(string text, IReadOnlyList<string>? attachments, IReadOnlyList<MentionToken> mentions,
-            CancellationToken cancellationToken = default) =>
+            bool immediate, CancellationToken cancellationToken = default) =>
             workspace.WithClientAsync(Host, client => client.SendPromptAsync(Session.Id, text, attachments,
                 SupportsMentions ? [.. mentions.Select(m => new AcpMentionMessage { Kind = m.Kind, TargetId = m.TargetId, Text = m.Text, AgentId = m.AgentId })] : null,
-                cancellationToken));
+                immediate, cancellationToken));
 
         public override async Task<IReadOnlyList<ConversationMentionTarget>> ListMentionTargetsAsync(string query, CancellationToken cancellationToken = default)
         {

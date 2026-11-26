@@ -1168,4 +1168,119 @@ public class ConversationTests
         Assert.False(vm.HasTasks);
         Assert.False(tray.IsVisible);
     }
+
+    [AvaloniaFact]
+    public void Merged_right_button_switches_between_stop_and_send_with_immediate_send_and_multiline_input()
+    {
+        using var phone = new Phone();
+        var (page, vm, session) = OpenDemoConversation(phone);
+
+        var field = page.FindControl<TextField>("PromptField")!;
+        var stopButton = page.FindControl<Control>("StopButton")!;
+        var sendButton = page.FindControl<Control>("SendButton")!;
+        var sendNowButton = page.FindControl<Control>("SendNowButton")!;
+
+        // Multi-line input is enabled.
+        Assert.True(field.AcceptsReturn);
+        Assert.Null(page.FindControl<Control>("MentionButton"));
+
+        // While active (Waiting) and input is empty: only Stop is shown (never both Stop and Send).
+        Assert.True(vm.CanStop);
+        Assert.True(vm.ShowComposerStop);
+        Assert.False(vm.ShowComposerSend);
+        Assert.False(vm.CanSendNow);
+        Assert.True(stopButton.IsVisible);
+        Assert.False(sendButton.IsVisible);
+        Assert.False(sendNowButton.IsVisible);
+
+        // Typing multi-line text flips the single right button to Send (default queue) and exposes Send Now.
+        vm.PromptText = "第一行\n第二行";
+        Phone.Pump();
+        Assert.False(vm.ShowComposerStop);
+        Assert.True(vm.ShowComposerSend);
+        Assert.True(vm.CanSendNow);
+        Assert.False(stopButton.IsVisible);
+        Assert.True(sendButton.IsVisible);
+        Assert.True(sendNowButton.IsVisible);
+
+        // Default Send queues while active.
+        vm.SendCommand.Execute(null);
+        Assert.True(Phone.Until(() => vm.QueuedCount == 1));
+        var demo = phone.Workspace.Conversations[session.Id];
+        Assert.Equal("第一行\n第二行", demo.Sent[^1]);
+        Assert.False(demo.SentImmediate[^1]);
+
+        // Clearing back to empty while still active flips back to Stop.
+        Assert.True(vm.ShowComposerStop);
+        Assert.True(stopButton.IsVisible);
+        Assert.False(sendButton.IsVisible);
+
+        // SendNow interrupts immediately instead of queueing.
+        vm.PromptText = "紧急插队消息";
+        Phone.Pump();
+        Assert.True(vm.CanSendNow);
+        vm.SendNowCommand.Execute(null);
+        Assert.True(Phone.Until(() => demo.Sent.Count >= 2 && demo.SentImmediate[^1]));
+        Assert.Equal("紧急插队消息", demo.Sent[^1]);
+        Assert.Contains(vm.Entries.OfType<ConversationUserEntry>(), u => u.Text == "紧急插队消息");
+    }
+
+    [AvaloniaFact]
+    public void Gui_composer_attaches_images_and_files_and_sends_with_or_without_text()
+    {
+        var savedPickImage = MobileHost.PickImage;
+        var savedPickFile = MobileHost.PickFile;
+        try
+        {
+            var png = Convert.FromBase64String(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+            MobileHost.PickImage = _ => Task.FromResult<Terminals.PickedImage?>(new Terminals.PickedImage("screen.png", png));
+            MobileHost.PickFile = _ => Task.FromResult<Terminals.PickedImage?>(new Terminals.PickedImage("notes.md", System.Text.Encoding.UTF8.GetBytes("# Notes")));
+
+            using var phone = new Phone();
+            var (page, vm, session) = OpenDemoConversation(phone);
+
+            Assert.True(vm.CanAttach);
+            var attachButton = page.FindControl<Control>("AttachButton")!;
+            Assert.True(attachButton.IsVisible);
+
+            // Opening the attach picker offers photo and file actions.
+            vm.OpenAttachPickerCommand.Execute(null);
+            Phone.Pump();
+            Assert.True(page.IsOptionSheetOpen);
+            Assert.Equal(2, page.OptionSheetLabels.Count);
+
+            // Attach an image and a file.
+            vm.AttachImageCommand.Execute(null);
+            Assert.True(Phone.Until(() => vm.PendingAttachments.Count == 1 && !vm.IsUploading));
+            Assert.True(vm.PendingAttachments[0].IsImage);
+            Assert.Equal("screen.png", vm.PendingAttachments[0].Name);
+
+            vm.AttachFileCommand.Execute(null);
+            Assert.True(Phone.Until(() => vm.PendingAttachments.Count == 2 && !vm.IsUploading));
+            Assert.False(vm.PendingAttachments[1].IsImage);
+            Assert.Equal("notes.md", vm.PendingAttachments[1].Name);
+
+            // Even with empty PromptText, attachments enable sending and switch Stop -> Send.
+            Assert.Equal("", vm.PromptText);
+            Assert.True(vm.HasPendingAttachments);
+            Assert.True(vm.CanSend);
+            Assert.False(vm.ShowComposerStop);
+            Assert.True(vm.CanSendNow);
+
+            // Remove one attachment and send the remaining one immediately.
+            vm.RemoveAttachmentCommand.Execute(vm.PendingAttachments[0]);
+            Assert.Single(vm.PendingAttachments);
+
+            vm.SendNowCommand.Execute(null);
+            var demo = phone.Workspace.Conversations[session.Id];
+            Assert.True(Phone.Until(() => demo.SentAttachments.Count > 0 && demo.SentAttachments[^1].Count == 1));
+            Assert.Empty(vm.PendingAttachments);
+        }
+        finally
+        {
+            MobileHost.PickImage = savedPickImage;
+            MobileHost.PickFile = savedPickFile;
+        }
+    }
 }

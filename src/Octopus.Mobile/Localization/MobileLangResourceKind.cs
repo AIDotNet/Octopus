@@ -609,4 +609,17 @@ public enum MobileLangResourceKind
     BotGroupsDeleteConfirm,
     BotGroupsLoadEarlier,
     BotGroupsYou,
+    // Conversation composer enhancements (immediate send, attachments) and virtualized list filtering.
+    ConversationSendNow,
+    ConversationAttach,
+    ConversationAttachImage,
+    ConversationAttachFile,
+    ConversationRemoveAttachment,
+    FilesSearchPlaceholder,
+    ChangesSearchPlaceholder,
+    LoadingFiles,
+    LoadingChanges,
+    LoadingFile,
+    LoadingDiff,
+    LoadingFolders,
 }

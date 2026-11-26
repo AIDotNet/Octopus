@@ -588,5 +588,17 @@
     <unit id="BotGroupsDeleteConfirm"><segment><source>Delete group "{0}"?</source></segment></unit>
     <unit id="BotGroupsLoadEarlier"><segment><source>Load earlier messages</source></segment></unit>
     <unit id="BotGroupsYou"><segment><source>You</source></segment></unit>
+    <unit id="ConversationSendNow"><segment><source>Send now</source></segment></unit>
+    <unit id="ConversationAttach"><segment><source>Attach photo or file</source></segment></unit>
+    <unit id="ConversationAttachImage"><segment><source>Choose photo</source></segment></unit>
+    <unit id="ConversationAttachFile"><segment><source>Choose file</source></segment></unit>
+    <unit id="ConversationRemoveAttachment"><segment><source>Remove attachment</source></segment></unit>
+    <unit id="FilesSearchPlaceholder"><segment><source>Filter files…</source></segment></unit>
+    <unit id="ChangesSearchPlaceholder"><segment><source>Filter changed files…</source></segment></unit>
+    <unit id="LoadingFiles"><segment><source>Loading files…</source></segment></unit>
+    <unit id="LoadingChanges"><segment><source>Loading changes…</source></segment></unit>
+    <unit id="LoadingFile"><segment><source>Loading file…</source></segment></unit>
+    <unit id="LoadingDiff"><segment><source>Loading diff…</source></segment></unit>
+    <unit id="LoadingFolders"><segment><source>Loading folders…</source></segment></unit>
   </file>
 </xliff>

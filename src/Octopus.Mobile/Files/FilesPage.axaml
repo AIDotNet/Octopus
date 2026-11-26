@@ -2,20 +2,24 @@
            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
            xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
            xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:common="using:Octopus.Mobile.Common"
            xmlns:l="using:Octopus.Mobile.Localization"
            xmlns:vm="using:Octopus.Mobile.Files"
            x:Class="Octopus.Mobile.Files.FilesPage"
            x:DataType="vm:FilesViewModel"
-           IsScrollable="True">
+           IsScrollable="False">
     <arcm:Page.Header>
         <arcm:Navbar Title="{Binding Title}"
                      ShowBack="True"
                      BackCommand="{Binding BackCommand}" />
     </arcm:Page.Header>
 
-    <StackPanel Margin="0,4,0,24" Spacing="12">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- The folder started in, then each folder walked into; tapping any goes back there. -->
-        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="16,0">
+        <ScrollViewer Grid.Row="0"
+                      HorizontalScrollBarVisibility="Hidden"
+                      VerticalScrollBarVisibility="Disabled"
+                      Margin="16,6,16,6">
             <ItemsControl Name="Crumbs" ItemsSource="{Binding Crumbs}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
@@ -28,29 +32,57 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <arc:ArcSpinner HorizontalAlignment="Center" Margin="0,24" IsVisible="{Binding IsLoading}" />
+        <!-- Client-side instant filter for large directories (zero round trips). -->
+        <arcm:TextField Name="SearchField"
+                        Grid.Row="1"
+                        Classes="hostSearch"
+                        Margin="16,0,16,8"
+                        Text="{Binding SearchQuery, Mode=TwoWay}"
+                        PlaceholderText="{l:MobileLangResource FilesSearchPlaceholder}"
+                        IsVisible="{Binding ShowSearch}" />
 
-        <Border Name="ErrorCard" Classes="alertCard danger" Margin="16,0" IsVisible="{Binding HasError}">
-            <TextBlock Name="ErrorText" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+        <Panel Grid.Row="2">
+            <!-- Virtualized file list: only visible rows are instantiated even in directories with thousands of files. -->
+            <ListBox Name="Entries"
+                     Classes="virtualList"
+                     ItemsSource="{Binding Entries}"
+                     IsVisible="{Binding HasEntries}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:FileRowViewModel">
+                        <Border Classes="virtualRow">
+                            <arcm:ListItem Content="{Binding Name}"
+                                           Icon="{Binding Icon}"
+                                           ShowChevron="True"
+                                           Command="{Binding OpenCommand}" />
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <common:MobileLoadingView Name="LoadingView"
+                                      Variant="List"
+                                      Label="{l:MobileLangResource LoadingFiles}"
+                                      IsVisible="{Binding IsLoading}" />
+
+            <Border Name="ErrorCard" Classes="alertCard danger" Margin="16,12" VerticalAlignment="Top" IsVisible="{Binding HasError}">
+                <TextBlock Name="ErrorText" Text="{Binding ErrorText}" TextWrapping="Wrap" />
+            </Border>
+
+            <TextBlock Name="EmptyText" Classes="muted" Text="{l:MobileLangResource FilesEmpty}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20,24"
+                       IsVisible="{Binding IsEmpty}" />
+        </Panel>
+
+        <Border Grid.Row="3" Classes="strip" Padding="14,6" IsVisible="{Binding IsCapped}">
+            <TextBlock Name="CappedText" Classes="muted" Text="{Binding CappedText}"
+                       HorizontalAlignment="Center" TextWrapping="Wrap" />
         </Border>
-
-        <arcm:ListGroup Name="Entries" ItemsSource="{Binding Entries}" IsVisible="{Binding HasEntries}">
-            <arcm:ListGroup.ItemTemplate>
-                <DataTemplate x:DataType="vm:FileRowViewModel">
-                    <arcm:ListItem Content="{Binding Name}"
-                                   Icon="{Binding Icon}"
-                                   ShowChevron="True"
-                                   Command="{Binding OpenCommand}" />
-                </DataTemplate>
-            </arcm:ListGroup.ItemTemplate>
-        </arcm:ListGroup>
-
-        <TextBlock Name="CappedText" Classes="muted" Text="{Binding CappedText}"
-                   HorizontalAlignment="Center" Margin="16,0" TextWrapping="Wrap"
-                   IsVisible="{Binding IsCapped}" />
-
-        <TextBlock Name="EmptyText" Classes="muted" Text="{l:MobileLangResource FilesEmpty}"
-                   HorizontalAlignment="Center" Margin="0,24"
-                   IsVisible="{Binding IsEmpty}" />
-    </StackPanel>
+    </Grid>
 </arcm:Page>

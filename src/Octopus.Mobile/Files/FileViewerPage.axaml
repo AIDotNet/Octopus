@@ -128,7 +128,10 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <arc:ArcSpinner HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsLoading}" />
+            <common:MobileLoadingView Name="LoadingView"
+                                      Variant="Code"
+                                      Label="{l:MobileLangResource LoadingFile}"
+                                      IsVisible="{Binding IsLoading}" />
 
             <Border Name="MessageCard" Classes="emptyCard" Margin="20" VerticalAlignment="Center" IsVisible="{Binding HasMessage}">
                 <TextBlock Name="MessageText" Classes="secondary" Text="{Binding Message}"

@@ -33,6 +33,12 @@ public static class MobileHost
     public static Func<Avalonia.Controls.TopLevel?, Task<Terminals.PickedImage?>> PickImage { get; set; } = Terminals.ImagePicking.PickWithStorageAsync;
 
     /// <summary>
+    /// Lets the person choose any file (<see cref="Terminals.ImagePicking.PickFileWithStorageAsync"/>) for GUI
+    /// conversation attachments; tests put their own file here. Null when nothing was chosen.
+    /// </summary>
+    public static Func<Avalonia.Controls.TopLevel?, Task<Terminals.PickedImage?>> PickFile { get; set; } = Terminals.ImagePicking.PickFileWithStorageAsync;
+
+    /// <summary>
     /// Opens the platform's native QR code scanner and returns the decoded text, or null when cancelled.
     /// Set by the iOS and Android platform heads (and by tests); null on heads without a camera (desktop preview).
     /// </summary>

@@ -2,6 +2,7 @@
            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
            xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
            xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:common="using:Octopus.Mobile.Common"
            xmlns:l="using:Octopus.Mobile.Localization"
            xmlns:vm="using:Octopus.Mobile.Hosts"
            x:Class="Octopus.Mobile.Hosts.FolderPickerPage"
@@ -54,7 +55,10 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <arc:ArcSpinner HorizontalAlignment="Center" Margin="0,24" IsVisible="{Binding IsLoading}" />
+        <common:MobileLoadingView Name="LoadingView"
+                                  Variant="List"
+                                  Label="{l:MobileLangResource LoadingFolders}"
+                                  IsVisible="{Binding IsLoading}" />
 
         <Border Classes="alertCard danger" Margin="16,0" IsVisible="{Binding HasError}">
             <TextBlock Name="ErrorText" Text="{Binding ErrorText}" TextWrapping="Wrap" />

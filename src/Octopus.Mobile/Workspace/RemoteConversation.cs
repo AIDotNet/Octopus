@@ -56,6 +56,11 @@ public abstract partial class RemoteConversation : ObservableObject, IDisposable
     /// <summary>Sends a prompt whose text @-mentions <paramref name="mentions"/> (in order of appearance).</summary>
     public virtual Task SendAsync(string text, IReadOnlyList<string>? attachments, IReadOnlyList<MentionToken> mentions,
         CancellationToken cancellationToken = default) =>
+        SendAsync(text, attachments, mentions, immediate: false, cancellationToken);
+
+    /// <summary>Sends a prompt with optional @-mentions and optional immediate interruption of the active turn.</summary>
+    public virtual Task SendAsync(string text, IReadOnlyList<string>? attachments, IReadOnlyList<MentionToken> mentions,
+        bool immediate, CancellationToken cancellationToken = default) =>
         SendAsync(text, attachments, cancellationToken);
 
     /// <summary>Stops the turn that runs.</summary>

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -9,13 +10,23 @@ using Octopus.App.Common.Mentions;
 using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
+using Octopus.Mobile.Terminals;
 using Octopus.Mobile.Voice;
 using Octopus.Mobile.Workspace;
+using Octopus.Remote.Protocol;
+using Octopus.Terminal.Avalonia;
+using TKCode.Arc;
 
 namespace Octopus.Mobile.Conversations;
 
 /// <summary>One choice in a composer option sheet (model, permission mode, or effort).</summary>
 public sealed record ConversationOptionChoice(ConversationOptionKind Kind, string Value);
+
+/// <summary>One uploaded image or file staged in the mobile composer before sending.</summary>
+public sealed record ConversationAttachmentItem(string Name, string RemotePath, bool IsImage)
+{
+    public Geometry Icon => IsImage ? ArcIcons.Image : ArcIcons.FileText;
+}
 
 /// <summary>
 /// One GUI conversation on a host (design/ui/移动端功能扩展方案.html, G-A): attaches to the host's timeline, renders its
@@ -26,6 +37,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private readonly IRemoteWorkspace _workspace;
     private readonly INavigator _navigator;
     private readonly Action<Uri> _openBrowser;
+    private Func<Task<PickedImage?>> _pickImage = () => MobileHost.PickImage(null);
+    private Func<Task<PickedImage?>> _pickFile = () => MobileHost.PickFile(null);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly HashSet<ConversationWorkflowTask> _watchedTasks = [];
     private RemoteConversation? _conversation;
@@ -57,6 +70,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
             PrimaryActionCommand = ReloadCommand,
         };
         Voice = new VoiceComposerViewModel(MobileHost.Voice, InsertDictation, SendDictationAsync, navigator.ShowVoiceSettings, Actions.ShowNotice, CollectHotwords);
+        PendingAttachments.CollectionChanged += OnPendingAttachmentsChanged;
         session.PropertyChanged += OnSessionChanged;
         MobileHost.Backgrounded += OnAppBackgrounded;
         MobileHost.Foregrounded += OnAppForegrounded;
@@ -93,12 +107,27 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
 
     /// <summary>What the person is typing in the composer.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasComposerInput))]
     [NotifyPropertyChangedFor(nameof(CanSend))]
+    [NotifyPropertyChangedFor(nameof(ShowComposerStop))]
+    [NotifyPropertyChangedFor(nameof(ShowComposerSend))]
+    [NotifyPropertyChangedFor(nameof(CanSendNow))]
     public partial string PromptText { get; set; } = "";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSend))]
+    [NotifyPropertyChangedFor(nameof(CanSendNow))]
     public partial bool IsSending { get; private set; }
+
+    /// <summary>Images and files already uploaded to the host, staged to go out with the next prompt.</summary>
+    public ObservableCollection<ConversationAttachmentItem> PendingAttachments { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSend))]
+    [NotifyPropertyChangedFor(nameof(CanSendNow))]
+    public partial bool IsUploading { get; private set; }
+
+    [ObservableProperty] public partial string UploadText { get; private set; } = "";
 
     /// <summary>The prompt field's caret, two-way bound: an <c>@</c> query is the word before it.</summary>
     [ObservableProperty] public partial int PromptCaretIndex { get; set; }
@@ -147,13 +176,23 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     public string? ErrorText => _conversation?.ErrorText ?? _openError;
     public bool HasError => !string.IsNullOrEmpty(ErrorText);
     public bool HasEarlier => _conversation?.HasEarlier == true;
+    public bool ShowInitialLoading => !IsLoaded && !HasError;
     public bool IsEmpty => IsLoaded && Entries.Count == 0 && !IsConnecting && !HasError;
     public int QueuedCount => _conversation?.QueuedCount ?? 0;
     public bool HasQueued => QueuedCount > 0;
     public string QueuedText => HasQueued ? string.Format(Text(MobileLangResourceKind.ConversationQueued), QueuedCount) : "";
     public bool ShowComposerTopRow => Composer.HasChoices || HasQueued;
+    public bool HasPendingAttachments => PendingAttachments.Count > 0;
+    public bool HasComposerInput => !string.IsNullOrWhiteSpace(PromptText) || HasPendingAttachments;
+    public bool CanAttach => IsLoaded && _workspace.SupportsUpload(Session.Project.Host);
     public bool CanStop => IsLoaded && (IsWorking || IsWaiting);
-    public bool CanSend => IsLoaded && !IsSending && !string.IsNullOrWhiteSpace(PromptText);
+    public bool CanSend => IsLoaded && !IsSending && !IsUploading && HasComposerInput;
+    /// <summary>Merged right-side primary action: shows Stop only when active and the composer has no draft text or attachments.</summary>
+    public bool ShowComposerStop => CanStop && !HasComposerInput;
+    /// <summary>Merged right-side primary action: shows Send whenever Stop is not shown.</summary>
+    public bool ShowComposerSend => !ShowComposerStop;
+    /// <summary>Shown alongside Send while a turn is active and the composer has input, to interrupt and send immediately.</summary>
+    public bool CanSendNow => CanStop && CanSend;
     public bool CanOpenFiles => _workspace.SupportsFiles(Session.Project.Host);
     public string WorkingDirectory => RemoteFolders.WorkspacePathOf(Session) ?? Session.Project.Path;
 
@@ -185,11 +224,21 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     /// <summary>Raised when the person taps a model, mode, or effort chip; the page shows an <c>ActionSheet</c>.</summary>
     public event Action<ConversationOptionKind, string, IReadOnlyList<ConversationOption>, string?>? OptionPickerRequested;
 
+    /// <summary>Raised when the person taps the attach button; the page shows a photo/file picker sheet.</summary>
+    public event Action? AttachPickerRequested;
+
     /// <summary>Raised when entries change so the page can stay pinned to the bottom.</summary>
     public event Action? TimelineChanged;
 
     /// <summary>Raised when the view should force-pin and scroll to the very bottom (initial attach or sending a prompt).</summary>
     public event Action? ScrollToBottomRequested;
+
+    /// <summary>Supplies the page-scoped photo and file pickers (using the page's <c>TopLevel</c>).</summary>
+    internal void SetPickers(Func<Task<PickedImage?>> pickImage, Func<Task<PickedImage?>> pickFile)
+    {
+        _pickImage = pickImage;
+        _pickFile = pickFile;
+    }
 
     [RelayCommand]
     private void Back() => _navigator.Back();
@@ -242,26 +291,38 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     }
 
     [RelayCommand]
-    private async Task SendAsync()
+    private Task SendAsync() => SendInternalAsync(immediate: false);
+
+    [RelayCommand]
+    private Task SendNowAsync() => SendInternalAsync(immediate: true);
+
+    private async Task SendInternalAsync(bool immediate)
     {
-        if (_conversation is null || IsSending) return;
+        if (_conversation is null || IsSending || IsUploading) return;
         var text = PromptText.Trim();
-        if (text.Length == 0) return;
+        var staged = PendingAttachments.ToList();
+        if (text.Length == 0 && staged.Count == 0) return;
+        var attachments = staged.Count > 0 ? staged.Select(a => a.RemotePath).ToList() : null;
         var mentions = MentionText.DistinctInOrder(MentionText.Scan(text, _draftMentions));
         IsSending = true;
         PromptText = "";
+        PendingAttachments.Clear();
         try
         {
-            if (mentions.Count > 0) await _conversation.SendAsync(text, null, mentions, _lifetime.Token);
-            else await _conversation.SendAsync(text, cancellationToken: _lifetime.Token);
+            if (immediate || mentions.Count > 0) await _conversation.SendAsync(text, attachments, mentions, immediate, _lifetime.Token);
+            else await _conversation.SendAsync(text, attachments, _lifetime.Token);
             // Kept until the prompt is out, so a failed send gives the text back with its tokens.
             if (PromptText.Length == 0) ClearMentions();
             ScrollToBottomRequested?.Invoke();
         }
         catch (IOException e)
         {
-            // Keep what the person typed when sending failed so they do not lose it.
+            // Keep what the person typed and staged when sending failed so they do not lose it.
             if (string.IsNullOrEmpty(PromptText)) PromptText = text;
+            if (PendingAttachments.Count == 0 && staged.Count > 0)
+            {
+                foreach (var item in staged) PendingAttachments.Add(item);
+            }
             Actions.ShowNotice(e.Message);
         }
         catch (OperationCanceledException)
@@ -271,6 +332,85 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         {
             IsSending = false;
         }
+    }
+
+    [RelayCommand]
+    private void OpenAttachPicker()
+    {
+        if (!CanAttach || IsUploading) return;
+        AttachPickerRequested?.Invoke();
+    }
+
+    [RelayCommand]
+    private Task AttachImageAsync() => PickAndUploadAttachmentAsync(_pickImage, forceImagePrepare: true);
+
+    [RelayCommand]
+    private Task AttachFileAsync() => PickAndUploadAttachmentAsync(_pickFile, forceImagePrepare: false);
+
+    [RelayCommand]
+    private void RemoveAttachment(ConversationAttachmentItem? item)
+    {
+        if (item is not null) PendingAttachments.Remove(item);
+    }
+
+    private async Task PickAndUploadAttachmentAsync(Func<Task<PickedImage?>> pick, bool forceImagePrepare)
+    {
+        if (!CanAttach || IsUploading) return;
+        try
+        {
+            var picked = await pick();
+            if (picked is null) return;
+            IsUploading = true;
+            ShowUploadProgress(0);
+            var isImage = forceImagePrepare || MobileFileLinks.IsImageExtension(picked.Name) || ClipboardImages.ImageExtension(picked.Name) is not null;
+            PickedImage toUpload;
+            if (isImage)
+            {
+                toUpload = await Task.Run(() => UploadImages.Prepare(picked), _lifetime.Token);
+            }
+            else
+            {
+                if (picked.Data.Length > RemoteMethods.UploadMaxBytes) throw new ImageTooLargeException();
+                toUpload = picked;
+            }
+            var remotePath = await _workspace.UploadImageAsync(Session, toUpload.Name, toUpload.Data, new Progress<double>(ShowUploadProgress), _lifetime.Token);
+            if (_disposed) return;
+            var displayName = Path.GetFileName(picked.Name);
+            if (string.IsNullOrWhiteSpace(displayName)) displayName = Path.GetFileName(remotePath);
+            PendingAttachments.Add(new ConversationAttachmentItem(displayName, remotePath, isImage));
+        }
+        catch (ImageTooLargeException)
+        {
+            Actions.ShowNotice(string.Format(Text(MobileLangResourceKind.UploadTooLarge), RemoteMethods.UploadMaxBytes / (1024 * 1024)));
+        }
+        catch (InvalidDataException)
+        {
+            Actions.ShowNotice(Text(MobileLangResourceKind.UploadUnreadable));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            Actions.ShowNotice(string.Format(Text(MobileLangResourceKind.UploadFailed), e.Message));
+        }
+        finally
+        {
+            IsUploading = false;
+        }
+    }
+
+    private void ShowUploadProgress(double share) =>
+        UploadText = string.Format(Text(MobileLangResourceKind.UploadProgress), (int)Math.Round(share * 100));
+
+    private void OnPendingAttachmentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasPendingAttachments));
+        OnPropertyChanged(nameof(HasComposerInput));
+        OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(ShowComposerStop));
+        OnPropertyChanged(nameof(ShowComposerSend));
+        OnPropertyChanged(nameof(CanSendNow));
     }
 
     /// <summary>
@@ -603,6 +743,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         StopStatusPhraseTimer();
         _lifetime.Cancel();
         _lifetime.Dispose();
+        PendingAttachments.CollectionChanged -= OnPendingAttachmentsChanged;
         Session.PropertyChanged -= OnSessionChanged;
         WorkspaceMenu.Dispose();
         DetachConversation();
@@ -768,13 +909,18 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(ErrorText));
         OnPropertyChanged(nameof(HasError));
         OnPropertyChanged(nameof(HasEarlier));
+        OnPropertyChanged(nameof(ShowInitialLoading));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(QueuedCount));
         OnPropertyChanged(nameof(HasQueued));
         OnPropertyChanged(nameof(QueuedText));
         OnPropertyChanged(nameof(ShowComposerTopRow));
+        OnPropertyChanged(nameof(CanAttach));
         OnPropertyChanged(nameof(CanStop));
         OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(ShowComposerStop));
+        OnPropertyChanged(nameof(ShowComposerSend));
+        OnPropertyChanged(nameof(CanSendNow));
         WorkspaceMenu.UpdateLiveStatus(IsWorking, IsWaiting, IsError, ShowSpinner, HasStatusPill ? StatusText : null);
         EnsureStatusPhraseTimer();
     }
