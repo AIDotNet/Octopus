@@ -20,6 +20,10 @@ internal static class Forwarder
         SignalThrottle? throttle = null,
         Func<long>? clock = null)
     {
+        if (McpStdioBridge.IsMcpInvocation(args))
+        {
+            return await McpStdioBridge.RunAsync(args, environment.All, stdin, stdout);
+        }
         var options = ForwarderOptions.Parse(args);
         if (options is null)
         {

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Core.Projects;
@@ -12,6 +13,7 @@ public sealed partial class ItemRowViewModel : ObservableObject
     private readonly Func<ItemRowViewModel, Task> _restart;
     private readonly Action<ItemRowViewModel> _moveToNewGroup;
     private readonly Func<ItemRowViewModel, Task> _close;
+    private readonly Action<string, bool>? _onChildrenExpandedChanged;
 
     public ItemRowViewModel(
         ProjectItem item,
@@ -21,7 +23,8 @@ public sealed partial class ItemRowViewModel : ObservableObject
         Action<ItemRowViewModel, string> rename,
         Func<ItemRowViewModel, Task> restart,
         Action<ItemRowViewModel> moveToNewGroup,
-        Func<ItemRowViewModel, Task> close)
+        Func<ItemRowViewModel, Task> close,
+        Action<string, bool>? onChildrenExpandedChanged = null)
     {
         Item = item;
         ModelName = modelName;
@@ -31,6 +34,7 @@ public sealed partial class ItemRowViewModel : ObservableObject
         _restart = restart;
         _moveToNewGroup = moveToNewGroup;
         _close = close;
+        _onChildrenExpandedChanged = onChildrenExpandedChanged;
     }
 
     public ProjectItem Item { get; }
@@ -59,6 +63,65 @@ public sealed partial class ItemRowViewModel : ObservableObject
     /// <summary>The subagents the session started (Claude Code's Agent tool); null for an item that never had one.</summary>
     [ObservableProperty] public partial SubagentListViewModel? Subagents { get; set; }
 
+    /// <summary>Agent sessions directly spawned by this item via Octopus multi-agent collaboration (Scheme C compact sub-rows).</summary>
+    public ObservableCollection<ItemRowViewModel> SpawnedChildren { get; } = [];
+    public bool HasSpawnedChildren => SpawnedChildren.Count > 0;
+    public int SpawnedChildrenCount => SpawnedChildren.Count;
+    public bool IsSpawnedChild => !string.IsNullOrEmpty(Item.ParentItemId);
+    public string? IsolationBadge => Item.CollabIsolation switch
+    {
+        "worktree" => "wt",
+        "read_only" => "ro",
+        _ => null,
+    };
+    public bool HasIsolationBadge => !string.IsNullOrEmpty(IsolationBadge);
+    public bool HasWaitingChild => SpawnedChildren.Any(c => c.IsWaiting || c.HasWaitingChild);
+    public bool ShowSpawnedChildren => HasSpawnedChildren && IsChildrenExpanded;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowSpawnedChildren))]
+    public partial bool IsChildrenExpanded { get; set; } = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPeerThreads))]
+    public partial int ActivePeerThreadCount { get; set; }
+    public bool HasPeerThreads => ActivePeerThreadCount > 0;
+
+    public bool IsActiveOrHasActiveChild => IsActive || SpawnedChildren.Any(c => c.IsActiveOrHasActiveChild);
+
+    public void AddSpawnedChild(ItemRowViewModel child)
+    {
+        SpawnedChildren.Add(child);
+        NotifyChildrenChanged();
+    }
+
+    public void NotifyChildrenChanged()
+    {
+        OnPropertyChanged(nameof(HasSpawnedChildren));
+        OnPropertyChanged(nameof(SpawnedChildrenCount));
+        OnPropertyChanged(nameof(HasWaitingChild));
+        OnPropertyChanged(nameof(ShowSpawnedChildren));
+    }
+
+    public void RefreshActiveRecursive(string? activeItemId)
+    {
+        IsActive = Id == activeItemId;
+        foreach (var child in SpawnedChildren)
+        {
+            child.RefreshActiveRecursive(activeItemId);
+        }
+    }
+
+    public ItemRowViewModel? FindRecursive(string itemId)
+    {
+        if (Id == itemId) return this;
+        foreach (var child in SpawnedChildren)
+        {
+            if (child.FindRecursive(itemId) is { } found) return found;
+        }
+        return null;
+    }
+
     public void RefreshTitle() => OnPropertyChanged(nameof(Title));
 
     public void Show(Activity.ItemActivity activity)
@@ -75,6 +138,12 @@ public sealed partial class ItemRowViewModel : ObservableObject
     [RelayCommand] private Task RestartAsync() => _restart(this);
     [RelayCommand] private void MoveToNewGroup() => _moveToNewGroup(this);
     [RelayCommand] private Task CloseAsync() => _close(this);
+    [RelayCommand]
+    private void ToggleChildrenExpanded()
+    {
+        IsChildrenExpanded = !IsChildrenExpanded;
+        _onChildrenExpandedChanged?.Invoke(Id, IsChildrenExpanded);
+    }
 
     public void CommitRename(string title)
     {

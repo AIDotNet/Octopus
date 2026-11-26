@@ -13,7 +13,6 @@ namespace Octopus.App.AgentGui;
 public partial class AgentGuiTabView : UserControl, ITabContent
 {
     private AgentGuiTabViewModel? _model;
-    private bool _started;
     private bool _isAttached;
 
     public AgentGuiTabView()
@@ -117,10 +116,9 @@ public partial class AgentGuiTabView : UserControl, ITabContent
 
     private void TryStartIfVisible()
     {
-        if (!_started && _isAttached && _model is not null)
+        if (_isAttached)
         {
-            _started = true;
-            _ = _model.ConnectAsync();
+            _model?.EnsureStarted();
         }
     }
 
@@ -128,14 +126,7 @@ public partial class AgentGuiTabView : UserControl, ITabContent
     /// Starts the ACP session if it has not been started yet, so a remote device attaching before this tab is ever
     /// shown on screen still brings the conversation up without double-connecting when the tab is later opened here.
     /// </summary>
-    internal void EnsureStarted()
-    {
-        if (!_started && _model is not null)
-        {
-            _started = true;
-            _ = _model.ConnectAsync();
-        }
-    }
+    internal void EnsureStarted() => _model?.EnsureStarted();
 
     private void OnFocusComposerRequested(object? sender, EventArgs e)
     {

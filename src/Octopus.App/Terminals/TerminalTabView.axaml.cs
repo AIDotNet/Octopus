@@ -78,6 +78,11 @@ public partial class TerminalTabView : UserControl, ITabContent
     {
         base.OnAttachedToVisualTree(e);
         // First time on screen: only now does the process start (a restored tab that is never shown never runs).
+        EnsureStarted();
+    }
+
+    internal void EnsureStarted()
+    {
         if (Model is { Started: false } model)
         {
             model.Started = true;

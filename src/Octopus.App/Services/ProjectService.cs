@@ -660,9 +660,39 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
         _restored.Remove(itemId);
         if (project.ActiveItemId == itemId)
         {
-            project.ActiveItemId = project.Items.Count == 0 ? null : project.Items[Math.Min(position, project.Items.Count - 1)].Id;
+            project.ActiveItemId = NeighbourWithTab(project, position);
         }
         Raise(ProjectChangeKind.Items, project, item);
+    }
+
+    public void CloseItemTab(string itemId)
+    {
+        var project = FindProjectOf(itemId);
+        var item = project?.Items.FirstOrDefault(i => i.Id == itemId);
+        if (project is null || item is null || item.TabClosed || item.Kind is not (ProjectItemKind.Agent or ProjectItemKind.Terminal))
+        {
+            return;
+        }
+        item.TabClosed = true;
+        if (project.ActiveItemId == itemId)
+        {
+            project.ActiveItemId = NeighbourWithTab(project, project.Items.IndexOf(item));
+        }
+        Raise(ProjectChangeKind.Items, project, item);
+    }
+
+    /// <summary>The item with an open tab nearest to <paramref name="position"/> (the next one first); null: none.</summary>
+    private static string? NeighbourWithTab(Project project, int position)
+    {
+        for (var i = position; i < project.Items.Count; i++)
+        {
+            if (!project.Items[i].TabClosed) return project.Items[i].Id;
+        }
+        for (var i = Math.Min(position, project.Items.Count) - 1; i >= 0; i--)
+        {
+            if (!project.Items[i].TabClosed) return project.Items[i].Id;
+        }
+        return null;
     }
 
     public void MoveItem(string itemId, string anchorItemId, bool after)
@@ -781,6 +811,15 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
                 Raise(ProjectChangeKind.Device, project, save: false);
             }
             Raise(ProjectChangeKind.CurrentProject, project, save: false);
+        }
+        if (item.TabClosed)
+        {
+            // Its tab comes back in front: made active first, so the dock opens it as the front tab, not behind.
+            item.TabClosed = false;
+            project.ActiveItemId = itemId;
+            Raise(ProjectChangeKind.Items, project, item);
+            Raise(ProjectChangeKind.Active, project, item, save: false);
+            return;
         }
         if (project.ActiveItemId == itemId)
         {

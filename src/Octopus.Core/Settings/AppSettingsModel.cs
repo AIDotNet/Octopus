@@ -232,6 +232,8 @@ public sealed class AgentSettings
     public bool AcpEnableClientTerminal { get; set; }
     /// <summary>Global MCP servers forwarded to ACP agents in <c>session/new</c>, <c>session/load</c>, <c>session/resume</c>, and <c>session/fork</c>.</summary>
     public List<AcpMcpServerConfig> AcpMcpServers { get; set; } = [];
+    /// <summary>Multi-agent delegation, @-mention routing, and cross-session collaboration settings.</summary>
+    public CollabSettings Collab { get; set; } = new();
     /// <summary>The permission level of every agent that has none of its own.</summary>
     public string DefaultPermission { get; set; } = PermissionModes.Default;
     /// <summary>

@@ -5,7 +5,9 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Octopus.App.Composition;
 using Octopus.App.Explorer;
+using Octopus.Storage;
 using TKCode.Arc;
 using TKCode.Arc.Localization;
 using TKCode.Arc.Motion;
@@ -70,6 +72,119 @@ public class ExplorerTabsTests
         Assert.Equal(["files", "sessions"], Values(group));
         window.Close();
         view.Model.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task Opening_with_remembered_git_tab_places_indicator_on_git_option()
+    {
+        if (ExplorerFixture.FindGit() is null) return;
+        using var repo = new ExplorerFixture();
+        repo.InitRepository();
+        repo.Write("a.txt", "x");
+        using var secondRepo = new ExplorerFixture();
+        secondRepo.InitRepository();
+        secondRepo.Write("b.txt", "y");
+
+        var settings = AppHost.Get<ISettingsStore>();
+        var previousTab = settings.Current.RightPanel.Tab;
+        settings.Update(s => s.RightPanel.Tab = "git");
+        try
+        {
+            var view = new ExplorerPanelView();
+            var window = new Window { Width = 320, Height = 400, Content = view };
+            window.Show();
+            Frames.Pump();
+
+            view.ProjectPath = repo.Root;
+            await WaitUntil(() => view.Model.IsGitRepository && view.Model.ChangeCount > 0);
+            Frames.Pump();
+            window.UpdateLayout();
+            Assert.True(StepUntil(() => !view.GetVisualDescendants().OfType<TabLabelReveal>().Any(l => l.IsRunning)));
+            Frames.Pump();
+            window.UpdateLayout();
+
+            var group = view.GetVisualDescendants().OfType<ExplorerTabGroup>().Single();
+            var indicator = group.GetVisualDescendants().OfType<GlidingIndicator>().Single();
+            var labels = group.GetVisualDescendants().OfType<TabLabelReveal>().ToList();
+            var gitRect = ContainerRect(group, indicator, 1);
+
+            Assert.True(view.Model.IsGitTab);
+            Assert.Equal("git", group.SelectedValue);
+            Assert.Equal(1, group.SelectedIndex);
+            Assert.Equal(0, labels[0].Bounds.Width, 0.5);
+            Assert.True(labels[1].Bounds.Width > 10);
+            AssertRectClose(gitRect, indicator.CurrentRect, 1.0);
+            Assert.Equal(1.0, indicator.CurrentOpacity, 0.05);
+
+            // Adding more changes widens the badge and the pill tracks the wider Git container.
+            for (var i = 0; i < 12; i++) repo.Write($"extra-{i}.txt", "z");
+            await view.Model.Git.RefreshAsync();
+            await WaitUntil(() => view.Model.ChangeCount >= 13);
+            Frames.Pump();
+            window.UpdateLayout();
+            AssertRectClose(ContainerRect(group, indicator, 1), indicator.CurrentRect, 1.0);
+
+            // Switching to another repository while Git is active also lands the pill cleanly on Git.
+            view.ProjectPath = secondRepo.Root;
+            await WaitUntil(() => view.Model.ProjectPath == secondRepo.Root && view.Model.IsGitRepository && view.Model.ChangeCount == 1);
+            Frames.Pump();
+            window.UpdateLayout();
+            Assert.True(StepUntil(() => !view.GetVisualDescendants().OfType<TabLabelReveal>().Any(l => l.IsRunning)));
+            Frames.Pump();
+            window.UpdateLayout();
+
+            Assert.Equal("git", group.SelectedValue);
+            Assert.Equal(1, group.SelectedIndex);
+            AssertRectClose(ContainerRect(group, indicator, 1), indicator.CurrentRect, 1.0);
+
+            window.Close();
+            view.Model.Dispose();
+        }
+        finally
+        {
+            settings.Update(s => s.RightPanel.Tab = previousTab);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Opening_with_remembered_sessions_tab_places_indicator_on_sessions_option()
+    {
+        using var plain = new ExplorerFixture();
+        plain.Write("a.txt", "x");
+
+        var settings = AppHost.Get<ISettingsStore>();
+        var previousTab = settings.Current.RightPanel.Tab;
+        settings.Update(s => s.RightPanel.Tab = "sessions");
+        try
+        {
+            var view = new ExplorerPanelView();
+            var window = new Window { Width = 320, Height = 400, Content = view };
+            window.Show();
+            Frames.Pump();
+
+            view.ProjectPath = plain.Root;
+            await WaitUntil(() => view.Model.HasProject && view.Model.IsSessionsTab);
+            Frames.Pump();
+            window.UpdateLayout();
+            Assert.True(StepUntil(() => !view.GetVisualDescendants().OfType<TabLabelReveal>().Any(l => l.IsRunning)));
+            Frames.Pump();
+            window.UpdateLayout();
+
+            var group = view.GetVisualDescendants().OfType<ExplorerTabGroup>().Single();
+            var indicator = group.GetVisualDescendants().OfType<GlidingIndicator>().Single();
+
+            Assert.Equal("sessions", group.SelectedValue);
+            Assert.Equal(1, group.SelectedIndex);
+            AssertRectClose(ContainerRect(group, indicator, 1), indicator.CurrentRect, 1.0);
+            Assert.Equal(1.0, indicator.CurrentOpacity, 0.05);
+
+            window.Close();
+            view.Model.Dispose();
+        }
+        finally
+        {
+            settings.Update(s => s.RightPanel.Tab = previousTab);
+        }
     }
 
     [AvaloniaFact]

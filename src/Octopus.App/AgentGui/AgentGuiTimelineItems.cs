@@ -25,6 +25,7 @@ public sealed partial class UserTurnItem : AgentTimelineItem
     {
         Text = text;
         _onReuse = onReuse;
+        ParseCollabMetadata();
         if (attachments is { Count: > 0 })
         {
             foreach (var att in attachments)
@@ -51,8 +52,14 @@ public sealed partial class UserTurnItem : AgentTimelineItem
     private bool _isExpanded;
     private bool _previewComputed;
     private int _previewLength;
+    private string _displaySource = "";
 
     public string Text { get; private set; }
+
+    /// <summary>True when this turn was injected by the Octopus multi-agent collaboration bus rather than typed by the user.</summary>
+    public bool IsCollabMessage { get; private set; }
+    public bool IsRegularUserMessage => !IsCollabMessage;
+    public string CollabHeader { get; private set; } = "";
 
     /// <summary>True when the prompt exceeds the collapsed preview limits.</summary>
     public bool IsCollapsible
@@ -60,7 +67,7 @@ public sealed partial class UserTurnItem : AgentTimelineItem
         get
         {
             EnsurePreview();
-            return _previewLength < Text.Length;
+            return _previewLength < _displaySource.Length;
         }
     }
 
@@ -82,9 +89,9 @@ public sealed partial class UserTurnItem : AgentTimelineItem
     {
         get
         {
-            if (_isExpanded) return Text;
+            if (_isExpanded) return _displaySource;
             EnsurePreview();
-            return _previewLength < Text.Length ? Text[.._previewLength].TrimEnd() + "…" : Text;
+            return _previewLength < _displaySource.Length ? _displaySource[.._previewLength].TrimEnd() + "…" : _displaySource;
         }
     }
 
@@ -99,7 +106,7 @@ public sealed partial class UserTurnItem : AgentTimelineItem
     {
         if (_previewComputed) return;
         _previewComputed = true;
-        var text = Text;
+        var text = _displaySource;
         var limit = Math.Min(text.Length, CollapsedMaxChars);
         var lines = 1;
         for (var i = 0; i < limit; i++)
@@ -122,7 +129,11 @@ public sealed partial class UserTurnItem : AgentTimelineItem
         if (string.IsNullOrEmpty(delta)) return;
         Text += delta;
         _previewComputed = false;
+        ParseCollabMetadata();
         OnPropertyChanged(nameof(Text));
+        OnPropertyChanged(nameof(IsCollabMessage));
+        OnPropertyChanged(nameof(IsRegularUserMessage));
+        OnPropertyChanged(nameof(CollabHeader));
         OnPropertyChanged(nameof(DisplayText));
         OnPropertyChanged(nameof(IsCollapsible));
         OnPropertyChanged(nameof(CanReuse));
@@ -130,12 +141,68 @@ public sealed partial class UserTurnItem : AgentTimelineItem
 
     public ObservableCollection<AttachmentChipViewModel> Attachments { get; } = [];
     public bool HasAttachments => Attachments.Count > 0;
-    public bool CanReuse => _onReuse is not null && !string.IsNullOrWhiteSpace(Text);
+    public bool CanReuse => !IsCollabMessage && _onReuse is not null && !string.IsNullOrWhiteSpace(Text);
 
     [RelayCommand]
     private void Reuse()
     {
         if (CanReuse) _onReuse!(Text);
+    }
+
+    private void ParseCollabMetadata()
+    {
+        var trimmed = Text.TrimStart();
+        if (trimmed.StartsWith("[Octopus Collab", StringComparison.Ordinal))
+        {
+            var firstLineEnd = trimmed.IndexOf('\n');
+            var firstLine = (firstLineEnd >= 0 ? trimmed[..firstLineEnd] : trimmed).Trim();
+            if (firstLine.EndsWith(']') && firstLine.Length > 2)
+            {
+                IsCollabMessage = true;
+                var inner = firstLine[1..^1].Trim();
+                if (inner.StartsWith("Octopus ", StringComparison.Ordinal))
+                {
+                    inner = inner["Octopus ".Length..];
+                }
+                CollabHeader = inner;
+
+                var body = firstLineEnd >= 0 ? trimmed[(firstLineEnd + 1)..].Trim() : "";
+                body = StripCollabInstructionFooter(body);
+                _displaySource = body.Length > 0 ? body : inner;
+                return;
+            }
+        }
+
+        IsCollabMessage = false;
+        CollabHeader = "";
+        _displaySource = Text;
+    }
+
+    private static string StripCollabInstructionFooter(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return "";
+        var normalized = body.Replace("\r\n", "\n", StringComparison.Ordinal);
+        string[] footerPrefixes =
+        [
+            "When finished (or if you need clarification from the delegating agent),",
+            "(The other session marked this thread as agreed/completed;",
+            "(Reply via `reply_thread(",
+            "(Please follow the user's guidance and continue or conclude the thread",
+        ];
+
+        foreach (var prefix in footerPrefixes)
+        {
+            var idx = normalized.LastIndexOf(prefix, StringComparison.Ordinal);
+            if (idx > 0 && normalized[idx - 1] == '\n')
+            {
+                return normalized[..idx].TrimEnd();
+            }
+            if (idx == 0)
+            {
+                return "";
+            }
+        }
+        return body;
     }
 }
 
@@ -156,7 +223,14 @@ public sealed class AttachmentChipViewModel
     public string Label => string.IsNullOrWhiteSpace(Attachment.DisplayName)
         ? Path.GetFileName(Attachment.Path)
         : Attachment.DisplayName;
-    public LucideIconKind Icon => Attachment.Kind == "image" ? LucideIconKind.Image : LucideIconKind.FileText;
+    public LucideIconKind Icon => Attachment.Kind switch
+    {
+        "image" => LucideIconKind.Image,
+        "session" => LucideIconKind.MessageSquare,
+        "agent" => LucideIconKind.Bot,
+        _ => LucideIconKind.FileText,
+    };
+    public bool IsCollabMention => Attachment.Kind is "session" or "agent";
     public bool CanRemove { get; }
     public IRelayCommand? RemoveChipCommand { get; }
 

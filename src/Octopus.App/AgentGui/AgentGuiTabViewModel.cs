@@ -14,6 +14,8 @@ using Octopus.Agents;
 using Octopus.Agents.Accounts;
 using Octopus.Agents.Subagents;
 using Octopus.App.Activity;
+using Octopus.App.Bots;
+using Octopus.App.Collab;
 using Octopus.App.Common;
 using Octopus.App.Explorer.Subagent;
 using Octopus.App.Files;
@@ -56,10 +58,14 @@ public sealed partial class QueuedPrompt : ObservableObject
         Action<QueuedPrompt>? onEdit = null,
         Action<QueuedPrompt>? onMoveUp = null,
         Action<QueuedPrompt>? onMoveDown = null,
-        Action<QueuedPrompt>? onRemove = null)
+        Action<QueuedPrompt>? onRemove = null,
+        string? collabThreadId = null,
+        string? collabTaskId = null)
     {
         Text = text;
         Attachments = attachments;
+        CollabThreadId = collabThreadId;
+        CollabTaskId = collabTaskId;
         _onSendNow = onSendNow;
         _onEdit = onEdit;
         _onMoveUp = onMoveUp;
@@ -69,6 +75,8 @@ public sealed partial class QueuedPrompt : ObservableObject
 
     public string Text { get; }
     public IReadOnlyList<AcpPromptAttachment> Attachments { get; }
+    public string? CollabThreadId { get; }
+    public string? CollabTaskId { get; }
 
     [ObservableProperty] public partial int Position { get; set; } = 1;
     [ObservableProperty] public partial bool CanMoveUp { get; set; }
@@ -169,7 +177,7 @@ public sealed partial class QueuedPrompt : ObservableObject
 /// ViewModel for an ACP Agent GUI tab with Scheme D orchestration (Live Workflow Swimlane, Floating HUD Capsules,
 /// Slide-Over SubAgent Drawer, persistent Background Bash tracking) and Bash Style 2 (output-first + script modal).
 /// </summary>
-public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<FocusSubagentRequested>, IDisposable
+public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<FocusSubagentRequested>, ICollabSessionBridge, IDisposable
 {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -199,6 +207,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private readonly ISubagentService? _subagents;
     private readonly IModelDiscovery? _modelDiscovery;
     private readonly IFileOpener? _fileOpener;
+    private readonly IBotService? _bots;
+    private readonly ICollabCoordinator? _collab;
     private readonly Dictionary<string, UrlElicitationCardItem> _urlElicitations = new(StringComparer.Ordinal);
 
     private IAcpSession? _session;
@@ -267,7 +277,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         Func<IWorkspaceCommands?>? workspaceCommands = null,
         ISubagentService? subagents = null,
         IModelDiscovery? modelDiscovery = null,
-        IFileOpener? fileOpener = null)
+        IFileOpener? fileOpener = null,
+        IBotService? bots = null,
+        ICollabCoordinator? collab = null)
     {
         _project = project;
         _item = item;
@@ -287,10 +299,13 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _subagents = subagents;
         _modelDiscovery = modelDiscovery;
         _fileOpener = fileOpener;
+        _bots = bots;
+        _collab = collab;
 
         var profile = settings.Current.Agents.ProfileOf(definition.Id);
-        var effectivePerm = compiler.ResolvePermission(definition, profile, settings.Current.Agents.DefaultPermission)
-            ?? PermissionModes.Default;
+        var effectivePerm = !string.IsNullOrWhiteSpace(item.Launch?.Permission)
+            ? item.Launch!.Permission!
+            : (compiler.ResolvePermission(definition, profile, settings.Current.Agents.DefaultPermission) ?? PermissionModes.Default);
         var dialect = dialects.Resolve(definition.Acp?.Dialect);
 
         _desiredModelId = NormalizeLaunchOption(item.Launch?.Model is not null ? item.Launch.Model : profile.Model);
@@ -324,6 +339,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         WeakReferenceMessenger.Default.Register(this);
         ScriptPreview.PropertyChanged += OnScriptPreviewPropertyChanged;
+        if (_collab is not null)
+        {
+            _collab.RegisterGuiSession(this);
+            _collab.Changed += OnCollabChanged;
+            RefreshCollabTopology();
+        }
     }
 
     public ProjectItem Item => _item;
@@ -350,8 +371,264 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public ObservableCollection<AuthMethodActionViewModel> AuthMethods { get; } = [];
     /// <summary>Saved ACP sessions fetched via <c>session/list</c>.</summary>
     public ObservableCollection<AcpSessionListEntryViewModel> RemoteSessions { get; } = [];
+    /// <summary>Scheme C top docked collaboration topology capsules (parent, direct spawned children, and peer negotiation threads).</summary>
+    public ObservableCollection<CollabRibbonNodeViewModel> CollabRibbonNodes { get; } = [];
+    /// <summary>Pending permission approval requests bubbled up from direct child agents spawned by this session.</summary>
+    public ObservableCollection<CollabBubbledApprovalViewModel> BubbledApprovals { get; } = [];
     /// <summary>Modal viewer for collapsed multi-line Bash scripts (Bash Style 2).</summary>
     public ScriptPreviewViewModel ScriptPreview { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveCollabThread))]
+    public partial CollabThreadPanelViewModel? ActiveCollabThread { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RouteModeLabel))]
+    public partial bool IsDirectRelayMode { get; set; }
+
+    public bool HasCollabTopology => CollabRibbonNodes.Count > 0;
+    public bool HasBubbledApprovals => BubbledApprovals.Count > 0;
+    public bool HasActiveCollabThread => ActiveCollabThread is not null;
+    public bool HasSessionMention => Attachments.Any(c => c.Attachment.Kind == "session");
+    public string RouteModeLabel => AppLangResources.Get(
+        IsDirectRelayMode ? AppLangResourceKind.CollabRouteDirectRelay : AppLangResourceKind.CollabRouteOrchestrate);
+
+    [RelayCommand]
+    private void ToggleRouteMode() => IsDirectRelayMode = !IsDirectRelayMode;
+
+    // ICollabSessionBridge implementation
+    string ICollabSessionBridge.ItemId => _item.Id;
+    string ICollabSessionBridge.DisplayTitle => _item.DisplayTitle;
+    bool ICollabSessionBridge.IsConnected => _session?.IsConnected == true;
+    string? ICollabSessionBridge.CurrentStatusDetail => StatusDetail;
+
+    public async Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId = null, string? taskId = null, CancellationToken cancellationToken = default)
+    {
+        if (_disposed || string.IsNullOrWhiteSpace(promptText)) return false;
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        SetUi(() =>
+        {
+            if (_disposed)
+            {
+                tcs.TrySetResult(false);
+                return;
+            }
+            if (_session is null)
+            {
+                EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
+                if (State != AgentGuiState.Connecting)
+                {
+                    _ = ConnectAsync();
+                }
+                tcs.TrySetResult(true);
+                return;
+            }
+            if (_isTurnActive || IsTurnActive)
+            {
+                EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
+                tcs.TrySetResult(true);
+                return;
+            }
+            _ = StartPumpAsync(CreateQueuedPrompt(promptText.Trim(), [], threadId, taskId));
+            tcs.TrySetResult(true);
+        });
+        return await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public int CancelQueuedCollabPrompts(string? threadId = null, string? taskId = null)
+    {
+        if (_disposed || (string.IsNullOrWhiteSpace(threadId) && string.IsNullOrWhiteSpace(taskId))) return 0;
+
+        int RemoveMatching()
+        {
+            var removed = 0;
+            for (var i = QueuedPrompts.Count - 1; i >= 0; i--)
+            {
+                var q = QueuedPrompts[i];
+                var matchesThread = !string.IsNullOrWhiteSpace(threadId)
+                    && string.Equals(q.CollabThreadId, threadId, StringComparison.Ordinal);
+                var matchesTask = !string.IsNullOrWhiteSpace(taskId)
+                    && string.Equals(q.CollabTaskId, taskId, StringComparison.Ordinal);
+                if (matchesThread || matchesTask)
+                {
+                    QueuedPrompts.RemoveAt(i);
+                    removed++;
+                }
+            }
+            if (removed > 0)
+            {
+                RefreshQueueState();
+            }
+            return removed;
+        }
+
+        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+        {
+            return RemoveMatching();
+        }
+        return Dispatcher.UIThread.Invoke(RemoveMatching);
+    }
+
+    public string ReadRecentSummary(int maxTurns = 5)
+    {
+        var sb = new StringBuilder();
+        var collected = new List<string>();
+        for (var i = Timeline.Count - 1; i >= 0 && collected.Count < maxTurns * 2; i--)
+        {
+            if (Timeline[i] is UserTurnItem u && !string.IsNullOrWhiteSpace(u.Text))
+            {
+                var snippet = u.Text.Length > 400 ? u.Text[..400] + "…" : u.Text;
+                collected.Add($"User: {snippet}");
+            }
+            else if (Timeline[i] is AssistantTurnItem a && !string.IsNullOrWhiteSpace(a.MarkdownText))
+            {
+                var md = a.MarkdownText.Trim();
+                var snippet = md.Length > 600 ? md[..600] + "…" : md;
+                collected.Add($"Assistant ({AgentName}): {snippet}");
+            }
+        }
+        collected.Reverse();
+        foreach (var entry in collected)
+        {
+            sb.AppendLine(entry);
+            sb.AppendLine();
+        }
+        return sb.Length > 0 ? sb.ToString().Trim() : "(No conversation turns recorded yet.)";
+    }
+
+    private void OnCollabChanged(string? _) => SetUi(RefreshCollabTopology);
+
+    private void RefreshCollabTopology()
+    {
+        if (_disposed || _collab is null) return;
+
+        CollabRibbonNodes.Clear();
+        var children = _collab.GetSpawnedChildren(_item.Id);
+        var threads = _collab.GetThreadsForItem(_item.Id);
+        var parentItem = !string.IsNullOrEmpty(_item.ParentItemId) ? _projects.FindItem(_item.ParentItemId) : null;
+
+        // Only populate Scheme C's ribbon when this session participates in parent/child or peer collaboration.
+        if (parentItem is not null || children.Count > 0 || threads.Count > 0)
+        {
+            if (parentItem is not null)
+            {
+                CollabRibbonNodes.Add(new CollabRibbonNodeViewModel(
+                    parentItem.Id,
+                    "parent",
+                    parentItem.AgentId ?? "terminal",
+                    parentItem.DisplayTitle,
+                    DescribeRibbonStatus(parentItem.Id),
+                    null,
+                    isCurrent: false,
+                    activate: () => _projects.ActivateItem(parentItem.Id)));
+            }
+
+            CollabRibbonNodes.Add(new CollabRibbonNodeViewModel(
+                _item.Id,
+                "self",
+                AgentId,
+                _item.DisplayTitle,
+                IsBusy ? "working" : "idle",
+                _item.CollabIsolation is "worktree" ? "wt" : _item.CollabIsolation is "read_only" ? "ro" : null,
+                isCurrent: true,
+                activate: () => { }));
+
+            foreach (var child in children)
+            {
+                var childId = child.Id;
+                var childMeta = child.CollabIsolation switch
+                {
+                    "worktree" => "wt",
+                    "read_only" => "ro",
+                    _ => null,
+                };
+                CollabRibbonNodes.Add(new CollabRibbonNodeViewModel(
+                    childId,
+                    "child",
+                    child.AgentId ?? "terminal",
+                    child.DisplayTitle,
+                    DescribeRibbonStatus(childId),
+                    childMeta,
+                    isCurrent: false,
+                    activate: () => _projects.ActivateItem(childId)));
+            }
+
+            // Peer negotiation threads (involving sessions that are neither our direct parent nor direct child).
+            foreach (var thread in threads)
+            {
+                var otherId = thread.ParticipantItemIds.FirstOrDefault(pid => pid != _item.Id);
+                if (otherId is null) continue;
+                if (otherId == _item.ParentItemId || children.Any(c => c.Id == otherId)) continue;
+                var other = _projects.FindItem(otherId);
+                if (other is null) continue;
+                var threadId = thread.ThreadId;
+                CollabRibbonNodes.Add(new CollabRibbonNodeViewModel(
+                    threadId,
+                    "peer",
+                    other.AgentId ?? "terminal",
+                    other.DisplayTitle,
+                    thread.Status == "paused_budget" ? "waiting_approval" : DescribeRibbonStatus(otherId),
+                    $"{thread.Hops}/{thread.MaxHops}",
+                    isCurrent: ActiveCollabThread?.ThreadId == threadId,
+                    activate: () => ToggleCollabThread(threadId)));
+            }
+        }
+
+        BubbledApprovals.Clear();
+        foreach (var apr in _collab.GetBubbledApprovalsForParent(_item.Id))
+        {
+            BubbledApprovals.Add(new CollabBubbledApprovalViewModel(apr, childId => _projects.ActivateItem(childId)));
+        }
+
+        if (ActiveCollabThread is { } openThread)
+        {
+            var refreshed = _collab.FindThread(openThread.ThreadId);
+            ActiveCollabThread = refreshed is null ? null : BuildThreadPanel(refreshed);
+        }
+
+        OnPropertyChanged(nameof(HasCollabTopology));
+        OnPropertyChanged(nameof(HasBubbledApprovals));
+    }
+
+    private void ToggleCollabThread(string threadId)
+    {
+        if (ActiveCollabThread?.ThreadId == threadId)
+        {
+            ActiveCollabThread = null;
+            RefreshCollabTopology();
+            return;
+        }
+        if (_collab?.FindThread(threadId) is { } thread)
+        {
+            ActiveCollabThread = BuildThreadPanel(thread);
+            RefreshCollabTopology();
+        }
+    }
+
+    private CollabThreadPanelViewModel BuildThreadPanel(CollabThreadRecord thread) =>
+        new(
+            thread,
+            (tid, text, extend) => _collab?.InterjectInThreadAsync(tid, text, extend) ?? Task.CompletedTask,
+            () =>
+            {
+                ActiveCollabThread = null;
+                RefreshCollabTopology();
+            });
+
+    private string DescribeRibbonStatus(string itemId)
+    {
+        if (_collab?.GetBubbledApprovalsForParent(_item.Id).Any(a => a.ChildItemId == itemId) == true)
+        {
+            return "waiting_approval";
+        }
+        return (_activity?.Of(itemId) ?? ItemActivity.Idle) switch
+        {
+            ItemActivity.Working => "working",
+            ItemActivity.Waiting => "waiting_approval",
+            ItemActivity.Done => "done",
+            _ => "idle",
+        };
+    }
 
     [ObservableProperty] public partial AgentGuiState State { get; private set; } = AgentGuiState.Connecting;
     [ObservableProperty] public partial string? StatusDetail { get; private set; }
@@ -699,6 +976,20 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         UpdateInlinePickers(value);
     }
 
+    /// <summary>
+    /// True once the session was started (by a view coming on screen or by a device asking for it). Kept here, not on
+    /// the view: a tab closed and opened again gets a new view over this model, and must not start the session again.
+    /// </summary>
+    public bool HasStarted { get; private set; }
+
+    /// <summary>Starts the ACP session the first time it is called; later calls do nothing.</summary>
+    public void EnsureStarted()
+    {
+        if (HasStarted || _disposed) return;
+        HasStarted = true;
+        _ = ConnectAsync();
+    }
+
     /// <summary>Starts or reconnects the underlying ACP child session.</summary>
     public async Task ConnectAsync()
     {
@@ -750,13 +1041,24 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             SetUi(() => StatusDetail = null);
 
             var additionalDirectories = ResolveAdditionalDirectories();
+            IReadOnlyList<AcpMcpServerConfig> mcpServers = agentSettings.AcpMcpServers;
+            if (_bots?.FindBotByBackingProjectId(_project.Id) is { } ownerBot)
+            {
+                var botMcpServers = await _bots.BuildAcpMcpServersAsync(ownerBot.Id, ct).ConfigureAwait(false);
+                mcpServers = BotConnectorRuntime.MergeMcpServers(agentSettings.AcpMcpServers, botMcpServers);
+            }
+            if (_collab?.BuildAcpMcpServer(_item.Id) is { } collabMcp)
+            {
+                mcpServers = BotConnectorRuntime.MergeMcpServers(mcpServers, [collabMcp]);
+            }
+
             var callbacks = new AcpSessionCallbacks
             {
                 EnableFormElicitation = agentSettings.AcpEnableFormElicitation,
                 EnableUrlElicitation = agentSettings.AcpEnableUrlElicitation,
                 EnableClientFileSystem = agentSettings.AcpEnableClientFileSystem,
                 EnableClientTerminal = agentSettings.AcpEnableClientTerminal,
-                McpServers = agentSettings.AcpMcpServers,
+                McpServers = mcpServers,
                 AllowedFileSystemRoots = BuildAllowedFileSystemRoots(additionalDirectories),
                 GetActivePermissionMode = () => Composer.SelectedPermissionId ?? PermissionModes.Default,
                 OnPermissionRequest = HandlePermissionRequestAsync,
@@ -853,8 +1155,36 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             {
                 _initialPromptSent = true;
                 var firstPrompt = _item.Launch!.Prompt!.Trim();
-                SetUi(() => InputText = firstPrompt);
-                await SendPromptAsync();
+                Task? pump = null;
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (_disposed || _session is null) return;
+                    if (_isTurnActive || IsTurnActive)
+                    {
+                        EnqueuePrompt(firstPrompt, []);
+                        return;
+                    }
+                    pump = StartPumpAsync(CreateQueuedPrompt(firstPrompt, []));
+                });
+                if (pump is not null)
+                {
+                    await pump.ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                Task? pump = null;
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (!_disposed && _session is not null && QueuedPrompts.Count > 0 && !_isTurnActive && !IsTurnActive)
+                    {
+                        pump = StartPumpAsync();
+                    }
+                });
+                if (pump is not null)
+                {
+                    await pump.ConfigureAwait(false);
+                }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -885,7 +1215,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    private QueuedPrompt CreateQueuedPrompt(string text, IReadOnlyList<AcpPromptAttachment> attachments) =>
+    private QueuedPrompt CreateQueuedPrompt(
+        string text,
+        IReadOnlyList<AcpPromptAttachment> attachments,
+        string? collabThreadId = null,
+        string? collabTaskId = null) =>
         new(
             text,
             attachments,
@@ -893,11 +1227,17 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             onEdit: EditQueuedPrompt,
             onMoveUp: MoveQueuedPromptUp,
             onMoveDown: MoveQueuedPromptDown,
-            onRemove: RemoveQueuedPrompt);
+            onRemove: RemoveQueuedPrompt,
+            collabThreadId: collabThreadId,
+            collabTaskId: collabTaskId);
 
-    private void EnqueuePrompt(string text, IReadOnlyList<AcpPromptAttachment> attachments)
+    private void EnqueuePrompt(
+        string text,
+        IReadOnlyList<AcpPromptAttachment> attachments,
+        string? collabThreadId = null,
+        string? collabTaskId = null)
     {
-        QueuedPrompts.Add(CreateQueuedPrompt(text, attachments));
+        QueuedPrompts.Add(CreateQueuedPrompt(text, attachments, collabThreadId, collabTaskId));
         RefreshQueueState();
     }
 
@@ -939,8 +1279,31 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     [RelayCommand(CanExecute = nameof(CanSend), AllowConcurrentExecutions = true)]
     public async Task SendPromptAsync()
     {
-        if (_session is null) return;
         if (CaptureComposerPrompt() is not { } captured) return;
+
+        // Direct relay mode: send straight to the first @-mentioned existing session without burning a turn here.
+        if (IsDirectRelayMode && _collab is not null
+            && captured.Attachments.FirstOrDefault(a => a.Kind == "session") is { } directTarget)
+        {
+            var body = string.IsNullOrWhiteSpace(captured.Text) ? "(ping)" : captured.Text;
+            var thread = await _collab.SendUserDirectMessageAsync(_item.Id, directTarget.Path, body);
+            SetUi(() =>
+            {
+                IsDirectRelayMode = false;
+                if (thread is not null)
+                {
+                    ActiveCollabThread = BuildThreadPanel(thread);
+                    RefreshCollabTopology();
+                }
+            });
+            return;
+        }
+
+        if (_session is null)
+        {
+            EnqueuePrompt(captured.Text, captured.Attachments);
+            return;
+        }
 
         // If a turn is currently active (Working or Waiting for approval/question), queue this follow-up.
         if (_isTurnActive || IsTurnActive)
@@ -1170,7 +1533,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         OnPropertyChanged(nameof(ShowJumpToBottom));
         ScrollToBottomRequested?.Invoke(this, true);
 
-        if (!_titledFromPrompt && text.Length > 0)
+        if (!_titledFromPrompt && text.Length > 0 && !userTurn.IsCollabMessage)
         {
             _titledFromPrompt = true;
             var shortTitle = text.Length > 48 ? text[..48] + "…" : text;
@@ -1183,9 +1546,20 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         try
         {
-            var promptResult = await session.PromptAsync(text, attached, _turnCts.Token);
+            var promptToSend = text;
+            var acpAttachments = attached;
+            var collabMentions = attached.Where(a => a.Kind is "session" or "agent").ToList();
+            if (collabMentions.Count > 0 && _collab is not null)
+            {
+                var refs = collabMentions.Select(a => new CollabMentionReference(a.Kind, a.Path, a.DisplayName, a.MimeType)).ToList();
+                promptToSend = text + _collab.FormatMentionContextBlock(_item.Id, refs);
+                acpAttachments = attached.Where(a => a.Kind is not ("session" or "agent")).ToList();
+            }
+
+            var promptResult = await session.PromptAsync(promptToSend, acpAttachments, _turnCts.Token);
             var stopNotice = FormatStopReasonNotice(promptResult.StopReason);
-            SetUi(() =>
+            string? finalMarkdown = null;
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 FlushPendingTextDeltas();
                 if (promptResult.Usage is { TotalTokens: > 0 } turnUsage && ContextSize == 0)
@@ -1196,6 +1570,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     OnPropertyChanged(nameof(ContextUsagePercent));
                 }
                 assistantTurn.Complete(stopReasonNotice: stopNotice);
+                finalMarkdown = assistantTurn.MarkdownText;
                 if (State is AgentGuiState.Working or AgentGuiState.Waiting) State = AgentGuiState.Ready;
                 RefreshDiagnostics();
                 if (Subagents.Any(s => s.IsRunning && s.RunsAsynchronously))
@@ -1203,6 +1578,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     PollAgySubagents(finalizeMissingTranscript: true);
                 }
             });
+            _collab?.NotifyTurnCompleted(_item.Id, finalMarkdown);
         }
         catch (OperationCanceledException)
         {
@@ -1788,12 +2164,35 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public void InsertFileMention(FileMentionSuggestion? file)
     {
         if (file is null) return;
-        AddAttachment(new AcpPromptAttachment
+        if (file.IsSession)
         {
-            Kind = "file",
-            Path = file.FullPath,
-            DisplayName = file.RelativePath,
-        });
+            AddAttachment(new AcpPromptAttachment
+            {
+                Kind = "session",
+                Path = file.TargetId,
+                DisplayName = $"@{file.RelativePath}",
+                MimeType = file.AgentId,
+            });
+        }
+        else if (file.IsAgent)
+        {
+            AddAttachment(new AcpPromptAttachment
+            {
+                Kind = "agent",
+                Path = file.TargetId,
+                DisplayName = $"@{file.RelativePath}",
+                MimeType = file.AgentId,
+            });
+        }
+        else
+        {
+            AddAttachment(new AcpPromptAttachment
+            {
+                Kind = "file",
+                Path = file.FullPath,
+                DisplayName = file.RelativePath,
+            });
+        }
         var at = InputText.LastIndexOf('@');
         if (at >= 0)
         {
@@ -1807,6 +2206,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         Attachments.Add(AttachmentChipViewModel.Removable(attachment, RemoveAttachment));
         OnPropertyChanged(nameof(HasAttachments));
+        OnPropertyChanged(nameof(HasSessionMention));
         NotifyComposerActionStateChanged();
     }
 
@@ -1814,6 +2214,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         Attachments.Remove(chip);
         OnPropertyChanged(nameof(HasAttachments));
+        OnPropertyChanged(nameof(HasSessionMention));
+        if (!HasSessionMention) IsDirectRelayMode = false;
         NotifyComposerActionStateChanged();
     }
 
@@ -1864,12 +2266,48 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _lastFileFilterQuery = query;
         EnsureWorkspaceFilesIndexed();
         FilteredFiles.Clear();
+
+        var q = query.Trim();
+        if (_collab is { IsEnabled: true })
+        {
+            // 1. Active sessions in the current project / merged workspace group (excluding self).
+            foreach (var peer in _collab.ListPeers(_item.Id))
+            {
+                if (peer.ItemId == _item.Id) continue;
+                var matches = string.IsNullOrEmpty(q)
+                    || peer.Title.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || peer.AgentId.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || peer.AgentName.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrEmpty(peer.Branch) && peer.Branch.Contains(q, StringComparison.OrdinalIgnoreCase));
+                if (!matches) continue;
+                var sub = peer.ParentItemId == _item.Id
+                    ? $"↳ {peer.Status}"
+                    : string.IsNullOrEmpty(peer.Branch) ? $"{peer.Surface} · {peer.Status}" : $"{peer.Branch} · {peer.Status}";
+                FilteredFiles.Add(new FileMentionSuggestion("session", peer.ItemId, peer.Title, peer.AgentId, sub, peer.Status));
+                if (FilteredFiles.Count >= 6) break;
+            }
+
+            // 2. Installed coding agents eligible for delegation (e.g. @codex, @agy / @反重力, @claude).
+            var agentCount = 0;
+            foreach (var ag in _collab.ListAvailableAgents())
+            {
+                var matches = string.IsNullOrEmpty(q)
+                    || ag.AgentId.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || ag.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+                    || ag.Aliases.Any(a => a.Contains(q, StringComparison.OrdinalIgnoreCase));
+                if (!matches) continue;
+                FilteredFiles.Add(new FileMentionSuggestion("agent", ag.AgentId, ag.Name, ag.AgentId, ag.DefaultSurface));
+                if (++agentCount >= 5) break;
+            }
+        }
+
+        // 3. Workspace files.
         foreach (var rel in _workspaceFiles)
         {
-            if (string.IsNullOrEmpty(query) || rel.Contains(query, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(q) || rel.Contains(q, StringComparison.OrdinalIgnoreCase))
             {
                 FilteredFiles.Add(new FileMentionSuggestion(rel, Path.Combine(WorkingDirectory, rel)));
-                if (FilteredFiles.Count >= 16) break;
+                if (FilteredFiles.Count >= 18) break;
             }
         }
         SelectedPickerIndex = 0;
@@ -2228,7 +2666,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             foreach (var user in built.OfType<UserTurnItem>())
             {
-                if (!string.IsNullOrWhiteSpace(user.Text)) _promptHistory.Add(user.Text.Trim());
+                if (!user.IsCollabMessage && !string.IsNullOrWhiteSpace(user.Text)) _promptHistory.Add(user.Text.Trim());
             }
         }
         // The tab already carries a title from the original conversation.
@@ -2999,8 +3437,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
 
         PermissionCardItem? card = null;
+        var approvalId = Guid.NewGuid().ToString("N");
         var reg = ct.Register(() =>
         {
+            _collab?.ClearChildApproval(_item.Id, approvalId);
             tcs.TrySetResult(null);
             if (card is not null)
             {
@@ -3013,19 +3453,51 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             FlushPendingTextDeltas();
             var prev = State;
             State = AgentGuiState.Waiting;
-            card = new PermissionCardItem(request, optionId =>
+            void ResolvePermission(string? optionId)
             {
                 reg.Dispose();
+                _collab?.ClearChildApproval(_item.Id, approvalId);
                 if (State == AgentGuiState.Waiting) State = prev == AgentGuiState.Working ? AgentGuiState.Working : AgentGuiState.Ready;
                 tcs.TrySetResult(optionId);
-                // Let the card play its smooth collapse/fade exit before removing it from the timeline.
-                var resolvedCard = card!;
-                _ = DismissPermissionCardAsync(resolvedCard);
-            });
+                if (card is not null)
+                {
+                    var resolvedCard = card;
+                    _ = DismissPermissionCardAsync(resolvedCard);
+                }
+            }
+
+            card = new PermissionCardItem(request, ResolvePermission);
             Timeline.Add(card);
             OnPropertyChanged(nameof(ShowEmptyState));
             OnPropertyChanged(nameof(HasTimeline));
             ScrollToBottomRequested?.Invoke(this, true);
+
+            // Bubble spawned child permission requests up to the parent session so the user can approve in-place.
+            if (!string.IsNullOrEmpty(_item.ParentItemId) && _collab is not null)
+            {
+                var allowOption = request.Options.FirstOrDefault(o =>
+                    string.Equals(o.Kind, "allow_once", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(o.Kind, "allow", StringComparison.OrdinalIgnoreCase))?.OptionId
+                    ?? request.Options.FirstOrDefault()?.OptionId;
+                var denyOption = request.Options.FirstOrDefault(o =>
+                    string.Equals(o.Kind, "reject_once", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(o.Kind, "reject", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(o.Kind, "deny", StringComparison.OrdinalIgnoreCase))?.OptionId;
+                var toolTitle = string.IsNullOrWhiteSpace(request.ToolCall.Title)
+                    ? (request.ToolCall.Name ?? "Tool permission")
+                    : request.ToolCall.Title!;
+                var detail = request.ActionDetail ?? request.ToolCall.Command ?? toolTitle;
+                _collab.ReportChildApproval(new CollabBubbledApproval(
+                    approvalId,
+                    _item.ParentItemId,
+                    _item.Id,
+                    AgentId,
+                    _item.DisplayTitle,
+                    toolTitle,
+                    detail,
+                    request.WarningMessage,
+                    allow => SetUi(() => ResolvePermission(allow ? allowOption : denyOption))));
+            }
         });
         return tcs.Task;
     }
@@ -3721,6 +4193,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         if (_disposed) return;
         _disposed = true;
+        if (_collab is not null)
+        {
+            _collab.Changed -= OnCollabChanged;
+            _collab.UnregisterGuiSession(_item.Id);
+        }
         WeakReferenceMessenger.Default.UnregisterAll(this);
         ScriptPreview.PropertyChanged -= OnScriptPreviewPropertyChanged;
         StopLiveTickTimer();

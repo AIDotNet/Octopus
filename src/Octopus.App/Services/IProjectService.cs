@@ -96,6 +96,11 @@ public interface IProjectService
     void AddItem(Project project, ProjectItem item, bool activate = true);
     /// <summary>Removes the item; the dock layout closes its tab.</summary>
     void RemoveItem(string itemId);
+    /// <summary>
+    /// Terminal and agent: closes only the item's tab (<see cref="ProjectItem.TabClosed"/>). The item stays in the
+    /// project and keeps running; <see cref="ActivateItem"/> opens its tab again.
+    /// </summary>
+    void CloseItemTab(string itemId);
     /// <summary>Moves the item next to another item of the same project: right after it, or right before it.</summary>
     void MoveItem(string itemId, string anchorItemId, bool after);
     void RenameItem(string itemId, string? customTitle);
@@ -105,6 +110,7 @@ public interface IProjectService
     void SetItemViewState(string itemId, string? state);
     /// <summary>Agents: records the live or resumed session id so restarts can continue the same session; saved after a pause, nothing is redrawn.</summary>
     void SetItemSessionId(string itemId, string? sessionId, bool isAcp = false);
+    /// <summary>Makes the item the active one; an item whose tab was closed gets its tab back.</summary>
     void ActivateItem(string itemId);
     /// <summary>Stores the dock layout JSON of a project (saved after a pause).</summary>
     void SetDockLayout(Project project, string? layout);

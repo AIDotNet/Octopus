@@ -54,6 +54,7 @@ public class WorkspaceCleanupTests
         public Control GetOrCreate(Project project, ProjectItem item) => new Border();
         public Control GetOrCreateDiff(Octopus.App.Files.DiffTabRequest request) => new Border();
         public ITabContent? Find(string itemId) => Tabs.GetValueOrDefault(itemId);
+        public void Detach(string itemId) { }
         public Task ReleaseAsync(string itemId) { Tabs.Remove(itemId); return Task.CompletedTask; }
         public Task ReleaseAllAsync() { Tabs.Clear(); return Task.CompletedTask; }
         public Task<bool> AnyRunningChildAsync() => Task.FromResult(false);

@@ -495,7 +495,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto" Background="{arc:ArcDesignTokenResource Background}">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Background="{arc:ArcDesignTokenResource Background}">
         <!-- Slim Compact IDE Header Bar -->
         <Border Grid.Row="0"
                 Height="{DynamicResource OctopusAgentGuiHeaderHeight}"
@@ -637,8 +637,157 @@
             </Grid>
         </Border>
 
+        <!-- Scheme C: Compact Docked Collab Topology Ribbon, Bubbled Child Approvals & Inline Negotiation Thread -->
+        <StackPanel Grid.Row="1" Spacing="0">
+            <Border IsVisible="{Binding HasCollabTopology}"
+                    Padding="10,4"
+                    Background="{arc:ArcDesignTokenResource Surface}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <TextBlock Text="{l:AppLangResource CollabRibbonTitle}"
+                               FontSize="10.5" FontWeight="SemiBold"
+                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                               VerticalAlignment="Center" />
+                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding CollabRibbonNodes}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="5" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="gui:CollabRibbonNodeViewModel">
+                                    <Button Classes="chipChoice"
+                                            Classes.selected="{Binding IsCurrent}"
+                                            Padding="7,2"
+                                            Command="{Binding ActivateCommand}">
+                                        <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding PrefixGlyph}" IsVisible="{Binding HasPrefixGlyph}"
+                                                       FontSize="11" Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                       VerticalAlignment="Center" />
+                                            <common:AgentIcon AgentId="{Binding AgentId}" AgentName="{Binding Label}" Size="12" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Label}" FontSize="11.5" MaxWidth="145"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Border IsVisible="{Binding HasMeta}" Padding="4,0" CornerRadius="4"
+                                                    Background="{arc:ArcDesignTokenResource SurfaceMuted}" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Meta}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                           FontSize="9.5" Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                            </Border>
+                                            <arc:ArcSpinner Width="10" Height="10" IsVisible="{Binding IsWorking}" VerticalAlignment="Center" />
+                                            <Ellipse Width="6" Height="6" IsVisible="{Binding IsWaiting}" VerticalAlignment="Center"
+                                                     Fill="{arc:ArcDesignTokenResource Warning}" />
+                                            <Ellipse Width="6" Height="6" IsVisible="{Binding IsDone}" VerticalAlignment="Center"
+                                                     Fill="{arc:ArcDesignTokenResource Success}" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Bubbled Permission Approvals from direct spawned child agents -->
+            <ItemsControl ItemsSource="{Binding BubbledApprovals}" IsVisible="{Binding HasBubbledApprovals}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="gui:CollabBubbledApprovalViewModel">
+                        <Border Padding="10,6"
+                                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                BorderBrush="{arc:ArcDesignTokenResource Warning}"
+                                BorderThickness="0,0,0,1">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                    <lucide:LucideIcon Kind="ShieldAlert" Size="13" Foreground="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center" />
+                                    <common:AgentIcon AgentId="{Binding ChildAgentId}" AgentName="{Binding ChildTitle}" Size="13" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding ChildTitle}" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding Detail}"
+                                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                           FontSize="11" Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                    <arc:Button Variant="Primary" Size="Small" Content="{l:AppLangResource CollabBubbleAllow}" Command="{Binding AllowOnceCommand}" />
+                                    <arc:Button Variant="Secondary" Size="Small" Content="{l:AppLangResource CollabBubbleDeny}" Command="{Binding DenyCommand}" />
+                                    <arc:Button Variant="Ghost" Size="Small" Content="{l:AppLangResource CollabBubbleInspect}" Command="{Binding InspectChildCommand}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Compact Inline Negotiation Thread Panel (opens when clicking a peer pill in the ribbon) -->
+            <ContentControl Content="{Binding ActiveCollabThread}" IsVisible="{Binding HasActiveCollabThread}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="gui:CollabThreadPanelViewModel">
+                        <Border Padding="10,7"
+                                Background="{arc:ArcDesignTokenResource Surface}"
+                                BorderBrush="{arc:ArcDesignTokenResource Border}"
+                                BorderThickness="0,0,0,1">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <TextBlock Text="⇄" FontSize="12" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                        <Border Padding="5,0" CornerRadius="999" Background="{arc:ArcDesignTokenResource SurfaceMuted}" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding HopsText}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10" Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <arc:Button Grid.Column="1" Variant="Secondary" Size="Small" IsVisible="{Binding IsBudgetPaused}"
+                                                Content="{l:AppLangResource CollabThreadExtendBudget}" Command="{Binding ExtendBudgetCommand}" />
+                                    <arc:Button Grid.Column="2" Classes="icon" Variant="Ghost" Command="{Binding CloseCommand}">
+                                        <lucide:LucideIcon Kind="X" Size="12" />
+                                    </arc:Button>
+                                </Grid>
+                                <arc:ScrollArea MaxHeight="140" Orientation="Vertical" FadeLength="0">
+                                    <ItemsControl ItemsSource="{Binding Messages}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="4" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="gui:CollabThreadMessageViewModel">
+                                                <Border Padding="7,4" CornerRadius="6"
+                                                        Background="{arc:ArcDesignTokenResource Background}"
+                                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                                    <StackPanel Spacing="2">
+                                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="5">
+                                                            <common:AgentIcon IsVisible="{Binding HasAgentIcon}" AgentId="{Binding FromAgentId}" AgentName="{Binding FromLabel}" Size="11" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding FromLabel}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5">
+                                                                <TextBlock Text="{Binding RoundBadge}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}" FontSize="10" Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                                                <TextBlock Text="{Binding TimeText}" Classes="hint" FontSize="10" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <TextBlock Text="{Binding Text}" FontSize="11.5" TextWrapping="Wrap"
+                                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </arc:ScrollArea>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                    <arc:Input Text="{Binding InterjectText, Mode=TwoWay}"
+                                               Placeholder="{l:AppLangResource CollabThreadInterjectPlaceholder}"
+                                               Label="{l:AppLangResource CollabThreadInterjectPlaceholder}"
+                                               IsLabelVisible="False"
+                                               Size="Small" />
+                                    <arc:Button Grid.Column="1" Variant="Primary" Size="Small"
+                                                Content="{l:AppLangResource CollabThreadBroadcast}"
+                                                Command="{Binding SendInterjectCommand}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+        </StackPanel>
+
         <!-- Centered Editorial Document Stream + SubAgent Slide-Over Drawer -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid RowDefinitions="Auto,*">
                 <!-- Status banners & collapsible diagnostics stay compact at top -->
                 <StackPanel Grid.Row="0" MaxWidth="860" HorizontalAlignment="Stretch" Margin="14,6,14,0" Spacing="6">
@@ -771,7 +920,7 @@
         </Grid>
 
         <!-- Compact Floating Dynamic Agent-Driven Composer -->
-        <Border Grid.Row="2" Padding="{DynamicResource OctopusAgentGuiComposerMargin}" Background="{arc:ArcDesignTokenResource Background}">
+        <Border Grid.Row="3" Padding="{DynamicResource OctopusAgentGuiComposerMargin}" Background="{arc:ArcDesignTokenResource Background}">
             <StackPanel MaxWidth="860" HorizontalAlignment="Stretch" Spacing="5">
                 <!-- Scheme A: Docked Live Activity Tray above composer (SubAgents, Background Bash & Workflow Tasks) -->
                 <common:SmoothCollapse IsExpanded="{Binding HasActivityTray}">
@@ -1482,7 +1631,7 @@
                     </common:SmoothCollapse.ContentTemplate>
                 </common:SmoothCollapse>
 
-                <!-- Inline '@' Workspace File Picker (lazy-mounted, supports Up/Down/Enter/Tab) -->
+                <!-- Inline '@' Unified Mention Picker (active sessions, agents to delegate, and workspace files) -->
                 <common:SmoothCollapse IsExpanded="{Binding IsFilePopupOpen}" LazyData="{Binding}">
                     <common:SmoothCollapse.ContentTemplate>
                         <DataTemplate x:DataType="gui:AgentGuiTabViewModel">
@@ -1491,7 +1640,7 @@
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="4"
-                                    MaxHeight="170">
+                                    MaxHeight="210">
                                 <arc:ScrollArea Orientation="Vertical" FadeLength="0">
                                     <ItemsControl ItemsSource="{Binding FilteredFiles}">
                                         <ItemsControl.ItemTemplate>
@@ -1499,12 +1648,22 @@
                                                 <Button Classes="row" Classes.selected="{Binding IsSelected}" Padding="7,4"
                                                         Command="{Binding $parent[gui:AgentGuiTabView].((gui:AgentGuiTabViewModel)DataContext).InsertFileMentionCommand}"
                                                         CommandParameter="{Binding}">
-                                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                                        <lucide:LucideIcon Kind="FileCode" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
-                                                        <TextBlock Text="{Binding RelativePath}"
-                                                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
-                                                                   FontSize="12" TextTrimming="CharacterEllipsis" />
-                                                    </StackPanel>
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                                                        <Panel VerticalAlignment="Center">
+                                                            <common:AgentIcon IsVisible="{Binding HasAgentIcon}" AgentId="{Binding AgentId}" AgentName="{Binding RelativePath}" Size="13" VerticalAlignment="Center" />
+                                                            <lucide:LucideIcon IsVisible="{Binding IsFile}" Kind="FileCode" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                                        </Panel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                                                   FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="2" Classes="hint" IsVisible="{Binding HasSubtitle}"
+                                                                   Text="{Binding Subtitle}" FontSize="10.5" VerticalAlignment="Center" />
+                                                        <Border Grid.Column="3" IsVisible="{Binding HasKindBadge}"
+                                                                Padding="5,0" CornerRadius="4"
+                                                                Background="{arc:ArcDesignTokenResource AccentSubtle}" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding KindBadge}" FontSize="10" FontWeight="SemiBold"
+                                                                       Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                                                        </Border>
+                                                    </Grid>
                                                 </Button>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -1571,6 +1730,19 @@
                                             arc:Tooltip.Tip="{l:AppLangResource AgentGuiMentionFile}">
                                     <lucide:LucideIcon Kind="AtSign" Size="13" />
                                 </arc:Button>
+
+                                <Button x:Name="CollabRouteModeButton"
+                                        Classes="composerChip"
+                                        Classes.active="{Binding IsDirectRelayMode}"
+                                        Margin="0,0,3,0"
+                                        IsVisible="{Binding HasSessionMention}"
+                                        Command="{Binding ToggleRouteModeCommand}"
+                                        arc:Tooltip.Tip="{l:AppLangResource CollabRouteToggleTip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <lucide:LucideIcon Kind="Send" Size="11" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding RouteModeLabel}" FontSize="{arc:ArcDesignTokenResource TypeXS}" FontWeight="Medium" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
 
                                 <arc:Button x:Name="ImageAttachButton"
                                             Classes="icon" Variant="Ghost" Margin="0,0,4,0"

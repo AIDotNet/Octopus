@@ -64,6 +64,11 @@ public sealed class ProjectItem
     /// <summary>The title the user typed; shown instead of <see cref="Title"/> when set.</summary>
     public string? CustomTitle { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    /// <summary>
+    /// Terminal and agent: its tab was closed, but the item was not. It keeps its sidebar row and keeps running; only
+    /// its tab (and the controls drawing it) is gone. Activating the item opens the tab again.
+    /// </summary>
+    public bool TabClosed { get; set; }
 
     /// <summary>Terminal and agent: the working directory; null means the project directory.</summary>
     public string? WorkingDirectory { get; set; }
@@ -78,6 +83,13 @@ public sealed class ProjectItem
     public Agents.AgentSurface? Surface { get; set; }
     /// <summary>Agent (GUI): the ACP session id reported by <c>session/new</c> so the session can be resumed or continued in a terminal.</summary>
     public string? AcpSessionId { get; set; }
+    /// <summary>
+    /// Collaboration: id of the parent agent <see cref="ProjectItem"/> that directly spawned this agent session.
+    /// When set, this item is displayed nested underneath its parent in the sidebar and in the parent's collab ribbon.
+    /// </summary>
+    public string? ParentItemId { get; set; }
+    /// <summary>Collaboration: effective isolation mode used when this item was spawned (<c>shared</c>, <c>worktree</c>, or <c>read_only</c>).</summary>
+    public string? CollabIsolation { get; set; }
 
     /// <summary>File: absolute path. For a file on an SSH host, the read-only copy kept on this computer.</summary>
     public string? FilePath { get; set; }

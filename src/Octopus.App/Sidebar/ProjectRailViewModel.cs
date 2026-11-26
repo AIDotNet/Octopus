@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -11,16 +13,35 @@ using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.App.Shell;
 using Octopus.Core.Agents;
+using Octopus.Core.Bots;
 using Octopus.Core.Projects;
 using Octopus.Platform;
 using Octopus.Storage;
+using TKCode.Arc.Icons.Lucide;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Sidebar;
 
+/// <summary>One Bot's avatar shown inside the Bots entry frame on the rail (up to four; overflow is omitted).</summary>
+public sealed record BotRailAvatarTile(
+    string Id,
+    string Name,
+    string Initial,
+    IBrush Background,
+    Bitmap? Image,
+    LucideIconKind? IconKind)
+{
+    public bool HasImage => Image is not null;
+    public bool HasIcon => !HasImage && IconKind is not null;
+    public bool ShowInitial => !HasImage && IconKind is null;
+    public LucideIconKind EffectiveIconKind => IconKind ?? LucideIconKind.Bot;
+}
+
 /// <summary>The 54 px column of project squares and group folders, "+" and settings. Squares and folders can be dragged.</summary>
 public sealed partial class ProjectRailViewModel : ObservableObject
 {
+    /// <summary>Maximum number of Bot avatars shown inside the Bots rail frame (2x2 grid); extras are omitted.</summary>
+    public const int MaxBotRailAvatars = 4;
     private readonly IProjectService _projects;
     private readonly IItemOpener _opener;
     private readonly IDialogService _dialogs;
@@ -70,7 +91,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _accounts?.Changed += (_, _) => UiContext.Run(Rebuild);
         _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
         _scanner?.Changed += (_, _) => UiContext.Run(Rebuild);
-        _bots?.Changed += (_, _) => UiContext.Run(RefreshBotState);
+        _bots?.Changed += (_, e) => UiContext.Run(() => RefreshBotState(e.Kind));
         ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
         // The rail lives as long as the shell, like the activity service: no unsubscribe.
         _activity?.Changed += (_, itemId) =>
@@ -95,13 +116,35 @@ public sealed partial class ProjectRailViewModel : ObservableObject
 
     public bool HasBots => _bots is not null;
 
-    [ObservableProperty] public partial bool IsBotMode { get; private set; }
+    /// <summary>Up to <see cref="MaxBotRailAvatars"/> Bot avatars shown in the rail's Bots frame; overflow is omitted.</summary>
+    public ObservableCollection<BotRailAvatarTile> BotAvatars { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEmptyBotDashedFrame), nameof(ShowBotIdleFrame), nameof(BotChipOpacity))]
+    public partial bool IsBotMode { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAnyBot), nameof(ShowEmptyBotFrame), nameof(ShowEmptyBotDashedFrame), nameof(ShowBotIdleFrame), nameof(ShowSingleBotAvatar), nameof(ShowBotAvatarGrid), nameof(BotChipOpacity))]
+    public partial int VisibleBotAvatarCount { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BotChipOpacity))]
+    public partial BotRailAvatarTile? SingleBotAvatar { get; private set; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasBotAttention), nameof(BotAttentionBadgeText), nameof(ShowBotWorking))]
     public partial int BotAttentionCount { get; private set; }
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowBotWorking))]
     public partial bool IsAnyBotWorking { get; private set; }
+
+    public bool HasAnyBot => VisibleBotAvatarCount > 0;
+    public bool ShowEmptyBotFrame => VisibleBotAvatarCount == 0;
+    public bool ShowEmptyBotDashedFrame => !IsBotMode && ShowEmptyBotFrame;
+    public bool ShowBotIdleFrame => !IsBotMode && HasAnyBot;
+    public bool ShowSingleBotAvatar => VisibleBotAvatarCount == 1;
+    public bool ShowBotAvatarGrid => VisibleBotAvatarCount > 1;
+    public double BotChipOpacity => ShowEmptyBotFrame || IsBotMode || (ShowSingleBotAvatar && SingleBotAvatar?.HasImage == true) ? 1 : 0.72;
 
     public bool HasBotAttention => BotAttentionCount > 0;
     public string BotAttentionBadgeText => BotAttentionCount > 99 ? "99+" : BotAttentionCount.ToString();
@@ -110,13 +153,45 @@ public sealed partial class ProjectRailViewModel : ObservableObject
     [RelayCommand]
     private void EnterBotMode() => _bots?.SetBotMode(true);
 
-    private void RefreshBotState()
+    private void RefreshBotState(BotChangeKind? kind = null)
     {
         if (_bots is null) return;
         IsBotMode = _bots.IsBotMode;
+        if (kind is null or BotChangeKind.Bots)
+        {
+            RefreshBotAvatars();
+        }
         RefreshBotBadges();
         UpdateCurrentRings();
     }
+
+    private void RefreshBotAvatars()
+    {
+        if (_bots is null) return;
+        BotAvatars.Clear();
+        foreach (var bot in _bots.Bots.Take(MaxBotRailAvatars))
+        {
+            BotAvatars.Add(CreateBotAvatarTile(bot));
+        }
+        SingleBotAvatar = BotAvatars.Count == 1 ? BotAvatars[0] : null;
+        VisibleBotAvatarCount = BotAvatars.Count;
+    }
+
+    private BotRailAvatarTile CreateBotAvatarTile(BotDefinition bot)
+    {
+        var image = _icons?.Load(bot.Image);
+        IBrush background = image is not null
+            ? Brushes.Transparent
+            : (Color.TryParse(bot.Color, out var color) ? new SolidColorBrush(color) : Brushes.Gray);
+        LucideIconKind? iconKind = !string.IsNullOrWhiteSpace(bot.Icon)
+            && Enum.TryParse<LucideIconKind>(bot.Icon.Trim(), ignoreCase: true, out var parsed)
+                ? parsed
+                : null;
+        return new BotRailAvatarTile(bot.Id, bot.Name, InitialOfBot(bot.Name), background, image, iconKind);
+    }
+
+    private static string InitialOfBot(string name) =>
+        string.IsNullOrWhiteSpace(name) ? "B" : char.ConvertFromUtf32(char.ConvertToUtf32(name.Trim(), 0)).ToUpperInvariant();
 
     private void RefreshBotBadges()
     {

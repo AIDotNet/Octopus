@@ -1,0 +1,646 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json.Nodes;
+using Octopus.Core.Agents;
+
+namespace Octopus.App.Collab;
+
+/// <summary>
+/// Loopback-only Streamable HTTP MCP server (<c>http://127.0.0.1:&lt;port&gt;/mcp</c>) hosted inside Octopus.
+/// Zero reflection (NativeAOT safe), authenticated per session with a 256-bit bearer token bound to
+/// the caller's <see cref="Octopus.Core.Projects.ProjectItem.Id"/>.
+/// </summary>
+public sealed class CollabMcpServer : IDisposable
+{
+    public const string ServerName = "octopus-collab";
+    public const string ProtocolVersion = "2025-03-26";
+    public const string UrlEnvVariable = "OCTOPUS_COLLAB_URL";
+    public const string TokenEnvVariable = "OCTOPUS_COLLAB_TOKEN";
+    public const string ItemIdEnvVariable = "OCTOPUS_ITEM_ID";
+    private const int MaxBodyBytes = 4 * 1024 * 1024;
+    private const int MaxHeaderBytes = 32 * 1024;
+
+    private readonly object _gate = new();
+    private readonly ConcurrentDictionary<string, byte[]> _itemToTokenBytes = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _itemToToken = new(StringComparer.Ordinal);
+    private readonly CancellationTokenSource _stop = new();
+    private TcpListener? _listener;
+    private Task? _acceptLoop;
+    private ICollabToolHandler? _handler;
+    private bool _disposed;
+
+    public string? EndpointUrl { get; private set; }
+    public bool IsRunning => _listener is not null && !_disposed;
+
+    public void AttachHandler(ICollabToolHandler handler)
+    {
+        _handler = handler;
+    }
+
+    public bool Start()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return false;
+            if (_listener is not null) return true;
+
+            try
+            {
+                var listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start();
+                var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+                _listener = listener;
+                EndpointUrl = $"http://127.0.0.1:{port}/mcp";
+                _acceptLoop = Task.Run(() => AcceptLoopAsync(listener, _stop.Token));
+                return true;
+            }
+            catch (Exception ex) when (ex is SocketException or IOException or UnauthorizedAccessException)
+            {
+                StopLocked();
+                return false;
+            }
+        }
+    }
+
+    /// <summary>Returns (or creates) the cryptographic bearer token bound to <paramref name="itemId"/>.</summary>
+    public string IssueToken(string itemId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(itemId);
+        return _itemToToken.GetOrAdd(itemId, id =>
+        {
+            var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
+            _itemToTokenBytes[id] = Encoding.UTF8.GetBytes(token);
+            return token;
+        });
+    }
+
+    public void RevokeToken(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId)) return;
+        _itemToToken.TryRemove(itemId, out _);
+        _itemToTokenBytes.TryRemove(itemId, out _);
+    }
+
+    /// <summary>
+    /// Builds an <see cref="AcpMcpServerConfig"/> using <c>auto</c> transport: ACP agents supporting HTTP MCP connect
+    /// directly without extra processes; stdio-only adapters automatically fall back to <c>octopus-signal --mcp</c>.
+    /// </summary>
+    public AcpMcpServerConfig? BuildAcpServerConfig(string itemId, string? forwarderExecutable)
+    {
+        if (!IsRunning || string.IsNullOrWhiteSpace(EndpointUrl))
+        {
+            return null;
+        }
+        var token = IssueToken(itemId);
+        var hasForwarder = !string.IsNullOrWhiteSpace(forwarderExecutable) && File.Exists(forwarderExecutable);
+        return new AcpMcpServerConfig
+        {
+            Name = ServerName,
+            Transport = hasForwarder ? "auto" : "http",
+            Url = EndpointUrl,
+            Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Authorization"] = $"Bearer {token}",
+            },
+            Command = hasForwarder ? forwarderExecutable : null,
+            Args = hasForwarder ? ["--mcp"] : [],
+            Env = hasForwarder
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [UrlEnvVariable] = EndpointUrl,
+                    [TokenEnvVariable] = token,
+                    [ItemIdEnvVariable] = itemId,
+                }
+                : [],
+            Enabled = true,
+        };
+    }
+
+    public bool TryAuthenticateBearer(string? authorizationHeader, out string callerItemId)
+    {
+        callerItemId = "";
+        if (string.IsNullOrWhiteSpace(authorizationHeader)) return false;
+        const string prefix = "Bearer ";
+        if (!authorizationHeader.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+        var candidate = authorizationHeader[prefix.Length..].Trim();
+        if (candidate.Length == 0) return false;
+        var candidateBytes = Encoding.UTF8.GetBytes(candidate);
+        foreach (var (itemId, expected) in _itemToTokenBytes)
+        {
+            if (expected.Length == candidateBytes.Length
+                && CryptographicOperations.FixedTimeEquals(expected, candidateBytes))
+            {
+                callerItemId = itemId;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private async Task AcceptLoopAsync(TcpListener listener, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            TcpClient client;
+            try
+            {
+                client = await listener.AcceptTcpClientAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
+            catch (SocketException)
+            {
+                break;
+            }
+
+            _ = Task.Run(() => HandleClientAsync(client, ct), ct);
+        }
+    }
+
+    private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
+    {
+        using (client)
+        {
+            client.NoDelay = true;
+            using var stream = client.GetStream();
+            try
+            {
+                var req = await ReadHttpRequestAsync(stream, ct).ConfigureAwait(false);
+                if (req is null) return;
+
+                if (!string.Equals(req.Path, "/mcp", StringComparison.Ordinal))
+                {
+                    await WriteHttpResponseAsync(stream, 404, "Not Found", """{"error":"not_found"}""", ct).ConfigureAwait(false);
+                    return;
+                }
+
+                if (string.Equals(req.Method, "DELETE", StringComparison.OrdinalIgnoreCase))
+                {
+                    await WriteHttpResponseAsync(stream, 200, "OK", "", ct).ConfigureAwait(false);
+                    return;
+                }
+                if (string.Equals(req.Method, "GET", StringComparison.OrdinalIgnoreCase))
+                {
+                    await WriteHttpResponseAsync(stream, 405, "Method Not Allowed", "", ct).ConfigureAwait(false);
+                    return;
+                }
+                if (!string.Equals(req.Method, "POST", StringComparison.OrdinalIgnoreCase))
+                {
+                    await WriteHttpResponseAsync(stream, 405, "Method Not Allowed", "", ct).ConfigureAwait(false);
+                    return;
+                }
+
+                req.Headers.TryGetValue("authorization", out var authHeader);
+                if (!TryAuthenticateBearer(authHeader, out var callerItemId))
+                {
+                    await WriteHttpResponseAsync(stream, 401, "Unauthorized", """{"error":"unauthorized"}""", ct).ConfigureAwait(false);
+                    return;
+                }
+
+                var responseJson = await HandleRpcPayloadAsync(callerItemId, req.Body, ct).ConfigureAwait(false);
+                if (responseJson is null)
+                {
+                    await WriteHttpResponseAsync(stream, 202, "Accepted", "", ct).ConfigureAwait(false);
+                    return;
+                }
+
+                await WriteHttpResponseAsync(stream, 200, "OK", responseJson, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch
+            {
+                try
+                {
+                    await WriteHttpResponseAsync(stream, 500, "Internal Server Error", """{"error":"internal_error"}""", CancellationToken.None).ConfigureAwait(false);
+                }
+                catch { }
+            }
+        }
+    }
+
+    internal async Task<string?> HandleRpcPayloadAsync(string callerItemId, string body, CancellationToken ct)
+    {
+        JsonNode? parsed;
+        try
+        {
+            parsed = JsonNode.Parse(body);
+        }
+        catch
+        {
+            return SerializeError(null, -32700, "Parse error");
+        }
+
+        if (parsed is not JsonObject obj)
+        {
+            return SerializeError(null, -32600, "Invalid Request");
+        }
+
+        var hasId = obj.TryGetPropertyValue("id", out var idNode) && idNode is not null;
+        var method = obj["method"]?.GetValue<string>() ?? "";
+        var paramsObj = obj["params"] as JsonObject;
+
+        if (!hasId)
+        {
+            // JSON-RPC notification (e.g. notifications/initialized): accept with no body.
+            return null;
+        }
+
+        var idClone = idNode!.DeepClone();
+        switch (method)
+        {
+            case "initialize":
+                return SerializeResult(idClone, new JsonObject
+                {
+                    ["protocolVersion"] = ProtocolVersion,
+                    ["capabilities"] = new JsonObject
+                    {
+                        ["tools"] = new JsonObject { ["listChanged"] = false },
+                    },
+                    ["serverInfo"] = new JsonObject
+                    {
+                        ["name"] = ServerName,
+                        ["version"] = "1.0.0",
+                    },
+                    ["instructions"] = "Octopus local multi-agent collaboration bus. Use list_peers to inspect active sessions and available agents (e.g. codex, agy, claude), read_session to inspect context, delegate_task to assign work asynchronously to another agent (nested under you in Octopus), send_message to negotiate with an existing session, reply_thread to answer a thread, and await_events to wait for parallel updates.",
+                });
+
+            case "ping":
+                return SerializeResult(idClone, new JsonObject());
+
+            case "tools/list":
+                return SerializeResult(idClone, new JsonObject
+                {
+                    ["tools"] = BuildToolSchemas(),
+                });
+
+            case "tools/call":
+            {
+                var toolName = paramsObj?["name"]?.GetValue<string>();
+                if (string.IsNullOrWhiteSpace(toolName))
+                {
+                    return SerializeError(idClone, -32602, "Missing tool name.");
+                }
+                var arguments = paramsObj?["arguments"] as JsonObject;
+                if (_handler is null)
+                {
+                    return SerializeError(idClone, -32000, "Collaboration coordinator is not initialized.");
+                }
+                try
+                {
+                    var result = await _handler.CallToolAsync(callerItemId, toolName, arguments, ct).ConfigureAwait(false);
+                    return SerializeResult(idClone, result);
+                }
+                catch (Exception ex)
+                {
+                    return SerializeResult(idClone, new JsonObject
+                    {
+                        ["isError"] = true,
+                        ["content"] = new JsonArray
+                        {
+                            (JsonNode)new JsonObject { ["type"] = "text", ["text"] = ex.Message },
+                        },
+                    });
+                }
+            }
+
+            default:
+                return SerializeError(idClone, -32601, $"Method not found: {method}");
+        }
+    }
+
+    public static JsonArray BuildToolSchemas() =>
+    new JsonArray(
+        ToolSchema(
+            "list_peers",
+            "List active agent/terminal sessions in the current Octopus project (or merged project group) plus installed coding agents (e.g. codex, agy, claude) available for delegation.",
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["scope"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JsonArray("project", "group"),
+                        ["description"] = "Defaults to 'group' (current project plus merged-workspace group peers).",
+                    },
+                },
+            }),
+        ToolSchema(
+            "read_session",
+            "Read a concise summary of recent turns or terminal output from another active Octopus session without waking it up.",
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["required"] = new JsonArray("target_session_id"),
+                ["properties"] = new JsonObject
+                {
+                    ["target_session_id"] = new JsonObject { ["type"] = "string", ["description"] = "Target session's Octopus item id (from list_peers or @-mention metadata)." },
+                    ["max_turns"] = new JsonObject { ["type"] = "integer", ["description"] = "Maximum recent turns to summarize (default 5)." },
+                },
+            }),
+        ToolSchema(
+            "delegate_task",
+            "Assign a task asynchronously to another agent (e.g. 'codex', 'agy', 'claude') or to an existing session id. Spawning a new agent nests it visually under your session in Octopus and automatically notifies you upon completion.",
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["required"] = new JsonArray("target", "goal"),
+                ["properties"] = new JsonObject
+                {
+                    ["target"] = new JsonObject { ["type"] = "string", ["description"] = "Agent id/alias (e.g. 'codex', 'agy', 'claude') to spawn, OR an existing session_id to reuse." },
+                    ["goal"] = new JsonObject { ["type"] = "string", ["description"] = "Clear, self-contained task specification and expected output." },
+                    ["title"] = new JsonObject { ["type"] = "string", ["description"] = "Short title shown under your session in the sidebar and collab ribbon." },
+                    ["isolation"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JsonArray("shared", "worktree", "read_only"),
+                        ["description"] = "Workspace isolation override. Omit to follow the user's global Octopus setting (default: shared). Use 'worktree' for isolated git branch edits or 'read_only' for audits/reviews.",
+                    },
+                    ["surface"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JsonArray("gui", "terminal"),
+                        ["description"] = "Optional UI surface override ('gui' ACP or 'terminal' CLI). Defaults to Octopus settings.",
+                    },
+                    ["model"] = new JsonObject { ["type"] = "string", ["description"] = "Optional model id override for the target agent." },
+                    ["effort"] = new JsonObject { ["type"] = "string", ["description"] = "Optional reasoning effort override." },
+                    ["context_files"] = new JsonObject
+                    {
+                        ["type"] = "array",
+                        ["items"] = new JsonObject { ["type"] = "string" },
+                        ["description"] = "Optional list of relevant workspace file paths to highlight for the delegate.",
+                    },
+                },
+            }),
+        ToolSchema(
+            "send_message",
+            "Send a message to an existing Octopus session to negotiate, align interfaces, review work, or ask follow-up questions. Enforces automatic hop limits to prevent loops.",
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["required"] = new JsonArray("target_session_id", "message"),
+                ["properties"] = new JsonObject
+                {
+                    ["target_session_id"] = new JsonObject { ["type"] = "string", ["description"] = "Existing target session id." },
+                    ["message"] = new JsonObject { ["type"] = "string", ["description"] = "Message body sent to the target session." },
+                    ["thread_id"] = new JsonObject { ["type"] = "string", ["description"] = "Optional existing negotiation thread id to continue." },
+                    ["title"] = new JsonObject { ["type"] = "string", ["description"] = "Optional short topic title when starting a new thread." },
+                    ["expect_reply"] = new JsonObject { ["type"] = "boolean", ["description"] = "Whether the target should reply back to this thread (default true)." },
+                    ["max_turns"] = new JsonObject { ["type"] = "integer", ["description"] = "Optional hop limit override for this thread." },
+                },
+            }),
+        ToolSchema(
+            "reply_thread",
+            "Reply explicitly to an active cross-session collaboration thread and notify the other participant(s).",
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["required"] = new JsonArray("thread_id", "message"),
+                ["properties"] = new JsonObject
+                {
+                    ["thread_id"] = new JsonObject { ["type"] = "string", ["description"] = "The collaboration thread id from the incoming message header." },
+                    ["message"] = new JsonObject { ["type"] = "string", ["description"] = "Concise reply, decision, or task deliverable." },
+                    ["status"] = new JsonObject
+                    {
+                        ["type"] = "string",
+                        ["enum"] = new JsonArray("continue", "agreed", "blocked"),
+                        ["description"] = "Use 'agreed' once both sides have reached consensus so no unnecessary follow-up turn is triggered.",
+                    },
+                },
+            }),
+        ToolSchema(
+            "await_events",
+            "Wait briefly (up to 45s) for one or more delegated tasks or negotiation threads to report updates or finish. Returns immediately when an update is available, or returns live progress on timeout.",
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject
+                {
+                    ["ids"] = new JsonObject
+                    {
+                        ["type"] = "array",
+                        ["items"] = new JsonObject { ["type"] = "string" },
+                        ["description"] = "Optional list of task_id and/or thread_id values to watch (empty watches all active items for caller).",
+                    },
+                    ["timeout_seconds"] = new JsonObject { ["type"] = "integer", ["description"] = "Seconds to wait before returning current progress (1-45, default 25)." },
+                },
+            })
+    );
+
+    private static JsonObject ToolSchema(string name, string description, JsonObject inputSchema) => new()
+    {
+        ["name"] = name,
+        ["description"] = description,
+        ["inputSchema"] = inputSchema,
+    };
+
+    private static string SerializeResult(JsonNode id, JsonObject result) =>
+        new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["id"] = id,
+            ["result"] = result,
+        }.ToJsonString();
+
+    private static string SerializeError(JsonNode? id, int code, string message) =>
+        new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["id"] = id,
+            ["error"] = new JsonObject
+            {
+                ["code"] = code,
+                ["message"] = message,
+            },
+        }.ToJsonString();
+
+    private sealed record HttpReq(string Method, string Path, Dictionary<string, string> Headers, string Body);
+
+    private static async Task<HttpReq?> ReadHttpRequestAsync(NetworkStream stream, CancellationToken ct)
+    {
+        using var headerMs = new MemoryStream();
+        var buf = new byte[4096];
+        var headerEnd = -1;
+        while (headerEnd < 0)
+        {
+            var n = await stream.ReadAsync(buf, ct).ConfigureAwait(false);
+            if (n == 0) return null;
+            headerMs.Write(buf, 0, n);
+            if (headerMs.Length > MaxHeaderBytes) return null;
+            headerEnd = FindHeaderTerminator(headerMs.GetBuffer(), (int)headerMs.Length);
+        }
+
+        var raw = headerMs.GetBuffer();
+        var totalBuffered = (int)headerMs.Length;
+        var headerText = Encoding.ASCII.GetString(raw, 0, headerEnd);
+        var lines = headerText.Split("\r\n", StringSplitOptions.None);
+        if (lines.Length == 0) return null;
+
+        var requestLine = lines[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (requestLine.Length < 2) return null;
+        var method = requestLine[0];
+        var rawTarget = requestLine[1];
+        var queryIdx = rawTarget.IndexOf('?');
+        var path = queryIdx >= 0 ? rawTarget[..queryIdx] : rawTarget;
+
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 1; i < lines.Length; i++)
+        {
+            var colon = lines[i].IndexOf(':');
+            if (colon <= 0) continue;
+            headers[lines[i][..colon].Trim()] = lines[i][(colon + 1)..].Trim();
+        }
+
+        var bodyStart = headerEnd + 4;
+        var alreadyRead = totalBuffered - bodyStart;
+
+        using var bodyMs = new MemoryStream();
+        if (alreadyRead > 0)
+        {
+            bodyMs.Write(raw, bodyStart, alreadyRead);
+        }
+
+        if (headers.TryGetValue("transfer-encoding", out var te)
+            && te.Contains("chunked", StringComparison.OrdinalIgnoreCase))
+        {
+            var decoded = await ReadChunkedBodyAsync(stream, bodyMs, ct).ConfigureAwait(false);
+            return new HttpReq(method, path, headers, decoded);
+        }
+
+        var contentLength = 0;
+        if (headers.TryGetValue("content-length", out var clText) && int.TryParse(clText, out var parsedLen))
+        {
+            contentLength = Math.Clamp(parsedLen, 0, MaxBodyBytes);
+        }
+
+        while (bodyMs.Length < contentLength)
+        {
+            var remaining = contentLength - (int)bodyMs.Length;
+            var n = await stream.ReadAsync(buf.AsMemory(0, Math.Min(buf.Length, remaining)), ct).ConfigureAwait(false);
+            if (n == 0) break;
+            bodyMs.Write(buf, 0, n);
+        }
+
+        var bodyStr = contentLength > 0
+            ? Encoding.UTF8.GetString(bodyMs.GetBuffer(), 0, (int)Math.Min(bodyMs.Length, contentLength))
+            : Encoding.UTF8.GetString(bodyMs.GetBuffer(), 0, (int)bodyMs.Length);
+        return new HttpReq(method, path, headers, bodyStr);
+    }
+
+    private static async Task<string> ReadChunkedBodyAsync(NetworkStream stream, MemoryStream preBuffered, CancellationToken ct)
+    {
+        var buffer = new byte[4096];
+        var result = new MemoryStream();
+        var pending = preBuffered.ToArray();
+        var offset = 0;
+
+        async Task EnsureBytesAsync(int needed)
+        {
+            while (pending.Length - offset < needed)
+            {
+                var n = await stream.ReadAsync(buffer, ct).ConfigureAwait(false);
+                if (n == 0) throw new EndOfStreamException();
+                var merged = new byte[(pending.Length - offset) + n];
+                Buffer.BlockCopy(pending, offset, merged, 0, pending.Length - offset);
+                Buffer.BlockCopy(buffer, 0, merged, pending.Length - offset, n);
+                pending = merged;
+                offset = 0;
+            }
+        }
+
+        async Task<string> ReadLineAsync()
+        {
+            while (true)
+            {
+                for (var i = offset; i < pending.Length - 1; i++)
+                {
+                    if (pending[i] == '\r' && pending[i + 1] == '\n')
+                    {
+                        var line = Encoding.ASCII.GetString(pending, offset, i - offset);
+                        offset = i + 2;
+                        return line;
+                    }
+                }
+                await EnsureBytesAsync(pending.Length - offset + 1).ConfigureAwait(false);
+            }
+        }
+
+        while (true)
+        {
+            var sizeLine = (await ReadLineAsync().ConfigureAwait(false)).Split(';')[0].Trim();
+            if (!int.TryParse(sizeLine, System.Globalization.NumberStyles.HexNumber, null, out var chunkSize) || chunkSize < 0)
+            {
+                break;
+            }
+            if (chunkSize == 0) break;
+            if (result.Length + chunkSize > MaxBodyBytes) break;
+            await EnsureBytesAsync(chunkSize + 2).ConfigureAwait(false);
+            result.Write(pending, offset, chunkSize);
+            offset += chunkSize + 2;
+        }
+        return Encoding.UTF8.GetString(result.GetBuffer(), 0, (int)result.Length);
+    }
+
+    private static int FindHeaderTerminator(byte[] data, int length)
+    {
+        for (var i = 0; i <= length - 4; i++)
+        {
+            if (data[i] == '\r' && data[i + 1] == '\n' && data[i + 2] == '\r' && data[i + 3] == '\n')
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static async Task WriteHttpResponseAsync(NetworkStream stream, int statusCode, string reason, string body, CancellationToken ct)
+    {
+        var bodyBytes = string.IsNullOrEmpty(body) ? [] : Encoding.UTF8.GetBytes(body);
+        var sb = new StringBuilder();
+        sb.Append("HTTP/1.1 ").Append(statusCode).Append(' ').Append(reason).Append("\r\n");
+        if (bodyBytes.Length > 0)
+        {
+            sb.Append("Content-Type: application/json; charset=utf-8\r\n");
+        }
+        sb.Append("Content-Length: ").Append(bodyBytes.Length).Append("\r\n");
+        sb.Append("Connection: close\r\n\r\n");
+        var headerBytes = Encoding.ASCII.GetBytes(sb.ToString());
+        await stream.WriteAsync(headerBytes, ct).ConfigureAwait(false);
+        if (bodyBytes.Length > 0)
+        {
+            await stream.WriteAsync(bodyBytes, ct).ConfigureAwait(false);
+        }
+        await stream.FlushAsync(ct).ConfigureAwait(false);
+    }
+
+    private void StopLocked()
+    {
+        try { _listener?.Stop(); } catch { }
+        _listener = null;
+        EndpointUrl = null;
+    }
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _stop.Cancel();
+            StopLocked();
+        }
+        _stop.Dispose();
+    }
+}

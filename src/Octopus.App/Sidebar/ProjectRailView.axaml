@@ -89,45 +89,112 @@
                 </Border>
             </Grid>
 
-            <!-- Default Bot entry directly below the Device badge -->
-            <Grid IsVisible="{Binding HasBots}" Width="{DynamicResource OctopusRailWidth}" Height="{DynamicResource OctopusProjectSlotSize}">
-                <!-- Left accent indicator bar when Bot mode is active -->
-                <Border Width="3" Height="20" CornerRadius="0,3,3,0"
-                        HorizontalAlignment="Left" VerticalAlignment="Center"
-                        Background="{arc:ArcDesignTokenResource Accent}"
-                        IsVisible="{Binding IsBotMode}" IsHitTestVisible="False" />
+            <!-- Bot avatar frame directly below the Device badge: empty dashed frame at 0 bots, full avatar at 1, 2x2 grid at 2-4 (overflow hidden). -->
+            <Grid IsVisible="{Binding HasBots}" Width="{DynamicResource OctopusProjectSlotSize}" Height="{DynamicResource OctopusProjectSlotSize}" HorizontalAlignment="Center">
+                <!-- 0 bots & inactive: dashed avatar frame -->
+                <Rectangle IsVisible="{Binding ShowEmptyBotDashedFrame}" IsHitTestVisible="False"
+                           RadiusX="7" RadiusY="7"
+                           Stroke="{arc:ArcDesignTokenResource Border}" StrokeThickness="1.5" StrokeDashArray="3,2.5"
+                           Fill="Transparent" />
+                <!-- 1+ bots & inactive: subtle avatar frame border -->
+                <Border IsVisible="{Binding ShowBotIdleFrame}" IsHitTestVisible="False"
+                        BorderThickness="1.5" BorderBrush="{arc:ArcDesignTokenResource Border}"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
+                <!-- Active Bot mode: accent highlight ring matching project chips -->
+                <Border IsVisible="{Binding IsBotMode}" IsHitTestVisible="False"
+                        BorderThickness="2" BorderBrush="{arc:ArcDesignTokenResource Accent}"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" />
 
-                <Grid Width="{DynamicResource OctopusProjectSlotSize}" Height="{DynamicResource OctopusProjectSlotSize}" HorizontalAlignment="Center">
-                    <Button x:Name="BotEntryButton" Classes="bot-rail-chip" Classes.active="{Binding IsBotMode}"
-                            Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}"
-                            Command="{Binding EnterBotModeCommand}"
-                            AutomationProperties.Name="{l:AppLangResource BotRailTooltip}"
-                            arc:Tooltip.Tip="{l:AppLangResource BotRailTooltip}" arc:Tooltip.Side="Right">
-                        <lucide:LucideIcon Kind="Bot" Size="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Button>
+                <Button x:Name="BotEntryButton" Classes="bot-rail-chip"
+                        Classes.active="{Binding IsBotMode}"
+                        Classes.has-bots="{Binding HasAnyBot}"
+                        Width="{DynamicResource OctopusProjectChipSize}" Height="{DynamicResource OctopusProjectChipSize}"
+                        Opacity="{Binding BotChipOpacity}"
+                        Command="{Binding EnterBotModeCommand}"
+                        AutomationProperties.Name="{l:AppLangResource BotRailTooltip}"
+                        arc:Tooltip.Tip="{l:AppLangResource BotRailTooltip}" arc:Tooltip.Side="Right">
+                    <Panel>
+                        <!-- 0 bots: placeholder robot glyph inside the avatar frame -->
+                        <lucide:LucideIcon IsVisible="{Binding ShowEmptyBotFrame}" Kind="Bot"
+                                           Size="{DynamicResource OctopusProjectChipIconSize}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-                    <!-- Top-right: yellow count badge when any Bot needs user input -->
-                    <Border IsVisible="{Binding HasBotAttention}" IsHitTestVisible="False"
-                            MinWidth="16" Height="16" Padding="3,0" CornerRadius="8"
-                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-1,-1,0"
-                            Background="{arc:ArcDesignTokenResource Warning}"
-                            BorderBrush="{arc:ArcDesignTokenResource SurfaceMuted}" BorderThickness="1.5">
-                        <TextBlock FontSize="9.5" FontWeight="Bold" Foreground="#1C1405"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Text="{Binding BotAttentionBadgeText}" />
-                    </Border>
+                        <!-- 1 bot: fill the chip with the bot's avatar (identical to a project chip) -->
+                        <Border IsVisible="{Binding ShowSingleBotAvatar}"
+                                Background="{Binding SingleBotAvatar.Background, FallbackValue=Transparent}"
+                                CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}" ClipToBounds="True">
+                            <Panel>
+                                <TextBlock IsVisible="{Binding SingleBotAvatar.ShowInitial, FallbackValue=False}"
+                                           Text="{Binding SingleBotAvatar.Initial, FallbackValue=''}"
+                                           Foreground="White" FontWeight="Bold"
+                                           FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <lucide:LucideIcon IsVisible="{Binding SingleBotAvatar.HasIcon, FallbackValue=False}"
+                                                   Kind="{Binding SingleBotAvatar.EffectiveIconKind, FallbackValue=Bot}"
+                                                   Size="{DynamicResource OctopusProjectChipIconSize}" Foreground="White"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Image IsVisible="{Binding SingleBotAvatar.HasImage, FallbackValue=False}"
+                                       Source="{Binding SingleBotAvatar.Image}"
+                                       Width="{DynamicResource OctopusProjectChipSize}"
+                                       Height="{DynamicResource OctopusProjectChipSize}"
+                                       Stretch="UniformToFill"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                            </Panel>
+                        </Border>
 
-                    <!-- Bottom-right: spinner when a Bot is working and nothing waits on the user -->
-                    <Border IsVisible="{Binding ShowBotWorking}" IsHitTestVisible="False"
-                            Width="{DynamicResource OctopusStatusBadgeSize}" Height="{DynamicResource OctopusStatusBadgeSize}"
-                            CornerRadius="{DynamicResource OctopusStatusBadgeCorner}"
-                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-1,-1"
-                            Background="{arc:ArcDesignTokenResource Background}"
-                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                        <arc:ArcSpinner Width="9" Height="9" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        Foreground="{arc:ArcDesignTokenResource Accent}" />
-                    </Border>
-                </Grid>
+                        <!-- 2-4 bots: 2x2 mini-avatar grid (bots beyond 4 are omitted) -->
+                        <Border IsVisible="{Binding ShowBotAvatarGrid}"
+                                Background="{arc:ArcDesignTokenResource Surface}"
+                                CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
+                                Padding="1.5" ClipToBounds="True">
+                            <ItemsControl ItemsSource="{Binding BotAvatars}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="2" Columns="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BotRailAvatarTile">
+                                        <Border Margin="1" CornerRadius="3" ClipToBounds="True" Background="{Binding Background}">
+                                            <Panel>
+                                                <Image IsVisible="{Binding HasImage}" Source="{Binding Image}" Stretch="UniformToFill"
+                                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                                <lucide:LucideIcon IsVisible="{Binding HasIcon}" Kind="{Binding EffectiveIconKind}"
+                                                                   Size="8" Foreground="White"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                <TextBlock IsVisible="{Binding ShowInitial}" Text="{Binding Initial}"
+                                                           FontSize="7.5" FontWeight="Bold" Foreground="White"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Panel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                    </Panel>
+                </Button>
+
+                <!-- Top-right: yellow count badge when any Bot needs user input -->
+                <Border IsVisible="{Binding HasBotAttention}" IsHitTestVisible="False"
+                        MinWidth="16" Height="16" Padding="3,0" CornerRadius="8"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-1,-1,0"
+                        Background="{arc:ArcDesignTokenResource Warning}"
+                        BorderBrush="{arc:ArcDesignTokenResource SurfaceMuted}" BorderThickness="1.5">
+                    <TextBlock FontSize="9.5" FontWeight="Bold" Foreground="#1C1405"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Text="{Binding BotAttentionBadgeText}" />
+                </Border>
+
+                <!-- Bottom-right: spinner when a Bot is working and nothing waits on the user -->
+                <Border IsVisible="{Binding ShowBotWorking}" IsHitTestVisible="False"
+                        Width="{DynamicResource OctopusStatusBadgeSize}" Height="{DynamicResource OctopusStatusBadgeSize}"
+                        CornerRadius="{DynamicResource OctopusStatusBadgeCorner}"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-1,-1"
+                        Background="{arc:ArcDesignTokenResource Background}"
+                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                    <arc:ArcSpinner Width="9" Height="9" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Foreground="{arc:ArcDesignTokenResource Accent}" />
+                </Border>
             </Grid>
 
             <Border Width="24" Height="1" Background="{arc:ArcDesignTokenResource Border}" HorizontalAlignment="Center" />

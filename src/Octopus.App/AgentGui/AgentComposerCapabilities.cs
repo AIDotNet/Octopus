@@ -25,11 +25,53 @@ public sealed partial class SlashCommandSuggestion(string name, string descripti
     [ObservableProperty] public partial bool IsSelected { get; set; }
 }
 
-/// <summary>One workspace file shown in the composer's <c>@</c> mention popup.</summary>
-public sealed partial class FileMentionSuggestion(string relativePath, string fullPath) : ObservableObject
+/// <summary>One selectable item shown in the composer's unified <c>@</c> mention popup (active session, installed agent, or workspace file).</summary>
+public sealed partial class FileMentionSuggestion : ObservableObject
 {
-    public string RelativePath { get; } = relativePath;
-    public string FullPath { get; } = fullPath;
+    public FileMentionSuggestion(string relativePath, string fullPath)
+        : this("file", fullPath, relativePath, null, null, null)
+    {
+    }
+
+    public FileMentionSuggestion(
+        string kind,
+        string targetId,
+        string displayName,
+        string? agentId = null,
+        string? subtitle = null,
+        string? status = null)
+    {
+        Kind = kind;
+        TargetId = targetId;
+        RelativePath = displayName;
+        FullPath = targetId;
+        AgentId = agentId;
+        Subtitle = subtitle;
+        Status = status;
+    }
+
+    /// <summary><c>session</c>, <c>agent</c>, or <c>file</c>.</summary>
+    public string Kind { get; }
+    public string TargetId { get; }
+    public string RelativePath { get; }
+    public string FullPath { get; }
+    public string? AgentId { get; }
+    public string? Subtitle { get; }
+    public string? Status { get; }
+
+    public bool IsSession => Kind == "session";
+    public bool IsAgent => Kind == "agent";
+    public bool IsFile => Kind == "file";
+    public bool HasAgentIcon => !string.IsNullOrWhiteSpace(AgentId);
+    public bool HasSubtitle => !string.IsNullOrWhiteSpace(Subtitle);
+    public string DisplayName => IsSession ? $"@{RelativePath}" : IsAgent ? $"@{RelativePath}" : RelativePath;
+    public string KindBadge => Kind switch
+    {
+        "session" => "会话",
+        "agent" => "智能体",
+        _ => "",
+    };
+    public bool HasKindBadge => KindBadge.Length > 0;
 
     [ObservableProperty] public partial bool IsSelected { get; set; }
 }

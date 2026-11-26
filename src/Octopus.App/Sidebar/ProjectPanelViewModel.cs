@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
+using Octopus.App.Collab;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
@@ -36,8 +37,10 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     private readonly IFileOpener? _fileOpener;
     private readonly ISettingsNavigator? _settingsNavigator;
     private readonly DeviceSwitcherViewModel? _devices;
+    private readonly ICollabCoordinator? _collab;
     /// <summary>Per item, outliving the rows: a rebuild (a filter, a new tab) keeps what the user opened.</summary>
     private readonly Dictionary<string, SubagentListViewModel> _subagentLists = [];
+    private readonly Dictionary<string, bool> _childrenCollapsed = [];
     private readonly Dictionary<string, bool> _defaultCollapsed = [];
     private bool _updatingName;
     private bool _moving;
@@ -57,7 +60,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         IWorkspaceManager? workspaces = null,
         IFileOpener? fileOpener = null,
         ISettingsNavigator? settingsNavigator = null,
-        DeviceSwitcherViewModel? devices = null)
+        DeviceSwitcherViewModel? devices = null,
+        ICollabCoordinator? collab = null)
     {
         _subagents = subagents;
         _accounts = accounts;
@@ -67,6 +71,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         _fileOpener = fileOpener;
         _settingsNavigator = settingsNavigator;
         _devices = devices;
+        _collab = collab;
+        _collab?.Changed += _ => UiContext.Run(RefreshCollabBadges);
         _devices?.Changed += (_, _) => UiContext.Run(NotifyDeviceState);
         _accounts?.Changed += (_, _) => UiContext.Run(Rebuild);
         _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
@@ -83,7 +89,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             };
         }
         _activity = activity;
-        _activity.Changed += (_, id) => Items.FirstOrDefault(r => r.Id == id)?.Show(_activity.Of(id));
+        _activity.Changed += (_, id) => UpdateActivityRecursive(id);
         _projects = projects;
         _opener = opener;
         _catalog = catalog;
@@ -132,7 +138,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         : AppLangResources.Get(AppLangResourceKind.NoProjectHint);
 
     public bool HasNoProject => !HasProject;
-    public bool HasGroup => GroupName.Length > 0;
+    /// <summary>The group line is shown only when it adds information, i.e. its name differs from the project's own.</summary>
+    public bool HasGroup => GroupName.Length > 0 && !string.Equals(GroupName, ProjectName, StringComparison.Ordinal);
     public bool NoItems => !HasWorkspaces && Items.Count == 0;
     public bool ShowFlatList => !HasWorkspaces;
     public bool CanCreateWorkspace => HasProject && IsGitProject && _workspaces is not null;
@@ -157,6 +164,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
 
     partial void OnProjectNameChanged(string value)
     {
+        OnPropertyChanged(nameof(HasGroup));
         if (!_updatingName && _projects.Current is { } project)
         {
             CommitProjectRename(project.Id, value);
@@ -197,7 +205,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         // A session renames its item as it goes: the row is updated in place, so a rename being typed in another
         // row, or a drag, is not interrupted by a rebuild. With a filter the row may have to appear or go.
         if (e.Kind == ProjectChangeKind.ItemTitle && Filter.Trim().Length == 0 && e.Item is { } renamed
-            && Items.FirstOrDefault(r => r.Id == renamed.Id) is { } row)
+            && FindRowRecursive(renamed.Id) is { } row)
         {
             row.RefreshTitle();
             return;
@@ -209,7 +217,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             var active = _projects.Current?.ActiveItemId;
             foreach (var item in Items)
             {
-                item.IsActive = item.Id == active;
+                item.RefreshActiveRecursive(active);
             }
             foreach (var group in WorkspaceGroups)
             {
@@ -282,6 +290,9 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         if (project is not null)
         {
             var filter = Filter.Trim();
+            var rowsById = new Dictionary<string, ItemRowViewModel>(StringComparer.Ordinal);
+            var orderedRows = new List<ItemRowViewModel>();
+
             foreach (var item in project.Items)
             {
                 // Open files are tabs only; the panel lists what runs (agents and terminals).
@@ -304,11 +315,31 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
                     (r, title) => _projects.RenameItem(r.Id, title),
                     r => _workspace.RestartItemAsync(r.Id),
                     r => _workspace.MoveToNewGroup(r.Id),
-                    r => _workspace.CloseItemAsync(r.Id));
+                    r => _workspace.CloseItemAsync(r.Id),
+                    (id, expanded) => _childrenCollapsed[id] = !expanded);
+                row.IsChildrenExpanded = !_childrenCollapsed.GetValueOrDefault(item.Id, false);
                 row.Show(_activity.Of(item.Id));
                 row.Subagents = _subagentLists.GetValueOrDefault(item.Id);
-                Items.Add(row);
+                rowsById[item.Id] = row;
+                orderedRows.Add(row);
             }
+
+            // Nest spawned child agents directly underneath the parent agent that created them (Scheme C).
+            foreach (var row in orderedRows)
+            {
+                if (!string.IsNullOrEmpty(row.Item.ParentItemId)
+                    && rowsById.TryGetValue(row.Item.ParentItemId, out var parentRow)
+                    && !ReferenceEquals(parentRow, row))
+                {
+                    parentRow.AddSpawnedChild(row);
+                }
+                else
+                {
+                    Items.Add(row);
+                }
+            }
+
+            RefreshCollabBadges();
 
             if (HasWorkspaces)
             {
@@ -440,9 +471,57 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             _subagentLists[itemId] = list;
         }
         list.Sync(runs, DateTimeOffset.Now);
-        if (Items.FirstOrDefault(r => r.Id == itemId) is { } row)
+        if (FindRowRecursive(itemId) is { } row)
         {
             row.Subagents = list;
+        }
+    }
+
+    private ItemRowViewModel? FindRowRecursive(string itemId)
+    {
+        foreach (var row in Items)
+        {
+            if (row.FindRecursive(itemId) is { } found) return found;
+        }
+        return null;
+    }
+
+    private void UpdateActivityRecursive(string itemId)
+    {
+        if (FindRowRecursive(itemId) is { } row)
+        {
+            row.Show(_activity.Of(itemId));
+        }
+        foreach (var top in Items)
+        {
+            if (top.HasSpawnedChildren) top.NotifyChildrenChanged();
+        }
+    }
+
+    private void RefreshCollabBadges()
+    {
+        if (_collab is null) return;
+        foreach (var top in Items)
+        {
+            ApplyCollabBadgeRecursive(top);
+        }
+    }
+
+    private void ApplyCollabBadgeRecursive(ItemRowViewModel row)
+    {
+        if (_collab is null) return;
+        var threads = _collab.GetThreadsForItem(row.Id);
+        // Show peer badge for sibling-to-sibling threads (threads involving an item that isn't a direct parent/child).
+        var peerCount = threads.Count(t =>
+            t.ParticipantItemIds.Any(pid =>
+                pid != row.Id
+                && pid != row.Item.ParentItemId
+                && row.SpawnedChildren.All(c => c.Id != pid)));
+        row.ActivePeerThreadCount = peerCount;
+        row.NotifyChildrenChanged();
+        foreach (var child in row.SpawnedChildren)
+        {
+            ApplyCollabBadgeRecursive(child);
         }
     }
 

@@ -1,6 +1,7 @@
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
 using Octopus.Agents.Signals;
+using Octopus.App.Collab;
 using Octopus.App.Common;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
@@ -25,7 +26,8 @@ public sealed class ItemLaunchService(
     Octopus.Ssh.ISshHostCatalog? hosts = null,
     ISystemProxy? systemProxy = null,
     PathComparer? paths = null,
-    IAgentAccountService? accounts = null) : IItemLaunchService
+    IAgentAccountService? accounts = null,
+    CollabCliMcpInjector? collabInjector = null) : IItemLaunchService
 {
     /// <summary>Points at an <c>octopus-signal</c> build when it is not next to the app (development).</summary>
     public const string ForwarderVariable = "OCTOPUS_SIGNAL_FORWARDER";
@@ -111,6 +113,7 @@ public sealed class ItemLaunchService(
             Model = item.Launch?.Model,
             Effort = item.Launch?.Effort,
             Fast = item.Launch?.Fast,
+            Permission = item.Launch?.Permission,
             AccountId = item.Launch?.AccountId,
             Prompt = restored ? null : item.Launch?.Prompt,
             Resume = continueLatest,
@@ -132,9 +135,25 @@ public sealed class ItemLaunchService(
         // The signal channel (design/plugins/11-补充能力.md §1): status line, hooks and notify reach Octopus through
         // the forwarder. Nothing of the user's own configuration is changed; without a hub or forwarder the agent
         // simply starts as before.
-        if (Attach(definition, item, cwd, command) is { } signal)
+        var signal = Attach(definition, item, cwd, command);
+        var collab = current.Agents.Collab is { Enabled: true, EnableTerminalBridge: true }
+            ? collabInjector?.Plan(definition, item, ResolveForwarderPath())
+            : null;
+        if (signal is not null || collab is not null)
         {
-            command = compiler.Compile(request with { Signals = signal });
+            var mergedArgs = new List<string>();
+            var mergedEnv = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (signal is not null)
+            {
+                mergedArgs.AddRange(signal.Arguments);
+                foreach (var (k, v) in signal.Environment) mergedEnv[k] = v;
+            }
+            if (collab is not null)
+            {
+                mergedArgs.AddRange(collab.Arguments);
+                foreach (var (k, v) in collab.Environment) mergedEnv[k] = v;
+            }
+            command = compiler.Compile(request with { Signals = new SignalAttachment(mergedArgs, mergedEnv) });
         }
         return planner.PlanAgent(UseSystemProxy(command, current.Agents.UseSystemProxy), cwd, current.Terminal.Shell);
     }
@@ -269,6 +288,8 @@ public sealed class ItemLaunchService(
         var plan = attach.Plan(new SignalAttachRequest(definition, item.Id, forwarder, endpoint, scanner.Find(definition.Id)?.Version, environment, cwd));
         return plan.Arguments.Count == 0 && plan.Environment.Count == 0 ? null : plan;
     }
+
+    internal static string? ResolveForwarderPath() => ForwarderPath();
 
     private static string? ForwarderPath()
     {

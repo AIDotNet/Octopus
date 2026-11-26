@@ -52,7 +52,7 @@ public sealed partial class WorkspaceGroupViewModel : ObservableObject
         {
             Items.Add(item);
         }
-        HasActiveItem = Items.Any(i => i.IsActive);
+        HasActiveItem = Items.Any(i => i.IsActiveOrHasActiveChild);
     }
 
     public ProjectWorkspace? Workspace { get; }
@@ -86,7 +86,7 @@ public sealed partial class WorkspaceGroupViewModel : ObservableObject
     [ObservableProperty] public partial bool IsExpanded { get; set; }
     [ObservableProperty] public partial bool HasActiveItem { get; set; }
 
-    public void RefreshActive() => HasActiveItem = Items.Any(i => i.IsActive);
+    public void RefreshActive() => HasActiveItem = Items.Any(i => i.IsActiveOrHasActiveChild);
 
     [RelayCommand]
     private void Toggle()

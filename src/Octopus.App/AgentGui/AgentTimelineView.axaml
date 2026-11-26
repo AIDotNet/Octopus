@@ -573,74 +573,119 @@
             </Border>
         </DataTemplate>
 
-        <!-- User turn: compact right-aligned quiet capsule with hover-revealed edit-resend & copy below -->
+        <!-- User turn: regular user messages as compact right-aligned capsule; collab-injected events as subtle left-aligned strip -->
         <DataTemplate DataType="gui:UserTurnItem">
-            <StackPanel Classes="userTurn"
-                        Background="Transparent"
-                        HorizontalAlignment="Right"
-                        MaxWidth="640"
-                        Margin="28,2,0,0"
-                        Spacing="2">
-                <Border Classes="userBubble"
-                        HorizontalAlignment="Right"
-                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                        BorderThickness="1"
-                        CornerRadius="9"
-                        Padding="10,6">
-                    <StackPanel Spacing="4">
-                        <ItemsControl ItemsSource="{Binding Attachments}" IsVisible="{Binding HasAttachments}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="gui:AttachmentChipViewModel">
-                                    <Border Margin="0,0,4,2" Padding="5,1" CornerRadius="5"
-                                            Background="{arc:ArcDesignTokenResource Surface}"
-                                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <lucide:LucideIcon Kind="{Binding Icon}" Size="11" VerticalAlignment="Center" />
-                                            <TextBlock Classes="hint" Text="{Binding Label}" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <StackPanel Spacing="2">
-                            <SelectableTextBlock Text="{Binding DisplayText}"
-                                                 TextWrapping="Wrap"
-                                                 FontSize="{arc:ArcDesignTokenResource TypeSM}"
-                                                 LineHeight="19"
-                                                 Foreground="{arc:ArcDesignTokenResource Foreground}" />
-                            <Button Classes="textLink accent"
-                                    HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsCollapsible}"
-                                    Command="{Binding ToggleExpandedCommand}"
-                                    Content="{Binding ToggleExpandedText}" />
+            <Grid>
+                <StackPanel Classes="userTurn"
+                            IsVisible="{Binding IsRegularUserMessage}"
+                            Background="Transparent"
+                            HorizontalAlignment="Right"
+                            MaxWidth="640"
+                            Margin="28,2,0,0"
+                            Spacing="2">
+                    <Border Classes="userBubble"
+                            HorizontalAlignment="Right"
+                            Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="9"
+                            Padding="10,6">
+                        <StackPanel Spacing="4">
+                            <ItemsControl ItemsSource="{Binding Attachments}" IsVisible="{Binding HasAttachments}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="gui:AttachmentChipViewModel">
+                                        <Border Margin="0,0,4,2" Padding="5,1" CornerRadius="5"
+                                                Background="{arc:ArcDesignTokenResource Surface}"
+                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <lucide:LucideIcon Kind="{Binding Icon}" Size="11" VerticalAlignment="Center" />
+                                                <TextBlock Classes="hint" Text="{Binding Label}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Spacing="2">
+                                <SelectableTextBlock Text="{Binding DisplayText}"
+                                                     TextWrapping="Wrap"
+                                                     FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                                                     LineHeight="19"
+                                                     Foreground="{arc:ArcDesignTokenResource Foreground}" />
+                                <Button Classes="textLink accent"
+                                        HorizontalAlignment="Left"
+                                        IsVisible="{Binding IsCollapsible}"
+                                        Command="{Binding ToggleExpandedCommand}"
+                                        Content="{Binding ToggleExpandedText}" />
+                            </StackPanel>
                         </StackPanel>
+                    </Border>
+                    <StackPanel Classes="turnActions"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                Spacing="2">
+                        <arc:Button Classes="icon" Variant="Ghost"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding CanReuse}"
+                                    Command="{Binding ReuseCommand}"
+                                    AutomationProperties.Name="{l:AppLangResource AgentGuiReusePrompt}"
+                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiReusePrompt}">
+                            <lucide:LucideIcon Kind="Pencil" Size="11" />
+                        </arc:Button>
+                        <arc:CopyButton IsIconOnly="True"
+                                        VerticalAlignment="Center"
+                                        Value="{Binding Text}"
+                                        AutomationProperties.Name="{l:AppLangResource AgentGuiCopyPrompt}"
+                                        arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyPrompt}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Inter-agent collaboration relay strip (distinct from user-authored bubbles) -->
+                <Border IsVisible="{Binding IsCollabMessage}"
+                        HorizontalAlignment="Stretch"
+                        Margin="0,2,0,2"
+                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                        BorderThickness="2,0,0,0"
+                        Padding="10,4,6,4">
+                    <StackPanel Spacing="3">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                            <lucide:LucideIcon Grid.Column="0"
+                                               Kind="GitBranch"
+                                               Size="11"
+                                               Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                               VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding CollabHeader}"
+                                       FontSize="11.5"
+                                       FontWeight="Medium"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                       VerticalAlignment="Center" />
+                            <arc:CopyButton Grid.Column="2"
+                                            IsIconOnly="True"
+                                            VerticalAlignment="Center"
+                                            Opacity="0.65"
+                                            Value="{Binding Text}"
+                                            AutomationProperties.Name="{l:AppLangResource AgentGuiCopyPrompt}"
+                                            arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyPrompt}" />
+                        </Grid>
+                        <SelectableTextBlock Text="{Binding DisplayText}"
+                                             TextWrapping="Wrap"
+                                             FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                             LineHeight="18"
+                                             Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                        <Button Classes="textLink accent"
+                                HorizontalAlignment="Left"
+                                IsVisible="{Binding IsCollapsible}"
+                                Command="{Binding ToggleExpandedCommand}"
+                                Content="{Binding ToggleExpandedText}" />
                     </StackPanel>
                 </Border>
-                <StackPanel Classes="turnActions"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            Spacing="2">
-                    <arc:Button Classes="icon" Variant="Ghost"
-                                VerticalAlignment="Center"
-                                IsVisible="{Binding CanReuse}"
-                                Command="{Binding ReuseCommand}"
-                                AutomationProperties.Name="{l:AppLangResource AgentGuiReusePrompt}"
-                                arc:Tooltip.Tip="{l:AppLangResource AgentGuiReusePrompt}">
-                        <lucide:LucideIcon Kind="Pencil" Size="11" />
-                    </arc:Button>
-                    <arc:CopyButton IsIconOnly="True"
-                                    VerticalAlignment="Center"
-                                    Value="{Binding Text}"
-                                    AutomationProperties.Name="{l:AppLangResource AgentGuiCopyPrompt}"
-                                    arc:Tooltip.Tip="{l:AppLangResource AgentGuiCopyPrompt}" />
-                </StackPanel>
-            </StackPanel>
+            </Grid>
         </DataTemplate>
 
         <!-- Inline ACP image generation canvas rendered with TKCode.Arc ImageReveal -->

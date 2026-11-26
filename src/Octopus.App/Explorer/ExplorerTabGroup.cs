@@ -92,12 +92,26 @@ public sealed class ExplorerTabGroup : ToggleGroup
     /// </summary>
     public void ReplaceOptions(IReadOnlyList<ToggleGroupOption> wanted, string? selectedValue)
     {
+        var targetIndex = -1;
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            if (Equals(wanted[i].Value, selectedValue))
+            {
+                targetIndex = i;
+                break;
+            }
+        }
+
         _rebuilding = true;
         try
         {
             Items.Clear();
             foreach (var option in wanted) Items.Add(option);
-            SelectedValue = selectedValue;
+            // Set SelectedIndex explicitly: if a TwoWay binding already pushed selectedValue while the option was not
+            // yet in Items, SelectedValue already equals selectedValue and reassigning it alone would be a no-op,
+            // leaving SelectedIndex at -1.
+            SelectedIndex = targetIndex;
+            SetCurrentValue(SelectedValueProperty, selectedValue);
             SnapAllLabels(selectedValue);
         }
         finally
@@ -281,7 +295,7 @@ public sealed class ExplorerTabGroup : ToggleGroup
         WatchContainer(container);
         if (container is null || !container.IsVisible)
         {
-            if (_placed) _indicator.Hide(animate: false);
+            if (_placed || _indicator.HasTarget) _indicator.Hide(animate: false);
             _placed = false;
             _gliding = false;
             return;
@@ -302,7 +316,7 @@ public sealed class ExplorerTabGroup : ToggleGroup
         WatchContainer(container);
         if (container is null || !container.IsVisible)
         {
-            if (_placed) _indicator.Hide(animate: false);
+            if (_placed || _indicator.HasTarget) _indicator.Hide(animate: false);
             _placed = false;
             _gliding = false;
             return;

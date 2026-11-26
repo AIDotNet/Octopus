@@ -22,6 +22,48 @@
                 <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Title}"
                            TextTrimming="CharacterEllipsis" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" Margin="4,0,0,0" VerticalAlignment="Center">
+                    <!-- Direct spawned child agents pill (Scheme C): compact count toggle with warning tint if any child awaits approval. -->
+                    <Button Classes="row" Height="18" VerticalAlignment="Center"
+                            IsVisible="{Binding HasSpawnedChildren}"
+                            Command="{Binding ToggleChildrenExpandedCommand}">
+                        <Border Background="{arc:ArcDesignTokenResource Surface}"
+                                BorderBrush="{arc:ArcDesignTokenResource Border}"
+                                BorderThickness="1"
+                                CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                                Padding="5,0">
+                            <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="↳" FontSize="10" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding SpawnedChildrenCount}" FontSize="10" FontWeight="SemiBold"
+                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                                <Ellipse Width="5" Height="5" VerticalAlignment="Center" IsVisible="{Binding HasWaitingChild}"
+                                         Fill="{arc:ArcDesignTokenResource Warning}" />
+                                <lucide:LucideIcon Kind="ChevronDown" Size="10" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsChildrenExpanded}"
+                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                <lucide:LucideIcon Kind="ChevronRight" Size="10" VerticalAlignment="Center"
+                                                   IsVisible="{Binding !IsChildrenExpanded}"
+                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                            </StackPanel>
+                        </Border>
+                    </Button>
+                    <!-- Active peer negotiation badge for sibling sessions collaborating via @-mentions. -->
+                    <Border IsVisible="{Binding HasPeerThreads}" VerticalAlignment="Center"
+                            Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                            CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                            Padding="4,0">
+                        <TextBlock Text="⇄" FontSize="10" FontWeight="SemiBold"
+                                   Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                    </Border>
+                    <!-- Isolation micro-badge on spawned child rows (wt = worktree, ro = read-only). -->
+                    <Border IsVisible="{Binding HasIsolationBadge}" VerticalAlignment="Center"
+                            Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="3,0">
+                        <TextBlock Text="{Binding IsolationBadge}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                   FontSize="9.5" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                    </Border>
                     <!-- Subagents: collapsed by default as one bot icon per subagent (up to 4, then ...); click to expand/collapse cards below. -->
                     <Button Classes="row" Height="18" VerticalAlignment="Center"
                             IsVisible="{Binding Subagents.HasAny, FallbackValue=False}"
@@ -90,6 +132,29 @@
                         IsVisible="{Binding IsRenaming}" Value="{Binding Title, Mode=OneWay}"
                         Label="{Binding Title}" TextCommitted="OnTextCommitted" EditCanceled="OnEditCanceled" />
     </Grid>
+    <!-- Directly spawned child agents nested underneath this parent agent (Scheme C compact sub-rows). -->
+    <Border IsVisible="{Binding ShowSpawnedChildren}"
+            Margin="15,1,0,3"
+            Padding="7,0,0,0"
+            BorderThickness="1,0,0,0"
+            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}">
+        <ItemsControl ItemsSource="{Binding SpawnedChildren}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Spacing="1" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ItemRowViewModel">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Text="↳" FontSize="11" Margin="0,0,2,0" VerticalAlignment="Top" Padding="0,5,0,0"
+                                   Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                        <vm:ItemRowView Grid.Column="1" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Border>
     <!-- Null for an item that never started a subagent: then nothing is built here. -->
     <ContentControl Content="{Binding Subagents}">
         <ContentControl.ContentTemplate>
