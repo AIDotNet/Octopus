@@ -19,11 +19,19 @@
                    TextWrapping="Wrap"
                    TextTrimming="None" />
 
+        <arcm:Button Name="ScanQrButton"
+                     Variant="Filled"
+                     HorizontalAlignment="Stretch"
+                     HorizontalContentAlignment="Center"
+                     Content="{l:MobileLangResource ScanQrCode}"
+                     Command="{Binding ScanQrCommand}"
+                     IsVisible="{Binding CanScanQr}" />
+
         <StackPanel Spacing="8">
             <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource AddHostTarget}" />
             <arcm:TextField Name="TargetInput"
                             Text="{Binding Target, Mode=TwoWay}"
-                            PlaceholderText="192.168.1.20:7420"
+                            PlaceholderText="192.168.1.20:47600"
                             AutomationProperties.Name="{l:MobileLangResource AddHostTarget}" />
         </StackPanel>
 

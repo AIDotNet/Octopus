@@ -1,3 +1,4 @@
+using System.Net;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
@@ -5,6 +6,8 @@ using Android.Runtime;
 using Avalonia;
 using Avalonia.Android;
 using Octopus.Mobile.Remote;
+using Octopus.Remote.Relay;
+using Xamarin.Android.Net;
 
 namespace Octopus.Mobile.Android;
 
@@ -22,6 +25,13 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
 
     public override void OnCreate()
     {
+        // Route relay and update HTTP requests through Android's native Java/Conscrypt stack so HarmonyOS / OEM
+        // certificate stores, NetworkSecurityConfig, and system proxies are respected consistently.
+        RelayHttp.HandlerFactory = static automaticDecompression => new AndroidMessageHandler
+        {
+            ConnectTimeout = TimeSpan.FromSeconds(10),
+            AutomaticDecompression = automaticDecompression ? DecompressionMethods.All : DecompressionMethods.None,
+        };
         UseRealHosts(this);
         base.OnCreate();
     }
@@ -95,6 +105,7 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
         MobileHost.Workspace = remote.Workspace;
         MobileHost.Account = remote.Account;
         MobileHost.OpenBrowser = address => OpenBrowser(context, address);
+        MobileHost.ScanQrCode = () => AndroidQrScanner.ScanAsync(context);
         MobileHost.Updater = Updates.MobileUpdater.Create(new AndroidUpdatePlatform(context), MobileHost.OpenBrowser);
     }
 
@@ -126,9 +137,19 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
 [IntentFilter([Intent.ActionView], Categories = [Intent.CategoryDefault, Intent.CategoryBrowsable], DataScheme = "octopus")]
 public sealed class MainActivity : AvaloniaMainActivity
 {
+    internal static WeakReference<MainActivity>? Current { get; private set; }
+
+    protected override void OnCreate(Bundle? savedInstanceState)
+    {
+        base.OnCreate(savedInstanceState);
+        Current = new WeakReference<MainActivity>(this);
+        DispatchDeepLink(Intent);
+    }
+
     protected override void OnResume()
     {
         base.OnResume();
+        Current = new WeakReference<MainActivity>(this);
         MobileHost.NotifyForegrounded();
     }
 
@@ -141,6 +162,11 @@ public sealed class MainActivity : AvaloniaMainActivity
     protected override void OnNewIntent(Intent? intent)
     {
         base.OnNewIntent(intent);
+        DispatchDeepLink(intent);
+    }
+
+    private static void DispatchDeepLink(Intent? intent)
+    {
         if (intent?.DataString is { Length: > 0 } raw && Uri.TryCreate(raw, UriKind.Absolute, out var uri))
         {
             MobileHost.HandleDeepLink(uri);

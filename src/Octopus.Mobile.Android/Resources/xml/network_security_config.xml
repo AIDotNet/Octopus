@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Allows ws:// LAN connections to paired hosts (end-to-end encrypted inside SecureChannel) and trusts system CAs,
+     user-installed CAs, and a bundled set of current public root CAs (ISRG Root X1/X2, GTS Root R1-R4, SSL.com 2022,
+     DigiCert G5, Sectigo E46/R46, etc.) so HarmonyOS 4 and older Android devices without GMS CA updates verify
+     modern TLS certificates cleanly. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+            <certificates src="@raw/ca_roots" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

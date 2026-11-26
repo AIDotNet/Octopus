@@ -16,6 +16,7 @@ public sealed record PairingLink(string DeviceId, byte[] Fingerprint, byte[] Tok
 {
     public const string Scheme = "octopus";
     private const string Prefix = Scheme + "://pair?";
+    private const string PrefixWithSlash = Scheme + "://pair/?";
 
     public override string ToString()
     {
@@ -31,11 +32,16 @@ public sealed record PairingLink(string DeviceId, byte[] Fingerprint, byte[] Tok
     /// <summary>The link from its text; null when it is not a pairing link of a version this device knows, or is incomplete.</summary>
     public static PairingLink? TryParse(string? text)
     {
-        if (text is null || !text.Trim().StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)) return null;
+        if (text is null) return null;
+        var trimmed = text.Trim();
+        int queryStart;
+        if (trimmed.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)) queryStart = Prefix.Length;
+        else if (trimmed.StartsWith(PrefixWithSlash, StringComparison.OrdinalIgnoreCase)) queryStart = PrefixWithSlash.Length;
+        else return null;
         string? version = null, id = null, name = null;
         byte[]? fingerprint = null, token = null;
         var addresses = new List<string>();
-        foreach (var pair in text.Trim()[Prefix.Length..].Split('&', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var pair in trimmed[queryStart..].Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
             var cut = pair.IndexOf('=');
             if (cut <= 0) return null;

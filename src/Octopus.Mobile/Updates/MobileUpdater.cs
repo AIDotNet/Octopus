@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Threading;
@@ -8,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Octopus.Core.Updates;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Remote;
+using Octopus.Remote.Relay;
 using Octopus.Updates;
 
 namespace Octopus.Mobile.Updates;
@@ -85,11 +85,7 @@ public sealed partial class MobileUpdater : ObservableObject
     public static MobileUpdater Create(IMobileUpdatePlatform platform, Action<Uri> openBrowser)
     {
         if (MobileBuild.ServiceUrl is not { Length: > 0 } service) return new MobileUpdater(platform, null, null, openBrowser);
-        var http = new HttpClient(new SocketsHttpHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All,
-            ConnectTimeout = TimeSpan.FromSeconds(20),
-        })
+        var http = new HttpClient(RelayHttp.CreateHandler(automaticDecompression: true))
         {
             // Downloads are long; each read has its own idle timeout (UpdateDownloader), each check its 30 s.
             Timeout = Timeout.InfiniteTimeSpan,

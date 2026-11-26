@@ -313,7 +313,7 @@ internal static class RelaySockets
                 HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => new RelayException(RelayFailure.Unauthorized, "The relay does not accept the access token.", e),
                 HttpStatusCode.TooManyRequests => new RelayException(RelayFailure.Busy, "The relay is busy; try again later.", e),
                 HttpStatusCode.NotFound or HttpStatusCode.Conflict => new RelayException(RelayFailure.HostOffline, "The connection through the relay is no longer there.", e),
-                _ => new RelayException(RelayFailure.Unreachable, $"The relay cannot be reached: {e.Message}", e),
+                _ => new RelayException(RelayFailure.Unreachable, $"The relay cannot be reached: {RelayHttp.DescribeError(e)}", e),
             };
         }
     }
@@ -333,7 +333,8 @@ internal static class RelaySockets
 /// <summary>The device's way to a host through a relay: asks for a tunnel and connects to its end.</summary>
 public static class RelayDialer
 {
-    private static readonly HttpClient Http = new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5), ConnectTimeout = TimeSpan.FromSeconds(10) });
+    private static readonly Lazy<HttpClient> HttpClientLazy = new(static () => new HttpClient(RelayHttp.CreateHandler()));
+    private static HttpClient Http => HttpClientLazy.Value;
 
     /// <summary>
     /// A transport to the host, through the relay. What goes over it is the same secure channel as on the local
@@ -356,7 +357,7 @@ public static class RelayDialer
             }
             catch (Exception e) when (e is HttpRequestException or IOException)
             {
-                throw new RelayException(RelayFailure.Unreachable, $"The relay cannot be reached: {e.Message}", e);
+                throw new RelayException(RelayFailure.Unreachable, $"The relay cannot be reached: {RelayHttp.DescribeError(e)}", e);
             }
             using (response)
             {

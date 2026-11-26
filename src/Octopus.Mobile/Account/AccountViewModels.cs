@@ -5,6 +5,7 @@ using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Workspace;
 using Octopus.Remote.Relay;
+using Octopus.Remote.Security;
 
 namespace Octopus.Mobile.Account;
 
@@ -241,11 +242,16 @@ public sealed partial class WelcomeViewModel : ObservableObject, IDisposable
     public bool ShowsHighlights => !IsOnTop;
     /// <summary>"Local network": not where the person already uses the app that way.</summary>
     public bool ShowsLocal => !IsOnTop;
+    /// <summary>True when this platform provides a native QR code scanner.</summary>
+    public bool CanScanQr => MobileHost.ScanQrCode is not null;
+    /// <summary>Quick QR scan row on the initial welcome page when the device has a camera.</summary>
+    public bool ShowsScanQr => ShowsLocal && CanScanQr;
     /// <summary>"Custom service" as a row of its own: only when "Sign in" does not lead there anyway.</summary>
     public bool ShowsCustom => HasOfficialServer;
-    public bool ShowsOtherWays => ShowsLocal || ShowsCustom;
+    public bool ShowsOtherWays => ShowsScanQr || ShowsLocal || ShowsCustom;
     /// <summary>The buttons are showing rather than the code.</summary>
     public bool IsChoosing => !SignIn.HasCode;
+    [ObservableProperty] public partial bool IsScanning { get; private set; }
 
     partial void OnIsCodeSheetOpenChanged(bool value)
     {
@@ -282,6 +288,21 @@ public sealed partial class WelcomeViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task ScanQrAsync()
+    {
+        if (IsScanning || MobileHost.ScanQrCode is not { } scan) return;
+        SignIn.Cancel();
+        IsScanning = true;
+        string? scanned;
+        try { scanned = await scan(); }
+        finally { IsScanning = false; }
+        if (string.IsNullOrWhiteSpace(scanned)) return;
+        var trimmed = scanned.Trim();
+        if (RelayConfigLink.TryParse(trimmed) is not null) _navigator.ShowCustomServer(trimmed);
+        else _navigator.ShowAddHost(trimmed, autoConnect: true);
+    }
+
+    [RelayCommand]
     private void UseCustom()
     {
         SignIn.Cancel();
@@ -303,7 +324,7 @@ public sealed partial class CustomServerViewModel : ObservableObject, IDisposabl
 {
     private readonly INavigator _navigator;
 
-    public CustomServerViewModel(IAccountSession account, INavigator navigator, Action<Uri> openBrowser)
+    public CustomServerViewModel(IAccountSession account, INavigator navigator, Action<Uri> openBrowser, string? initialLink = null)
     {
         _navigator = navigator;
         Server = account.Server;
@@ -314,6 +335,10 @@ public sealed partial class CustomServerViewModel : ObservableObject, IDisposabl
             OnPropertyChanged(nameof(IsEntering));
             Notify();
         };
+        if (!string.IsNullOrWhiteSpace(initialLink))
+        {
+            Server = initialLink.Trim();
+        }
     }
 
     public SignInFlow SignIn { get; }
@@ -321,9 +346,11 @@ public sealed partial class CustomServerViewModel : ObservableObject, IDisposabl
     [ObservableProperty] public partial string Server { get; set; }
     /// <summary>Optional Access Key for browser-free sign-in on a self-hosted Octopus Relay.</summary>
     [ObservableProperty] public partial string AccessKey { get; set; } = "";
+    [ObservableProperty] public partial bool IsScanning { get; private set; }
 
     /// <summary>The address is showing rather than the code.</summary>
     public bool IsEntering => !SignIn.HasCode;
+    public bool CanScanQr => MobileHost.ScanQrCode is not null;
     public bool CanStart => SignIn.IsIdle && !string.IsNullOrWhiteSpace(Server);
 
     partial void OnServerChanged(string value)
@@ -362,6 +389,24 @@ public sealed partial class CustomServerViewModel : ObservableObject, IDisposabl
     }
 
     [RelayCommand]
+    private async Task ScanQrAsync()
+    {
+        if (IsScanning || MobileHost.ScanQrCode is not { } scan) return;
+        IsScanning = true;
+        string? scanned;
+        try { scanned = await scan(); }
+        finally { IsScanning = false; }
+        if (string.IsNullOrWhiteSpace(scanned)) return;
+        var trimmed = scanned.Trim();
+        if (PairingLink.TryParse(trimmed) is not null)
+        {
+            _navigator.ShowAddHost(trimmed, autoConnect: true);
+            return;
+        }
+        Server = trimmed;
+    }
+
+    [RelayCommand]
     private void Back()
     {
         SignIn.Cancel();
@@ -384,30 +429,67 @@ public sealed partial class AddHostViewModel : ObservableObject, IDisposable
     private PairingAttempt? _attempt;
     private bool _disposed;
 
-    public AddHostViewModel(IRemoteWorkspace workspace, IAccountSession account, INavigator navigator)
+    public AddHostViewModel(IRemoteWorkspace workspace, IAccountSession account, INavigator navigator, string? initialTarget = null, bool autoConnect = false)
     {
         _workspace = workspace;
         _account = account;
         _navigator = navigator;
+        if (!string.IsNullOrWhiteSpace(initialTarget))
+        {
+            Target = initialTarget.Trim();
+            if (autoConnect)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!_disposed && ConnectCommand.CanExecute(null)) ConnectCommand.Execute(null);
+                });
+            }
+        }
     }
 
     /// <summary>What the person typed or pasted: an address or a pairing link.</summary>
     [ObservableProperty] public partial string Target { get; set; } = "";
     /// <summary>The computer is being reached, or the person there is being waited for.</summary>
     [ObservableProperty] public partial bool IsConnecting { get; private set; }
+    [ObservableProperty] public partial bool IsScanning { get; private set; }
     [ObservableProperty] public partial string? ErrorText { get; private set; }
 
     public bool HasError => !string.IsNullOrEmpty(ErrorText);
-    public bool CanConnect => !IsConnecting && !string.IsNullOrWhiteSpace(Target);
+    public bool CanScanQr => MobileHost.ScanQrCode is not null;
+    public bool CanStartScan => CanScanQr && !IsConnecting && !IsScanning;
+    public bool CanConnect => !IsConnecting && !IsScanning && !string.IsNullOrWhiteSpace(Target);
 
     partial void OnTargetChanged(string value) => Notify();
     partial void OnIsConnectingChanged(bool value) => Notify();
+    partial void OnIsScanningChanged(bool value) => Notify();
     partial void OnErrorTextChanged(string? value) => OnPropertyChanged(nameof(HasError));
 
     private void Notify()
     {
         OnPropertyChanged(nameof(CanConnect));
+        OnPropertyChanged(nameof(CanStartScan));
         ConnectCommand.NotifyCanExecuteChanged();
+        ScanQrCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanStartScan))]
+    private async Task ScanQrAsync()
+    {
+        if (MobileHost.ScanQrCode is not { } scan) return;
+        ErrorText = null;
+        IsScanning = true;
+        string? scanned;
+        try { scanned = await scan(); }
+        finally { IsScanning = false; }
+        if (_disposed || string.IsNullOrWhiteSpace(scanned)) return;
+        var trimmed = scanned.Trim();
+        if (RelayConfigLink.TryParse(trimmed) is not null)
+        {
+            _navigator.ShowCustomServer(trimmed);
+            return;
+        }
+        Target = trimmed;
+        await ConnectAsync();
     }
 
     [RelayCommand(CanExecute = nameof(CanConnect))]
@@ -437,13 +519,15 @@ public sealed partial class AddHostViewModel : ObservableObject, IDisposable
             case PairingOutcome.Cancelled:
                 break;
             default:
-                ErrorText = MobileLangResources.Get(outcome switch
+                var baseError = MobileLangResources.Get(outcome switch
                 {
                     PairingOutcome.NotAnAddress => MobileLangResourceKind.AddHostNotAnAddress,
                     PairingOutcome.NotPairing => MobileLangResourceKind.PairingNotOpen,
                     PairingOutcome.Unreachable => MobileLangResourceKind.PairingUnreachable,
                     _ => MobileLangResourceKind.PairingFailed,
                 });
+                var detail = outcome == PairingOutcome.Unreachable ? attempt.ErrorDetail?.Invoke() : null;
+                ErrorText = string.IsNullOrWhiteSpace(detail) ? baseError : $"{baseError} ({detail})";
                 break;
         }
     }

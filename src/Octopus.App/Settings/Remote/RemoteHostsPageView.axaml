@@ -3,23 +3,26 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:remote="using:Octopus.App.Settings.Remote"
              x:Class="Octopus.App.Settings.Remote.RemoteHostsPageView"
              x:DataType="remote:RemoteHostsSettingsViewModel">
     <StackPanel Spacing="16">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource SettingsRemoteHostsTitle}" />
-            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsRemoteHostsSubtitle}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsRemoteHostsTitle}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource SettingsRemoteHostsSubtitle}" />
         </StackPanel>
 
         <!-- Pairing with another host. -->
-        <TextBlock Classes="group" Text="{l:AppLangResource SettingsRemoteHostsAdd}" Margin="0,8,0,0" />
+        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,8,0,0">
+            <TextBlock Classes="group" Text="{l:AppLangResource SettingsRemoteHostsAdd}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource SettingsRemoteHostsAddHint}" />
+        </StackPanel>
         <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                 BorderThickness="1"
                 CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
                 Padding="14,12">
             <StackPanel Spacing="12">
-                <TextBlock Classes="hint" Text="{l:AppLangResource SettingsRemoteHostsAddHint}" TextWrapping="Wrap" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                     <arc:Input x:Name="TargetInput" Size="Small"
                                AutomationProperties.Name="{l:AppLangResource SettingsRemoteHostsAddress}"

@@ -95,6 +95,13 @@
             <arcm:ListGroup Name="OtherWays"
                             Header="{l:MobileLangResource OtherWays}"
                             IsVisible="{Binding ShowsOtherWays}">
+                <arcm:ListItem Name="ScanQrRow"
+                               Icon="{x:Static arc:ArcIcons.Smartphone}"
+                               Content="{l:MobileLangResource ScanQrToConnect}"
+                               Subtitle="{l:MobileLangResource ScanQrToConnectHint}"
+                               ShowChevron="True"
+                               Command="{Binding ScanQrCommand}"
+                               IsVisible="{Binding ShowsScanQr}" />
                 <arcm:ListItem Name="LocalRow"
                                Icon="{x:Static arc:ArcIcons.Monitor}"
                                Content="{l:MobileLangResource UseLocal}"

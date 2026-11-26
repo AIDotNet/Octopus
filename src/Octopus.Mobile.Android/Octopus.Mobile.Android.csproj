@@ -15,6 +15,8 @@
         <ApplicationDisplayVersion>0.1</ApplicationDisplayVersion>
         <AndroidManifest>AndroidManifest.xml</AndroidManifest>
         <AndroidPackageFormat>apk</AndroidPackageFormat>
+        <UseNativeHttpHandler>true</UseNativeHttpHandler>
+        <UseSystemResourceKeys>false</UseSystemResourceKeys>
         <IsPackable>false</IsPackable>
     </PropertyGroup>
 
@@ -24,6 +26,7 @@
 
     <ItemGroup>
         <PackageReference Include="Avalonia.Android" />
+        <PackageReference Include="ZXing.Net" />
     </ItemGroup>
 
     <ItemGroup>

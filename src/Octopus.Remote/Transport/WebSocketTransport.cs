@@ -22,6 +22,13 @@ public sealed class WebSocketTransport(WebSocket socket, IDisposable? owner = nu
         client.Options.KeepAliveInterval = KeepAlive;
         // Detect silently dropped TCP flows (e.g. mobile backgrounding or Wi-Fi/NAT reset) when Pong never returns.
         client.Options.KeepAliveTimeout = KeepAlive;
+        // Direct LAN connections must bypass any device Wi-Fi HTTP proxy so local private IPs remain reachable.
+        if (address.Scheme.Equals("ws", StringComparison.OrdinalIgnoreCase)
+            && IPAddress.TryParse(address.Host, out var hostIp)
+            && LocalNetwork.IsLocal(hostIp))
+        {
+            client.Options.Proxy = null;
+        }
         try
         {
             var target = string.IsNullOrEmpty(address.AbsolutePath) || address.AbsolutePath == "/"

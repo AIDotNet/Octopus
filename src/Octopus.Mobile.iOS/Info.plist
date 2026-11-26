@@ -41,5 +41,8 @@
   <!-- Asked the first time the app connects to a computer on the same network. -->
   <key>NSLocalNetworkUsageDescription</key>
   <string>Octopus connects to your computers on this network to show their terminals and agents.</string>
+  <!-- Asked the first time the user scans a pairing or relay QR code inside the app. -->
+  <key>NSCameraUsageDescription</key>
+  <string>Octopus uses the camera to scan pairing and relay setup QR codes from your computer.</string>
 </dict>
 </plist>

@@ -3,24 +3,25 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:remote="using:Octopus.App.Settings.Remote"
              x:Class="Octopus.App.Settings.Remote.AccountDevicesPageView"
              x:DataType="remote:AccountDevicesSettingsViewModel">
     <StackPanel Spacing="16">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource AccountDevicesTitle}" />
-            <TextBlock Classes="subtitle" Text="{l:AppLangResource AccountDevicesSubtitle}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="title" Text="{l:AppLangResource AccountDevicesTitle}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource AccountDevicesSubtitle}" />
         </StackPanel>
 
         <!-- The account: everything below the password needs it. -->
         <arc:SettingsGroup Appearance="Plain">
             <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteRelayAccount}"
-                             Description="{l:AppLangResource AccountDevicesAccountHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource AccountDevicesAccountHint}">
                 <TextBlock x:Name="AccountText" Classes="name" Text="{Binding AccountText}"
                            TextTrimming="CharacterEllipsis" MaxWidth="300" VerticalAlignment="Center" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsRemoteRelayHost}"
-                             Description="{l:AppLangResource AccountDevicesRelayHostHint}"
+                             settings:SettingHelp.Tip="{l:AppLangResource AccountDevicesRelayHostHint}"
                              IsVisible="{Binding IsSignedIn}">
                 <arc:Switch x:Name="RelayHostSwitch" IsChecked="{Binding RelayHostEnabled, Mode=TwoWay}" />
             </arc:SettingsRow>
@@ -29,11 +30,13 @@
         <arc:Alert Tone="Warning" Content="{l:AppLangResource AccountDevicesRelayOff}" IsVisible="{Binding ShowRelayOffHint}" />
 
         <!-- This computer's access password. -->
-        <TextBlock Classes="group" Text="{l:AppLangResource AccountDevicesPasswordGroup}" Margin="0,8,0,0" />
-        <TextBlock Classes="hint" Margin="2,0,0,0" Text="{l:AppLangResource AccountDevicesPasswordGroupHint}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,8,0,0">
+            <TextBlock Classes="group" Text="{l:AppLangResource AccountDevicesPasswordGroup}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource AccountDevicesPasswordGroupHint}" />
+        </StackPanel>
         <arc:SettingsGroup Appearance="Plain">
             <arc:SettingsRow Header="{l:AppLangResource AccountDevicesPasswordAccess}"
-                             Description="{l:AppLangResource AccountDevicesPasswordAccessHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource AccountDevicesPasswordAccessHint}">
                 <arc:Switch x:Name="PasswordAccessSwitch" IsChecked="{Binding PasswordAccessEnabled, Mode=TwoWay}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource AccountDevicesPassword}"
@@ -53,7 +56,7 @@
                 </StackPanel>
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource AccountDevicesChange}"
-                             Description="{l:AppLangResource AccountDevicesChangeHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource AccountDevicesChangeHint}">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <arc:Button x:Name="RegenerateButton" Variant="Secondary" Size="Small"
                                 Content="{l:AppLangResource AccountDevicesRegenerate}" Command="{Binding RegeneratePasswordCommand}" />
@@ -100,14 +103,16 @@
 
         <!-- Every device of the account. -->
         <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
-            <TextBlock Classes="group" Text="{l:AppLangResource AccountDevicesList}" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                <TextBlock Classes="group" Text="{l:AppLangResource AccountDevicesList}" VerticalAlignment="Center" />
+                <settings:SettingHelpTip Tip="{l:AppLangResource AccountDevicesListHint}" IsVisible="{Binding IsSignedIn}" />
+            </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsSignedIn}">
                 <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" IsVisible="{Binding IsLoadingDevices}" />
                 <arc:Button x:Name="RefreshDevicesButton" Variant="Ghost" Size="Small"
                             Content="{l:AppLangResource AccountDevicesRefresh}" Command="{Binding RefreshDevicesCommand}" />
             </StackPanel>
         </Grid>
-        <TextBlock Classes="hint" Margin="2,0,0,0" Text="{l:AppLangResource AccountDevicesListHint}" TextWrapping="Wrap" IsVisible="{Binding IsSignedIn}" />
         <arc:Alert Tone="Danger" Content="{Binding DevicesErrorText}" IsVisible="{Binding HasDevicesError}" />
         <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                 BorderThickness="1"

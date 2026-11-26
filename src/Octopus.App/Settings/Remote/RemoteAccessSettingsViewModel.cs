@@ -66,11 +66,16 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
     [ObservableProperty] public partial string? ErrorText { get; private set; }
     [ObservableProperty] public partial bool IsPairing { get; private set; }
     [ObservableProperty] public partial string? PairingLink { get; private set; }
+    [ObservableProperty] public partial QrCodeMatrix? PairingQrCode { get; private set; }
     [ObservableProperty] public partial bool HasDevices { get; private set; }
     [ObservableProperty] public partial bool HasRequests { get; private set; }
 
+    private string? _encodedQrLink;
+
     public bool HasError => !string.IsNullOrEmpty(ErrorText);
     public bool HasPairingLink => !string.IsNullOrEmpty(PairingLink);
+    public bool HasPairingQrCode => PairingQrCode is not null;
+    public bool IsPairingLinkUsed => IsPairing && !HasPairingLink;
     public bool IsWaitingForRequest => IsPairing && !HasRequests;
     /// <summary>Remote access is on but closing the window would quit the app: the page says how to keep it running.</summary>
     public bool ShowTrayHint => LanEnabled && !_settings.Current.Tray.CloseToTray;
@@ -306,6 +311,12 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
     }
 
     [RelayCommand]
+    private void RefreshPairingLink()
+    {
+        if (_service?.RefreshPairingToken() == true) Refresh();
+    }
+
+    [RelayCommand]
     private async Task RevokeAsync(PairedDeviceRow? row)
     {
         if (row is null || _service is null) return;
@@ -363,6 +374,11 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
         IsPairing = window is not null;
         // The link carries every way to this computer: its local addresses and, while registered there, the relay.
         PairingLink = window is null ? null : service!.CreatePairingLink(_runtime.RelayAddress is { } throughRelay ? [.. _runtime.LanAddresses(), throughRelay] : _runtime.LanAddresses())?.ToString();
+        if (!string.Equals(_encodedQrLink, PairingLink, StringComparison.Ordinal))
+        {
+            _encodedQrLink = PairingLink;
+            PairingQrCode = string.IsNullOrEmpty(PairingLink) ? null : QrCodeEncoder.Encode(PairingLink, QrErrorCorrectionLevel.Medium);
+        }
 
         IsRelayOnline = _runtime.RelayState == Octopus.Remote.Relay.RelayLinkState.Online;
         RelayStatus = _runtime.RelayState switch
@@ -408,6 +424,8 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
         HasDevices = Devices.Count > 0;
         OnPropertyChanged(nameof(HasError));
         OnPropertyChanged(nameof(HasPairingLink));
+        OnPropertyChanged(nameof(HasPairingQrCode));
+        OnPropertyChanged(nameof(IsPairingLinkUsed));
         OnPropertyChanged(nameof(IsWaitingForRequest));
         OnPropertyChanged(nameof(ShowTrayHint));
     }

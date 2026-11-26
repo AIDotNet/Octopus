@@ -323,10 +323,11 @@ public static class RelayClientInfo
 /// </summary>
 public static class RelayAccountClient
 {
-    private static readonly HttpClient Http = new(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5), ConnectTimeout = TimeSpan.FromSeconds(10) })
+    private static readonly Lazy<HttpClient> HttpClientLazy = new(static () => new HttpClient(RelayHttp.CreateHandler())
     {
         Timeout = TimeSpan.FromSeconds(20),
-    };
+    });
+    private static HttpClient Http => HttpClientLazy.Value;
     private static readonly byte[] LoginLabel = Encoding.ASCII.GetBytes("octopus-relay/1 login\n");
     private static readonly byte[] KeyLoginLabel = Encoding.ASCII.GetBytes("octopus-relay/1 key-login\n");
     private const int MaxAnswerBytes = 16 * 1024;
@@ -353,7 +354,7 @@ public static class RelayAccountClient
         }
         catch (Exception e) when (e is HttpRequestException or IOException || e is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            throw new RelayException(RelayFailure.Unreachable, e is OperationCanceledException ? "The relay did not answer in time." : $"The relay cannot be reached: {e.Message}", e);
+            throw new RelayException(RelayFailure.Unreachable, e is OperationCanceledException ? "The relay did not answer in time." : $"The relay cannot be reached: {RelayHttp.DescribeError(e)}", e);
         }
         if (status != HttpStatusCode.OK || bytes.Length > MaxAnswerBytes) return null;
         var parsed = Parse(bytes, RelayAccountJsonContext.Default.RelayInfoResponse);
@@ -516,7 +517,7 @@ public static class RelayAccountClient
         }
         catch (Exception e) when (e is HttpRequestException or IOException || e is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            throw new RelayException(RelayFailure.Unreachable, e is OperationCanceledException ? "The relay did not answer in time." : $"The relay cannot be reached: {e.Message}", e);
+            throw new RelayException(RelayFailure.Unreachable, e is OperationCanceledException ? "The relay did not answer in time." : $"The relay cannot be reached: {RelayHttp.DescribeError(e)}", e);
         }
         if (status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) throw new RelayException(RelayFailure.Unauthorized, "The relay does not accept the access token.");
         if (status == HttpStatusCode.TooManyRequests) throw new RelayException(RelayFailure.Busy, "The relay is busy; try again later.");
@@ -577,7 +578,7 @@ public static class RelayAccountClient
         }
         catch (Exception e) when (e is HttpRequestException or IOException || e is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
-            throw new RelayException(RelayFailure.Unreachable, e is OperationCanceledException ? "The relay did not answer in time." : $"The relay cannot be reached: {e.Message}", e);
+            throw new RelayException(RelayFailure.Unreachable, e is OperationCanceledException ? "The relay did not answer in time." : $"The relay cannot be reached: {RelayHttp.DescribeError(e)}", e);
         }
     }
 

@@ -37,6 +37,7 @@ public static class Program
         MobileHost.Workspace = remote.Workspace;
         MobileHost.Account = remote.Account;
         MobileHost.OpenBrowser = OpenBrowser;
+        MobileHost.ScanQrCode = IosQrScanner.ScanAsync;
     }
 
     /// <summary>What a computer shows for this phone. Since iOS 16 the name the person gave it needs an entitlement; without, it is "iPhone".</summary>
