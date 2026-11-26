@@ -52,6 +52,8 @@ public partial class DiffTabView : UserControl, ITabContent
         _model = DataContext as DiffTabViewModel;
         if (_model is null)
         {
+            Diff.OriginalText = "";
+            Diff.ModifiedText = "";
             Diff.ClearValue(FontFamilyProperty);
             Lines.ClearValue(CodeView.FontFamilyProperty);
             return;

@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Collections.Immutable;
 using StreamMark.Core.Highlighting;
 using StreamMark.Highlighting.TextMate;
+using TKCode.Arc;
 
 namespace Octopus.App.Files;
 
@@ -24,18 +25,18 @@ public enum SyntaxRole : byte
 public readonly record struct SyntaxSpan(int Start, int Length, SyntaxRole Role);
 
 /// <summary>
-/// Tokens from the same engine <c>arc:CodeBlock</c> uses: StreamMark's TextMate highlighter (public, a dependency of
-/// Arc), in a Light+ session. Arc's own wrapper over it, <c>TKCode.Arc.CodeBlockHighlighter</c>, is internal; what it adds
-/// is the table that reads a Light+ token color back as one of Arc's nine roles. That table is mirrored below until Arc
-/// makes the highlighter public (see the report in design notes); the colors themselves come from Arc's public
-/// <c>CodeBlock</c> design tokens, so they follow the theme.
+/// Tokens from the same shared engine <c>arc:CodeBlock</c> uses (<see cref="ArcHighlighting.SharedHighlighter"/>,
+/// avoiding a duplicate TextMate grammar registry and Oniguruma native heap), in a Light+ session. Arc's own wrapper over
+/// it, <c>TKCode.Arc.CodeBlockHighlighter</c>, is internal; what it adds is the table that reads a Light+ token color back
+/// as one of Arc's nine roles. The colors themselves come from Arc's public <c>CodeBlock</c> design tokens, so they follow
+/// the theme.
 /// </summary>
 public static class CodeSyntax
 {
     private enum Family { Code, Markup, Json, Yaml, Css }
 
     // Light+ foreground colors (0xAARRGGBB) as TextMateSharp reports them for VS Code's Light+ theme.
-    private static readonly FrozenDictionary<uint, SyntaxRole> s_roles = new Dictionary<uint, SyntaxRole>
+    private static readonly FrozenDictionary<uint, SyntaxRole> Roles = new Dictionary<uint, SyntaxRole>
     {
         [0xFF008000] = SyntaxRole.Comment,
         [0xFFA31515] = SyntaxRole.String,
@@ -53,14 +54,14 @@ public static class CodeSyntax
 
     private const string PunctuationCharacters = "{}[]();,.<>:=+*/!?|&-";
 
-    private static readonly Lazy<TextMateSyntaxHighlighter> s_engine = new(() => new TextMateSyntaxHighlighter());
+    private static TextMateSyntaxHighlighter Engine => ArcHighlighting.SharedHighlighter;
 
     /// <summary>Whether TextMate has a grammar for the language identifier.</summary>
-    public static bool Supports(string? language) => !string.IsNullOrWhiteSpace(language) && s_engine.Value.SupportsLanguage(language);
+    public static bool Supports(string? language) => !string.IsNullOrWhiteSpace(language) && Engine.SupportsLanguage(language);
 
     /// <summary>An incremental session (one thread at a time), or null for a language without a grammar.</summary>
     public static IHighlightSession? CreateSession(string? language) =>
-        Supports(language) ? s_engine.Value.CreateSession(language!, HighlightThemeKind.Light) : null;
+        Supports(language) ? Engine.CreateSession(language!, HighlightThemeKind.Light) : null;
 
     private static Family FamilyOf(string? language) => language switch
     {
@@ -87,7 +88,7 @@ public static class CodeSyntax
             case Family.Css when foreground == 0xFF267F99:
                 return SyntaxRole.Property;
         }
-        return s_roles.GetValueOrDefault(foreground);
+        return Roles.GetValueOrDefault(foreground);
     }
 
     /// <summary>The role spans of one line (ascending, merged); plain stretches are not listed, except punctuation.</summary>

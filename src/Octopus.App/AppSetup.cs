@@ -20,13 +20,13 @@ public static class AppSetup
                .WithArcFonts()
                .UseArc(arc => arc
                    .UseLanguages(AppLanguages.Initial, AppLanguages.Supported)
-                   .UseArcBlocks()       // Arc's controls and blocks (SettingsPage); registers UseArcControls() and UseArcMarkdown() too
+                   .UseArcMarkdown()     // Markdown rendering for AgentTimelineView, MarkdownViewerView and UpdateNotesView
+                   .UseArcBlocks(static blocks => blocks.UseSettings().UseSidebar()) // trim-safe selective Blocks (Settings + Sidebar only)
+                   .UseArcSpecial(static special => special.UseImageReveal())        // trim-safe selective Special (ImageReveal only)
                    .UseArcHighlighting() // TextMate syntax highlighting for CodeBlock, the Markdown editor and fenced code
                    .UseArcCodeEditor()   // Monaco-based code editor for editable source and config file tabs
                    .UseArcDock()         // the workspace: tab groups and splits
                    .UseArcCorners()      // compact corners: the whole app is a dense tool, not a landing page
-                   // The app's own package: its text (Localization/) and any Arc controls of its own.
-                   .UsePackage("Octopus", static p => TKCode.Arc.Generated.Octopus.ArcGeneratedAssets.AddTo(p))
-                   // The saved appearance and accent, read from settings.json before the first frame.
-                   .WithTheme(AppHost.Get<ThemeService>().ApplyStartupTheme));
+                   .UsePackage("Octopus", static p => TKCode.Arc.Generated.Octopus.ArcGeneratedAssets.AddTo(p)) // own text + Arc controls
+                   .WithTheme(AppHost.Get<ThemeService>().ApplyStartupTheme)); // saved appearance + accent, before the first frame
 }

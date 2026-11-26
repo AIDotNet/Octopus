@@ -39,22 +39,38 @@ public interface ILanguageServerManager : IDisposable
     void StopAll();
 }
 
-/// <summary>Production LSP manager: resolves executables via login PATH, shares one process per workspace, and cleans up on disable/exit.</summary>
+/// <summary>Production LSP manager: resolves executables via login PATH, shares one process per workspace, shuts down idle servers after the last tab detaches, and cleans up on disable/exit.</summary>
 public sealed class LanguageServerManager : ILanguageServerManager
 {
+    /// <summary>How long a language server stays warm after its last attached editor closes before being stopped.</summary>
+    public static readonly TimeSpan DefaultIdleShutdownDelay = TimeSpan.FromSeconds(45);
+
     private readonly ISettingsStore _settings;
     private readonly IExecutableLocator _locator;
     private readonly ILoginEnvironment _loginEnvironment;
+    private readonly TimeSpan _idleShutdownDelay;
     private readonly ConcurrentDictionary<(string ServerId, string Root), Lazy<Task<RunningServer?>>> _servers = new();
     private bool _disposed;
 
     public LanguageServerManager(ISettingsStore settings, IExecutableLocator locator, ILoginEnvironment loginEnvironment)
+        : this(settings, locator, loginEnvironment, DefaultIdleShutdownDelay)
+    {
+    }
+
+    internal LanguageServerManager(
+        ISettingsStore settings,
+        IExecutableLocator locator,
+        ILoginEnvironment loginEnvironment,
+        TimeSpan idleShutdownDelay)
     {
         _settings = settings;
         _locator = locator;
         _loginEnvironment = loginEnvironment;
+        _idleShutdownDelay = idleShutdownDelay;
         _settings.Changed += OnSettingsChanged;
     }
+
+    internal int RunningServerCount => _servers.Count;
 
     public async Task<IReadOnlyList<DetectedLanguageServer>> DetectInstalledAsync(CancellationToken cancellationToken = default)
     {
@@ -104,22 +120,53 @@ public sealed class LanguageServerManager : ILanguageServerManager
             : Path.GetFullPath(workspaceRoot);
         var key = (chosen.Value.Spec.Id, root);
 
-        var running = await GetOrStartAsync(key, chosen.Value.Spec, chosen.Value.ExecutablePath, root, cancellationToken).ConfigureAwait(false);
-        if (running is null || !running.Client.IsRunning || cancellationToken.IsCancellationRequested || _disposed) return null;
-
-        // Re-check setting in case user disabled LSP while the server was starting.
-        var current = _settings.Current.Experiments;
-        if (!current.CodeEditor || !current.LanguageServer) return null;
-
-        var uri = new Uri(fullFile);
-        return await Dispatcher.UIThread.InvokeAsync(() =>
+        RunningServer? running = null;
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            if (cancellationToken.IsCancellationRequested || _disposed || !running.Client.IsRunning) return (IDisposable?)null;
-            return editor.AttachLanguageClient(running.Client, uri, languageId);
-        });
+            var (entry, candidate) = await GetOrStartAsync(key, chosen.Value.Spec, chosen.Value.ExecutablePath, root, cancellationToken).ConfigureAwait(false);
+            if (candidate is null || entry is null) return null;
+            if (candidate.TryAcquire())
+            {
+                running = candidate;
+                break;
+            }
+            // Raced with idle eviction; remove stale entry and retry once.
+            _servers.TryRemove(new KeyValuePair<(string ServerId, string Root), Lazy<Task<RunningServer?>>>(key, entry));
+        }
+        if (running is null) return null;
+
+        // Re-check cancellation, disposal, and settings after acquiring an attachment refcount.
+        var current = _settings.Current.Experiments;
+        if (cancellationToken.IsCancellationRequested || _disposed || !current.CodeEditor || !current.LanguageServer)
+        {
+            running.Release();
+            return null;
+        }
+
+        IDisposable? inner;
+        try
+        {
+            var uri = new Uri(fullFile);
+            inner = await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (cancellationToken.IsCancellationRequested || _disposed || !running.Client.IsRunning) return null;
+                return editor.AttachLanguageClient(running.Client, uri, languageId);
+            });
+        }
+        catch
+        {
+            running.Release();
+            throw;
+        }
+        if (inner is null)
+        {
+            running.Release();
+            return null;
+        }
+        return new AttachmentHandle(inner, running.Release);
     }
 
-    private async Task<RunningServer?> GetOrStartAsync(
+    private async Task<(Lazy<Task<RunningServer?>>? Entry, RunningServer? Server)> GetOrStartAsync(
         (string ServerId, string Root) key,
         LanguageServerSpec spec,
         string executablePath,
@@ -132,19 +179,19 @@ public sealed class LanguageServerManager : ILanguageServerManager
             var server = await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
             if (server is null || !server.Client.IsRunning)
             {
-                _servers.TryRemove(key, out _);
-                return null;
+                _servers.TryRemove(new KeyValuePair<(string ServerId, string Root), Lazy<Task<RunningServer?>>>(key, lazy));
+                return (null, null);
             }
-            return server;
+            return (lazy, server);
         }
         catch (OperationCanceledException)
         {
-            return null;
+            return (null, null);
         }
         catch (Exception)
         {
-            _servers.TryRemove(key, out _);
-            return null;
+            _servers.TryRemove(new KeyValuePair<(string ServerId, string Root), Lazy<Task<RunningServer?>>>(key, lazy));
+            return (null, null);
         }
     }
 
@@ -184,7 +231,6 @@ public sealed class LanguageServerManager : ILanguageServerManager
                 RootUri = rootUri,
                 ShutdownTimeout = TimeSpan.FromSeconds(2),
             });
-            client.Disconnected += (_, _) => _servers.TryRemove(key, out _);
 
             using var startTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await client.StartAsync(process.StandardOutput.BaseStream, process.StandardInput.BaseStream, startTimeout.Token).ConfigureAwait(false);
@@ -193,13 +239,27 @@ public sealed class LanguageServerManager : ILanguageServerManager
                 DisposeServer(client, process);
                 return null;
             }
-            return new RunningServer(client, process);
+            var running = new RunningServer(client, process, _idleShutdownDelay, server => EvictAndDispose(key, server));
+            client.Disconnected += (_, _) => EvictAndDispose(key, running);
+            return running;
         }
         catch (Exception)
         {
             DisposeServer(client, process);
             return null;
         }
+    }
+
+    private void EvictAndDispose((string ServerId, string Root) key, RunningServer server)
+    {
+        if (_servers.TryGetValue(key, out var existing)
+            && existing.IsValueCreated
+            && existing.Value.IsCompletedSuccessfully
+            && ReferenceEquals(existing.Value.Result, server))
+        {
+            _servers.TryRemove(new KeyValuePair<(string ServerId, string Root), Lazy<Task<RunningServer?>>>(key, existing));
+        }
+        server.Dispose();
     }
 
     private async Task<string?> GetSearchPathAsync(CancellationToken cancellationToken)
@@ -243,10 +303,128 @@ public sealed class LanguageServerManager : ILanguageServerManager
         try { process.Dispose(); } catch (Exception) { }
     }
 
-    private sealed class RunningServer(LanguageClient client, Process process) : IDisposable
+    internal sealed class AttachmentHandle(IDisposable inner, Action onDispose) : IDisposable
     {
-        public LanguageClient Client { get; } = client;
+        private int _disposed;
 
-        public void Dispose() => DisposeServer(Client, process);
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            try { inner.Dispose(); } catch (Exception) { }
+            onDispose();
+        }
+    }
+
+    internal sealed class RunningServer : IDisposable
+    {
+        private readonly object _gate = new();
+        private readonly Func<bool> _isAlive;
+        private readonly Action _disposeCore;
+        private readonly TimeSpan _idleDelay;
+        private readonly Action<RunningServer> _onIdle;
+        private int _activeAttachments;
+        private Timer? _idleTimer;
+        private bool _closing;
+        private int _disposed;
+
+        public RunningServer(LanguageClient client, Process process, TimeSpan idleDelay, Action<RunningServer> onIdle)
+            : this(client, () => client.IsRunning, () => DisposeServer(client, process), idleDelay, onIdle)
+        {
+        }
+
+        internal RunningServer(Func<bool> isAlive, TimeSpan idleDelay, Action<RunningServer> onIdle, Action disposeCore)
+            : this(null!, isAlive, disposeCore, idleDelay, onIdle)
+        {
+        }
+
+        private RunningServer(
+            LanguageClient client,
+            Func<bool> isAlive,
+            Action disposeCore,
+            TimeSpan idleDelay,
+            Action<RunningServer> onIdle)
+        {
+            Client = client;
+            _isAlive = isAlive;
+            _disposeCore = disposeCore;
+            _idleDelay = idleDelay;
+            _onIdle = onIdle;
+            if (idleDelay > TimeSpan.Zero && idleDelay != Timeout.InfiniteTimeSpan)
+            {
+                ArmIdleTimerLocked();
+            }
+        }
+
+        public LanguageClient Client { get; }
+
+        public bool TryAcquire()
+        {
+            lock (_gate)
+            {
+                if (_closing || !_isAlive()) return false;
+                _idleTimer?.Dispose();
+                _idleTimer = null;
+                _activeAttachments++;
+                return true;
+            }
+        }
+
+        public void Release()
+        {
+            var idleNow = false;
+            lock (_gate)
+            {
+                if (_closing) return;
+                if (_activeAttachments > 0) _activeAttachments--;
+                if (_activeAttachments == 0)
+                {
+                    if (_idleDelay <= TimeSpan.Zero)
+                    {
+                        _closing = true;
+                        _idleTimer?.Dispose();
+                        _idleTimer = null;
+                        idleNow = true;
+                    }
+                    else
+                    {
+                        ArmIdleTimerLocked();
+                    }
+                }
+            }
+            if (idleNow) _onIdle(this);
+        }
+
+        private void ArmIdleTimerLocked()
+        {
+            if (_closing || _idleDelay <= TimeSpan.Zero || _idleDelay == Timeout.InfiniteTimeSpan) return;
+            _idleTimer?.Dispose();
+            _idleTimer = new Timer(static state => ((RunningServer)state!).OnIdleElapsed(), this, _idleDelay, Timeout.InfiniteTimeSpan);
+        }
+
+        private void OnIdleElapsed()
+        {
+            lock (_gate)
+            {
+                if (_closing || _activeAttachments > 0) return;
+                _closing = true;
+                _idleTimer?.Dispose();
+                _idleTimer = null;
+            }
+            _onIdle(this);
+        }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _closing = true;
+                _idleTimer?.Dispose();
+                _idleTimer = null;
+            }
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                _disposeCore();
+            }
+        }
     }
 }

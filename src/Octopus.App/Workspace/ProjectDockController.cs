@@ -1,5 +1,6 @@
-using Avalonia.Media;
+using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Octopus.App.Files;
 using Octopus.App.Services;
@@ -20,6 +21,7 @@ public sealed class ProjectDockController : IDisposable
     private readonly CloseConfirmation _confirmation;
     private readonly Func<ProjectItem?> _newTerminal;
     private readonly Dictionary<string, DockPane> _panes = [];
+    private readonly Dictionary<string, Action> _paneCleanups = [];
     private readonly HashSet<string> _approvedClose = [];
     /// <summary>The panes of diff tabs: they have no project item, so syncing with the items must leave them alone.</summary>
     private readonly HashSet<string> _diffKeys = [];
@@ -37,7 +39,7 @@ public sealed class ProjectDockController : IDisposable
     private const double SpinTurnMs = 700;
     private const int SpinFrameCount = 120;
     private int _spinFrame;
-    private bool _loading;
+    private readonly bool _loading;
 
     public ProjectDockController(
         Project project,
@@ -49,10 +51,7 @@ public sealed class ProjectDockController : IDisposable
         Activity.IItemActivityService? activity = null)
     {
         _activity = activity;
-        if (_activity is not null)
-        {
-            _activity.Changed += OnActivityChanged;
-        }
+        _activity?.Changed += OnActivityChanged;
         _spin.Tick += OnSpinTick;
         _project = project;
         _projects = projects;
@@ -228,16 +227,15 @@ public sealed class ProjectDockController : IDisposable
         Layout.ActivePaneChanged -= OnActivePaneChanged;
         Layout.PaneClosing -= OnPaneClosing;
         Layout.PaneClosed -= OnPaneClosed;
-        if (_activity is not null)
-        {
-            _activity.Changed -= OnActivityChanged;
-        }
+        _activity?.Changed -= OnActivityChanged;
         _projects.Changed -= OnProjectsChanged;
-        foreach (var id in _panes.Keys.ToList())
+        foreach (var (id, pane) in _panes.ToList())
         {
+            CleanupPane(id, pane);
             _ = _registry.ReleaseAsync(id);
         }
         _panes.Clear();
+        _paneCleanups.Clear();
     }
 
     private void Focus(DockPane pane)
@@ -284,7 +282,7 @@ public sealed class ProjectDockController : IDisposable
     /// swapping the icon. ArcGlyph draws an icon in a fixed 24-unit box, not by its bounds, so a frame may sit at any
     /// angle. Like Arc's spinner, the ring is open for a quarter.
     /// </summary>
-    private static readonly Geometry[] s_spinFrames = Enumerable.Range(0, SpinFrameCount).Select(SpinFrame).ToArray();
+    private static readonly Geometry[] SpinFrames = Enumerable.Range(0, SpinFrameCount).Select(SpinFrame).ToArray();
 
     private static Geometry SpinFrame(int index)
     {
@@ -308,7 +306,7 @@ public sealed class ProjectDockController : IDisposable
         {
             return;
         }
-        pane.Icon = IsWorking(itemId) ? s_spinFrames[_spinFrame] : IsDone(itemId) ? ArcIcons.Check : IconOf(item);
+        pane.Icon = IsWorking(itemId) ? SpinFrames[_spinFrame] : IsDone(itemId) ? ArcIcons.Check : IconOf(item);
         SetSpinning(_panes.Keys.Any(IsWorking));
     }
 
@@ -324,7 +322,7 @@ public sealed class ProjectDockController : IDisposable
         {
             foreach (var (id, pane) in _panes)
             {
-                if (IsWorking(id)) pane.Icon = s_spinFrames[_spinFrame];
+                if (IsWorking(id)) pane.Icon = SpinFrames[_spinFrame];
             }
         }
     }
@@ -349,7 +347,7 @@ public sealed class ProjectDockController : IDisposable
             if (IsWorking(id))
             {
                 // A pane that just started working shows the current frame at once; the others change only when the frame does.
-                if (turned || !ReferenceEquals(pane.Icon, s_spinFrames[frame])) pane.Icon = s_spinFrames[frame];
+                if (turned || !ReferenceEquals(pane.Icon, SpinFrames[frame])) pane.Icon = SpinFrames[frame];
                 any = true;
             }
         }
@@ -361,14 +359,32 @@ public sealed class ProjectDockController : IDisposable
     {
         if (pane.Content is Plugins.PluginViewTab view)
         {
-            view.ChromeChanged += (_, _) => pane.Title = view.IsDirty ? "● " + TitleOf(item, null) : TitleOf(item, null);
+            void OnChromeChanged(object? sender, EventArgs e) =>
+                pane.Title = view.IsDirty ? "● " + TitleOf(item, null) : TitleOf(item, null);
+            view.ChromeChanged += OnChromeChanged;
+            _paneCleanups[item.Id] = () => view.ChromeChanged -= OnChromeChanged;
             return;
         }
         if (pane.Content is not Control { DataContext: FileTabViewModel file }) return;
-        file.PropertyChanged += (_, e) =>
+        void OnFilePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(FileTabViewModel.HasUnsavedChanges)) pane.Title = TitleOf(item, file);
-        };
+        }
+        file.PropertyChanged += OnFilePropertyChanged;
+        _paneCleanups[item.Id] = () => file.PropertyChanged -= OnFilePropertyChanged;
+    }
+
+    private void CleanupPane(string id, DockPane? pane)
+    {
+        if (_paneCleanups.Remove(id, out var unsubscribe))
+        {
+            unsubscribe();
+        }
+        if (pane is not null)
+        {
+            pane.Content = null;
+            pane.Icon = null;
+        }
     }
 
     private string TitleOf(ProjectItem item, FileTabViewModel? file)
@@ -427,6 +443,7 @@ public sealed class ProjectDockController : IDisposable
             return;
         }
         _panes.Remove(pane.Id);
+        CleanupPane(pane.Id, pane);
         _ = _registry.ReleaseAsync(pane.Id);
         if (_diffKeys.Remove(pane.Id))
         {
@@ -482,6 +499,7 @@ public sealed class ProjectDockController : IDisposable
             finally { _syncing = false; }
             if (_panes.Remove(gone))
             {
+                CleanupPane(gone, pane);
                 _ = _registry.ReleaseAsync(gone);
             }
         }

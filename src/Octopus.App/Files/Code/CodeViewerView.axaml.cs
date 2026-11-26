@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
@@ -66,6 +65,7 @@ public partial class CodeViewerView : UserControl, IFileViewerView
         _model = DataContext as CodeViewerModel;
         if (_model is null)
         {
+            Editor.Text = "";
             Editor.ClearValue(FontFamilyProperty);
             return;
         }

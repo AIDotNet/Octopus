@@ -48,6 +48,7 @@
         <PackageReference Include="Avalonia.Fonts.Inter" />
         <PackageReference Include="TKCode.Arc" />
         <PackageReference Include="TKCode.Arc.Blocks" />
+        <PackageReference Include="TKCode.Arc.Special" />
         <PackageReference Include="TKCode.Arc.Dock" />
         <PackageReference Include="TKCode.Arc.Editor.Controls" />
         <PackageReference Include="TKCode.Arc.Fonts" />

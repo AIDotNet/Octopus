@@ -29,6 +29,7 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
     private MarkdownViewerModel? _model;
     private int _loadedId;
     private int _sourceLoadedId;
+    private EventHandler? _pendingPreviewReady;
 
     public MarkdownViewerView()
     {
@@ -54,9 +55,16 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
         else Focus();
     }
 
+    protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        CancelPendingPreviewReady();
+    }
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        CancelPendingPreviewReady();
         if (_model is not null)
         {
             _model.PropertyChanged -= OnModelPropertyChanged;
@@ -69,6 +77,7 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
         if (_model is null)
         {
             DetachEditor();
+            Source.Text = "";
             Source.ClearValue(FontFamilyProperty);
             return;
         }
@@ -159,14 +168,28 @@ public partial class MarkdownViewerView : UserControl, IFileViewerView
     /// <summary>The preview's text changed and it parses again: it returns to where it was once the new document is ready.</summary>
     private void KeepPreviewPlace()
     {
+        CancelPendingPreviewReady();
         var offset = PreviewScroller.Offset;
         if (offset == default) return;
         Dispatcher.UIThread.Post(() => PreviewScroller.Offset = offset, DispatcherPriority.Loaded);
-        void OnReady(object? s, EventArgs args)
+        EventHandler? handler = null;
+        handler = (_, _) =>
         {
-            Preview.DocumentReady -= OnReady;
+            if (ReferenceEquals(_pendingPreviewReady, handler))
+            {
+                _pendingPreviewReady = null;
+            }
+            Preview.DocumentReady -= handler;
             Dispatcher.UIThread.Post(() => PreviewScroller.Offset = offset, DispatcherPriority.Loaded);
-        }
-        Preview.DocumentReady += OnReady;
+        };
+        _pendingPreviewReady = handler;
+        Preview.DocumentReady += handler;
+    }
+
+    private void CancelPendingPreviewReady()
+    {
+        if (_pendingPreviewReady is not { } pending) return;
+        _pendingPreviewReady = null;
+        Preview.DocumentReady -= pending;
     }
 }

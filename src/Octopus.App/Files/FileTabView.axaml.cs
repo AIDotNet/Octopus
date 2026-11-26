@@ -38,6 +38,10 @@ public partial class FileTabView : UserControl, ITabContent
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        if (Content is Control previous)
+        {
+            previous.DataContext = null;
+        }
         Content = Model is { } model ? FileViewers.For(model.Kind).CreateView(model.Viewer) : null;
     }
 
