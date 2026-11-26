@@ -194,6 +194,53 @@
                     </ItemsControl>
                 </StackPanel>
 
+                <!-- Schedules the bot (via the octopus-bot MCP tools) or its owner made; Octopus fires them -->
+                <StackPanel IsVisible="{Binding HasScheduledTasks}" Spacing="6">
+                    <TextBlock Classes="caption" Text="{l:AppLangResource BotScheduledTasksHeading}" />
+                    <Border Classes="bot-settings-group">
+                        <ItemsControl ItemsSource="{Binding ScheduledTasks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BotScheduleRowViewModel">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4" Margin="0,0,8,0">
+                                        <Button Classes="row" Padding="12,8" CornerRadius="0"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                                Command="{Binding OpenChatCommand}"
+                                                arc:Tooltip.Tip="{Binding Tooltip}">
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                                <Panel VerticalAlignment="Top" Margin="0,2,0,0">
+                                                    <lucide:LucideIcon IsVisible="{Binding IsRecurring}" Kind="Repeat" Size="15"
+                                                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                                    <lucide:LucideIcon IsVisible="{Binding !IsRecurring}" Kind="AlarmClock" Size="15"
+                                                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                                </Panel>
+                                                <StackPanel Grid.Column="1" Spacing="2">
+                                                    <TextBlock Classes="body" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Classes="hint" Text="{Binding ScheduleText}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Classes="hint" IsVisible="{Binding HasStatus}" Text="{Binding StatusText}"
+                                                               Foreground="{arc:ArcDesignTokenResource Warning}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                        <arc:Switch Grid.Column="1" IsChecked="{Binding IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                        <arc:Button Grid.Column="2" Classes="ex-icon" Variant="Ghost" VerticalAlignment="Center"
+                                                    AutomationProperties.Name="{l:AppLangResource ExplorerMore}"
+                                                    arc:Tooltip.Tip="{l:AppLangResource ExplorerMore}">
+                                            <arc:Button.Flyout>
+                                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                    <MenuItem Header="{l:AppLangResource BotScheduleRunNow}" Command="{Binding RunNowCommand}" />
+                                                    <MenuItem Header="{l:AppLangResource BotScheduleDelete}" Command="{Binding DeleteCommand}" />
+                                                </MenuFlyout>
+                                            </arc:Button.Flyout>
+                                            <lucide:LucideIcon Kind="Ellipsis" Size="14" />
+                                        </arc:Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <TextBlock Classes="hint" TextWrapping="Wrap" Margin="2,2,2,0" Text="{Binding ScheduledTasksHint}" />
+                </StackPanel>
+
                 <!-- Automations card (Look around + Memory maintenance) -->
                 <StackPanel Spacing="6">
                     <TextBlock Classes="caption" Text="{l:AppLangResource BotHomeAutomationsHeading}" />

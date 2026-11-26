@@ -250,6 +250,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
     private readonly ISettingsStore? _settings;
     private string? _loadedFilesRoot;
     private bool _hydrating;
+    private readonly BotScheduler? _scheduler;
 
     public BotRightPanelViewModel(
         IBotService bots,
@@ -261,9 +262,11 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
         IProjectIconStore? icons = null,
         IItemActivityService? activity = null,
         IAgentScanner? scanner = null,
-        ISettingsStore? settings = null)
+        ISettingsStore? settings = null,
+        BotScheduler? scheduler = null)
     {
         _bots = bots;
+        _scheduler = scheduler;
         _dialogs = dialogs;
         _catalog = catalog;
         _fileOpener = fileOpener;
@@ -295,6 +298,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
     public ObservableCollection<BotWorkItemCardViewModel> WorkItems { get; } = [];
     public ObservableCollection<string> MemoryLines { get; } = [];
     public ObservableCollection<BotConnectorItemViewModel> Connectors { get; } = [];
+    public ObservableCollection<BotScheduleRowViewModel> ScheduledTasks { get; } = [];
     public ObservableCollection<BotChatRowViewModel> FilteredChats { get; } = [];
     public ObservableCollection<SelectOption> StaleDayOptions { get; } = [];
     public ObservableCollection<SelectOption> AgentOptions { get; } = [];
@@ -353,6 +357,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
     [ObservableProperty] public partial string SoulSummary { get; private set; } = "";
     [ObservableProperty] public partial bool HasSoul { get; private set; }
     [ObservableProperty] public partial bool HasWorkItems { get; private set; }
+    [ObservableProperty] public partial bool HasScheduledTasks { get; private set; }
+    [ObservableProperty] public partial string ScheduledTasksHint { get; private set; } = "";
     [ObservableProperty] public partial bool HasMemory { get; private set; }
     [ObservableProperty] public partial bool HasConnectors { get; private set; }
     [ObservableProperty] public partial string ConnectorsEmptyDescription { get; private set; } = "";
@@ -546,6 +552,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
             MemoryLines.Clear();
             Connectors.Clear();
             FilteredChats.Clear();
+            RefreshScheduledTasks();
             NeedsCount = 0;
             if (_loadedFilesRoot is not null)
             {
@@ -644,18 +651,26 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
         }
         HasMemory = MemoryLines.Count > 0;
 
-        // Connectors
+        // Connectors (preserve expanded edit state across non-save refreshes)
+        var editingIds = Connectors.Where(c => c.IsEditing).Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
         Connectors.Clear();
         foreach (var conn in bot.Connectors)
         {
-            Connectors.Add(new BotConnectorItemViewModel(
+            var item = new BotConnectorItemViewModel(
                 bot.Id,
                 conn,
                 _bots,
                 setEnabled: (id, enabled) => _bots.SetConnectorEnabled(bot.Id, id, enabled),
-                remove: id => _bots.RemoveConnector(bot.Id, id)));
+                remove: id => _bots.RemoveConnector(bot.Id, id));
+            if (editingIds.Contains(conn.Id))
+            {
+                item.IsEditing = true;
+            }
+            Connectors.Add(item);
         }
         HasConnectors = Connectors.Count > 0;
+
+        RefreshScheduledTasks();
 
         // Home files tree
         if (!string.Equals(_loadedFilesRoot, BotHomePath, StringComparison.Ordinal))
@@ -684,7 +699,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
 
         if (!bot.IsPaused && bot.LookAroundEnabled)
         {
-            var nextRun = ComputeNextLookAroundTime(bot.LookAroundIntervalHours);
+            var scheduled = bot.Schedules.FirstOrDefault(s => s.Kind == BotScheduleKinds.LookAround && s.Enabled)?.NextRunAt;
+            var nextRun = scheduled is { } at ? BotScheduleFormatter.FormatWhen(at, DateTimeOffset.Now) : ComputeNextLookAroundTime(bot.LookAroundIntervalHours);
             var nextPart = AppLangResources.Format(AppLangResourceKind.BotHomeNextLookAround, nextRun);
             BotStatusLine = $"{BotStatusText} · {nextPart}";
         }
@@ -739,6 +755,32 @@ public sealed partial class BotRightPanelViewModel : ObservableObject
         }
 
         HasNoFilteredChats = FilteredChats.Count == 0;
+    }
+
+    /// <summary>Lists the schedules the bot (or its owner) made; built-in automations have their own rows.</summary>
+    private void RefreshScheduledTasks()
+    {
+        ScheduledTasks.Clear();
+        var bot = _bots.CurrentBot;
+        if (bot is not null && _scheduler is not null)
+        {
+            var now = DateTimeOffset.Now;
+            var custom = bot.Schedules
+                .Where(s => !s.IsBuiltIn)
+                .OrderByDescending(s => s.Enabled)
+                .ThenBy(s => s.NextRunAt ?? DateTimeOffset.MaxValue);
+            foreach (var schedule in custom)
+            {
+                ScheduledTasks.Add(new BotScheduleRowViewModel(
+                    bot,
+                    schedule,
+                    now,
+                    _scheduler,
+                    openChat: chatId => _bots.OpenChat(bot.Id, chatId)));
+            }
+            ScheduledTasksHint = AppLangResources.Format(AppLangResourceKind.BotScheduledTasksHint, bot.Name);
+        }
+        HasScheduledTasks = ScheduledTasks.Count > 0;
     }
 
     private void OpenBotFile(string path)

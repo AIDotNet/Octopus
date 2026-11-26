@@ -61,6 +61,16 @@ public class App : Application
             {
                 StartupTrace.LogException("app:initialize:collab-mcp", e);
             }
+            try
+            {
+                // Bots' own schedules (and the look-around / memory-maintenance switches), plus the bot-only MCP tools to make them.
+                AppHost.Get<Bots.BotScheduleMcpServer>().Start();
+                AppHost.Get<Bots.BotScheduler>().Start();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
+            {
+                StartupTrace.LogException("app:initialize:bot-scheduler", e);
+            }
         }
         StartupTrace.Log("app:initialize:signal-hub");
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

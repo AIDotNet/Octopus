@@ -1649,5 +1649,23 @@
     <unit id="BotMenuMarkUnread"><segment><source>Mark as unread</source></segment></unit>
     <unit id="BotMenuMarkRead"><segment><source>Mark as read</source></segment></unit>
     <unit id="BotMenuDeleteBot"><segment><source>Delete bot</source></segment></unit>
+    <unit id="BotScheduledTasksHeading"><segment><source>Scheduled tasks</source></segment></unit>
+    <unit id="BotScheduledTasksHint"><segment><source>Octopus sends these into {0}'s chat on time while it is running.</source></segment></unit>
+    <unit id="BotScheduleEveryMinutes"><segment><source>Every {0} min</source></segment></unit>
+    <unit id="BotScheduleEveryHours"><segment><source>Every {0} h at :{1}</source></segment></unit>
+    <unit id="BotScheduleHourly"><segment><source>Hourly at :{0}</source></segment></unit>
+    <unit id="BotScheduleDaily"><segment><source>Daily {0}</source></segment></unit>
+    <unit id="BotScheduleWeekdays"><segment><source>Weekdays {0}</source></segment></unit>
+    <unit id="BotScheduleWeekly"><segment><source>Every {0} {1}</source></segment></unit>
+    <unit id="BotScheduleMonthly"><segment><source>Monthly on day {0} {1}</source></segment></unit>
+    <unit id="BotScheduleOnce"><segment><source>Once · {0}</source></segment></unit>
+    <unit id="BotScheduleNext"><segment><source>Next {0}</source></segment></unit>
+    <unit id="BotScheduleTomorrow"><segment><source>Tomorrow {0}</source></segment></unit>
+    <unit id="BotScheduleFromChat"><segment><source>Sends to {0}</source></segment></unit>
+    <unit id="BotScheduleRunNow"><segment><source>Run now</source></segment></unit>
+    <unit id="BotScheduleDelete"><segment><source>Delete</source></segment></unit>
+    <unit id="BotScheduleOff"><segment><source>Off</source></segment></unit>
+    <unit id="BotScheduleLastFailed"><segment><source>Last run failed: {0}</source></segment></unit>
+    <unit id="BotScheduleLastMissed"><segment><source>Skipped a run while Octopus was closed</source></segment></unit>
   </file>
 </xliff>

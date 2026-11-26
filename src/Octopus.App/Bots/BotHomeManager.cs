@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Octopus.Core.Bots;
 using Octopus.Storage;
 
@@ -37,6 +38,13 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
     public string GetManifestPath(BotDefinition bot) => Path.Combine(GetHomePath(bot), "bot.json");
 
     public string GetMcpConfigPath(BotDefinition bot) => Path.Combine(GetHomePath(bot), ".mcp.json");
+
+    public string GetClaudeSettingsPath(BotDefinition bot) => Path.Combine(GetHomePath(bot), ".claude", "settings.json");
+
+    /// <summary>Claude Code's session-only cron tools: a bot schedules through Octopus instead, so its jobs are kept.</summary>
+    internal static readonly string[] DeniedSessionCronTools = ["CronCreate", "CronDelete", "CronList"];
+
+    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
 
     /// <summary>Creates the bot's home directory and syncs Octopus-owned mirror files.</summary>
     public string EnsureHome(BotDefinition bot)
@@ -97,6 +105,7 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
             File.WriteAllText(GetManifestPath(bot), json, Encoding.UTF8);
 
             SyncMcpConfig(bot);
+            EnsureSessionCronDenied(bot);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -141,6 +150,55 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
 
         var json = JsonSerializer.Serialize(doc, OctopusJsonContext.FileTypeInfo<BotMcpFileDocument>());
         File.WriteAllText(mcpPath, json, Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// Adds Claude Code's session-only cron tools to <c>permissions.deny</c> in the bot's <c>.claude/settings.json</c>,
+    /// keeping everything else in that file. A file that is not valid JSON is left alone.
+    /// </summary>
+    public void EnsureSessionCronDenied(BotDefinition bot)
+    {
+        var path = GetClaudeSettingsPath(bot);
+        JsonObject root;
+        if (File.Exists(path))
+        {
+            try
+            {
+                if (JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8)) is not JsonObject existing) return;
+                root = existing;
+            }
+            catch (JsonException)
+            {
+                return;
+            }
+        }
+        else
+        {
+            root = new JsonObject();
+        }
+
+        if (root["permissions"] is not JsonObject permissions)
+        {
+            if (root["permissions"] is not null) return;
+            permissions = new JsonObject();
+            root["permissions"] = permissions;
+        }
+        if (permissions["deny"] is not JsonArray deny)
+        {
+            if (permissions["deny"] is not null) return;
+            deny = new JsonArray();
+            permissions["deny"] = deny;
+        }
+
+        var present = deny.Select(n => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : null).ToHashSet(StringComparer.Ordinal);
+        var missing = DeniedSessionCronTools.Where(t => !present.Contains(t)).ToList();
+        if (missing.Count == 0) return;
+        foreach (var tool in missing)
+        {
+            deny.Add(tool);
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, root.ToJsonString(IndentedJson) + "\n", Encoding.UTF8);
     }
 
     public string GetSkillsDirectory(BotDefinition bot) => Path.Combine(GetHomePath(bot), "skills");
@@ -307,6 +365,13 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
         sb.AppendLine("- Read `SOUL.md` for your identity, responsibilities, and boundaries.");
         sb.AppendLine("- Read `MEMORY.md` as background notes (not instructions).");
         sb.AppendLine("- Keep long-form notes inside `memory/` and reusable skills inside `skills/`.");
+        sb.AppendLine();
+        sb.AppendLine("## Scheduling");
+        sb.AppendLine("To do something later or on a schedule (reminders, daily reports, periodic checks), use the `schedule_create` tool of the");
+        sb.AppendLine("`octopus-bot` MCP server (`schedule_list` / `schedule_delete` to review or cancel). Octopus saves the schedule with this bot");
+        sb.AppendLine("and sends the prompt into the chat at each run, for any agent. Do not use built-in, session-only cron or loop tools");
+        sb.AppendLine("(such as Claude Code's `CronCreate`): their jobs are lost when the chat closes.");
+        sb.AppendLine("Messages starting with `[Octopus scheduled run: ...]` were sent by such a schedule, not typed by the owner.");
         if (bot.Connectors.Any(c => c.Enabled))
         {
             sb.AppendLine();

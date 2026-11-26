@@ -1650,5 +1650,23 @@
     <unit id="BotMenuMarkUnread"><segment><source>Mark as unread</source><target state="translated">标记为未读</target></segment></unit>
     <unit id="BotMenuMarkRead"><segment><source>Mark as read</source><target state="translated">标记为已读</target></segment></unit>
     <unit id="BotMenuDeleteBot"><segment><source>Delete bot</source><target state="translated">删除 bot</target></segment></unit>
+    <unit id="BotScheduledTasksHeading"><segment><source>Scheduled tasks</source><target state="translated">定时任务</target></segment></unit>
+    <unit id="BotScheduledTasksHint"><segment><source>Octopus sends these into {0}'s chat on time while it is running.</source><target state="translated">Octopus 运行期间会按时把它们发到 {0} 的聊天里</target></segment></unit>
+    <unit id="BotScheduleEveryMinutes"><segment><source>Every {0} min</source><target state="translated">每 {0} 分钟</target></segment></unit>
+    <unit id="BotScheduleEveryHours"><segment><source>Every {0} h at :{1}</source><target state="translated">每 {0} 小时 · 第 {1} 分</target></segment></unit>
+    <unit id="BotScheduleHourly"><segment><source>Hourly at :{0}</source><target state="translated">每小时第 {0} 分</target></segment></unit>
+    <unit id="BotScheduleDaily"><segment><source>Daily {0}</source><target state="translated">每天 {0}</target></segment></unit>
+    <unit id="BotScheduleWeekdays"><segment><source>Weekdays {0}</source><target state="translated">工作日 {0}</target></segment></unit>
+    <unit id="BotScheduleWeekly"><segment><source>Every {0} {1}</source><target state="translated">每{0} {1}</target></segment></unit>
+    <unit id="BotScheduleMonthly"><segment><source>Monthly on day {0} {1}</source><target state="translated">每月 {0} 日 {1}</target></segment></unit>
+    <unit id="BotScheduleOnce"><segment><source>Once · {0}</source><target state="translated">一次 · {0}</target></segment></unit>
+    <unit id="BotScheduleNext"><segment><source>Next {0}</source><target state="translated">下次 {0}</target></segment></unit>
+    <unit id="BotScheduleTomorrow"><segment><source>Tomorrow {0}</source><target state="translated">明天 {0}</target></segment></unit>
+    <unit id="BotScheduleFromChat"><segment><source>Sends to {0}</source><target state="translated">发送到 {0}</target></segment></unit>
+    <unit id="BotScheduleRunNow"><segment><source>Run now</source><target state="translated">立即运行</target></segment></unit>
+    <unit id="BotScheduleDelete"><segment><source>Delete</source><target state="translated">删除</target></segment></unit>
+    <unit id="BotScheduleOff"><segment><source>Off</source><target state="translated">已停用</target></segment></unit>
+    <unit id="BotScheduleLastFailed"><segment><source>Last run failed: {0}</source><target state="translated">上次运行失败：{0}</target></segment></unit>
+    <unit id="BotScheduleLastMissed"><segment><source>Skipped a run while Octopus was closed</source><target state="translated">Octopus 未运行时错过了一次</target></segment></unit>
   </file>
 </xliff>
