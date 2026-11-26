@@ -1,4 +1,5 @@
 using Octopus.Core.Agents;
+using Octopus.Core.Bots;
 using Octopus.Core.Plugins;
 using Octopus.Core.Projects;
 using Octopus.Core.Settings;
@@ -59,4 +60,16 @@ public interface IAccountStore
 
     /// <summary>Changes <see cref="Current"/>, normalizes it, and writes the file.</summary>
     void Update(Action<AccountsDocument> mutate);
+}
+
+/// <summary>Reads and writes <c>bots.json</c>: persisted Bots, their chats, connectors, and work items.</summary>
+public interface IBotStore
+{
+    BotsDocument Current { get; }
+    event EventHandler? Changed;
+
+    void Load();
+
+    /// <summary>Changes <see cref="Current"/>, normalizes it, and writes the file.</summary>
+    void Update(Action<BotsDocument> mutate);
 }

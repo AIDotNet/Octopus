@@ -1,0 +1,139 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:vm="using:Octopus.App.Bots"
+             x:Class="Octopus.App.Bots.ConnectorCatalogView"
+             x:DataType="vm:ConnectorCatalogViewModel">
+    <Grid ColumnDefinitions="196,*" MinWidth="660" Height="460">
+        <!-- Left category sidebar -->
+        <Grid RowDefinitions="*,Auto" Margin="0,0,12,0">
+            <Border BorderThickness="0,0,1,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" Padding="0,0,12,0">
+                <Grid RowDefinitions="*,Auto">
+                    <arc:ScrollArea OverlayScrollbarMode="Auto" FadeLength="0">
+                        <ItemsControl ItemsSource="{Binding Categories}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="2" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ConnectorCategoryItemViewModel">
+                                    <StackPanel>
+                                        <Border IsVisible="{Binding SeparatorBefore}" Height="1" Margin="4,8"
+                                                Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                                        <Button Classes="row" Classes.selected="{Binding IsSelected}"
+                                                Padding="8,6"
+                                                Command="{Binding SelectCommand}">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                                <lucide:LucideIcon Kind="{Binding Icon}" Size="14" VerticalAlignment="Center"
+                                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                                <TextBlock Grid.Column="1" Classes="body" Text="{Binding Name}"
+                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="2" Classes="hint" IsVisible="{Binding HasCount}"
+                                                           Text="{Binding CountText}" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </arc:ScrollArea>
+
+                    <Border Grid.Row="1" BorderThickness="0,1,0,0" BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" Padding="0,8,0,0" Margin="0,8,0,0">
+                        <Button Classes="row" Padding="8,6" Command="{Binding ToggleAddByUrlCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                                <lucide:LucideIcon Kind="Plus" Size="14" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                                <TextBlock Classes="body" Text="{l:AppLangResource BotConnectorCatalogAddByUrl}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Right search + categorized app list -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*">
+            <arc:SearchField x:Name="AppSearchField" Size="Small" IsLabelVisible="False"
+                             Label="{l:AppLangResource BotConnectorCatalogSearch}"
+                             Placeholder="{l:AppLangResource BotConnectorCatalogSearch}"
+                             Text="{Binding SearchQuery, Mode=TwoWay}" />
+
+            <!-- Optional inline "+ Add by URL" form -->
+            <Border Grid.Row="1" IsVisible="{Binding IsAddingByUrl}" Margin="0,10,0,0" Padding="10"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource Border}" BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="caption" Text="{l:AppLangResource BotConnectorCatalogAddByUrl}" />
+                    <TextBox Text="{Binding CustomUrlName, Mode=TwoWay}"
+                             PlaceholderText="{l:AppLangResource BotConnectorUrlNamePlaceholder}" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <TextBox Text="{Binding CustomUrl, Mode=TwoWay}"
+                                 PlaceholderText="{l:AppLangResource BotConnectorUrlPlaceholder}" />
+                        <arc:Button Grid.Column="1" Variant="Primary" Size="Small"
+                                    Content="{l:AppLangResource BotConnectorUrlConfirm}"
+                                    Command="{Binding AddByUrlCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <arc:ScrollArea Grid.Row="2" Margin="0,10,0,0" OverlayScrollbarMode="Auto" FadeLength="0">
+                <StackPanel Spacing="14">
+                    <ItemsControl ItemsSource="{Binding Groups}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="14" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ConnectorCatalogGroupViewModel">
+                                <StackPanel Spacing="6">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,0">
+                                        <lucide:LucideIcon Kind="{Binding Icon}" Size="12" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Classes="caption" Text="{Binding Header}" VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <ItemsControl ItemsSource="{Binding Apps}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="4" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ConnectorAppRowViewModel">
+                                                <Border Padding="8,7" CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                                        Background="{arc:ArcDesignTokenResource Surface}"
+                                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                                        <Border Width="32" Height="32" CornerRadius="8" Background="{Binding BadgeBrush}" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding BadgeText}" Foreground="White" FontSize="11" FontWeight="Bold"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                                            <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding Name}" />
+                                                            <TextBlock Classes="hint" Text="{Binding Description}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <arc:Button Grid.Column="2" Size="Small" VerticalAlignment="Center"
+                                                                    Variant="Secondary"
+                                                                    Content="{Binding ActionLabel}"
+                                                                    Command="{Binding ToggleCommand}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Classes="hint" HorizontalAlignment="Center" Margin="0,24"
+                               IsVisible="{Binding HasNoResults}"
+                               Text="{l:AppLangResource BotChatsEmpty}" />
+                </StackPanel>
+            </arc:ScrollArea>
+        </Grid>
+    </Grid>
+</UserControl>

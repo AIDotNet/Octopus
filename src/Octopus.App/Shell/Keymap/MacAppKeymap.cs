@@ -10,6 +10,7 @@ public sealed class MacAppKeymap : AppKeymapBase
         const KeyModifiers cmd = KeyModifiers.Meta;
         Add(AppCommand.ToggleSidebar, Key.B, cmd);
         Add(AppCommand.ToggleRightPanel, Key.B, cmd | KeyModifiers.Alt);
+        Add(AppCommand.NewBot, Key.B, cmd | KeyModifiers.Shift);
         AddHint(AppCommand.FindInTerminal, Key.F, cmd);
         Add(AppCommand.NewTerminal, Key.T, cmd);
         Add(AppCommand.NewDefaultAgent, Key.T, cmd | KeyModifiers.Alt);

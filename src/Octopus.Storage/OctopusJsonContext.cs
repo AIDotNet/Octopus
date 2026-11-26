@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Octopus.Core.Agents;
+using Octopus.Core.Bots;
 using Octopus.Core.Plugins;
 using Octopus.Core.Projects;
 using Octopus.Core.Settings;
@@ -16,11 +17,13 @@ namespace Octopus.Storage;
     ReadCommentHandling = JsonCommentHandling.Skip,
     AllowTrailingCommas = true,
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip,
-    Converters = [typeof(OctopusJsonContext.KindConverter), typeof(OctopusJsonContext.PluginSourceConverter), typeof(OctopusJsonContext.FileAccessConverter), typeof(OctopusJsonContext.TunnelKindConverter), typeof(OctopusJsonContext.AccountOriginConverter), typeof(OctopusJsonContext.WorkspaceTaskKindConverter), typeof(OctopusJsonContext.AgentSurfaceConverter), typeof(OctopusJsonContext.AcpAdapterPolicyConverter)])]
+    Converters = [typeof(OctopusJsonContext.KindConverter), typeof(OctopusJsonContext.PluginSourceConverter), typeof(OctopusJsonContext.FileAccessConverter), typeof(OctopusJsonContext.TunnelKindConverter), typeof(OctopusJsonContext.AccountOriginConverter), typeof(OctopusJsonContext.WorkspaceTaskKindConverter), typeof(OctopusJsonContext.AgentSurfaceConverter), typeof(OctopusJsonContext.AcpAdapterPolicyConverter), typeof(OctopusJsonContext.BotChatKindConverter), typeof(OctopusJsonContext.BotChatStatusConverter), typeof(OctopusJsonContext.BotWorkItemStatusConverter)])]
 [JsonSerializable(typeof(ProjectsDocument))]
 [JsonSerializable(typeof(AppSettingsModel))]
 [JsonSerializable(typeof(PluginsDocument))]
 [JsonSerializable(typeof(AccountsDocument))]
+[JsonSerializable(typeof(BotsDocument))]
+[JsonSerializable(typeof(BotHomeManifest))]
 public sealed partial class OctopusJsonContext : JsonSerializerContext
 {
     /// <summary>Writes <see cref="ProjectItemKind"/> as a camelCase string.</summary>
@@ -39,6 +42,12 @@ public sealed partial class OctopusJsonContext : JsonSerializerContext
     public sealed class AgentSurfaceConverter() : JsonStringEnumConverter<AgentSurface>(JsonNamingPolicy.CamelCase);
 
     public sealed class AcpAdapterPolicyConverter() : JsonStringEnumConverter<AcpAdapterPolicy>(JsonNamingPolicy.CamelCase);
+
+    public sealed class BotChatKindConverter() : JsonStringEnumConverter<BotChatKind>(JsonNamingPolicy.CamelCase);
+
+    public sealed class BotChatStatusConverter() : JsonStringEnumConverter<BotChatStatus>(JsonNamingPolicy.CamelCase);
+
+    public sealed class BotWorkItemStatusConverter() : JsonStringEnumConverter<BotWorkItemStatus>(JsonNamingPolicy.CamelCase);
 
     /// <summary>The context's options with the computed <c>DisplayTitle</c> property removed from the contract.</summary>
     public static JsonSerializerOptions FileOptions => _fileOptions ??= CreateOptions();
@@ -67,6 +76,13 @@ public sealed partial class OctopusJsonContext : JsonSerializerContext
                     for (var i = info.Properties.Count - 1; i >= 0; i--)
                     {
                         if (info.Properties[i].Name == "displayName") info.Properties.RemoveAt(i);
+                    }
+                }
+                else if (info.Type == typeof(BotChat))
+                {
+                    for (var i = info.Properties.Count - 1; i >= 0; i--)
+                    {
+                        if (info.Properties[i].Name == "displayTitle") info.Properties.RemoveAt(i);
                     }
                 }
             })

@@ -1,0 +1,360 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:l="using:Octopus.App.Localization"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:ex="using:Octopus.App.Explorer"
+             xmlns:files="using:Octopus.App.Explorer.Files"
+             xmlns:search="using:Octopus.App.Explorer.Search"
+             xmlns:vm="using:Octopus.App.Bots"
+             x:Class="Octopus.App.Bots.BotRightPanelView"
+             x:DataType="vm:BotRightPanelViewModel">
+    <UserControl.Styles>
+        <Style Selector="arc|Button.ex-icon">
+            <Setter Property="Width" Value="{DynamicResource OctopusIconButtonSize}" />
+            <Setter Property="Height" Value="{DynamicResource OctopusIconButtonSize}" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="IsPressScaleEnabled" Value="False" />
+        </Style>
+
+        <Style Selector="Border.bot-card">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPanel}" />
+            <Setter Property="Padding" Value="10" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Background="{arc:ArcDesignTokenResource SurfaceMuted}" RowDefinitions="Auto,Auto,*">
+        <!-- Top drag bar aligned with window chrome -->
+        <Border x:Name="TopBar" Height="{DynamicResource OctopusTopRowHeight}" Background="Transparent"
+                PointerPressed="OnTopBarPointerPressed" />
+
+        <!-- 4 tabs: Home | Connectors | Chats | Files (placed in row 0 when it fits, or row 1 below TopBar) -->
+        <ex:ExplorerTabGroup x:Name="Tabs" Size="Small" Margin="8,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center"
+                             IsVisible="{Binding HasBot}"
+                             SelectedValue="{Binding TabKey, Mode=TwoWay}"
+                             Label="{l:AppLangResource BotsTitle}" />
+
+        <!-- No bot selected -->
+        <arc:EmptyState Grid.Row="2" IsVisible="{Binding HasNoBot}" VerticalAlignment="Top" Margin="12,24"
+                        Title="{l:AppLangResource BotRightEmptyTitle}"
+                        Description="{l:AppLangResource BotRightEmptyDescription}"
+                        Icon="{x:Static arc:ArcIcons.Sparkles}" />
+
+        <!-- Tab 1: Home -->
+        <arc:ScrollArea Grid.Row="2" IsVisible="{Binding IsHomeTab}" OverlayScrollbarMode="Auto" FadeLength="0">
+            <StackPanel Margin="10,6,10,16" Spacing="12">
+                <!-- Bot identity header -->
+                <Border Classes="bot-card">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <Grid Width="40" Height="40" VerticalAlignment="Center">
+                            <Border Width="40" Height="40" CornerRadius="20" Background="{Binding BotAvatarBrush}">
+                                <TextBlock Text="{Binding BotInitial}" Foreground="White" FontSize="16" FontWeight="Bold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Border Width="11" Height="11" CornerRadius="5.5" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                    Margin="0,0,-1,-1" Background="{arc:ArcDesignTokenResource Surface}" Padding="1.5">
+                                <Ellipse Fill="{Binding BotAgentAccent}" />
+                            </Border>
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding BotName}" TextTrimming="CharacterEllipsis" />
+                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                <Ellipse Width="7" Height="7" IsVisible="{Binding IsBotWorking}" Fill="{arc:ArcDesignTokenResource Accent}" VerticalAlignment="Center" />
+                                <Ellipse Width="7" Height="7" IsVisible="{Binding !IsBotWorking}" Fill="{arc:ArcDesignTokenResource Success}" VerticalAlignment="Center" />
+                                <TextBlock Classes="hint" Text="{Binding BotStatusText}" VerticalAlignment="Center" />
+                                <TextBlock Classes="hint" Text="·" VerticalAlignment="Center" />
+                                <TextBlock Classes="hint" Text="{Binding BotAgentName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                            <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding TogglePauseCommand}"
+                                        arc:Tooltip.Tip="{Binding PauseButtonTooltip}">
+                                <Panel>
+                                    <lucide:LucideIcon Kind="Play" Size="14" IsVisible="{Binding IsBotPaused}" />
+                                    <lucide:LucideIcon Kind="Pause" Size="14" IsVisible="{Binding !IsBotPaused}" />
+                                </Panel>
+                            </arc:Button>
+                            <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding RevealHomeFolderCommand}"
+                                        arc:Tooltip.Tip="{l:AppLangResource BotMenuRevealFolder}">
+                                <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                            </arc:Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- SOUL.md responsibilities -->
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Classes="caption" Text="{l:AppLangResource BotHomeSoulHeading}" VerticalAlignment="Center" />
+                        <arc:Button Grid.Column="1" Variant="Ghost" Size="Small" Padding="6,2"
+                                    Content="{l:AppLangResource BotMenuEditSoul}"
+                                    Command="{Binding EditSoulCommand}" />
+                    </Grid>
+                    <Border Classes="bot-card">
+                        <Panel>
+                            <TextBlock Classes="body" TextWrapping="Wrap" IsVisible="{Binding HasSoul}" Text="{Binding SoulSummary}" />
+                            <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !HasSoul}" Text="{l:AppLangResource BotHomeSoulEmpty}" />
+                        </Panel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Tracked work items -->
+                <StackPanel Spacing="6">
+                    <TextBlock Classes="caption" Text="{l:AppLangResource BotHomeItemsHeading}" />
+                    <Border Classes="bot-card" IsVisible="{Binding HasNoWorkItems}">
+                        <TextBlock Classes="hint" TextWrapping="Wrap" Text="{l:AppLangResource BotHomeItemsEmpty}" />
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding WorkItems}" IsVisible="{Binding HasWorkItems}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BotWorkItemCardViewModel">
+                                <Border Classes="bot-card">
+                                    <StackPanel Spacing="6">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                                            <TextBlock Classes="hint" Text="{Binding NumberText}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Classes="body" FontWeight="SemiBold" Text="{Binding Title}"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Border Grid.Column="2" Padding="5,1" CornerRadius="999"
+                                                    Background="{arc:ArcDesignTokenResource BorderSubtle}">
+                                                <TextBlock Classes="hint" FontSize="10" Text="{Binding StatusLabel}" />
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding HasQuestion}" Text="{Binding Question}" />
+                                        <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding IsNeedsYou}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:BotWorkItemOptionViewModel">
+                                                    <arc:Button Variant="Secondary" Size="Small" Content="{Binding Label}" Command="{Binding ChooseCommand}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- MEMORY.md preview -->
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Classes="caption" Text="{l:AppLangResource BotHomeMemoryHeading}" VerticalAlignment="Center" />
+                        <arc:Button Grid.Column="1" Variant="Ghost" Size="Small" Padding="6,2"
+                                    Content="{l:AppLangResource BotMenuEditMemory}"
+                                    Command="{Binding EditMemoryCommand}" />
+                    </Grid>
+                    <Border Classes="bot-card">
+                        <Panel>
+                            <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding HasNoMemory}" Text="{l:AppLangResource BotHomeMemoryEmpty}" />
+                            <ItemsControl ItemsSource="{Binding MemoryLines}" IsVisible="{Binding HasMemory}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="5" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                                            <TextBlock Classes="hint" Text="•" />
+                                            <TextBlock Grid.Column="1" Classes="body" FontSize="12" TextWrapping="Wrap" Text="{Binding}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Panel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </arc:ScrollArea>
+
+        <!-- Tab 2: Connectors (matches reference screenshot #3) -->
+        <Grid Grid.Row="2" IsVisible="{Binding IsConnectorsTab}">
+            <!-- Empty state: 4 app icons + description + "+ Add connector" CTA -->
+            <StackPanel IsVisible="{Binding HasNoConnectors}" VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Margin="20,0" Spacing="16" MaxWidth="280">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                    <Border Width="38" Height="38" CornerRadius="10" Background="#4A154B">
+                        <TextBlock Text="SL" Foreground="White" FontWeight="Bold" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border Width="38" Height="38" CornerRadius="10" Background="#4285F4">
+                        <TextBlock Text="G" Foreground="White" FontWeight="Bold" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border Width="38" Height="38" CornerRadius="10" Background="#1F1F24" BorderBrush="{arc:ArcDesignTokenResource Border}" BorderThickness="1">
+                        <TextBlock Text="LN" Foreground="White" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <Border Width="38" Height="38" CornerRadius="10" Background="#24292E">
+                        <TextBlock Text="GH" Foreground="White" FontWeight="Bold" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
+
+                <TextBlock Classes="body" TextWrapping="Wrap" TextAlignment="Center"
+                           Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                           Text="{Binding ConnectorsEmptyDescription}" />
+
+                <arc:Button x:Name="EmptyAddConnectorButton" Variant="Primary" Size="Medium" HorizontalAlignment="Center"
+                            Command="{Binding OpenConnectorCatalogCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <lucide:LucideIcon Kind="Plus" Size="14" VerticalAlignment="Center" />
+                        <TextBlock Text="{l:AppLangResource BotConnectorsAddButton}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+            </StackPanel>
+
+            <!-- Connected apps list -->
+            <Grid IsVisible="{Binding HasConnectors}" RowDefinitions="Auto,*">
+                <Border Padding="10,8,10,6">
+                    <arc:Button Variant="Secondary" Size="Small" HorizontalAlignment="Stretch"
+                                Command="{Binding OpenConnectorCatalogCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <lucide:LucideIcon Kind="Plus" Size="13" VerticalAlignment="Center" />
+                            <TextBlock Text="{l:AppLangResource BotConnectorsAddButton}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </arc:Button>
+                </Border>
+                <arc:ScrollArea Grid.Row="1" OverlayScrollbarMode="Auto" FadeLength="0">
+                    <ItemsControl ItemsSource="{Binding Connectors}" Margin="10,4,10,14">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BotConnectorItemViewModel">
+                                <Border Classes="bot-card" Padding="8,7">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                                        <Border Width="28" Height="28" CornerRadius="7" Background="{Binding BadgeBrush}" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding BadgeText}" Foreground="White" FontSize="10" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                            <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="hint" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <CheckBox Grid.Column="2" IsChecked="{Binding IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
+                                        <arc:Button Grid.Column="3" Classes="ex-icon" Variant="Ghost" VerticalAlignment="Center"
+                                                    Command="{Binding RemoveCommand}"
+                                                    arc:Tooltip.Tip="{l:AppLangResource BotConnectorRemove}">
+                                            <lucide:LucideIcon Kind="Trash2" Size="13" />
+                                        </arc:Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </arc:ScrollArea>
+            </Grid>
+        </Grid>
+
+        <!-- Tab 3: Chats (matches reference screenshot #2) -->
+        <Grid Grid.Row="2" IsVisible="{Binding IsChatsTab}" RowDefinitions="Auto,*">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="10,6,10,6">
+                <arc:SearchField Size="Small" IsLabelVisible="False"
+                                 Label="{l:AppLangResource BotChatsSearchPlaceholder}"
+                                 Placeholder="{l:AppLangResource BotChatsSearchPlaceholder}"
+                                 Text="{Binding ChatSearchQuery, Mode=TwoWay}" />
+                <arc:Button Grid.Column="1" Variant="Secondary" Size="Small"
+                            Command="{Binding NewChatCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <lucide:LucideIcon Kind="Plus" Size="13" VerticalAlignment="Center" />
+                        <TextBlock Text="{l:AppLangResource BotNewChatButton}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+            </Grid>
+
+            <arc:ScrollArea Grid.Row="1" OverlayScrollbarMode="Auto" FadeLength="0">
+                <StackPanel Margin="6,2,6,12" Spacing="2">
+                    <ItemsControl ItemsSource="{Binding FilteredChats}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BotChatRowViewModel">
+                                <Button Classes="row" Classes.selected="{Binding IsSelected}"
+                                        Padding="8,7"
+                                        Command="{Binding OpenCommand}">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                        <lucide:LucideIcon Kind="{Binding Icon}" Size="15" VerticalAlignment="Top" Margin="0,2,0,0"
+                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                            <TextBlock Classes="body" FontWeight="Medium" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Classes="hint" IsVisible="{Binding HasSubtitle}" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <Panel Grid.Column="2" VerticalAlignment="Top" Margin="4,2,0,0">
+                                            <arc:ArcSpinner Width="11" Height="11" IsVisible="{Binding IsWorking}" Foreground="{arc:ArcDesignTokenResource Accent}" />
+                                            <Ellipse Width="7" Height="7" IsVisible="{Binding NeedsYou}" Fill="{arc:ArcDesignTokenResource Warning}" />
+                                            <TextBlock Classes="hint" IsVisible="{Binding ShowTime}" Text="{Binding TimeText}" />
+                                        </Panel>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Classes="hint" HorizontalAlignment="Center" Margin="0,20"
+                               IsVisible="{Binding HasNoFilteredChats}"
+                               Text="{l:AppLangResource BotChatsEmpty}" />
+                </StackPanel>
+            </arc:ScrollArea>
+        </Grid>
+
+        <!-- Tab 4: Files (matches reference screenshot #1 — reuses Octopus's FileTreeView + FileSearchViewModel) -->
+        <Grid Grid.Row="2" IsVisible="{Binding IsFilesTab}" RowDefinitions="Auto,Auto,*">
+            <Grid ColumnDefinitions="*,Auto" Margin="{DynamicResource OctopusExplorerHeaderMargin}" Height="{DynamicResource OctopusExplorerHeaderHeight}">
+                <TextBlock Classes="body" FontWeight="SemiBold" VerticalAlignment="Center"
+                           Text="{Binding BotSlug}" TextTrimming="CharacterEllipsis"
+                           arc:Tooltip.Tip="{Binding BotHomePath}" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0">
+                    <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding Files.CollapseAllCommand}"
+                                AutomationProperties.Name="{l:AppLangResource ExplorerCollapseAll}"
+                                arc:Tooltip.Tip="{l:AppLangResource ExplorerCollapseAll}">
+                        <lucide:LucideIcon Kind="ListCollapse" Size="14" />
+                    </arc:Button>
+                    <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding RefreshFilesCommand}"
+                                AutomationProperties.Name="{l:AppLangResource ExplorerRefresh}"
+                                arc:Tooltip.Tip="{l:AppLangResource ExplorerRefresh}">
+                        <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+                    </arc:Button>
+                    <arc:Button Classes="ex-icon" Variant="Ghost" Command="{Binding RevealHomeFolderCommand}"
+                                AutomationProperties.Name="{l:AppLangResource BotMenuRevealFolder}"
+                                arc:Tooltip.Tip="{l:AppLangResource BotMenuRevealFolder}">
+                        <lucide:LucideIcon Kind="FolderOpen" Size="14" />
+                    </arc:Button>
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Grid.Row="1" Margin="{DynamicResource OctopusExplorerSearchMargin}" Spacing="{DynamicResource OctopusExplorerSearchSpacing}"
+                        DataContext="{Binding Search}" x:DataType="search:FileSearchViewModel" IsVisible="{Binding HasRoot}">
+                <arc:SegmentedControl HorizontalAlignment="Stretch" SelectedValue="{Binding ModeKey, Mode=TwoWay}"
+                                      AutomationProperties.Name="{l:AppLangResource ExplorerSearchMode}">
+                    <arc:SegmentedOption Value="name" Label="{l:AppLangResource ExplorerSearchByName}" />
+                    <arc:SegmentedOption Value="content" Label="{l:AppLangResource ExplorerSearchByContent}" />
+                </arc:SegmentedControl>
+                <arc:SearchField Size="Small" IsLabelVisible="False"
+                                 Label="{Binding Placeholder}" Placeholder="{Binding Placeholder}"
+                                 Text="{Binding Query, Mode=TwoWay}" />
+            </StackPanel>
+
+            <Panel Grid.Row="2" IsVisible="{Binding !Search.IsActive}">
+                <files:FileTreeView DataContext="{Binding Files}" />
+            </Panel>
+            <search:SearchResultsView Grid.Row="2" DataContext="{Binding Search}" IsVisible="{Binding IsActive}" />
+        </Grid>
+    </Grid>
+</UserControl>

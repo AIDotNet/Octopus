@@ -2,6 +2,8 @@ using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Appearance;
+using Octopus.App.Bots;
+using Octopus.App.Common;
 using Octopus.App.Launcher;
 using Octopus.App.Services;
 using Octopus.App.Shell.Chrome;
@@ -27,6 +29,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly IWorkspaceCommands _workspaceCommands;
     private readonly ISettingsNavigator _navigator;
     private readonly IProjectService _projects;
+    private readonly IBotService? _bots;
 
     public ShellViewModel(
         ISettingsStore settings,
@@ -43,7 +46,10 @@ public sealed partial class ShellViewModel : ObservableObject
         ProjectPanelViewModel panel,
         WorkspaceViewModel workspace,
         LauncherViewModel launcher,
-        Octopus.App.Updates.UpdateCardViewModel updateCard)
+        Octopus.App.Updates.UpdateCardViewModel updateCard,
+        IBotService? bots = null,
+        BotPanelViewModel? botPanel = null,
+        BotRightPanelViewModel? botRightPanel = null)
     {
         _settings = settings;
         _theme = theme;
@@ -52,6 +58,7 @@ public sealed partial class ShellViewModel : ObservableObject
         _workspaceCommands = workspaceCommands;
         _navigator = navigator;
         _projects = projects;
+        _bots = bots;
         _theme.DensityChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(RailWidth));
@@ -64,6 +71,17 @@ public sealed partial class ShellViewModel : ObservableObject
                 ReadProject();
             }
         };
+        if (_bots is not null)
+        {
+            _bots.Changed += (_, e) =>
+            {
+                if (e.Kind == BotChangeKind.Mode)
+                {
+                    UiContext.Run(() => IsBotMode = _bots.IsBotMode);
+                }
+            };
+            IsBotMode = _bots.IsBotMode;
+        }
         ReadProject();
         IsRightPanelOpen = settings.Current.RightPanel.IsOpen;
         RightPanelWidth = Math.Clamp(settings.Current.RightPanel.Width, MinRightPanelWidth, MaxRightPanelWidth);
@@ -72,6 +90,8 @@ public sealed partial class ShellViewModel : ObservableObject
         Account = account;
         Rail = rail;
         Panel = panel;
+        BotPanel = botPanel;
+        BotRightPanel = botRightPanel;
         Workspace = workspace;
         Launcher = launcher;
         UpdateCard = updateCard;
@@ -86,10 +106,14 @@ public sealed partial class ShellViewModel : ObservableObject
     public Account.AccountViewModel Account { get; }
     public ProjectRailViewModel Rail { get; }
     public ProjectPanelViewModel Panel { get; }
+    public BotPanelViewModel? BotPanel { get; }
+    public BotRightPanelViewModel? BotRightPanel { get; }
     public WorkspaceViewModel Workspace { get; }
     public LauncherViewModel Launcher { get; }
     /// <summary>The update card at the bottom right (design/10-自动更新.md §10).</summary>
     public Octopus.App.Updates.UpdateCardViewModel UpdateCard { get; }
+
+    [ObservableProperty] public partial bool IsBotMode { get; private set; }
 
     /// <summary>Room kept free at the top left for the system's window buttons.</summary>
     public double LeftInset { get; }
@@ -239,6 +263,10 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             case AppCommand.ToggleSidebar: ToggleSidebar(); break;
             case AppCommand.ToggleRightPanel: ToggleRightPanel(); break;
+            case AppCommand.NewBot:
+                _bots?.SetBotMode(true);
+                if (BotPanel is not null) _ = BotPanel.NewBotAsync();
+                break;
             case AppCommand.NewTerminal: _opener.OpenTerminal(); break;
             case AppCommand.NewDefaultAgent: _opener.OpenDefaultAgent(); break;
             case AppCommand.CloseTab: _workspaceCommands.CloseActiveTab(); break;

@@ -1,4 +1,5 @@
 using Octopus.Core.Agents;
+using Octopus.Core.Bots;
 using Octopus.Core.Projects;
 using Octopus.Core.Settings;
 
@@ -51,6 +52,22 @@ public sealed class InMemoryAccountStore(AccountsDocument? initial = null) : IAc
     {
         mutate(Current);
         Current = JsonAccountStore.Normalize(Current);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+}
+
+/// <summary>A bot store that keeps <c>bots.json</c> in memory (headless tests).</summary>
+public sealed class InMemoryBotStore(BotsDocument? initial = null) : IBotStore
+{
+    public BotsDocument Current { get; private set; } = JsonBotStore.Normalize(initial);
+    public event EventHandler? Changed;
+
+    public void Load() => Changed?.Invoke(this, EventArgs.Empty);
+
+    public void Update(Action<BotsDocument> mutate)
+    {
+        mutate(Current);
+        Current = JsonBotStore.Normalize(Current);
         Changed?.Invoke(this, EventArgs.Empty);
     }
 }
