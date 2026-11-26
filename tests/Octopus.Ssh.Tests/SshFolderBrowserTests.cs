@@ -1,4 +1,3 @@
-using Octopus.FileSystem;
 using Octopus.Platform;
 
 namespace Octopus.Ssh.Tests;

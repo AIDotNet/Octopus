@@ -105,7 +105,7 @@ public static class WorkspacePaths
         }
         var expanded = ExpandHome(rootDirectory, homeDirectory);
         if (expanded.Length == 0
-            || expanded.IndexOf('\0') >= 0
+            || expanded.Contains('\0')
             || expanded.IndexOfAny(System.IO.Path.GetInvalidPathChars()) >= 0
             || !System.IO.Path.IsPathFullyQualified(expanded))
         {

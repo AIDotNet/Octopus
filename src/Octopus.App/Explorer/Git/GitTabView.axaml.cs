@@ -161,7 +161,7 @@ public partial class GitTabView : UserControl
 
     private void OnChangePressed(object? sender, PointerPressedEventArgs e)
     {
-        if (DataContext is GitPanelViewModel model && (sender as Control)?.DataContext is GitChangeRowViewModel row)
+        if (DataContext is GitPanelViewModel model && sender is Control { DataContext: GitChangeRowViewModel row })
         {
             model.SelectedChange = row;
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) model.RequestDiff(row);
@@ -170,7 +170,7 @@ public partial class GitTabView : UserControl
 
     private void OnChangeDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (DataContext is GitPanelViewModel model && (sender as Control)?.DataContext is GitChangeRowViewModel row)
+        if (DataContext is GitPanelViewModel model && sender is Control { DataContext: GitChangeRowViewModel row })
         {
             model.RequestOpen(row);
         }
@@ -178,7 +178,7 @@ public partial class GitTabView : UserControl
 
     private void OnCommitPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (DataContext is GitPanelViewModel model && (sender as Control)?.DataContext is GitCommitRowViewModel row
+        if (DataContext is GitPanelViewModel model && sender is Control { DataContext: GitCommitRowViewModel row }
             && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             _ = model.ToggleCommit(row);
@@ -187,7 +187,7 @@ public partial class GitTabView : UserControl
 
     private void OnCommitFilePressed(object? sender, PointerPressedEventArgs e)
     {
-        if (DataContext is GitPanelViewModel model && (sender as Control)?.DataContext is GitCommitFileRowViewModel row
+        if (DataContext is GitPanelViewModel model && sender is Control { DataContext: GitCommitFileRowViewModel row }
             && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             model.RequestCommitFileDiff(row);

@@ -1,8 +1,6 @@
-using Octopus.Platform;
 using Octopus.Platform.Linux;
 using Octopus.Platform.MacOS;
 using Octopus.Platform.Windows;
-using Xunit;
 
 namespace Octopus.Platform.Tests;
 

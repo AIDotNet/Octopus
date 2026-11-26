@@ -45,7 +45,7 @@ public static class ImageDecoders
     /// Nothing outside the file is read: no linked file, no address on the network (a picture in a repository someone
     /// else wrote must not reach out), only the document itself and the data: addresses inside it.
     /// </summary>
-    private static readonly SvgParameters s_svgParameters = new(null, null, null,
+    private static readonly SvgParameters DefaultSvgParameters = new(null, null, null,
         new SvgDocumentLoadOptions { ExternalResources = SvgExternalResourcePolicy.SameDocumentAndDataOnly });
 
     public static bool IsSvg(string path) => string.Equals(Path.GetExtension(path), ".svg", StringComparison.OrdinalIgnoreCase);
@@ -61,7 +61,7 @@ public static class ImageDecoders
         SKPicture? picture;
         using (var stream = new MemoryStream(bytes, writable: false))
         {
-            picture = svg.Load(stream, s_svgParameters);
+            picture = svg.Load(stream, DefaultSvgParameters);
         }
         if (picture is null) return null;
         var bounds = picture.CullRect;
@@ -126,7 +126,7 @@ public static class ImageDecoders
         // The decoder's frames (some are the basis of later ones, so they stay until the end) and the copies handed to
         // Avalonia live together for a moment: count both.
         var keptBytes = (long)kept.Width * kept.Height * 4;
-        if (frames.Length > MaxFrames || (long)frames.Length * keptBytes > MaxAnimationBytes) return null;
+        if (frames.Length > MaxFrames || frames.Length * keptBytes > MaxAnimationBytes) return null;
 
         // Track the last frame that depends on each earlier frame so intermediate SKBitmaps can be freed as soon as possible.
         var lastUsedBy = new int[frames.Length];

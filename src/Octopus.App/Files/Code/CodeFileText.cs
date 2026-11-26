@@ -9,7 +9,7 @@ namespace Octopus.App.Files.Code;
 /// </summary>
 public sealed record CodeFileText(string Text, bool HasBom, string NewLine, bool HasMixedNewLines)
 {
-    private static readonly UTF8Encoding s_strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly UTF8Encoding Strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     /// <summary>An empty UTF-8 LF document with no BOM.</summary>
     public static CodeFileText Empty { get; } = new("", false, "\n", false);
@@ -22,7 +22,7 @@ public sealed record CodeFileText(string Text, bool HasBom, string NewLine, bool
         string raw;
         try
         {
-            raw = s_strict.GetString(bytes, hasBom ? 3 : 0, bytes.Length - (hasBom ? 3 : 0));
+            raw = Strict.GetString(bytes, hasBom ? 3 : 0, bytes.Length - (hasBom ? 3 : 0));
         }
         catch (DecoderFallbackException)
         {
@@ -34,9 +34,15 @@ public sealed record CodeFileText(string Text, bool HasBom, string NewLine, bool
             if (raw[i] == '\r')
             {
                 if (i + 1 < raw.Length && raw[i + 1] == '\n') { crlf++; i++; }
-                else cr++;
+                else
+                {
+                    cr++;
+                }
             }
-            else if (raw[i] == '\n') lf++;
+            else if (raw[i] == '\n')
+            {
+                lf++;
+            }
         }
         var newLine = crlf > lf && crlf >= cr ? "\r\n" : cr > lf && cr > crlf ? "\r" : "\n";
         var mixed = (crlf > 0 ? 1 : 0) + (lf > 0 ? 1 : 0) + (cr > 0 ? 1 : 0) > 1;

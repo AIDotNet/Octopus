@@ -97,11 +97,7 @@ public sealed class ItemLaunchService(
         {
             throw new InvalidOperationException("Agents do not run in a project on an SSH host.");
         }
-        var definition = item.AgentId is null ? null : catalog.Find(item.AgentId);
-        if (definition is null)
-        {
-            throw new InvalidOperationException($"Unknown agent '{item.AgentId}'.");
-        }
+        var definition = (item.AgentId is null ? null : catalog.Find(item.AgentId)) ?? throw new InvalidOperationException($"Unknown agent '{item.AgentId}'.");
         // The prompt is for the first start only; a restored tab continues its session instead (when enabled).
         var restored = projects.WasRestored(item.Id);
         var canResume = allowResume && (!restored || current.Terminal.ResumeAgentsOnRestart);

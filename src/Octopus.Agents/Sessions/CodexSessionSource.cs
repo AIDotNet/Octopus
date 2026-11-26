@@ -302,7 +302,7 @@ public sealed class CodexSessionSource : ISessionSource
         var name = Str(payload, "name") ?? (type == "local_shell_call" ? "local_shell" : "tool");
         // function_call: arguments is a JSON string. custom_tool_call: input is raw text (a patch). local_shell_call: action.command.
         JsonElement args = default;
-        string? raw = Str(payload, "arguments") ?? Str(payload, "input");
+        var raw = Str(payload, "arguments") ?? Str(payload, "input");
         var parsed = false;
         JsonDocument? argsDoc = null;
         try

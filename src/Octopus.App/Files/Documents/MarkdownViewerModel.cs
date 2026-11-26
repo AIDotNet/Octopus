@@ -332,7 +332,11 @@ public sealed partial class MarkdownViewerModel : FileViewerModel
         var read = await Task.Run(() => FileReader.Read(Path, MaxBytes));
         if (Disposed) return;
         if (read.Bytes is { } bytes && bytes.Length == _diskLength && _diskHash is { } known
-            && CryptographicOperations.FixedTimeEquals(SHA256.HashData(bytes), known)) return;
+            && CryptographicOperations.FixedTimeEquals(SHA256.HashData(bytes), known))
+        {
+            return;
+        }
+
         if (!HasUnsavedChanges)
         {
             _version++;

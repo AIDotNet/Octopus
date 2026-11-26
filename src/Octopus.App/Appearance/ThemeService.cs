@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Media;
-using Octopus.Core.Settings;
 using Octopus.Storage;
 using TKCode.Arc;
 

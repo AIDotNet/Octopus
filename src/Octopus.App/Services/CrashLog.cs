@@ -22,7 +22,7 @@ public static class CrashLog
     private const string UnobservedFileName = "unobserved.log";
     private const string UnobservedPreviousFileName = "unobserved.prev.log";
 
-    private static readonly Lock s_gate = new();
+    private static readonly Lock Gate = new();
     private static int s_installed;
     private static int s_dispatcherAttached;
     private static string? s_directory;
@@ -91,7 +91,7 @@ public static class CrashLog
             var timestamp = now ?? DateTimeOffset.Now;
             var targetDir = directory ?? s_directory ?? ResolveLogDirectory();
 
-            lock (s_gate)
+            lock (Gate)
             {
                 // One fatal UI exception often passes through Dispatcher.UnhandledException, Program.Main's catch,
                 // and AppDomain.UnhandledException in sequence; keep a single report for the same instance.
@@ -134,7 +134,7 @@ public static class CrashLog
             var timestamp = now ?? DateTimeOffset.Now;
             var targetDir = directory ?? s_directory ?? ResolveLogDirectory();
 
-            lock (s_gate)
+            lock (Gate)
             {
                 Directory.CreateDirectory(targetDir);
                 var path = Path.Combine(targetDir, UnobservedFileName);
@@ -153,10 +153,10 @@ public static class CrashLog
 
     internal static void ResetDeduplicationForTests()
     {
-        lock (s_gate)
+        lock (Gate)
         {
             s_lastCrashException = null;
-            s_recoveredAt.Clear();
+            RecoveredAt.Clear();
         }
     }
 
@@ -180,7 +180,7 @@ public static class CrashLog
 
     private const int RecoverBurstLimit = 20;
     private const long RecoverBurstWindowMs = 10_000;
-    private static readonly Queue<long> s_recoveredAt = new();
+    private static readonly Queue<long> RecoveredAt = new();
 
     /// <summary>
     /// Whether a UI-thread exception may be swallowed: not when it signals a corrupted process (out of memory, bad
@@ -194,14 +194,14 @@ public static class CrashLog
             return false;
         }
 
-        lock (s_gate)
+        lock (Gate)
         {
-            while (s_recoveredAt.Count > 0 && nowMs - s_recoveredAt.Peek() > RecoverBurstWindowMs)
+            while (RecoveredAt.Count > 0 && nowMs - RecoveredAt.Peek() > RecoverBurstWindowMs)
             {
-                s_recoveredAt.Dequeue();
+                RecoveredAt.Dequeue();
             }
-            if (s_recoveredAt.Count >= RecoverBurstLimit) return false;
-            s_recoveredAt.Enqueue(nowMs);
+            if (RecoveredAt.Count >= RecoverBurstLimit) return false;
+            RecoveredAt.Enqueue(nowMs);
             return true;
         }
     }

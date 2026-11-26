@@ -35,10 +35,10 @@ public sealed class DiffRowViewModel
         _ => CodeLineTint.None,
     }, Kind switch
     {
-        GitDiffLineKind.Context => (byte)3,
-        GitDiffLineKind.Added => (byte)2,
-        GitDiffLineKind.Removed => (byte)1,
-        _ => (byte)0,
+        GitDiffLineKind.Context => 3,
+        GitDiffLineKind.Added => 2,
+        GitDiffLineKind.Removed => 1,
+        _ => 0,
     });
 
     private static string Pad(int? number, int digits) => (number?.ToString() ?? "").PadLeft(digits);

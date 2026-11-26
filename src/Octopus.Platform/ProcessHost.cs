@@ -120,7 +120,10 @@ public sealed class ProcessHost : IProcessHost
             using var process = Process.GetProcessById(processId);
             if (!string.Equals(process.ProcessName, processName, StringComparison.OrdinalIgnoreCase)
                 || (new DateTimeOffset(process.StartTime) - startedAt).Duration() > StartTimeTolerance)
+            {
                 return false;
+            }
+
             process.Kill(entireProcessTree: true);
             return true;
         }

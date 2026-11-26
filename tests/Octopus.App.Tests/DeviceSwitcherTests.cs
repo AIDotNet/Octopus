@@ -11,7 +11,6 @@ using Octopus.App.Services;
 using Octopus.App.Shell;
 using Octopus.App.Sidebar;
 using Octopus.Core.Projects;
-using Octopus.Storage;
 using SkiaSharp;
 using TKCode.Arc;
 using TKCode.Arc.Icons.Lucide;

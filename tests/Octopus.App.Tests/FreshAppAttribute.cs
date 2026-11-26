@@ -1,7 +1,5 @@
 using System.Reflection;
 using Avalonia.Threading;
-using Xunit;
-using Xunit.Sdk;
 using Xunit.v3;
 
 namespace Octopus.App.Tests;

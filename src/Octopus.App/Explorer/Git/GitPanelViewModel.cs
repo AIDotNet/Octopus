@@ -447,7 +447,11 @@ public sealed partial class GitPanelViewModel : ObservableObject
         if (!await _dialogs.ConfirmAsync(
                 AppLangResources.Format(AppLangResourceKind.ExplorerDeleteBranchTitle, branch.Name),
                 AppLangResources.Get(AppLangResourceKind.ExplorerDeleteBranchDescription),
-                AppLangResources.Get(AppLangResourceKind.ExplorerDelete), isDanger: true)) return;
+                AppLangResources.Get(AppLangResourceKind.ExplorerDelete), isDanger: true))
+        {
+            return;
+        }
+
         var unmerged = false;
         await RunAsync(async root =>
         {
@@ -459,7 +463,11 @@ public sealed partial class GitPanelViewModel : ObservableObject
         if (!await _dialogs.ConfirmAsync(
                 AppLangResources.Format(AppLangResourceKind.ExplorerDeleteBranchUnmerged, branch.Name),
                 AppLangResources.Get(AppLangResourceKind.ExplorerDeleteBranchDescription),
-                AppLangResources.Get(AppLangResourceKind.ExplorerDelete), isDanger: true)) return;
+                AppLangResources.Get(AppLangResourceKind.ExplorerDelete), isDanger: true))
+        {
+            return;
+        }
+
         await RunAsync(root => _git.DeleteBranchAsync(root, branch.Name, force: true), includeLog: true);
     }
 

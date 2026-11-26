@@ -1,6 +1,3 @@
-using Octopus.Platform;
-using Xunit;
-
 namespace Octopus.Platform.Tests;
 
 /// <summary>OCTOPUS_DATA_DIR: a second instance keeps its files in a folder of its own.</summary>

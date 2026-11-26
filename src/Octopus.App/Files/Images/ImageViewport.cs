@@ -62,7 +62,10 @@ public sealed class ImageViewport(double imageWidth, double imageHeight)
         var first = _view == default;
         var center = first ? default : CenterPoint;
         _view = view;
-        if (IsFit) ApplyFit();
+        if (IsFit)
+        {
+            ApplyFit();
+        }
         else
         {
             // Keep the picture point that was at the middle of the window at the middle.

@@ -1,6 +1,4 @@
 using Octopus.Core.Projects;
-using Octopus.Core.Settings;
-using Octopus.Storage;
 using Xunit;
 
 namespace Octopus.Storage.Tests;

@@ -5,7 +5,6 @@ using Avalonia.VisualTree;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Octopus.App.Composition;
-using Octopus.App.Settings;
 using Octopus.App.Settings.About;
 using Octopus.App.Shell;
 using Octopus.App.Updates;
@@ -47,7 +46,8 @@ public sealed class FakeUpdateService : IUpdateService
             PublishedAt = new DateTimeOffset(2026, 12, 1, 8, 0, 0, TimeSpan.Zero),
             NotesUrl = $"https://github.com/AIDotNet/Octopus/releases/tag/v{version}",
         },
-        withPackage ? new UpdateAsset { Name = $"Octopus-{version}-osx-arm64.zip", Url = "https://example.invalid/x.zip", Size = 64_000_000, Sha256 = new string('a', 64) } : null) { Notes = notes };
+        withPackage ? new UpdateAsset { Name = $"Octopus-{version}-osx-arm64.zip", Url = "https://example.invalid/x.zip", Size = 64_000_000, Sha256 = new string('a', 64) } : null)
+    { Notes = notes };
 
     public void Start() => Calls.Add("start");
     public Task CheckAsync(bool manual) { Calls.Add($"check:{manual}"); return Task.CompletedTask; }

@@ -4,7 +4,6 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Octopus.App.Composition;
 using Octopus.Platform;
-using TKCode.Arc;
 
 namespace Octopus.App.Files;
 

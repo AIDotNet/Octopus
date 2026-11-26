@@ -299,7 +299,11 @@ public class TunnelServiceTests : IDisposable
 
     private static TunnelSpec Local(int port = 5173, bool reconnect = true, bool auto = false) => new()
     {
-        Kind = TunnelKind.Local, ListenPort = port, TargetPort = port, AutoReconnect = reconnect, AutoStart = auto,
+        Kind = TunnelKind.Local,
+        ListenPort = port,
+        TargetPort = port,
+        AutoReconnect = reconnect,
+        AutoStart = auto,
     };
 
     private static TunnelSpec Remote(int port = 9000) => new() { Kind = TunnelKind.Remote, ListenPort = port, TargetPort = 3000 };

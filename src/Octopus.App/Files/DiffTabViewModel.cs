@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Common;
-using Octopus.App.Composition;
 using Octopus.App.Files.Code;
 using Octopus.App.Localization;
 using Octopus.FileSystem;

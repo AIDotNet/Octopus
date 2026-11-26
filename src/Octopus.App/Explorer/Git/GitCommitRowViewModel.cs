@@ -1,6 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Octopus.App.Common;
-using Octopus.App.Localization;
 using Octopus.Git;
 using TKCode.Arc.Icons.Lucide;
 

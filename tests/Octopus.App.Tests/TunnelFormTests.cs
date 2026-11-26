@@ -41,8 +41,14 @@ public class TunnelFormTests
     {
         var initial = new TunnelSpec
         {
-            Kind = TunnelKind.Remote, Name = " Callback ", BindAddress = "127.0.0.1", ListenPort = 9000, TargetHost = "localhost", TargetPort = 3000,
-            AutoStart = true, AutoReconnect = false,
+            Kind = TunnelKind.Remote,
+            Name = " Callback ",
+            BindAddress = "127.0.0.1",
+            ListenPort = 9000,
+            TargetHost = "localhost",
+            TargetPort = 3000,
+            AutoStart = true,
+            AutoReconnect = false,
         };
         var form = new TunnelFormView(initial, () => 0);
 

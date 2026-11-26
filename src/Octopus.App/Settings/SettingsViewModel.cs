@@ -11,8 +11,8 @@ using Octopus.App.Settings.Shortcuts;
 using Octopus.App.Settings.Ssh;
 using Octopus.App.Settings.Terminal;
 using Octopus.App.Settings.Workspaces;
-using TKCode.Arc.Localization;
 using TKCode.Arc.Icons.Lucide;
+using TKCode.Arc.Localization;
 
 namespace Octopus.App.Settings;
 

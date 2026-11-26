@@ -20,7 +20,7 @@ public sealed record GroupPreviewTile(IBrush Background, Bitmap? Image)
 public sealed partial class ProjectGroupViewModel : ObservableObject
 {
     /// <summary>The place of a missing project in the folder: a faint square that reads on light and dark.</summary>
-    private static readonly IBrush s_emptyTile = new SolidColorBrush(Avalonia.Media.Color.FromArgb(0x2E, 0x80, 0x80, 0x88));
+    private static readonly IBrush EmptyTile = new SolidColorBrush(Avalonia.Media.Color.FromArgb(0x2E, 0x80, 0x80, 0x88));
 
     private readonly Action<ProjectGroupViewModel> _toggle;
     private readonly Func<ProjectGroupViewModel, Task> _rename;
@@ -55,7 +55,7 @@ public sealed partial class ProjectGroupViewModel : ObservableObject
         CapsuleBackground = new SolidColorBrush(tint, 0.14);
         CapsuleBorder = new SolidColorBrush(tint, 0.30);
         Previews = Enumerable.Range(0, 4)
-            .Select(i => i < chips.Count ? new GroupPreviewTile(chips[i].Background, chips[i].Image) : new GroupPreviewTile(s_emptyTile, null))
+            .Select(i => i < chips.Count ? new GroupPreviewTile(chips[i].Background, chips[i].Image) : new GroupPreviewTile(EmptyTile, null))
             .ToList();
         var count = chips.Count == 1
             ? AppLangResources.Get(AppLangResourceKind.GroupProjectCountOne)

@@ -115,9 +115,9 @@ public sealed class SignalAttachPlanner : ISignalAttachPlanner
         }
         else
         {
-            const UnixFileMode Private = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
-            Directory.CreateDirectory(directory, Private);
-            File.SetUnixFileMode(directory, Private);
+            const UnixFileMode privateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+            Directory.CreateDirectory(directory, privateMode);
+            File.SetUnixFileMode(directory, privateMode);
         }
         return directory;
     }

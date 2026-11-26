@@ -114,7 +114,8 @@ public sealed partial class ProjectChipViewModel(
     /// <summary>Asks for a name and puts the project into a new group of that name.</summary>
     [RelayCommand] private Task NewGroupAsync() => newGroup?.Invoke(this) ?? Task.CompletedTask;
     /// <summary>Sets or clears a project-level default subscription account for an agent.</summary>
-    [RelayCommand] private void SetAgentAccount(ProjectAgentAccountSelection? selection)
+    [RelayCommand]
+    private void SetAgentAccount(ProjectAgentAccountSelection? selection)
     {
         if (selection is not null) setAgentAccount?.Invoke(this, selection);
     }

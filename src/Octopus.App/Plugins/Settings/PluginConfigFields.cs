@@ -15,14 +15,14 @@ namespace Octopus.App.Plugins.Settings;
 /// </summary>
 public abstract partial class PluginConfigField : ObservableObject
 {
-    private protected readonly PluginConfigStore _store;
-    private protected readonly PluginManifest _manifest;
+    private protected readonly PluginConfigStore Store;
+    private protected readonly PluginManifest Manifest;
     private protected bool Loading;
 
     protected PluginConfigField(PluginConfigStore store, PluginManifest manifest, ConfigurationProperty property)
     {
-        _store = store;
-        _manifest = manifest;
+        Store = store;
+        Manifest = manifest;
         Property = property;
         Label = property.Localized.Pick(PluginText.Language, "label") ?? property.Label;
         Description = property.Localized.Pick(PluginText.Language, "description") ?? property.Description;
@@ -34,7 +34,7 @@ public abstract partial class PluginConfigField : ObservableObject
 
     [ObservableProperty] public partial string? Error { get; private set; }
 
-    protected JsonNode? Read() => _store.Get(_manifest, Property.Key);
+    protected JsonNode? Read() => Store.Get(Manifest, Property.Key);
 
     protected void Write(JsonNode? value)
     {
@@ -42,7 +42,7 @@ public abstract partial class PluginConfigField : ObservableObject
         try
         {
             // The settings page is the user: it may write every kind, commands included.
-            _store.Set(_manifest, Property.Key, value, byUser: true);
+            Store.Set(Manifest, Property.Key, value, byUser: true);
             Error = null;
         }
         catch (Exception e) when (e is PluginApiException or IOException or UnauthorizedAccessException)

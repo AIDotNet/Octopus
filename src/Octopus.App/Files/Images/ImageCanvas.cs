@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 
 namespace Octopus.App.Files.Images;
 
@@ -89,7 +88,7 @@ public sealed class ImageCanvas : Control
         _model = null;
     }
 
-    private static readonly Cursor s_panCursor = new(StandardCursorType.SizeAll);
+    private static readonly Cursor PanCursor = new(StandardCursorType.SizeAll);
     private IPen? _edgePen;
     private IBrush? _edgeBrush;
 
@@ -97,7 +96,7 @@ public sealed class ImageCanvas : Control
 
     private void OnViewChanged(object? sender, EventArgs e)
     {
-        var next = _model?.Viewport is { CanPan: true } ? s_panCursor : null;
+        var next = _model?.Viewport is { CanPan: true } ? PanCursor : null;
         if (!ReferenceEquals(Cursor, next)) Cursor = next;
         InvalidateVisual();
     }

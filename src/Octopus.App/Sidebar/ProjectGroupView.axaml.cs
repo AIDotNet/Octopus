@@ -1,4 +1,3 @@
-using TKCode.Arc;
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
@@ -7,6 +6,7 @@ using Avalonia.Media;
 using Octopus.App.Appearance;
 using Octopus.App.Common;
 using Octopus.App.Localization;
+using TKCode.Arc;
 using TKCode.Arc.Icons.Lucide;
 using TKCode.Arc.Motion;
 
@@ -44,10 +44,7 @@ public partial class ProjectGroupView : UserControl
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_model is not null)
-        {
-            _model.PropertyChanged -= OnModelChanged;
-        }
+        _model?.PropertyChanged -= OnModelChanged;
         _model = DataContext as ProjectGroupViewModel;
         if (_model is null)
         {

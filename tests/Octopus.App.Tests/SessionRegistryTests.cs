@@ -3,7 +3,6 @@ using Avalonia.Headless.XUnit;
 using Octopus.App.Composition;
 using Octopus.App.Services;
 using Octopus.App.Workspace;
-using Octopus.Terminal;
 using Octopus.Terminal.Avalonia;
 using TKCode.Terminal.Core;
 using Xunit;

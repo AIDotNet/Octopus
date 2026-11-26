@@ -9,11 +9,9 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.TextFormatting;
-using Avalonia.Media.TextFormatting.Unicode;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.Utilities;
-using Avalonia.VisualTree;
 using TKCode.Arc;
 using TKCode.Arc.DesignTokens;
 

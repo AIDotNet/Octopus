@@ -230,8 +230,14 @@ public sealed partial record MarkdownFidelity(IReadOnlyList<MarkdownIssue> Lost,
                 continue;
             }
             if (line.Length == 0) continue;
-            if (Rule().IsMatch(line)) line = "---";
-            else if (line.Contains('|') && TableDelimiter().IsMatch(line)) continue;
+            if (Rule().IsMatch(line))
+            {
+                line = "---";
+            }
+            else if (line.Contains('|') && TableDelimiter().IsMatch(line))
+            {
+                continue;
+            }
             else
             {
                 line = ListMarker().Replace(line, "");

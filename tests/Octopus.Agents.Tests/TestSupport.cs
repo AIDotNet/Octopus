@@ -1,5 +1,4 @@
 using System.Text;
-using Octopus.Agents;
 using Octopus.Core.Agents;
 using Octopus.Platform;
 
@@ -25,7 +24,7 @@ internal sealed class TestShellBuilder : IShellCommandBuilder
         var result = new List<string>();
         var sb = new StringBuilder();
         var has = false;
-        char quote = '\0';
+        var quote = '\0';
         foreach (var c in commandLine)
         {
             if (quote != '\0')

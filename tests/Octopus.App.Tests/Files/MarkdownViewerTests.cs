@@ -9,7 +9,6 @@ using Octopus.App.Files.Documents;
 using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.App.Workspace;
-using Octopus.Core.Projects;
 using TKCode.Arc;
 using Xunit;
 

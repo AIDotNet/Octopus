@@ -1,6 +1,6 @@
 using Avalonia.Controls;
-using TKCode.Arc;
 using Octopus.App.Localization;
+using TKCode.Arc;
 
 namespace Octopus.App.Explorer.Files;
 

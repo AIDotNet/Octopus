@@ -106,14 +106,14 @@ public static class ThemeReader
 
     private static ThemeDefinition Read(ManifestObject root)
     {
-        ThemeAppearance? appearance = root.String("appearance") switch
+        var appearance = root.String("appearance") switch
         {
             null => null,
             "light" => ThemeAppearance.Light,
             "dark" => ThemeAppearance.Dark,
             var other => Ignore<ThemeAppearance?>(root, "appearance", $"\"{other}\" must be \"light\" or \"dark\"", null),
         };
-        ThemeDensity? density = root.String("density") switch
+        var density = root.String("density") switch
         {
             null => null,
             "compact" => ThemeDensity.Compact,

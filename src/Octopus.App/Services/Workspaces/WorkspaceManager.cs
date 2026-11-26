@@ -6,7 +6,6 @@ using Octopus.App.Localization;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Git;
-using Octopus.Platform;
 using Octopus.Storage;
 
 namespace Octopus.App.Services.Workspaces;
@@ -309,7 +308,7 @@ public sealed class WorkspaceManager(
             LastActivityAt = now,
         };
 
-        ProjectWorkspace saved = workspace;
+        var saved = workspace;
         await RunOnUiAsync(() =>
         {
             saved = projects.AddWorkspace(project, workspace);

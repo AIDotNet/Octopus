@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Layout;
 using Avalonia.Controls.Shapes;
+using Avalonia.Layout;
 using Avalonia.Media;
 using TKCode.Arc;
 using TKCode.Arc.DesignTokens;
@@ -25,7 +25,7 @@ public sealed class AgentIcon : Border
         AvaloniaProperty.Register<AgentIcon, double>(nameof(Size), 18);
 
     // Identity colors of the built-in agents: data, not theme colors, so they stay the same in light and dark.
-    private static readonly Dictionary<string, (string Color, string Letter)> s_known = new()
+    private static readonly Dictionary<string, (string Color, string Letter)> Known = new()
     {
         ["claude"] = ("#D97757", "C"),
         ["codex"] = ("#10A37F", "X"),
@@ -147,7 +147,7 @@ public sealed class AgentIcon : Border
             Child = _letter;
         }
 
-        var (color, letter) = AgentId is not null && s_known.TryGetValue(AgentId, out var known)
+        var (color, letter) = AgentId is not null && Known.TryGetValue(AgentId, out var known)
             ? known
             : ("#71717A", FirstLetter(AgentName ?? AgentId));
         CornerRadius = new CornerRadius(Math.Round(Size * 0.28));

@@ -1,7 +1,6 @@
 using Octopus.App.Common;
 using Octopus.App.Services;
 using Octopus.Core.Projects;
-using Octopus.Platform;
 using Octopus.Storage;
 using Xunit;
 

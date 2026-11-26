@@ -567,7 +567,7 @@ public sealed partial class FileTreeViewModel : ObservableObject
                 rows.Move(at, i);
             }
         }
-        if (parent is not null) parent.IsLoaded = true;
+        parent?.IsLoaded = true;
     }
 
     private static readonly HashSet<string> SkipReadAhead = new(StringComparer.OrdinalIgnoreCase)

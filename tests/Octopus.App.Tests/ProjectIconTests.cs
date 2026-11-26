@@ -1,9 +1,6 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
-using Avalonia.VisualTree;
 using Octopus.App.Composition;
 using Octopus.App.Dialogs;
 using Octopus.App.Services;

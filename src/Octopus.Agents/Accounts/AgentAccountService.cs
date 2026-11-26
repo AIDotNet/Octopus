@@ -436,7 +436,7 @@ public sealed class AgentAccountService : IAgentAccountService
             return;
         }
 
-        AgentAccountRecord? target = _store.Current.Accounts.FirstOrDefault(a => a.AgentId == definition.Id && a.Id == accountId);
+        var target = _store.Current.Accounts.FirstOrDefault(a => a.AgentId == definition.Id && a.Id == accountId);
         if (target is null) return;
 
         _store.Update(doc =>
@@ -685,11 +685,11 @@ public sealed class AgentAccountService : IAgentAccountService
             Directory.CreateDirectory(directory);
             return;
         }
-        const UnixFileMode PrivateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
-        Directory.CreateDirectory(directory, PrivateMode);
+        const UnixFileMode privateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        Directory.CreateDirectory(directory, privateMode);
         try
         {
-            File.SetUnixFileMode(directory, PrivateMode);
+            File.SetUnixFileMode(directory, privateMode);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

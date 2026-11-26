@@ -1,7 +1,5 @@
-using System.Text.Json;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
-using Octopus.Storage;
 using Xunit;
 
 namespace Octopus.Storage.Tests;

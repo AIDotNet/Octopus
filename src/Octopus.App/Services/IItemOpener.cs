@@ -7,7 +7,7 @@ namespace Octopus.App.Services;
 public interface IItemOpener
 {
     /// <summary>Pass as <c>workspaceId</c> to force the project's default directory rather than following the active tab's workspace.</summary>
-    public const string DefaultWorkspaceId = "";
+    const string DefaultWorkspaceId = "";
 
     ProjectItem? OpenTerminal(string? workspaceId = null, string? workingDirectory = null);
     ProjectItem? OpenAgent(string agentId, AgentLaunchOptions? launch = null, string? workspaceId = null, string? workingDirectory = null);

@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using Octopus.Agents.Signals;
 using Octopus.Core.Agents;
@@ -23,12 +22,14 @@ public static class ThirdPartyModelDiscovery
     private static readonly Lazy<HttpClient> SharedRemoteHttp = new(() => new HttpClient(new HttpClientHandler
     {
         UseProxy = true,
-    }) { Timeout = GatewayTimeout });
+    })
+    { Timeout = GatewayTimeout });
 
     private static readonly Lazy<HttpClient> SharedLoopbackHttp = new(() => new HttpClient(new HttpClientHandler
     {
         UseProxy = false,
-    }) { Timeout = GatewayTimeout });
+    })
+    { Timeout = GatewayTimeout });
 
     /// <summary>
     /// Discovers Codex models from: (1) <c>model_catalog_json</c>, (2) live custom gateway <c>GET {baseUrl}/models</c>,

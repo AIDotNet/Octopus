@@ -6,13 +6,9 @@ using Octopus.Agents.Signals;
 using Octopus.App.Composition;
 using Octopus.App.Explorer.Sessions;
 using Octopus.App.Services;
-using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Platform;
 using Octopus.Storage;
-using Avalonia.Controls;
-using Avalonia.Threading;
-using TKCode.Arc;
 using Xunit;
 
 namespace Octopus.App.Tests.Explorer;

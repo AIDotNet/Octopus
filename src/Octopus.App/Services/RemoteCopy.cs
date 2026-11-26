@@ -1,4 +1,3 @@
-using System.Linq;
 using Octopus.App.Localization;
 using Octopus.Ssh;
 

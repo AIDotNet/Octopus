@@ -566,8 +566,8 @@ public sealed partial class SessionsPanelViewModel : ObservableObject
         }
         if (_catalog.Find(row.Info.AgentId) is not { } agent) return;
 
-        string? targetWorkspaceId = row.IsWorktree ? row.WorkspaceId : IItemOpener.DefaultWorkspaceId;
-        string? targetWorkingDir = row.IsWorktree ? row.WorkspacePath : null;
+        var targetWorkspaceId = row.IsWorktree ? row.WorkspaceId : IItemOpener.DefaultWorkspaceId;
+        var targetWorkingDir = row.IsWorktree ? row.WorkspacePath : null;
         if (row.IsWorktree && !string.IsNullOrEmpty(row.WorkspacePath) && !Directory.Exists(row.WorkspacePath))
         {
             var fallback = await _dialogs.ConfirmAsync(

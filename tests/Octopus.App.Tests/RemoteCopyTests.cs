@@ -32,7 +32,7 @@ public class RemoteCopyTests
         private static Task<ProcessResult> Ok(string output) => Task.FromResult(new ProcessResult(0, output, "", false));
     }
 
-    private static (RemoteCopy Copy, Host Host, FakeDialogService Dialogs) Open(string hostContent, string lastSeen)
+    private static (RemoteCopy Copy, Host Host, FakeDialogService Dialogs) Open(string? hostContent, string lastSeen)
     {
         var host = new Host(hostContent);
         var dialogs = new FakeDialogService();
@@ -52,7 +52,7 @@ public class RemoteCopyTests
     {
         var (copy, host, dialogs) = Open(hostContent: "old", lastSeen: "old");
 
-        var result = await copy.WriteAsync("new"u8.ToArray());
+        var result = await copy.WriteAsync("new"u8.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(RemoteWriteOutcome.Written, result.Outcome);
         Assert.Equal(0, dialogs.Asked);
@@ -65,7 +65,7 @@ public class RemoteCopyTests
         var (copy, host, dialogs) = Open(hostContent: "changed on the server", lastSeen: "old");
         dialogs.Answer = false;
 
-        var result = await copy.WriteAsync("mine"u8.ToArray());
+        var result = await copy.WriteAsync("mine"u8.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(RemoteWriteOutcome.Declined, result.Outcome);
         Assert.Equal(1, dialogs.Asked);
@@ -79,7 +79,7 @@ public class RemoteCopyTests
         var (copy, host, dialogs) = Open(hostContent: "changed on the server", lastSeen: "old");
         dialogs.Answer = true;
 
-        var result = await copy.WriteAsync("mine"u8.ToArray());
+        var result = await copy.WriteAsync("mine"u8.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(RemoteWriteOutcome.Written, result.Outcome);
         Assert.Equal("mine", host.Content);
@@ -91,7 +91,7 @@ public class RemoteCopyTests
         var (copy, host, dialogs) = Open(hostContent: null, lastSeen: "old");
         dialogs.Answer = true;
 
-        var result = await copy.WriteAsync("mine"u8.ToArray());
+        var result = await copy.WriteAsync("mine"u8.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(RemoteWriteOutcome.Written, result.Outcome);
         Assert.Equal(1, dialogs.Asked);
@@ -105,7 +105,7 @@ public class RemoteCopyTests
         var dialogs = new FakeDialogService();
         var copy = new RemoteCopy(new RemoteFiles(host, new TestPaths(), Path.Combine(Path.GetTempPath(), "octopus-rc-" + Guid.NewGuid().ToString("N"))).TreeFor("prod"), "/srv/notes.md", "old"u8.ToArray(), dialogs);
 
-        var result = await copy.WriteAsync("mine"u8.ToArray());
+        var result = await copy.WriteAsync("mine"u8.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(RemoteWriteOutcome.Failed, result.Outcome);
         Assert.Contains("Permission denied", result.Error);

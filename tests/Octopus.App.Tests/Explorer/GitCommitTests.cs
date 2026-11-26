@@ -6,7 +6,6 @@ using Octopus.App.Composition;
 using Octopus.App.Explorer;
 using Octopus.App.Explorer.Git;
 using Octopus.App.Localization;
-using TKCode.Arc;
 using Xunit;
 
 namespace Octopus.App.Tests.Explorer;

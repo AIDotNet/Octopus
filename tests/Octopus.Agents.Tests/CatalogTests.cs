@@ -200,7 +200,9 @@ public class CatalogTests
     {
         var feature = new AgentFeature
         {
-            Id = "x", Label = "Default", Description = "Desc",
+            Id = "x",
+            Label = "Default",
+            Description = "Desc",
             Localized = new()
             {
                 ["zh-CN"] = new LocalizedText { Label = "简体" },

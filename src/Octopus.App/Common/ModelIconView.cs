@@ -19,13 +19,13 @@ public sealed class ModelIconView : Control
         AvaloniaProperty.Register<ModelIconView, double>(nameof(Size), 14);
 
     // Lucide "sparkles" icon (24x24 viewBox, strokeWidth=2) used as the neutral fallback for unknown/default models.
-    private static readonly Geometry s_fallbackSparkleMain = StreamGeometry.Parse(
+    private static readonly Geometry FallbackSparkleMain = StreamGeometry.Parse(
         "M 11.017 2.814 A 1 1 0 0 1 12.983 2.814 L 14.034 6.071 A 2 2 0 0 0 15.929 7.966 L 19.186 9.017 A 1 1 0 0 1 19.186 10.983 L 15.929 12.034 A 2 2 0 0 0 14.034 13.929 L 12.983 17.186 A 1 1 0 0 1 11.017 17.186 L 9.966 13.929 A 2 2 0 0 0 8.071 12.034 L 4.814 10.983 A 1 1 0 0 1 4.814 9.017 L 8.071 7.966 A 2 2 0 0 0 9.966 6.071 Z");
 
-    private static readonly Geometry s_fallbackSparkleTopRight = StreamGeometry.Parse(
+    private static readonly Geometry FallbackSparkleTopRight = StreamGeometry.Parse(
         "M 20 2 V 6 M 22 4 H 18");
 
-    private static readonly Geometry s_fallbackSparkleBottomLeft = StreamGeometry.Parse(
+    private static readonly Geometry FallbackSparkleBottomLeft = StreamGeometry.Parse(
         "M 4 17 A 1 1 0 1 0 4 19 A 1 1 0 1 0 4 17 Z");
 
     static ModelIconView()
@@ -86,7 +86,7 @@ public sealed class ModelIconView : Control
                 ? (currentColor ??= TextElement.GetForeground(this) ?? Brushes.Gray)
                 : shape.Fill;
 
-            IPen? stroke = shape.StrokeUsesCurrentColor
+            var stroke = shape.StrokeUsesCurrentColor
                 ? new Pen(currentColor ??= TextElement.GetForeground(this) ?? Brushes.Gray, shape.StrokeWidth)
                 : shape.Stroke;
 
@@ -126,8 +126,8 @@ public sealed class ModelIconView : Control
         var pen = new Pen(fg, 2.0, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
 
         using var _ = context.PushTransform(matrix);
-        context.DrawGeometry(null, pen, s_fallbackSparkleMain);
-        context.DrawGeometry(null, pen, s_fallbackSparkleTopRight);
-        context.DrawGeometry(fg, null, s_fallbackSparkleBottomLeft);
+        context.DrawGeometry(null, pen, FallbackSparkleMain);
+        context.DrawGeometry(null, pen, FallbackSparkleTopRight);
+        context.DrawGeometry(fg, null, FallbackSparkleBottomLeft);
     }
 }

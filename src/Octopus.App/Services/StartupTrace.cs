@@ -16,8 +16,8 @@ namespace Octopus.App.Services;
 /// </summary>
 public static class StartupTrace
 {
-    private static readonly Lock s_gate = new();
-    private static readonly List<PosixSignalRegistration> s_signals = [];
+    private static readonly Lock Gate = new();
+    private static readonly List<PosixSignalRegistration> Signals = [];
     private static StreamWriter? s_writer;
     private static FileStream? s_stream;
     private static string? s_path;
@@ -82,7 +82,7 @@ public static class StartupTrace
             var thread = Thread.CurrentThread;
             var line = string.Create(CultureInfo.InvariantCulture,
                 $"{now} [pid {Environment.ProcessId} t{Environment.CurrentManagedThreadId}{(string.IsNullOrEmpty(thread.Name) ? string.Empty : " " + thread.Name)}] {phase}{(string.IsNullOrEmpty(detail) ? string.Empty : ": " + detail)}");
-            lock (s_gate)
+            lock (Gate)
             {
                 s_writer.WriteLine(line);
                 s_writer.Flush();
@@ -134,8 +134,9 @@ public static class StartupTrace
     [DllImport("libSystem.dylib", EntryPoint = "sigaction", SetLastError = true)]
     private static extern int NativeSigaction(int signum, IntPtr act, IntPtr oldact);
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA2101", Justification = "Unix C API taking UTF-8; marshalled explicitly as LPUTF8Str.")]
     [DllImport("libSystem.dylib", EntryPoint = "open", SetLastError = true)]
-    private static extern int NativeOpen(string path, int flags, int mode);
+    private static extern int NativeOpen([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags, int mode);
 
     [DllImport("libSystem.dylib", EntryPoint = "write", SetLastError = true)]
     private static extern nint NativeWrite(int fd, IntPtr buffer, nint count);
@@ -278,7 +279,7 @@ public static class StartupTrace
     {
         try
         {
-            s_signals.Add(PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+            Signals.Add(PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
             {
                 NoteHangups();
                 var sinceHangup = Environment.TickCount64 - Volatile.Read(ref s_lastHangupMs);
@@ -333,7 +334,7 @@ public static class StartupTrace
     {
         try
         {
-            s_signals.Add(PosixSignalRegistration.Create(signal, context =>
+            Signals.Add(PosixSignalRegistration.Create(signal, context =>
             {
                 Log($"signal:{signal}", $"default action will run (cancel={context.Cancel})");
             }));
@@ -373,7 +374,7 @@ public static class StartupTrace
     private static void WriteRaw(string text)
     {
         if (s_writer is null) return;
-        lock (s_gate)
+        lock (Gate)
         {
             s_writer.Write(text);
             s_writer.Flush();

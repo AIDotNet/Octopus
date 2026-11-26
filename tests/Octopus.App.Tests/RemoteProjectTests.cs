@@ -28,7 +28,6 @@ using Octopus.Remote.Transport;
 using Octopus.Storage;
 using Octopus.Terminal;
 using Octopus.Terminal.Avalonia;
-using TKCode.Arc;
 using Xunit;
 
 namespace Octopus.App.Tests;
@@ -370,7 +369,8 @@ public class RemoteProjectTests
         // A terminal started meanwhile says why it has nothing to show, and ends, instead of hanging.
         var item = new ProjectItem { Id = "0123", Kind = ProjectItemKind.Terminal, Title = "zsh" };
         await using (var session = new TerminalSession(ItemLaunchService.RemoteSession, remote.TerminalFactory(project, item),
-                         new TKCode.Terminal.Core.TerminalSize(60, 10, 0, 0), TerminalPalettes.Dark, TKCode.Terminal.Core.ColorScheme.Dark, 100, () => false) { IsMirror = true })
+                         new TKCode.Terminal.Core.TerminalSize(60, 10, 0, 0), TerminalPalettes.Dark, TKCode.Terminal.Core.ColorScheme.Dark, 100, () => false)
+        { IsMirror = true })
         {
             session.Start();
             await Until(() => session.ReadText().Contains("Studio:"), "the terminal says the host is not connected");

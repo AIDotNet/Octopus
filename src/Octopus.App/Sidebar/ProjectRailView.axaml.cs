@@ -24,8 +24,8 @@ public partial class ProjectRailView : UserControl
     // Application formats, not in-process ones: on macOS Avalonia (12.1.5) leaves in-process formats off the
     // pasteboard, and AppKit aborts the whole app on a drag whose only item has no pasteboard type ("There are 0 items
     // on the pasteboard, but 1 drag images"). The payload is just an id, so exposing it to the pasteboard is harmless.
-    private static readonly DataFormat<string> s_project = DataFormat.CreateStringApplicationFormat("octopus.project-square");
-    private static readonly DataFormat<string> s_group = DataFormat.CreateStringApplicationFormat("octopus.project-group");
+    private static readonly DataFormat<string> ProjectFormat = DataFormat.CreateStringApplicationFormat("octopus.project-square");
+    private static readonly DataFormat<string> GroupFormat = DataFormat.CreateStringApplicationFormat("octopus.project-group");
 
     /// <summary>How far the pointer moves with the button down before a press becomes a drag.</summary>
     private const double DragThreshold = 6;
@@ -59,11 +59,8 @@ public partial class ProjectRailView : UserControl
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_boundDevices is not null)
-        {
-            _boundDevices.Changed -= OnDevicesChanged;
-            _boundDevices = null;
-        }
+        _boundDevices?.Changed -= OnDevicesChanged;
+        _boundDevices = null;
         _boundDevices = Model?.Devices;
         if (_boundDevices is not null)
         {
@@ -105,11 +102,11 @@ public partial class ProjectRailView : UserControl
         }
         if (source.FindAncestorOfType<ProjectChipView>(includeSelf: true)?.DataContext is ProjectChipViewModel chip)
         {
-            _pressed = (s_project, chip.Id);
+            _pressed = (ProjectFormat, chip.Id);
         }
         else if (source.FindAncestorOfType<ProjectGroupView>(includeSelf: true)?.DataContext is ProjectGroupViewModel group)
         {
-            _pressed = (s_group, group.Id);
+            _pressed = (GroupFormat, group.Id);
         }
         else
         {
@@ -172,11 +169,11 @@ public partial class ProjectRailView : UserControl
     private DropPlan? PlanOf(DragEventArgs e)
     {
         var source = e.Source as Visual;
-        if (e.DataTransfer.TryGetValue(s_project) is { } projectId)
+        if (e.DataTransfer.TryGetValue(ProjectFormat) is { } projectId)
         {
             return PlanForSquare(e, source, projectId);
         }
-        return e.DataTransfer.TryGetValue(s_group) is { } groupId ? PlanForFolder(e, source, groupId) : null;
+        return e.DataTransfer.TryGetValue(GroupFormat) is { } groupId ? PlanForFolder(e, source, groupId) : null;
     }
 
     /// <summary>Where a dragged square would go; null over itself.</summary>

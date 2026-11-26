@@ -17,10 +17,24 @@ public class UnixTerminalEnvironmentTests
     {
         var env = new Env(new()
         {
-            ["PATH"] = "/bin", ["HOME"] = "/h", ["LANG"] = "en_US.UTF-8",
-            ["OCTOPUS_TOKEN"] = "x", ["TKCODE_X"] = "x", ["TMUX"] = "x", ["TMUX_PANE"] = "x", ["TERMCAP"] = "x",
-            ["SHLVL"] = "2", ["PWD"] = "/stale", ["OLDPWD"] = "/older", ["__CFBundleIdentifier"] = "x", ["XPC_FLAGS"] = "x", ["ITERM_SESSION_ID"] = "x",
-            ["VSCODE_PID"] = "1", ["DOTNET_STARTUP_HOOKS"] = "x", ["COR_ENABLE_PROFILING"] = "1", ["WT_SESSION"] = "x",
+            ["PATH"] = "/bin",
+            ["HOME"] = "/h",
+            ["LANG"] = "en_US.UTF-8",
+            ["OCTOPUS_TOKEN"] = "x",
+            ["TKCODE_X"] = "x",
+            ["TMUX"] = "x",
+            ["TMUX_PANE"] = "x",
+            ["TERMCAP"] = "x",
+            ["SHLVL"] = "2",
+            ["PWD"] = "/stale",
+            ["OLDPWD"] = "/older",
+            ["__CFBundleIdentifier"] = "x",
+            ["XPC_FLAGS"] = "x",
+            ["ITERM_SESSION_ID"] = "x",
+            ["VSCODE_PID"] = "1",
+            ["DOTNET_STARTUP_HOOKS"] = "x",
+            ["COR_ENABLE_PROFILING"] = "1",
+            ["WT_SESSION"] = "x",
         }).Build();
         Assert.Equal(new[] { "HOME", "LANG", "PATH", "COLORTERM", "TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION" }.Order(),
             env.Keys.Order());
@@ -42,7 +56,8 @@ public class UnixTerminalEnvironmentTests
     {
         var env = new Env(new() { ["PATH"] = "/bin" }).Build(new Dictionary<string, string>
         {
-            ["TERM"] = "screen", ["FOO"] = "1",
+            ["TERM"] = "screen",
+            ["FOO"] = "1",
         });
         Assert.Equal("fallback.UTF-8", env["LANG"]);
         Assert.Equal("screen", env["TERM"]);

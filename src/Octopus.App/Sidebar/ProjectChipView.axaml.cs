@@ -1,7 +1,7 @@
-using TKCode.Arc;
 using Avalonia.Controls;
 using Octopus.App.Common;
 using Octopus.App.Localization;
+using TKCode.Arc;
 
 namespace Octopus.App.Sidebar;
 

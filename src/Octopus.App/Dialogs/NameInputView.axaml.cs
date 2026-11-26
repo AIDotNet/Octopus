@@ -1,6 +1,5 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using TKCode.Arc;
 
 namespace Octopus.App.Dialogs;
 
@@ -20,7 +19,7 @@ public partial class NameInputView : UserControl
     }
 
     /// <summary>What was typed, trimmed.</summary>
-    public string Name => (NameInput.Text ?? "").Trim();
+    public new string Name => (NameInput.Text ?? "").Trim();
 
     protected override void OnLoaded(RoutedEventArgs e)
     {

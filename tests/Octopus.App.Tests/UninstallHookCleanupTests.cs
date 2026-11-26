@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Octopus.Agents.Signals;
 using Octopus.App.Services;
 using Xunit;
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Avalonia.Headless.XUnit;
 using Octopus.Agents;
 using Octopus.App.Composition;
@@ -7,7 +8,6 @@ using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Storage;
 using TKCode.Arc.Localization;
-using System.Text.Json;
 using Xunit;
 
 namespace Octopus.App.Tests;
@@ -252,7 +252,7 @@ public class LaunchTests
     public void An_empty_choice_survives_the_projects_file()
     {
         var item = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Launch = new AgentLaunchOptions { Model = "", Effort = "", Fast = false } };
-        var json = JsonSerializer.Serialize(new ProjectsDocument { Projects = [new Project { Path = Dir, Items = [item]}] }, OctopusJsonContext.FileOptions);
+        var json = JsonSerializer.Serialize(new ProjectsDocument { Projects = [new Project { Path = Dir, Items = [item] }] }, OctopusJsonContext.FileOptions);
         var back = JsonSerializer.Deserialize<ProjectsDocument>(json, OctopusJsonContext.FileOptions)!.Projects[0].Items[0].Launch!;
         Assert.Equal("", back.Model);
         Assert.Equal("", back.Effort);

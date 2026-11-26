@@ -21,8 +21,7 @@ public sealed class JsonProjectStore(IAppPaths paths) : IProjectStore
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return new ProjectsDocument(); }
             try
             {
-                var document = JsonSerializer.Deserialize(text, OctopusJsonContext.FileTypeInfo<ProjectsDocument>());
-                if (document is null) throw new JsonException("null document");
+                var document = JsonSerializer.Deserialize(text, OctopusJsonContext.FileTypeInfo<ProjectsDocument>()) ?? throw new JsonException("null document");
                 return ProjectsDocumentNormalizer.Normalize(document);
             }
             catch (JsonException)

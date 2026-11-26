@@ -333,7 +333,7 @@ public sealed class SignalHub : ISignalHub
     [UnsupportedOSPlatform("windows")]
     private static string CreatePrivateDirectory(string root)
     {
-        const UnixFileMode Private = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+        const UnixFileMode privateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
         for (var attempt = 0; attempt < 8; attempt++)
         {
             var directory = Path.Combine(root, Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(6)));
@@ -341,9 +341,9 @@ public sealed class SignalHub : ISignalHub
             {
                 continue;
             }
-            Directory.CreateDirectory(directory, Private);
+            Directory.CreateDirectory(directory, privateMode);
             // The umask may only remove bits, but an existing directory keeps its own mode: set it explicitly.
-            File.SetUnixFileMode(directory, Private);
+            File.SetUnixFileMode(directory, privateMode);
             return directory;
         }
         throw new IOException("Could not create a private directory for the signal socket.");

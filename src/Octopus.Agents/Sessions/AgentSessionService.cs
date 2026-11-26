@@ -115,7 +115,7 @@ public sealed class AgentSessionService : IAgentSessionService
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                return (IReadOnlyList<AgentSessionInfo>)[];
+                return [];
             }
         })).ConfigureAwait(false);
         var accounts = directories

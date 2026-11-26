@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Octopus.Platform.Unix;
 
 /// <summary>

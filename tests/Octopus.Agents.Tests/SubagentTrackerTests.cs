@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Octopus.Agents.Subagents;
-using Xunit;
 
 namespace Octopus.Agents.Tests;
 

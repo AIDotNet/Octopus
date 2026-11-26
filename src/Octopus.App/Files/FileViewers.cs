@@ -14,14 +14,14 @@ public sealed record FileViewerDescriptor(FileKind Kind, Func<FileViewerContext,
 /// </summary>
 public static class FileViewers
 {
-    private static readonly FileViewerDescriptor[] s_all =
+    private static readonly FileViewerDescriptor[] All =
     [
         new(FileKind.Code, c => new CodeViewerModel(c), m => new CodeViewerView { DataContext = m }),
         new(FileKind.Markdown, c => new MarkdownViewerModel(c), m => new MarkdownViewerView { DataContext = m }),
         new(FileKind.Image, c => new ImageViewerModel(c), m => new ImageViewerView { DataContext = m }),
     ];
 
-    public static FileViewerDescriptor For(FileKind kind) => s_all.First(d => d.Kind == kind);
+    public static FileViewerDescriptor For(FileKind kind) => All.First(d => d.Kind == kind);
 }
 
 /// <summary>What a viewer's view offers the tab around it.</summary>

@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Octopus.Plugins.Security;
 
 /// <summary>
@@ -6,6 +8,8 @@ namespace Octopus.Plugins.Security;
 /// </summary>
 public static class PathSyntax
 {
+    private static readonly SearchValues<char> WindowsReservedChars = SearchValues.Create("<>\"|?*");
+
     private static readonly string[] ReservedNames =
     [
         "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
@@ -50,7 +54,7 @@ public static class PathSyntax
         foreach (var segment in rest.Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
             if (segment is "." or "..") continue;
-            if (segment.AsSpan().IndexOfAny("<>\"|?*") >= 0 || segment.Any(char.IsControl)) return $"'{segment}' contains characters Windows does not allow in names.";
+            if (segment.AsSpan().ContainsAny(WindowsReservedChars) || segment.Any(char.IsControl)) return $"'{segment}' contains characters Windows does not allow in names.";
             // Windows drops trailing dots and spaces: ".env." would open ".env" past a name check.
             if (segment.EndsWith('.') || segment.EndsWith(' ')) return $"'{segment}' ends in a dot or space.";
             var stem = segment.Split('.')[0].TrimEnd(' ');

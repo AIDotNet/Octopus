@@ -1,5 +1,3 @@
-using Octopus.Platform;
-
 namespace Octopus.Platform.Tests;
 
 public class ShellCommandBuilderTests

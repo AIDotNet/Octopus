@@ -53,7 +53,7 @@ public sealed class SshHostCatalog : ISshHostCatalog
     public void Refresh()
     {
         var exists = File.Exists(_configPath);
-        IReadOnlyList<SshHost> hosts = exists ? MarkEditable(SshConfigParser.Parse(_configPath, _home)) : [];
+        var hosts = exists ? MarkEditable(SshConfigParser.Parse(_configPath, _home)) : [];
         Current = new SshHostScan(_configPath, exists, DateTimeOffset.UtcNow, hosts);
         Changed?.Invoke(this, EventArgs.Empty);
     }

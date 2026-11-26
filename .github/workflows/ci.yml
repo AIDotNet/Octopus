@@ -18,6 +18,25 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
+  # 编码规范（.editorconfig）：格式必须与 `dotnet format` 的输出一致。风格与质量规则在下面的构建中检查（警告即错误）。
+  lint:
+    name: lint (format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore
+        run: dotnet restore Octopus.slnx
+
+      - name: Check formatting
+        run: dotnet format whitespace Octopus.slnx --verify-no-changes --no-restore
+
   build-test:
     name: build & test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -37,6 +56,7 @@ jobs:
       - name: Restore
         run: dotnet restore Octopus.slnx
 
+      # TreatWarningsAsErrors 与 EnforceCodeStyleInBuild 在 Directory.Build.props 中打开：任何规范违规都会让这一步失败。
       - name: Build
         run: dotnet build Octopus.slnx -c Release --no-restore
 

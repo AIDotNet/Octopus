@@ -12,7 +12,6 @@ using Octopus.App.Services;
 using Octopus.App.Shell;
 using Octopus.App.Workspace;
 using Octopus.Core.Projects;
-using SkiaSharp;
 using Xunit;
 
 namespace Octopus.App.Tests.Files;

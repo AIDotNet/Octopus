@@ -1,8 +1,8 @@
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Automation;
-using Avalonia.Interactivity;
+using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Octopus.App.Common;
 using Octopus.App.Localization;

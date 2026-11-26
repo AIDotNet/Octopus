@@ -162,12 +162,12 @@ public static class SubagentTranscript
         }
     }
 
-    private static readonly byte[] s_toolUseMark = Encoding.UTF8.GetBytes("\"tool_use\"");
+    private static readonly byte[] ToolUseMark = Encoding.UTF8.GetBytes("\"tool_use\"");
 
     private static void ScanLine(ReadOnlySpan<byte> line, ref int tools, ref string? last)
     {
         // Most lines are not assistant tool calls; a byte search spares parsing them.
-        if (line.IndexOf(s_toolUseMark) < 0)
+        if (line.IndexOf(ToolUseMark) < 0)
         {
             return;
         }

@@ -1,7 +1,7 @@
 using Avalonia.Headless.XUnit;
 using Octopus.App.Common;
-using Octopus.App.Explorer.Files;
 using Octopus.App.Composition;
+using Octopus.App.Explorer.Files;
 using Octopus.App.Services;
 using Octopus.FileSystem;
 using Octopus.Platform;
@@ -44,7 +44,7 @@ public class RemoteFilesTests
             ? new ProcessResult(0, "5\n", "", false)
             : new ProcessResult(0, "aGVsbG8=\n", "", false));
 
-        var copy = await files.CopyAsync("prod", "/srv/app/hello.txt");
+        var copy = await files.CopyAsync("prod", "/srv/app/hello.txt", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("hello.txt", Path.GetFileName(copy));
         Assert.Equal("hello", File.ReadAllText(copy));
@@ -59,7 +59,7 @@ public class RemoteFilesTests
         }
 
         // A second copy replaces the first one: the copy is made again, not refused.
-        await files.CopyAsync("prod", "/srv/app/hello.txt");
+        await files.CopyAsync("prod", "/srv/app/hello.txt", cancellationToken: TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class RemoteFilesTests
     {
         var (files, root) = Create(_ => new ProcessResult(0, (RemoteFiles.MaxCopyBytes + 1) + "\n", "", false));
 
-        await Assert.ThrowsAsync<SshFileTooLargeException>(() => files.CopyAsync("prod", "/srv/big.bin"));
+        await Assert.ThrowsAsync<SshFileTooLargeException>(() => files.CopyAsync("prod", "/srv/big.bin", cancellationToken: TestContext.Current.CancellationToken));
 
         // Nothing was written: not even the folder of the copy.
         Assert.False(Directory.Exists(Path.Combine(root, "cache", "remote")));

@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Sockets;
-using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +11,6 @@ using Octopus.Remote.Client;
 using Octopus.Remote.Security;
 using Octopus.Remote.Transport;
 using Octopus.Storage;
-using TKCode.Arc;
 using Xunit;
 
 namespace Octopus.App.Tests;

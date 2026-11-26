@@ -4,7 +4,6 @@ using Avalonia.VisualTree;
 using Octopus.App.Composition;
 using Octopus.App.Services;
 using Octopus.App.Shell;
-using Octopus.App.Sidebar;
 using Octopus.Core.Projects;
 using TKCode.Arc;
 using Xunit;
@@ -29,7 +28,8 @@ public class ItemOrderTests
             {
                 var item = new ProjectItem
                 {
-                    Kind = kind, Title = title,
+                    Kind = kind,
+                    Title = title,
                     AgentId = kind == ProjectItemKind.Agent ? "claude" : null,
                     FilePath = kind == ProjectItemKind.File ? Path.Combine(dir, title) : null,
                 };

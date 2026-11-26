@@ -1,5 +1,4 @@
 using Octopus.Platform;
-using Octopus.Ssh;
 
 namespace Octopus.Ssh.Tests;
 

@@ -150,7 +150,7 @@ public sealed class DialogService(
             .Where(a => existing is null || !a.Equals(existing.Alias, StringComparison.OrdinalIgnoreCase))
             .ToList();
         var editing = existing is not null;
-        SshHostDraft? typed = existing?.ToDraft();
+        var typed = existing?.ToDraft();
         IReadOnlyList<SshHostIssue> issues = [];
         Func<SshHostDraft, CancellationToken, Task<SshTestResult>>? tester = sshTester is null ? null : sshTester.TestAsync;
         while (true)
@@ -212,7 +212,7 @@ public sealed class DialogService(
                 comparer);
         }
 
-        NewProjectChoice? typed = initial;
+        var typed = initial;
         string? error = null;
         while (true)
         {

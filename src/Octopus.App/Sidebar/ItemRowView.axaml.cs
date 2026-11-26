@@ -17,10 +17,7 @@ public partial class ItemRowView : UserControl
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_model is not null)
-        {
-            _model.PropertyChanged -= OnModelChanged;
-        }
+        _model?.PropertyChanged -= OnModelChanged;
         _model = DataContext as ItemRowViewModel;
         if (_model is null)
         {
@@ -54,9 +51,6 @@ public partial class ItemRowView : UserControl
 
     private void OnEditCanceled(object? sender, RoutedEventArgs e)
     {
-        if (_model is not null)
-        {
-            _model.IsRenaming = false;
-        }
+        _model?.IsRenaming = false;
     }
 }

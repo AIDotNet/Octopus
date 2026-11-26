@@ -2,14 +2,12 @@ using System.Collections.ObjectModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Octopus.App.Localization;
 using Octopus.FileSystem;
-using TKCode.Arc;
 using TKCode.Arc.Icons.Lucide;
 
 namespace Octopus.App.Dialogs;

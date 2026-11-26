@@ -406,8 +406,14 @@ public static class AgySubagentTranscript
                 if (c == '"') inString = false;
                 continue;
             }
-            if (c == '"') inString = true;
-            else if (c == '{') depth++;
+            if (c == '"')
+            {
+                inString = true;
+            }
+            else if (c == '{')
+            {
+                depth++;
+            }
             else if (c == '}')
             {
                 depth--;

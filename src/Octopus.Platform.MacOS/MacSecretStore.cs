@@ -30,7 +30,7 @@ public sealed class MacSecretStore : ISecretStore
         }
         finally
         {
-            SecKeychainItemFreeContent(IntPtr.Zero, data);
+            _ = SecKeychainItemFreeContent(IntPtr.Zero, data);
             if (item != IntPtr.Zero) CFRelease(item);
         }
     }, cancellationToken);
@@ -43,7 +43,7 @@ public sealed class MacSecretStore : ISecretStore
         var status = SecKeychainFindGenericPassword(IntPtr.Zero, (uint)s.Length, s, (uint)a.Length, a, out _, out var data, out var item);
         if (status == 0)
         {
-            SecKeychainItemFreeContent(IntPtr.Zero, data);
+            _ = SecKeychainItemFreeContent(IntPtr.Zero, data);
             try
             {
                 Check(SecKeychainItemModifyAttributesAndData(item, IntPtr.Zero, (uint)v.Length, v), "change");
@@ -66,7 +66,7 @@ public sealed class MacSecretStore : ISecretStore
         var status = SecKeychainFindGenericPassword(IntPtr.Zero, (uint)s.Length, s, (uint)a.Length, a, out _, out var data, out var item);
         if (status == ErrSecItemNotFound) return;
         Check(status, "read");
-        SecKeychainItemFreeContent(IntPtr.Zero, data);
+        _ = SecKeychainItemFreeContent(IntPtr.Zero, data);
         try
         {
             Check(SecKeychainItemDelete(item), "delete");

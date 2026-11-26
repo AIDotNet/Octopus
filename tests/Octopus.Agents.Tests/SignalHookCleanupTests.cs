@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Octopus.Agents.Signals;
-using Xunit;
 
 namespace Octopus.Agents.Tests;
 

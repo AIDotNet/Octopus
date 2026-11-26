@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Octopus.App.Activity;
 
 /// <summary>
@@ -13,7 +15,7 @@ public readonly record struct SessionTitle(string Text, bool Working)
     private const string RestMarks = "✳✶✻✽✢✦◇·∗*●○";
 
     /// <summary>Spinner frames besides the braille block: quarter and half circles.</summary>
-    private const string SpinMarks = "◐◓◑◒◴◷◶◵";
+    private static readonly SearchValues<char> SpinMarks = SearchValues.Create("◐◓◑◒◴◷◶◵");
 
     public static SessionTitle Parse(string? raw)
     {
@@ -27,7 +29,7 @@ public readonly record struct SessionTitle(string Text, bool Working)
         }
         if (end > 0 && (end == text.Length || char.IsWhiteSpace(text[end])))
         {
-            working = text.AsSpan(0, end).IndexOfAny(SpinMarks) >= 0 || HasBraille(text.AsSpan(0, end));
+            working = text.AsSpan(0, end).ContainsAny(SpinMarks) || HasBraille(text.AsSpan(0, end));
             text = text[end..].Trim();
         }
         return new SessionTitle(IsProgramPath(text) ? "" : text, working);

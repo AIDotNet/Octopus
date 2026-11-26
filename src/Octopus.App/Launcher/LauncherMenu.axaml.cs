@@ -64,7 +64,7 @@ public partial class LauncherMenu : UserControl
         {
             return;
         }
-        for (Visual? visual = source; visual is not null && !ReferenceEquals(visual, FirstLevel); visual = visual.GetVisualParent())
+        for (var visual = source; visual is not null && !ReferenceEquals(visual, FirstLevel); visual = visual.GetVisualParent())
         {
             if (visual is Control { DataContext: LauncherAgentViewModel agent })
             {

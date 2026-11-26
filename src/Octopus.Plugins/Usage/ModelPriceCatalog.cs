@@ -227,13 +227,20 @@ public sealed partial class ModelPriceCatalog : IDisposable
     {
         var json = new JsonObject
         {
-            ["input"] = price.Input, ["output"] = price.Output, ["cacheRead"] = price.CacheRead, ["cacheWrite"] = price.CacheWrite,
+            ["input"] = price.Input,
+            ["output"] = price.Output,
+            ["cacheRead"] = price.CacheRead,
+            ["cacheWrite"] = price.CacheWrite,
         };
         if (price.Tier is { } tier)
         {
             json["tier"] = new JsonObject
             {
-                ["size"] = tier.Size, ["input"] = tier.Input, ["output"] = tier.Output, ["cacheRead"] = tier.CacheRead, ["cacheWrite"] = tier.CacheWrite,
+                ["size"] = tier.Size,
+                ["input"] = tier.Input,
+                ["output"] = tier.Output,
+                ["cacheRead"] = tier.CacheRead,
+                ["cacheWrite"] = tier.CacheWrite,
             };
         }
         return json;

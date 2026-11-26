@@ -3,11 +3,10 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Octopus.App.Settings;
-using ArcSidebar = TKCode.Arc.Sidebar;
 using Xunit;
+using ArcSidebar = TKCode.Arc.Sidebar;
 
 namespace Octopus.App.Tests.Settings;
 

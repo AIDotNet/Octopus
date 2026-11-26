@@ -5,7 +5,6 @@ using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.Platform;
 using Octopus.Ssh;
-using TKCode.Arc;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Settings.Ssh;

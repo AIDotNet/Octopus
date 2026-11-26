@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
-using Microsoft.Extensions.DependencyInjection;
 using Octopus.Agents;
 using Octopus.App.Activity;
 using Octopus.App.Common;

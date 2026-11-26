@@ -1,5 +1,4 @@
 using System.Text;
-using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Octopus.App.Common;
 using Octopus.App.Composition;
@@ -7,7 +6,6 @@ using Octopus.App.Files;
 using Octopus.App.Files.Code;
 using Octopus.App.Services;
 using Octopus.App.Workspace;
-using Octopus.Core.Projects;
 using TKCode.Arc;
 using Xunit;
 

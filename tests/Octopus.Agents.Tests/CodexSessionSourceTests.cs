@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Octopus.Agents.Sessions;
-using Xunit;
 
 namespace Octopus.Agents.Tests;
 
@@ -27,7 +26,10 @@ public sealed class CodexSessionSourceTests : IDisposable
             ["type"] = "session_meta",
             ["payload"] = new Dictionary<string, object?>
             {
-                ["id"] = id, ["timestamp"] = time, ["cwd"] = cwd, ["cli_version"] = "0.167.0",
+                ["id"] = id,
+                ["timestamp"] = time,
+                ["cwd"] = cwd,
+                ["cli_version"] = "0.167.0",
                 ["git"] = branch is null ? null : new { branch, commit_hash = "abc" },
             },
         });

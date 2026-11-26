@@ -1,13 +1,10 @@
 using System.Text;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Octopus.App.Composition;
 using Octopus.App.Dialogs;
 using Octopus.App.Localization;
-using Octopus.App.Services;
-using Octopus.App.Shell;
 using Octopus.Core.Terminals;
 using Octopus.Storage;
 using Octopus.Terminal;

@@ -1,6 +1,3 @@
-using Octopus.Updates;
-using Xunit;
-
 namespace Octopus.Updates.Tests;
 
 public sealed class ReleaseNotesTidyTests

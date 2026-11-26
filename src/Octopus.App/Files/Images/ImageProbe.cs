@@ -61,7 +61,7 @@ public static class ImageProbe
     public static ImageInfo? TryRead(ReadOnlySpan<byte> b)
     {
         if (Sniff(b) is not { } format) return null;
-        (int, int)? size = format switch
+        var size = format switch
         {
             ImageFormat.Png => Png(b),
             ImageFormat.Gif => b.Length >= 10 ? (BinaryPrimitives.ReadUInt16LittleEndian(b[6..]), BinaryPrimitives.ReadUInt16LittleEndian(b[8..])) : null,

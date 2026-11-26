@@ -12,7 +12,7 @@ public static partial class ModelIcons
     private readonly record struct Rule(string IconKey, Regex Pattern, bool SafeForDescription = false);
 
     // Ordered from most-specific to broadest, matching @lobehub/icons modelConfig.ts precedence.
-    private static readonly Rule[] s_rules =
+    private static readonly Rule[] Rules =
     [
         // OpenAI specialized models first
         new("sora", SoraRegex(), SafeForDescription: true),
@@ -180,7 +180,7 @@ public static partial class ModelIcons
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
         var candidate = text.Trim();
-        foreach (var rule in s_rules)
+        foreach (var rule in Rules)
         {
             if (descriptionOnly && !rule.SafeForDescription) continue;
             if (rule.Pattern.IsMatch(candidate))

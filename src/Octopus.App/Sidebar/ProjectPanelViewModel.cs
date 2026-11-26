@@ -67,9 +67,9 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         _fileOpener = fileOpener;
         _settingsNavigator = settingsNavigator;
         _devices = devices;
-        if (_devices is not null) _devices.Changed += (_, _) => UiContext.Run(NotifyDeviceState);
-        if (_accounts is not null) _accounts.Changed += (_, _) => UiContext.Run(Rebuild);
-        if (_settings is not null) _settings.Changed += (_, _) => UiContext.Run(Rebuild);
+        _devices?.Changed += (_, _) => UiContext.Run(NotifyDeviceState);
+        _accounts?.Changed += (_, _) => UiContext.Run(Rebuild);
+        _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
         if (_subagents is not null)
         {
             _subagents.Changed += (_, id) => SyncSubagents(id);

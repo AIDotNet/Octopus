@@ -753,9 +753,9 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
                 item.Launch ??= new AgentLaunchOptions();
                 item.Launch.SessionId = normalized;
             }
-            else if (item.Launch is not null)
+            else
             {
-                item.Launch.SessionId = null;
+                item.Launch?.SessionId = null;
             }
         }
         ScheduleSave();

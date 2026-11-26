@@ -2,12 +2,11 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Octopus.App.Composition;
-using Octopus.App.Settings;
 using Octopus.App.Services;
+using Octopus.App.Settings;
 using Octopus.App.Settings.Ssh;
 using Octopus.Platform;
 using Octopus.Ssh;
-using TKCode.Arc;
 using Xunit;
 
 namespace Octopus.App.Tests.Settings;

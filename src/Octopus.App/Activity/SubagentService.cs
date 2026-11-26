@@ -32,7 +32,7 @@ public interface ISubagentService
 /// </summary>
 public sealed class SubagentService : ISubagentService, IDisposable
 {
-    private static readonly TimeSpan s_pollInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
     private readonly IProjectService _projects;
     private readonly IDisposable? _subscription;
@@ -133,7 +133,7 @@ public sealed class SubagentService : ISubagentService, IDisposable
             || _external.Values.Any(list => list.Any(r => r.State == SubagentState.Running));
         if (running && _timer is null)
         {
-            _timer = new DispatcherTimer { Interval = s_pollInterval };
+            _timer = new DispatcherTimer { Interval = PollInterval };
             _timer.Tick += (_, _) =>
             {
                 Poll();

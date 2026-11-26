@@ -46,12 +46,12 @@ public sealed class PolicyContext
         IAppPaths app,
         IEnumerable<string>? otherPluginDirectories = null,
         IEnumerable<AgentCredentialLocation>? agentCredentials = null) => new()
-    {
-        ProtectedDirectories = [app.DataDirectory, app.CacheDirectory],
-        OtherPluginDirectories = [.. otherPluginDirectories ?? []],
-        AgentCredentials = [.. agentCredentials ?? []],
-        SystemLocations = [.. SensitiveFiles.DefaultSystemLocations(), AppContext.BaseDirectory],
-    };
+        {
+            ProtectedDirectories = [app.DataDirectory, app.CacheDirectory],
+            OtherPluginDirectories = [.. otherPluginDirectories ?? []],
+            AgentCredentials = [.. agentCredentials ?? []],
+            SystemLocations = [.. SensitiveFiles.DefaultSystemLocations(), AppContext.BaseDirectory],
+        };
 
     internal Resolved Real => _resolved ??= BuildResolved();
 

@@ -3,7 +3,6 @@ using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Common;
-using Octopus.App.Composition;
 using Octopus.App.Localization;
 using Octopus.App.Services;
 

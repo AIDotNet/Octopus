@@ -55,23 +55,14 @@ public sealed partial class DeviceSwitcherViewModel : ObservableObject
         _settings = settings;
 
         _projects.Changed += OnProjectsChanged;
-        if (_activity is not null)
-        {
-            _activity.Changed += (_, _) => UiContext.Run(RefreshActivity);
-        }
+        _activity?.Changed += (_, _) => UiContext.Run(RefreshActivity);
         if (_remoteRuntime is not null)
         {
             _remoteRuntime.StateChanged += _ => UiContext.Run(Rebuild);
             _remoteRuntime.Hosts.Changed += () => UiContext.Run(Rebuild);
         }
-        if (_sshCatalog is not null)
-        {
-            _sshCatalog.Changed += (_, _) => UiContext.Run(Rebuild);
-        }
-        if (_settings is not null)
-        {
-            _settings.Changed += (_, _) => UiContext.Run(Rebuild);
-        }
+        _sshCatalog?.Changed += (_, _) => UiContext.Run(Rebuild);
+        _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
         ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
 
         Rebuild();

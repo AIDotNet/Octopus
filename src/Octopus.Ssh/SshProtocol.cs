@@ -37,28 +37,43 @@ public static class SshProtocol
         var text = Clean(line);
         if (text.Contains("Entering interactive session", StringComparison.Ordinal)
             || text.Contains("mux_client_request_session", StringComparison.Ordinal))
+        {
             return SshStage.Ready;
+        }
+
         if (text.Contains("channel 0: new session", StringComparison.Ordinal)
             || text.Contains("Sending environment", StringComparison.Ordinal)
             || text.Contains("Sending command", StringComparison.Ordinal))
+        {
             return SshStage.OpeningSession;
+        }
+
         if (text.Contains("Authenticating to", StringComparison.Ordinal)
             || text.Contains("Authentications that can continue", StringComparison.Ordinal)
             || text.Contains("Next authentication method", StringComparison.Ordinal)
             || text.Contains("Offering public key", StringComparison.Ordinal)
             || text.Contains("Trying private key", StringComparison.Ordinal)
             || text.Contains("Authenticated to ", StringComparison.Ordinal))
+        {
             return SshStage.Authenticating;
+        }
+
         if (text.Contains("Server host key:", StringComparison.Ordinal)
             || text.Contains("Permanently added", StringComparison.Ordinal)
             || text.Contains("is known and matches", StringComparison.Ordinal))
+        {
             return SshStage.CheckingHostKey;
+        }
+
         if (text.Contains("Connection established.", StringComparison.Ordinal)
             || text.Contains("Local version string", StringComparison.Ordinal)
             || text.Contains("Remote protocol version", StringComparison.Ordinal)
             || text.Contains("SSH2_MSG_KEXINIT", StringComparison.Ordinal)
             || text.Contains("kex: algorithm", StringComparison.Ordinal))
+        {
             return SshStage.Negotiating;
+        }
+
         if (text.Contains("Connecting to ", StringComparison.Ordinal))
             return SshStage.Connecting;
         return null;

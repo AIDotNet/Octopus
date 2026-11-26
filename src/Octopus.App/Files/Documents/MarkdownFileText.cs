@@ -8,7 +8,7 @@ namespace Octopus.App.Files.Documents;
 /// </summary>
 public sealed record MarkdownFileText(string Text, bool HasBom, string NewLine, bool EndsWithNewline, bool HasMixedNewLines)
 {
-    private static readonly UTF8Encoding s_strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly UTF8Encoding Strict = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     /// <summary>An empty file: nothing yet, so a first save ends the text with a newline.</summary>
     public static MarkdownFileText Empty { get; } = new("", false, "\n", true, false);
@@ -21,7 +21,7 @@ public sealed record MarkdownFileText(string Text, bool HasBom, string NewLine, 
         string raw;
         try
         {
-            raw = s_strict.GetString(bytes, hasBom ? 3 : 0, bytes.Length - (hasBom ? 3 : 0));
+            raw = Strict.GetString(bytes, hasBom ? 3 : 0, bytes.Length - (hasBom ? 3 : 0));
         }
         catch (DecoderFallbackException)
         {
@@ -33,9 +33,15 @@ public sealed record MarkdownFileText(string Text, bool HasBom, string NewLine, 
             if (raw[i] == '\r')
             {
                 if (i + 1 < raw.Length && raw[i + 1] == '\n') { crlf++; i++; }
-                else cr++;
+                else
+                {
+                    cr++;
+                }
             }
-            else if (raw[i] == '\n') lf++;
+            else if (raw[i] == '\n')
+            {
+                lf++;
+            }
         }
         var newLine = crlf > lf && crlf >= cr ? "\r\n" : cr > lf && cr > crlf ? "\r" : "\n";
         var mixed = (crlf > 0 ? 1 : 0) + (lf > 0 ? 1 : 0) + (cr > 0 ? 1 : 0) > 1;

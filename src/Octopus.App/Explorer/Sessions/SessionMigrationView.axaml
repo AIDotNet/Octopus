@@ -91,8 +91,8 @@
         <TextBlock Classes="mig-caption" Margin="0,4,0,0" Text="{l:AppLangResource MigrateKind}" />
         <arc:SegmentedControl HorizontalAlignment="Stretch" SelectedValue="{Binding Mode, Mode=TwoWay}"
                               AutomationProperties.Name="{l:AppLangResource MigrateKind}">
-            <arc:SegmentedOption Value="native" Label="{l:AppLangResource MigrateNative}" IsDisabled="{Binding !CanNative}" />
-            <arc:SegmentedOption Value="handoff" Label="{l:AppLangResource MigrateHandoff}" IsDisabled="{Binding !CanHandoff}" />
+            <arc:SegmentedOption Value="native" Label="{l:AppLangResource MigrateNative}" IsEnabled="{Binding CanNative}" />
+            <arc:SegmentedOption Value="handoff" Label="{l:AppLangResource MigrateHandoff}" IsEnabled="{Binding CanHandoff}" />
         </arc:SegmentedControl>
         <TextBlock IsVisible="{Binding IsNative}" Text="{Binding NativeHint}" TextWrapping="Wrap"
                    FontSize="{arc:ArcDesignTokenResource TypeXS}" Foreground="{arc:ArcDesignTokenResource TextMuted}" />

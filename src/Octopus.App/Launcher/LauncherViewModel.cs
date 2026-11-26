@@ -65,8 +65,8 @@ public sealed partial class LauncherViewModel : ObservableObject
         _scanner.Changed += (_, _) => UiContext.PostToUi(Refresh);
         _catalog.Changed += (_, _) => UiContext.PostToUi(Refresh);
         _settings.Changed += (_, _) => UiContext.PostToUi(Refresh);
-        if (_accounts is not null) _accounts.Changed += (_, _) => UiContext.PostToUi(Refresh);
-        if (plugins is not null) plugins.Manager.HostChanged += (_, _) => UiContext.PostToUi(RefreshViews);
+        _accounts?.Changed += (_, _) => UiContext.PostToUi(Refresh);
+        plugins?.Manager.HostChanged += (_, _) => UiContext.PostToUi(RefreshViews);
         Refresh();
     }
 
@@ -205,16 +205,10 @@ public sealed partial class LauncherViewModel : ObservableObject
         {
             return;
         }
-        if (ExpandedAgent is not null)
-        {
-            ExpandedAgent.IsExpanded = false;
-        }
+        ExpandedAgent?.IsExpanded = false;
         ExpandedAgent = agent;
         Panel = agent is null ? null : PanelOf(agent);
-        if (agent is not null)
-        {
-            agent.IsExpanded = true;
-        }
+        agent?.IsExpanded = true;
     }
 
     [RelayCommand]

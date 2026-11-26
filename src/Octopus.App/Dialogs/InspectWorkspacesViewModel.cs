@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.App.Services.Workspaces;
-using Octopus.Core.Projects;
 using Octopus.Platform;
 
 namespace Octopus.App.Dialogs;

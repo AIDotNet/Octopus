@@ -31,8 +31,10 @@ public class LauncherPlacementTests
             var root = shell.GetVisualDescendants().OfType<Grid>().First(g => g.Name == "Root");
             var anchor = new Border
             {
-                Width = 80, Height = 30,
-                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+                Width = 80,
+                Height = 30,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(300, anchorTop, 0, 0),
             };
             root.Children.Add(anchor);

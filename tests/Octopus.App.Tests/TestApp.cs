@@ -1,16 +1,15 @@
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
-using Avalonia.Skia;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Octopus.Agents;
 using Octopus.App.Appearance;
 using Octopus.App.Composition;
-using Octopus.Agents;
 using Octopus.App.Services;
 using Octopus.Platform;
-using Octopus.Terminal;
 using Octopus.Storage;
+using Octopus.Terminal;
 using Xunit;
 
 // Every test gets a fresh app on the headless platform, and the tests run one after another (Avalonia has one UI thread).
@@ -56,6 +55,8 @@ public static class TestApp
             services.Replace(ServiceDescriptor.Singleton(p => new Octopus.App.Services.Workspaces.WorkspaceRootOptions(((TempAppPaths)p.GetRequiredService<IAppPaths>()).Home)));
             // Scheduled automatic workspace cleanup stays off by default in tests unless explicitly started.
             services.Replace(ServiceDescriptor.Singleton(new Octopus.App.Services.Workspaces.WorkspaceCleanupOptions { AutoStart = false }));
+            // Star prompt background timer stays off by default in tests unless explicitly configured.
+            services.Replace(ServiceDescriptor.Singleton(new Octopus.App.StarPrompt.StarPromptOptions { AutoStart = false }));
             // No real process, no scan of the machine, no system dialogs.
             services.Replace(ServiceDescriptor.Singleton<ITerminalConnectionFactory, FakeTerminalConnectionFactory>());
             services.AddSingleton(p => (FakeTerminalConnectionFactory)p.GetRequiredService<ITerminalConnectionFactory>());

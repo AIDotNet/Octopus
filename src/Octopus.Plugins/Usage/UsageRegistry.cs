@@ -108,7 +108,7 @@ public sealed class UsageRegistry : IDisposable
     /// <summary>The usage of an agent: the given account, or the most recently updated one.</summary>
     public UsageState? Get(string agentId, string? account = null)
     {
-        UsageState? state = account is not null
+        var state = account is not null
             ? _states.GetValueOrDefault((agentId, account))
             : _states.Values.Where(s => s.AgentId == agentId).MaxBy(s => s.UpdatedAt);
         return state is null ? null : WithResetWindows(state);

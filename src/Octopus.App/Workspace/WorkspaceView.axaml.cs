@@ -67,7 +67,7 @@ public partial class WorkspaceView : UserControl
             return;
         }
         var onStrip = false;
-        for (Visual? v = source; v is not null && !ReferenceEquals(v, this); v = v.GetVisualParent())
+        for (var v = source; v is not null && !ReferenceEquals(v, this); v = v.GetVisualParent())
         {
             var name = v.GetType().Name;
             if (v is Avalonia.Controls.Button || name == "DockTab" || v is StripAddButton)

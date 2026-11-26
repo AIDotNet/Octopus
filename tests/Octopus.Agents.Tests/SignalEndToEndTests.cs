@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 using Octopus.Agents.Signals;
 using static Octopus.Agents.Tests.SignalTestHelpers;

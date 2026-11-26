@@ -39,7 +39,7 @@ public class ImageProbeTests
     public void Text_and_cut_off_headers_are_not_pictures()
     {
         Assert.Null(ImageProbe.TryRead("hello world, this is text"u8));
-        Assert.Null(ImageProbe.TryRead(TestImages.Png(10, 10)[..12]));
+        Assert.Null(ImageProbe.TryRead(TestImages.Png(10, 10).AsSpan(0, 12).ToArray()));
         Assert.Null(ImageProbe.TryRead([]));
         Assert.Null(ImageProbe.Sniff("BM text"u8));
     }

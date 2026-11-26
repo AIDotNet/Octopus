@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Avalonia.Headless.XUnit;
-using Avalonia.Threading;
 using Octopus.Agents.Signals;
 using Octopus.App.Activity;
 using Octopus.App.Composition;
@@ -8,7 +7,6 @@ using Octopus.App.Services;
 using Octopus.App.Shell;
 using Octopus.App.Sidebar;
 using Octopus.Core.Projects;
-using TKCode.Arc;
 using Xunit;
 
 namespace Octopus.App.Tests;

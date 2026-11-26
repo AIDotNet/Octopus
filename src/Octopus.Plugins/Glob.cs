@@ -42,9 +42,18 @@ public static class Glob
                     i++;
                 }
             }
-            else if (c == '*') sb.Append("[^/]*");
-            else if (c == '?') sb.Append("[^/]");
-            else sb.Append(Regex.Escape(c.ToString()));
+            else if (c == '*')
+            {
+                sb.Append("[^/]*");
+            }
+            else if (c == '?')
+            {
+                sb.Append("[^/]");
+            }
+            else
+            {
+                sb.Append(Regex.Escape(c.ToString()));
+            }
         }
         sb.Append('$');
         var options = RegexOptions.CultureInvariant | (OperatingSystem.IsLinux() ? RegexOptions.None : RegexOptions.IgnoreCase);

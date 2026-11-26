@@ -1,5 +1,4 @@
 using Octopus.Core.Plugins;
-using Octopus.Storage;
 using Xunit;
 
 namespace Octopus.Storage.Tests;

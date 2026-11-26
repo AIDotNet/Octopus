@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Octopus.Platform;
-using Octopus.Plugins.Runtime;
 using Octopus.Plugins.Runtime.Modules;
 using Xunit;
 
@@ -71,8 +70,8 @@ public sealed class SecretsModuleTests : IAsyncDisposable
             "contributes": { "commands": [ { "id": "test.secrets.run", "title": "Run" } ] }
             """);
         var manager = await _harness.StartAsync();
-        var plugin = (await manager.EnsureActiveAsync("test.secrets"))!;
-        var json = await plugin.InvokeAsync("command:test.secrets.run", [], TimeSpan.FromSeconds(10));
+        var plugin = (await manager.EnsureActiveAsync("test.secrets", cancellationToken: TestContext.Current.CancellationToken))!;
+        var json = await plugin.InvokeAsync("command:test.secrets.run", [], TimeSpan.FromSeconds(10), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("PermissionDenied", (string?)JsonNode.Parse(json));
     }
 }

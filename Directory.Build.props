@@ -4,7 +4,19 @@
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+        <!-- 编码规范：.editorconfig 是唯一来源，这里让构建强制执行它。
+             警告即错误；风格规则（IDExxxx）在构建期检查；质量分析器使用 latest-recommended 集合。 -->
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- 依赖漏洞公告（NU1901-NU1904）随时可能新增，不应让构建突然失败；它们仍作为警告显示，需及时升级。 -->
+        <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+        <!-- 存量裁剪问题，修复后删除这一行（只放行这两个编号，其他 IL2xxx/IL3xxx 仍是错误）：
+             IL2026 Workspace/WorkspaceView.axaml.cs 按名称反射查找 TKCode.Arc.DockTab；
+             IL2045 Octopus.Mobile/Remote/MobileRemote.cs 读取 AssemblyMetadata，iOS 裁剪会删掉该特性（ServiceUrl 可能为 null）。 -->
+        <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL2045</WarningsNotAsErrors>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
+        <!-- IDE0005（未使用的 using）只有生成 XML 文档时才在构建中报告；CS1591 等文档注释警告已在 .editorconfig 关闭。 -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
         <!-- The address of the official Octopus service (https://…), compiled into the desktop and phone apps:
              sign-in, default relay, and update checks go here. Override with -p:OctopusServiceUrl=… -->

@@ -4,7 +4,6 @@ using Octopus.App.Composition;
 using Octopus.App.Localization;
 using Octopus.App.Services;
 using Octopus.App.Settings.Agents;
-using Octopus.Core.Agents;
 using Octopus.Platform;
 using Octopus.Storage;
 using Xunit;

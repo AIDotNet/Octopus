@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Media;
-using Avalonia.Media.Immutable;
 using Avalonia.Styling;
 
 namespace Octopus.App.Common;
@@ -74,7 +73,7 @@ public sealed class FileIconView : Control
                 ? (currentColor ??= TextElement.GetForeground(this) ?? Brushes.Gray)
                 : shape.Fill;
 
-            IPen? stroke = shape.StrokeUsesCurrentColor
+            var stroke = shape.StrokeUsesCurrentColor
                 ? new Pen(currentColor ??= TextElement.GetForeground(this) ?? Brushes.Gray, shape.StrokeWidth)
                 : shape.Stroke;
 

@@ -4,7 +4,6 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Octopus.Agents;
 using Octopus.App.Composition;
 using Octopus.App.Launcher;
 using Octopus.App.Services;
@@ -274,7 +273,7 @@ public class WorkspaceTests
     public void Empty_views_render_the_logo_with_a_transparent_background()
     {
         var emptyState = AppHost.Get<EmptyStateViewModel>();
-        foreach (Control view in new Control[]
+        foreach (var view in new Control[]
         {
             new EmptyProjectView { DataContext = emptyState },
             new NoProjectView { DataContext = emptyState },

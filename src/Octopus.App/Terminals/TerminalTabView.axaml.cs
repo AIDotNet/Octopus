@@ -1,11 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Octopus.Terminal.Avalonia;
 using Octopus.App.Composition;
 using Octopus.App.Localization;
-using Octopus.Platform;
 using Octopus.App.Workspace;
+using Octopus.Platform;
+using Octopus.Terminal.Avalonia;
 
 namespace Octopus.App.Terminals;
 
@@ -56,11 +56,8 @@ public partial class TerminalTabView : UserControl, ITabContent
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_boundModel is not null)
-        {
-            _boundModel.PropertyChanged -= OnModelPropertyChanged;
-            _boundModel = null;
-        }
+        _boundModel?.PropertyChanged -= OnModelPropertyChanged;
+        _boundModel = null;
         ApplyFont();
         if (Model is { } model)
         {

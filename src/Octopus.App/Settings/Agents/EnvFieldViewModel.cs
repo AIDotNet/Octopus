@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.App.Common;
 using Octopus.Core.Agents;
@@ -11,7 +10,7 @@ public sealed partial class EnvFieldViewModel : AgentFieldViewModel
 {
     private readonly EnvCapability _capability;
     private readonly Debouncer _debounce = new();
-    private bool _loading;
+    private readonly bool _loading;
 
     public EnvFieldViewModel(AgentRowViewModel row, string label, EnvCapability capability)
         : base(row, "env", label)

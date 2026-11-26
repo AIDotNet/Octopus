@@ -4,12 +4,12 @@ using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
-using Avalonia.VisualTree;
-using TKCode.Arc;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Octopus.App.Common;
 using Octopus.App.Launcher;
+using TKCode.Arc;
 
 namespace Octopus.App.Sidebar;
 
@@ -202,9 +202,9 @@ public partial class ProjectPanelView : UserControl
         }, DispatcherPriority.Input);
     }
 
-    private static readonly AttachedProperty<bool> s_compactWiredProperty =
+    private static readonly AttachedProperty<bool> CompactWiredProperty =
         AvaloniaProperty.RegisterAttached<ProjectPanelView, TemplatedControl, bool>("CompactWired");
-    private static readonly AttachedProperty<IDisposable?> s_rowBackgroundSubProperty =
+    private static readonly AttachedProperty<IDisposable?> RowBackgroundSubProperty =
         AvaloniaProperty.RegisterAttached<ProjectPanelView, TemplatedControl, IDisposable?>("RowBackgroundSub");
 
     /// <summary>
@@ -214,11 +214,11 @@ public partial class ProjectPanelView : UserControl
     /// </summary>
     private void MakeCompact(Control container)
     {
-        if (container is not TemplatedControl item || item.GetValue(s_compactWiredProperty))
+        if (container is not TemplatedControl item || item.GetValue(CompactWiredProperty))
         {
             return;
         }
-        item.SetValue(s_compactWiredProperty, true);
+        item.SetValue(CompactWiredProperty, true);
         Control? currentHandle = null;
         void Show()
         {
@@ -232,13 +232,13 @@ public partial class ProjectPanelView : UserControl
         };
         item.DetachedFromVisualTree += (_, _) =>
         {
-            item.GetValue(s_rowBackgroundSubProperty)?.Dispose();
-            item.SetValue(s_rowBackgroundSubProperty, null);
+            item.GetValue(RowBackgroundSubProperty)?.Dispose();
+            item.SetValue(RowBackgroundSubProperty, null);
         };
         item.TemplateApplied += (_, e) =>
         {
-            item.GetValue(s_rowBackgroundSubProperty)?.Dispose();
-            item.SetValue(s_rowBackgroundSubProperty, null);
+            item.GetValue(RowBackgroundSubProperty)?.Dispose();
+            item.SetValue(RowBackgroundSubProperty, null);
             if (currentHandle is not null)
             {
                 currentHandle.GotFocus -= OnHandleFocus;
@@ -254,7 +254,7 @@ public partial class ProjectPanelView : UserControl
             // The panel's own color: invisible at rest, and it covers the rows a lifted row passes over.
             if (item.IsAttachedToVisualTree())
             {
-                item.SetValue(s_rowBackgroundSubProperty, row.Bind(Border.BackgroundProperty, PanelRoot.GetObservable(Panel.BackgroundProperty)));
+                item.SetValue(RowBackgroundSubProperty, row.Bind(Border.BackgroundProperty, PanelRoot.GetObservable(Panel.BackgroundProperty)));
             }
             row.BorderThickness = default;
             row.BoxShadow = default;

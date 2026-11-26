@@ -243,7 +243,7 @@ public sealed class ForwarderEndToEndTests : IDisposable
             Input(""), new MemoryStream(), Throttle);
 
         Assert.Equal(0, exit);
-        Assert.Equal(payload, await File.ReadAllTextAsync(output));
+        Assert.Equal(payload, await File.ReadAllTextAsync(output, cancellationToken: TestContext.Current.CancellationToken));
         using var envelope = JsonDocument.Parse(await received);
         Assert.Equal(payload, envelope.RootElement.GetProperty("payload").GetString());
     }

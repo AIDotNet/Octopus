@@ -54,8 +54,11 @@ public abstract class UnixShellResolverBase : IShellResolver
         foreach (var candidate in EnumerateCandidates()) Add(candidate);
         foreach (var line in ReadEtcShells()) Add(line);
         foreach (var name in KnownShells)
+        {
             foreach (var directory in KnownDirectories)
                 Add(Path.Combine(directory, name));
+        }
+
         return result;
     }
 

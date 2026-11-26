@@ -63,21 +63,18 @@ public sealed partial class ProjectRailViewModel : ObservableObject
         _files = files;
         _navigator = navigator;
         _projects.Changed += OnProjectsChanged;
-        if (_accounts is not null) _accounts.Changed += (_, _) => UiContext.Run(Rebuild);
-        if (_settings is not null) _settings.Changed += (_, _) => UiContext.Run(Rebuild);
-        if (_scanner is not null) _scanner.Changed += (_, _) => UiContext.Run(Rebuild);
+        _accounts?.Changed += (_, _) => UiContext.Run(Rebuild);
+        _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
+        _scanner?.Changed += (_, _) => UiContext.Run(Rebuild);
         ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
-        if (_activity is not null)
+        // The rail lives as long as the shell, like the activity service: no unsubscribe.
+        _activity?.Changed += (_, itemId) =>
         {
-            // The rail lives as long as the shell, like the activity service: no unsubscribe.
-            _activity.Changed += (_, itemId) =>
+            if (_projects.FindProjectOf(itemId) is { } project)
             {
-                if (_projects.FindProjectOf(itemId) is { } project)
-                {
-                    ShowWork(project);
-                }
-            };
-        }
+                ShowWork(project);
+            }
+        };
         Rebuild();
     }
 

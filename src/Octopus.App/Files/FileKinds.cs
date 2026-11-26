@@ -12,7 +12,7 @@ public static class FileKinds
     /// <summary>The bytes <see cref="FromHeader"/> needs to see.</summary>
     public const int HeaderLength = 32;
 
-    private static readonly HashSet<string> s_imageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".png", ".apng", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".ico", ".svg",
     };
@@ -22,7 +22,7 @@ public static class FileKinds
     {
         if (FileLanguages.IsMarkdown(fileName)) return FileKind.Markdown;
         var extension = Path.GetExtension(fileName);
-        if (s_imageExtensions.Contains(extension)) return FileKind.Image;
+        if (ImageExtensions.Contains(extension)) return FileKind.Image;
         return null;
     }
 

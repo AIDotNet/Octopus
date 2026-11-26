@@ -2,7 +2,6 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Octopus.App.Common;

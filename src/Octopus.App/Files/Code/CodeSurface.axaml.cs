@@ -30,10 +30,22 @@ public partial class CodeSurface : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == TextProperty) Code.Text = Text;
-        else if (change.Property == LanguageProperty) Code.Language = Language;
-        else if (change.Property == WrapLinesProperty) Code.WrapLines = WrapLines;
-        else if (change.Property == CodeFontSizeProperty) Code.FontSize = CodeFontSize;
+        if (change.Property == TextProperty)
+        {
+            Code.Text = Text;
+        }
+        else if (change.Property == LanguageProperty)
+        {
+            Code.Language = Language;
+        }
+        else if (change.Property == WrapLinesProperty)
+        {
+            Code.WrapLines = WrapLines;
+        }
+        else if (change.Property == CodeFontSizeProperty)
+        {
+            Code.FontSize = CodeFontSize;
+        }
         else if (change.Property == MonoFontFamilyProperty)
         {
             if (MonoFontFamily is { } family) Code.FontFamily = new FontFamily(family);

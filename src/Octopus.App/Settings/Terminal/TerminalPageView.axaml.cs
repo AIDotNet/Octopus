@@ -36,7 +36,7 @@ public partial class TerminalPageView : UserControl
     private void WatchModel(TerminalSettingsViewModel? model)
     {
         if (ReferenceEquals(_model, model)) return;
-        if (_model is not null) _model.PropertyChanged -= OnModelChanged;
+        _model?.PropertyChanged -= OnModelChanged;
         _model = model;
         if (model is null) return;
         model.PropertyChanged += OnModelChanged;

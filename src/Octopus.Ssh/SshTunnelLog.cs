@@ -52,7 +52,9 @@ public static class SshTunnelLog
         if (text.Contains("open failed: connect failed", StringComparison.Ordinal)
             || text.Contains("connection failed:", StringComparison.Ordinal)
             || (text.Contains("connect_to ", StringComparison.Ordinal) && text.Contains("failed", StringComparison.Ordinal)))
+        {
             return SshTunnelEvent.TargetUnreachable;
+        }
 
         // `ssh -O ...` with no master: "Control socket connect(<path>): No such file or directory" (or "Connection refused" for a stale socket).
         if (text.Contains("Control socket connect", StringComparison.Ordinal))
@@ -64,17 +66,29 @@ public static class SshTunnelLog
             || text.Contains("Port forwarding failed", StringComparison.Ordinal)
             || text.Contains("Could not request local forwarding", StringComparison.Ordinal)
             || (text.Contains("bind", StringComparison.Ordinal) && text.Contains("Permission denied", StringComparison.Ordinal)))
+        {
             return SshTunnelEvent.LocalPortUnavailable;
+        }
+
         if (text.Contains("remote port forwarding failed", StringComparison.Ordinal)
             || text.Contains("Could not request remote forwarding", StringComparison.Ordinal)
             || text.Contains("remote forward failure", StringComparison.Ordinal))
+        {
             return SshTunnelEvent.RemoteForwardRefused;
+        }
+
         if (text.Contains("Host key verification failed", StringComparison.Ordinal)
             || text.Contains("REMOTE HOST IDENTIFICATION HAS CHANGED", StringComparison.Ordinal))
+        {
             return SshTunnelEvent.HostKeyRejected;
+        }
+
         if (text.Contains("Permission denied", StringComparison.Ordinal)
             || text.Contains("Too many authentication failures", StringComparison.Ordinal))
+        {
             return SshTunnelEvent.LoginDenied;
+        }
+
         if (IsConnectionLoss(text))
             return SshTunnelEvent.ConnectionLost;
 

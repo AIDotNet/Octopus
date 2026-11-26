@@ -743,9 +743,9 @@ public sealed partial class PluginRowViewModel : ObservableObject
     /// <summary>While the log is open it follows new lines.</summary>
     private void Listen(PluginHost? host)
     {
-        if (_listening is not null) _listening.Logged -= OnLogged;
+        _listening?.Logged -= OnLogged;
         _listening = host;
-        if (host is not null) host.Logged += OnLogged;
+        host?.Logged += OnLogged;
     }
 
     private void OnLogged(object? sender, PluginLogEntry e) => Dispatcher.UIThread.Post(RefreshLog);

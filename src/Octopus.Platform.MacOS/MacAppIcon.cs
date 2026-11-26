@@ -42,11 +42,13 @@ public sealed class MacAppIcon : IAppIcon
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA2101", Justification = "Unix C API taking UTF-8; marshalled explicitly as LPUTF8Str.")]
     [DllImport(ObjC, EntryPoint = "objc_getClass")]
-    private static extern IntPtr GetClass([MarshalAs(UnmanagedType.LPStr)] string name);
+    private static extern IntPtr GetClass([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA2101", Justification = "Unix C API taking UTF-8; marshalled explicitly as LPUTF8Str.")]
     [DllImport(ObjC, EntryPoint = "sel_registerName")]
-    private static extern IntPtr Sel([MarshalAs(UnmanagedType.LPStr)] string name);
+    private static extern IntPtr Sel([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 
     [DllImport(ObjC, EntryPoint = "objc_msgSend")]
     private static extern IntPtr Send(IntPtr receiver, IntPtr selector);

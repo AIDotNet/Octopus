@@ -1,5 +1,4 @@
 using Octopus.Platform.MacOS;
-using Xunit;
 
 namespace Octopus.Platform.Tests;
 
