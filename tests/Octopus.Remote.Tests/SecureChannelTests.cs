@@ -66,7 +66,7 @@ public class SecureChannelTests
         Assert.False(c.WasPaired);
 
         await c.SendAsync("ls -la\r"u8.ToArray());
-        await c.SendAsync(new byte[0]);
+        await c.SendAsync(Array.Empty<byte>());
         await h.SendAsync(Encoding.UTF8.GetBytes("total 42 中文"));
         Assert.Equal("ls -la\r", Encoding.UTF8.GetString((await h.ReceiveAsync())!));
         Assert.Empty((await h.ReceiveAsync())!);
@@ -277,8 +277,10 @@ public class SecureChannelTests
             byte[]? last = null;
             a.Outgoing = attack switch
             {
-                "flip" => message => { message[0] ^= 1; return message; },
-                "drop" => message => { if (last is null) { last = message; return null; } return message; },
+                "flip" => message => { message[0] ^= 1; return message; }
+                ,
+                "drop" => message => { if (last is null) { last = message; return null; } return message; }
+                ,
                 _ => message => message,
             };
             if (attack == "repeat")

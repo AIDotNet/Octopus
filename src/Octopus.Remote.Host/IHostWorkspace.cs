@@ -13,6 +13,8 @@ public interface IHostWorkspace
     Task<IReadOnlyList<ProjectMessage>> ListProjectsAsync();
     /// <summary>Adds a folder of this computer as a project, or returns the project that folder already is.</summary>
     Task<ProjectMessage> CreateProjectAsync(CreateProjectMessage request);
+    /// <summary>Reads the custom picture thumbnail of a project (<see cref="ProjectMessage.Image"/>); null when the project has none.</summary>
+    Task<ProjectIconMessage?> GetProjectIconAsync(string projectId) => Task.FromResult<ProjectIconMessage?>(null);
     Task<IReadOnlyList<ItemMessage>> ListItemsAsync(string projectId);
     /// <summary>Adds a terminal or agent to a project without bringing it to the front of this computer's window.</summary>
     Task<ItemMessage> CreateItemAsync(CreateItemMessage request);
@@ -30,6 +32,13 @@ public interface IHostWorkspace
     /// size), takes the terminal's state and reports everything after it to <paramref name="sink"/>.
     /// </summary>
     Task<ISessionAttachment> AttachAsync(string itemId, int columns, int rows, bool nativeSnapshot, bool claimSize, ISessionSink sink);
+
+    /// <summary>
+    /// Attaches to an item's terminal, optionally resuming from <paramref name="resumeFrom"/> in the session's 1 MiB
+    /// history ring buffer without encoding a snapshot when the missed range is still available (v2).
+    /// </summary>
+    Task<ISessionAttachment> AttachAsync(string itemId, int columns, int rows, bool nativeSnapshot, bool claimSize, ISessionSink sink, ulong? resumeFrom) =>
+        AttachAsync(itemId, columns, rows, nativeSnapshot, claimSize, sink);
     Task RestartAsync(string itemId);
 
     // Files. A path outside every project's folder is answered with RemoteMethods.NotAllowed.
@@ -78,6 +87,15 @@ public interface IHostWorkspace
     Task<string?> UploadAsync(string itemId, string upload, string name, byte[] data, bool last) =>
         throw new RemoteException(RemoteMethods.NotAllowed, "This host takes no pictures.");
 
+    Task<SystemMetricsSnapshotMessage> GetSystemMetricsAsync(SystemMetricsRequestMessage request, CancellationToken cancellationToken = default) =>
+        throw new RemoteException(RemoteProtocol.MethodNotFound, "System metrics are not supported by this host.");
+
+    Task<bool> SignalProcessAsync(SignalProcessMessage request, CancellationToken cancellationToken = default) =>
+        throw new RemoteException(RemoteProtocol.MethodNotFound, "Process signaling is not supported by this host.");
+
+    Task<RemoteProcessRunResultMessage> RunProcessAsync(RemoteProcessRunMessage request, CancellationToken cancellationToken = default) =>
+        throw new RemoteException(RemoteProtocol.MethodNotFound, "Remote process execution is not supported by this host.");
+
     private static RemoteException NoConversations() => new(RemoteMethods.NotAllowed, "This host shows no GUI conversations.");
 
     /// <summary>Projects or their items were added, removed or reordered.</summary>
@@ -108,10 +126,12 @@ public interface ISessionSink
 /// <summary>One device's view of one terminal. Disposing it ends the reports and gives up the say over the size.</summary>
 public interface ISessionAttachment : IDisposable
 {
-    /// <summary>The position of the first output after <see cref="Snapshot"/>.</summary>
+    /// <summary>The position of the first output after <see cref="Snapshot"/> (or the resumed position when <see cref="Resumed"/> is true).</summary>
     ulong Position { get; }
     bool IsNative { get; }
     int SnapshotLength { get; }
+    /// <summary>True when the attachment resumed from the session's ring buffer without taking a full snapshot.</summary>
+    bool Resumed => false;
     /// <summary>Takes the initial snapshot once; subsequent calls return an empty array so the buffer is not kept for the whole session.</summary>
     byte[] TakeSnapshot();
     int Columns { get; }

@@ -5,8 +5,10 @@ namespace Octopus.Remote.Protocol;
 /// <summary>The version of the messages inside the secure channel, and the error codes both sides use.</summary>
 public static class RemoteProtocol
 {
-    /// <summary>Changes only when an old peer could no longer be talked to. Everything else is added as capabilities.</summary>
+    /// <summary>Base wire version kept in <see cref="HelloMessage.Protocol"/> so v1 peers never reject a v2 hello.</summary>
     public const int Version = 1;
+    /// <summary>The latest protocol version this build supports via <see cref="HelloMessage.MaxProtocol"/> and <see cref="TransportNegotiation"/>.</summary>
+    public const int LatestVersion = 2;
 
     public const string Hello = "hello";
 
@@ -17,16 +19,72 @@ public static class RemoteProtocol
     public const int VersionMismatch = -33003;
 }
 
+/// <summary>Names of payload compression algorithms negotiated in <see cref="TransportNegotiation.Compression"/>.</summary>
+public static class CompressionAlgorithms
+{
+    public const string Brotli = "brotli";
+    public const string Deflate = "deflate";
+}
+
+/// <summary>Names of transport mechanisms advertised in <see cref="TransportOffer.Kind"/>.</summary>
+public static class TransportKinds
+{
+    public const string WebSocket = "ws";
+    public const string Relay = "relay";
+    public const string Quic = "quic";
+    public const string WebRtcP2p = "p2p";
+}
+
 /// <summary>The other side answered a request with an error.</summary>
 public sealed class RemoteException(int code, string message) : Exception(message)
 {
     public int Code { get; } = code;
 }
 
+/// <summary>An alternative or upgrade transport endpoint a host offers (e.g., QUIC or WebRTC P2P).</summary>
+public sealed class TransportOffer
+{
+    public string Kind { get; set; } = "";
+    public string Address { get; set; } = "";
+    public int Priority { get; set; }
+    public Dictionary<string, string>? Parameters { get; set; }
+}
+
+/// <summary>
+/// Frame-level and transport-level negotiation exchanged inside <see cref="HelloMessage.Transport"/> (v2).
+/// Older v1 peers ignore this field and leave it null in their answer.
+/// </summary>
+public sealed class TransportNegotiation
+{
+    /// <summary>The frame protocol version supported or selected (1 = legacy, 2 = compression + priority + binary streams + ping/pong).</summary>
+    public int FrameVersion { get; set; } = RemoteProtocol.LatestVersion;
+    /// <summary>Supported compression algorithms in preference order; the host's answer lists the single chosen algorithm.</summary>
+    public List<string>? Compression { get; set; }
+    /// <summary>Minimum payload size in bytes before compression is attempted.</summary>
+    public int? CompressThreshold { get; set; }
+    /// <summary>Preferred maximum chunk size for snapshots and binary streams (default 64 KiB).</summary>
+    public int? MaxChunkBytes { get; set; }
+    /// <summary>Transport endpoints the host offers for direct connection or live transport migration.</summary>
+    public List<TransportOffer>? Transports { get; set; }
+
+    public static TransportNegotiation CreateDefault(List<TransportOffer>? transports = null) => new()
+    {
+        FrameVersion = RemoteProtocol.LatestVersion,
+        Compression = [CompressionAlgorithms.Brotli, CompressionAlgorithms.Deflate],
+        CompressThreshold = FrameCodec.DefaultThreshold,
+        MaxChunkBytes = 64 * 1024,
+        Transports = transports,
+    };
+}
+
 /// <summary>What each side tells the other first: its protocol version, its app, and what it can do.</summary>
 public sealed class HelloMessage
 {
     public int Protocol { get; set; } = RemoteProtocol.Version;
+    /// <summary>Lowest protocol version this peer supports; null means <see cref="Protocol"/>.</summary>
+    public int? MinProtocol { get; set; }
+    /// <summary>Highest protocol version this peer supports; null means <see cref="Protocol"/> (or <see cref="TransportNegotiation.FrameVersion"/>).</summary>
+    public int? MaxProtocol { get; set; }
     public string AppVersion { get; set; } = "";
     /// <summary>
     /// Features this side has, by name. A feature is used only when both sides list it, so a newer app talks to an
@@ -38,10 +96,16 @@ public sealed class HelloMessage
     /// snapshot; otherwise as VT text (design/12-远程操作.md §4.3).
     /// </summary>
     public string? TerminalBuild { get; set; }
+    /// <summary>Protocol v2 frame and transport negotiation parameters; null from a v1 peer.</summary>
+    public TransportNegotiation? Transport { get; set; }
+    /// <summary>Inlined host information from a v2 host, saving a separate <c>host/info</c> round trip on connect.</summary>
+    public HostInfoMessage? HostInfo { get; set; }
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(HelloMessage))]
+[JsonSerializable(typeof(TransportNegotiation))]
+[JsonSerializable(typeof(TransportOffer))]
 [JsonSerializable(typeof(Nothing))]
 [JsonSerializable(typeof(HostInfoMessage))]
 [JsonSerializable(typeof(ProjectListMessage))]
@@ -53,6 +117,7 @@ public sealed class HelloMessage
 [JsonSerializable(typeof(CreateWorkspaceMessage))]
 [JsonSerializable(typeof(CreateProjectMessage))]
 [JsonSerializable(typeof(ProjectRefMessage))]
+[JsonSerializable(typeof(ProjectIconMessage))]
 [JsonSerializable(typeof(ItemListMessage))]
 [JsonSerializable(typeof(ItemMessage))]
 [JsonSerializable(typeof(CreateItemMessage))]
@@ -74,6 +139,12 @@ public sealed class HelloMessage
 [JsonSerializable(typeof(WriteFileMessage))]
 [JsonSerializable(typeof(UploadMessage))]
 [JsonSerializable(typeof(UploadedMessage))]
+[JsonSerializable(typeof(ReadStreamMessage))]
+[JsonSerializable(typeof(ReadStreamReadyMessage))]
+[JsonSerializable(typeof(WriteStreamMessage))]
+[JsonSerializable(typeof(UploadStreamMessage))]
+[JsonSerializable(typeof(P2pCandidateMessage))]
+[JsonSerializable(typeof(P2pHandshakeMessage))]
 [JsonSerializable(typeof(MoveMessage))]
 [JsonSerializable(typeof(DeleteMessage))]
 [JsonSerializable(typeof(BrowseFolderMessage))]
@@ -97,4 +168,16 @@ public sealed class HelloMessage
 [JsonSerializable(typeof(AcpPromptMessage))]
 [JsonSerializable(typeof(AcpRespondMessage))]
 [JsonSerializable(typeof(AcpSetOptionMessage))]
+[JsonSerializable(typeof(SystemMetricsRequestMessage))]
+[JsonSerializable(typeof(SystemHostMessage))]
+[JsonSerializable(typeof(CpuMetricsMessage))]
+[JsonSerializable(typeof(MemoryMetricsMessage))]
+[JsonSerializable(typeof(DiskMetricsMessage))]
+[JsonSerializable(typeof(NetworkInterfaceMessage))]
+[JsonSerializable(typeof(ProcessMetricsMessage))]
+[JsonSerializable(typeof(SystemMetricsSnapshotMessage))]
+[JsonSerializable(typeof(SignalProcessMessage))]
+[JsonSerializable(typeof(SignalProcessResultMessage))]
+[JsonSerializable(typeof(RemoteProcessRunMessage))]
+[JsonSerializable(typeof(RemoteProcessRunResultMessage))]
 public sealed partial class RemoteJsonContext : JsonSerializerContext;

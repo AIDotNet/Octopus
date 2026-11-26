@@ -6,6 +6,8 @@ public static class RemoteMethods
     public const string HostInfo = "host/info";
     public const string ProjectList = "project/list";
     public const string ProjectCreate = "project/create";
+    /// <summary>Fetches the custom thumbnail PNG of a project whose <see cref="ProjectMessage.Image"/> is set.</summary>
+    public const string ProjectIcon = "project/icon";
     public const string ItemList = "item/list";
     public const string ItemCreate = "item/create";
     public const string ItemRemove = "item/remove";
@@ -42,8 +44,27 @@ public static class RemoteMethods
     /// temporary folder, not a project's, and the last piece is answered with its path for the session to be given.
     /// </summary>
     public const string FsUpload = "fs/upload";
+    /// <summary>Streams a file from the host over a binary channel without Base64 overhead (v2).</summary>
+    public const string FsReadStream = "fs/readStream";
+    /// <summary>Opens a binary channel to stream a file write to the host (v2).</summary>
+    public const string FsWriteStream = "fs/writeStream";
+    /// <summary>Completes a streamed file write and atomically replaces the target file (v2).</summary>
+    public const string FsWriteFinish = "fs/writeFinish";
+    /// <summary>Opens a binary channel to stream a session image upload to the host (v2).</summary>
+    public const string FsUploadStream = "fs/uploadStream";
+    /// <summary>Completes a streamed session image upload and returns its path on the host (v2).</summary>
+    public const string FsUploadFinish = "fs/uploadFinish";
+    /// <summary>Exchanges ICE/STUN candidates and credentials to punch a direct WebRTC P2P UDP channel (v2).</summary>
+    public const string TransportP2pHandshake = "transport/p2pHandshake";
+    /// <summary>Event: the sender is migrating this connection to a newly established transport channel (v2).</summary>
+    public const string TransportMigrating = "transport/migrating";
     /// <summary>A call of the host's git service: the method's name and its arguments as JSON, the result as JSON.</summary>
     public const string GitCall = "git/call";
+
+    // System telemetry, process signaling, and controlled remote execution.
+    public const string SystemMetrics = "system/metrics";
+    public const string SystemSignalProcess = "system/signalProcess";
+    public const string ProcessRun = "process/run";
 
     /// <summary>Event: something under a watched folder changed.</summary>
     public const string FsChanged = "fs/changed";
@@ -81,10 +102,41 @@ public static class RemoteMethods
     public const string CapabilityWorkspaces = "workspaces";
     /// <summary>The host takes pictures for its sessions (<see cref="FsUpload"/>).</summary>
     public const string CapabilityUpload = "fs.upload";
+    /// <summary>The host answers <see cref="SystemMetrics"/>.</summary>
+    public const string CapabilitySystemMetrics = "system.metrics";
+    /// <summary>The host answers <see cref="SystemSignalProcess"/>.</summary>
+    public const string CapabilitySystemSignal = "system.signal";
+    /// <summary>The host answers <see cref="ProcessRun"/>.</summary>
+    public const string CapabilityProcessRun = "process.run";
+    /// <summary>The peer speaks protocol v2 extensions (negotiation, ping/pong, priority frames).</summary>
+    public const string CapabilityProtocolV2 = "protocol.v2";
+    /// <summary>The peer supports adaptive frame payload compression (<see cref="FrameFlags.Compressed"/>).</summary>
+    public const string CapabilityCompression = "frame.compression";
+    /// <summary>The peer supports binary file and image streaming (<see cref="FsReadStream"/>, <see cref="FsWriteStream"/>, <see cref="FsUploadStream"/>).</summary>
+    public const string CapabilityFileStream = "fs.stream";
+    /// <summary>The host keeps a 1 MiB ring buffer per attached terminal and supports <see cref="AttachMessage.ResumeFrom"/>.</summary>
+    public const string CapabilitySessionResume = "session.resume";
+    /// <summary>The peer supports QUIC transport (<c>quic://</c>).</summary>
+    public const string CapabilityTransportQuic = "transport.quic";
+    /// <summary>The peer supports WebRTC P2P ICE-UDP direct hole-punching transport (<see cref="TransportP2pHandshake"/>).</summary>
+    public const string CapabilityTransportP2p = "transport.p2p";
+    /// <summary>The peer supports live transport migration without dropping sessions (<see cref="TransportMigrating"/>).</summary>
+    public const string CapabilityTransportMigrate = "transport.migrate";
+    /// <summary>The host exposes custom project thumbnail images (<see cref="ProjectMessage.Image"/> and <see cref="ProjectIcon"/>).</summary>
+    public const string CapabilityProjectIcons = "project.icons";
+
+    /// <summary>Maximum byte size of a single project thumbnail returned by <see cref="ProjectIcon"/>.</summary>
+    public const int ProjectIconMaxBytes = 512 * 1024;
 
     /// <summary>The most bytes of a file in one <see cref="FsRead"/> answer or <see cref="FsWrite"/> request.</summary>
     public const int FilePieceBytes = 256 * 1024;
-    /// <summary>The most bytes of one picture sent with <see cref="FsUpload"/>.</summary>
+    /// <summary>The chunk size of a binary stream frame (<see cref="FrameType.StreamData"/>) in protocol v2.</summary>
+    public const int StreamChunkBytes = 64 * 1024;
+    /// <summary>Maximum unacknowledged in-flight bytes on a binary stream channel before the sender pauses for <see cref="FrameType.StreamWindow"/>.</summary>
+    public const int StreamWindowBytes = 512 * 1024;
+    /// <summary>How often a binary stream receiver sends a <see cref="FrameType.StreamWindow"/> update.</summary>
+    public const int StreamAckEveryBytes = 128 * 1024;
+    /// <summary>The most bytes of one picture sent with <see cref="FsUpload"/> or <see cref="FsUploadStream"/>.</summary>
     public const long UploadMaxBytes = 20 * 1024 * 1024;
 
     public const int NotFound = -33010;
@@ -152,6 +204,8 @@ public sealed class ProjectMessage
     public string Path { get; set; } = "";
     public string? Color { get; set; }
     public string? Icon { get; set; }
+    /// <summary>Versioned file name of the project's custom picture thumbnail on the host; null when using an icon or initial.</summary>
+    public string? Image { get; set; }
     /// <summary>True when the project's folder sits inside a git repository on the host.</summary>
     public bool IsGitRepository { get; set; }
     /// <summary>Current or default branch of the project's main directory, when it is a git repository.</summary>
@@ -239,6 +293,15 @@ public sealed class CreateProjectMessage
 public sealed class ProjectRefMessage
 {
     public string ProjectId { get; set; } = "";
+}
+
+/// <summary>The custom picture thumbnail of a project (<see cref="RemoteMethods.ProjectIcon"/>).</summary>
+public sealed class ProjectIconMessage
+{
+    /// <summary>Versioned file name matching <see cref="ProjectMessage.Image"/>; null when the project has no picture.</summary>
+    public string? Image { get; set; }
+    /// <summary>PNG image bytes encoded as base64; null when unavailable.</summary>
+    public string? Data { get; set; }
 }
 
 public sealed class ItemMessage
@@ -344,16 +407,23 @@ public sealed class AttachMessage
     public string Snapshot { get; set; } = SnapshotFormats.Vt;
     /// <summary>Make this device's view decide the terminal's size (design/12 §6.5).</summary>
     public bool ClaimSize { get; set; }
+    /// <summary>
+    /// When re-attaching after a drop, the position up to which the device already processed output. If the host still
+    /// has everything from there in its ring buffer, it skips the snapshot and resumes from that position (v2).
+    /// </summary>
+    public ulong? ResumeFrom { get; set; }
 }
 
 public sealed class AttachedMessage
 {
     /// <summary>The channel the terminal's frames use on this connection.</summary>
     public uint Channel { get; set; }
-    /// <summary>The position of the first output after the snapshot.</summary>
+    /// <summary>The position of the first output after the snapshot (or the position resumed from when <see cref="Resumed"/> is true).</summary>
     public ulong Position { get; set; }
     public string Snapshot { get; set; } = SnapshotFormats.Vt;
     public int SnapshotLength { get; set; }
+    /// <summary>True when the host resumed from <see cref="AttachMessage.ResumeFrom"/> without sending a <see cref="FrameType.Snapshot"/>.</summary>
+    public bool Resumed { get; set; }
     public int Columns { get; set; }
     public int Rows { get; set; }
     public string? Title { get; set; }
@@ -527,4 +597,56 @@ public sealed class CallMessage
 public sealed class CallResultMessage
 {
     public string Result { get; set; } = "";
+}
+
+/// <summary>Asks the host to stream a file's raw bytes over <see cref="Channel"/> (v2, <see cref="RemoteMethods.FsReadStream"/>).</summary>
+public sealed class ReadStreamMessage
+{
+    public string Path { get; set; } = "";
+    public uint Channel { get; set; }
+    public long MaxBytes { get; set; }
+}
+
+/// <summary>The host's answer to <see cref="RemoteMethods.FsReadStream"/> before <see cref="FrameType.StreamData"/> frames arrive.</summary>
+public sealed class ReadStreamReadyMessage
+{
+    public long Size { get; set; }
+}
+
+/// <summary>Opens a binary receiver on <see cref="Channel"/> for writing a file on the host (v2, <see cref="RemoteMethods.FsWriteStream"/>).</summary>
+public sealed class WriteStreamMessage
+{
+    public string Path { get; set; } = "";
+    public uint Channel { get; set; }
+    public long Size { get; set; }
+}
+
+/// <summary>Opens a binary receiver on <see cref="Channel"/> for uploading a session picture on the host (v2, <see cref="RemoteMethods.FsUploadStream"/>).</summary>
+public sealed class UploadStreamMessage
+{
+    public string ItemId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public uint Channel { get; set; }
+    public long Size { get; set; }
+}
+
+/// <summary>One ICE/UDP candidate for WebRTC P2P direct transport hole punching (v2).</summary>
+public sealed class P2pCandidateMessage
+{
+    public string Foundation { get; set; } = "1";
+    public int Component { get; set; } = 1;
+    public string Transport { get; set; } = "udp";
+    public uint Priority { get; set; }
+    public string Address { get; set; } = "";
+    public int Port { get; set; }
+    /// <summary><c>host</c> or <c>srflx</c>.</summary>
+    public string Type { get; set; } = "host";
+}
+
+/// <summary>Credentials and UDP candidates exchanged over an existing connection to establish a WebRTC P2P direct channel (v2).</summary>
+public sealed class P2pHandshakeMessage
+{
+    public string Ufrag { get; set; } = "";
+    public string Pwd { get; set; } = "";
+    public List<P2pCandidateMessage> Candidates { get; set; } = [];
 }

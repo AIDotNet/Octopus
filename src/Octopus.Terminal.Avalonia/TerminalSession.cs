@@ -24,6 +24,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     private readonly ITerminalConnectionFactory _factory;
     private Func<bool> _isVisible;
     private readonly List<ITerminalTap> _taps = [];
+    private TerminalHistoryRing? _history;
     // The place in the output a tap is told: every byte takes one position, a resize or a reset takes one too.
     private ulong _head;
     /// <summary>
@@ -142,15 +143,50 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
     /// followed by what the tap is told is exactly what this terminal showed, nothing twice and nothing missing.
     /// Disposing the result ends the reports.
     /// </summary>
-    public IDisposable Tap(ITerminalTap tap, TerminalSnapshotFormat format, out TerminalTapStart start)
+    public IDisposable Tap(ITerminalTap tap, TerminalSnapshotFormat format, out TerminalTapStart start) =>
+        Tap(tap, format, resumeFrom: null, out start);
+
+    /// <summary>
+    /// Adds a second reader of the output, resuming from <paramref name="resumeFrom"/> without encoding a snapshot when
+    /// all output since that position is still in the session's 1 MiB history ring buffer. When <paramref name="resumeFrom"/>
+    /// is null or no longer in the ring buffer, takes a full snapshot and sets <see cref="TerminalTapStart.Resumed"/> to false.
+    /// </summary>
+    public IDisposable Tap(ITerminalTap tap, TerminalSnapshotFormat format, ulong? resumeFrom, out TerminalTapStart start)
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed || _core is null, this);
+            if (_history is null)
+            {
+                _history = new TerminalHistoryRing();
+                _history.ResetTo(_head);
+            }
+            if (resumeFrom is { } from && _history.TryReadFrom(from, _head, out var missed))
+            {
+                foreach (var item in missed)
+                {
+                    switch (item.Kind)
+                    {
+                        case TerminalHistoryKind.Output:
+                            tap.OnOutput(item.Position, item.Bytes);
+                            break;
+                        case TerminalHistoryKind.Resize:
+                            tap.OnResize(item.Position, item.Size);
+                            break;
+                        case TerminalHistoryKind.Reset:
+                            tap.OnReset(item.Position);
+                            break;
+                    }
+                }
+                start = new TerminalTapStart(from, format, [], _size, Title, Resumed: true);
+                _taps.Add(tap);
+                return new TapRegistration(this, tap);
+            }
+
             var snapshot = format == TerminalSnapshotFormat.Native
                 ? _core.EncodeSnapshot()
                 : System.Text.Encoding.UTF8.GetBytes(_core.FormatVt());
-            start = new TerminalTapStart(_head, format, snapshot, _size, Title);
+            start = new TerminalTapStart(_head, format, snapshot, _size, Title, Resumed: false);
             _taps.Add(tap);
         }
         return new TapRegistration(this, tap);
@@ -209,6 +245,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
             _core.Reset();
             _core.SetDefaultColors(_initialPalette, _initialScheme);
             _cachedInputModes = _core.ReadInputModes();
+            _history?.AppendReset(_head);
             foreach (var tap in _taps) tap.OnReset(_head);
             _head++;
         }
@@ -295,6 +332,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
                 if (size == _size) return true;
                 _size = size;
                 _core.Resize(size);
+                _history?.AppendResize(_head, size);
                 foreach (var tap in _taps) tap.OnResize(_head, size);
                 _head++;
             }
@@ -443,7 +481,17 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
         {
             _core?.Dispose();
             _core = null;
+            _history = null;
+            _taps.Clear();
+            _claims.Clear();
+            _sizeOwner = null;
         }
+        _isVisible = static () => false;
+        FrameReady = null;
+        TitleChanged = null;
+        Bell = null;
+        Exited = null;
+        SizeOwnerChanged = null;
     }
 
     private void StartLink()
@@ -495,6 +543,7 @@ public sealed class TerminalSession : ITerminalEffects, IAsyncDisposable
                     {
                         _core.Write(chunk.Span);
                         _cachedInputModes = _core.ReadInputModes();
+                        _history?.AppendOutput(_head, chunk.Span);
                         foreach (var tap in _taps) tap.OnOutput(_head, chunk.Span);
                         _head += (ulong)chunk.Length;
                     }

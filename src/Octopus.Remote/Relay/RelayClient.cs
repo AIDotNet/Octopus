@@ -1,6 +1,11 @@
+using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Quic;
+using System.Net.Security;
 using System.Net.WebSockets;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -79,6 +84,12 @@ public static class RelayHostFeatures
 {
     /// <summary>Devices of the same account may come in with the host's access password.</summary>
     public const string PasswordAccess = "password-access";
+    /// <summary>Host speaks Octopus Remote Protocol v2 (compression, binary streams, delta resume).</summary>
+    public const string ProtocolV2 = "protocol-v2";
+    /// <summary>Host can join QUIC relay tunnels and/or direct QUIC transport.</summary>
+    public const string Quic = "quic";
+    /// <summary>Host supports WebRTC P2P ICE UDP upgrade and live transport migration.</summary>
+    public const string P2p = "p2p";
 }
 
 internal sealed class RelayOpenTunnel
@@ -92,17 +103,193 @@ internal sealed class RelayOpenedTunnel
     public string? Error { get; set; }
 }
 
+internal sealed class RelayQuicJoinRequest
+{
+    public string Tunnel { get; set; } = "";
+    public string Role { get; set; } = "";
+    public string Token { get; set; } = "";
+}
+
+internal sealed class RelayQuicJoinResponse
+{
+    public bool Ok { get; set; }
+    public string? Error { get; set; }
+}
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(RelayControlMessage))]
 [JsonSerializable(typeof(RelayOpenTunnel))]
 [JsonSerializable(typeof(RelayOpenedTunnel))]
+[JsonSerializable(typeof(RelayQuicJoinRequest))]
+[JsonSerializable(typeof(RelayQuicJoinResponse))]
 internal sealed partial class RelayJsonContext : JsonSerializerContext;
+
+/// <summary>Short-lived best-effort cache of <c>GET /v1/info</c> per relay URL for STUN and QUIC endpoint discovery.</summary>
+public static class RelayCapabilitiesCache
+{
+    private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
+    private static readonly ConcurrentDictionary<string, (RelayServerInfo? Info, DateTimeOffset ExpiresAt)> Entries = new(StringComparer.OrdinalIgnoreCase);
+
+    public static async Task<RelayServerInfo?> GetAsync(Uri relayUrl, CancellationToken cancellationToken = default)
+    {
+        var key = relayUrl.GetLeftPart(UriPartial.Authority);
+        var now = DateTimeOffset.UtcNow;
+        if (Entries.TryGetValue(key, out var cached) && cached.ExpiresAt > now)
+        {
+            return cached.Info;
+        }
+
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            limit.CancelAfter(TimeSpan.FromSeconds(3));
+            var info = await RelayAccountClient.GetInfoAsync(relayUrl, limit.Token).ConfigureAwait(false);
+            Entries[key] = (info, DateTimeOffset.UtcNow + Ttl);
+            return info;
+        }
+        catch (Exception e) when (e is RelayException or OperationCanceledException)
+        {
+            return cached.Info;
+        }
+    }
+
+    public static void Invalidate(Uri relayUrl) => Entries.TryRemove(relayUrl.GetLeftPart(UriPartial.Authority), out _);
+}
 
 /// <summary>What both sides do at a relay: open a WebSocket there with the access token.</summary>
 internal static class RelaySockets
 {
     private static readonly TimeSpan KeepAlive = TimeSpan.FromSeconds(20);
     private static readonly byte[] RegistrationLabel = Encoding.ASCII.GetBytes("octopus-relay/1 host\n");
+    internal static readonly SslApplicationProtocol QuicRelayAlpn = new("octopus-relay-v2");
+    private static readonly TimeSpan QuicTunnelConnectTimeout = TimeSpan.FromSeconds(3);
+
+    public static async Task<IMessageTransport?> TryConnectQuicTunnelAsync(
+        Uri quicEndpoint,
+        string tunnelId,
+        string role,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        if (!QuicMessageTransport.IsSupported) return null;
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+        {
+            return await TryConnectQuicTunnelCoreAsync(quicEndpoint, tunnelId, role, token, cancellationToken).ConfigureAwait(false);
+        }
+        return null;
+    }
+
+    [SupportedOSPlatform("linux")]
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("macos")]
+    private static async Task<IMessageTransport?> TryConnectQuicTunnelCoreAsync(
+        Uri quicEndpoint,
+        string tunnelId,
+        string role,
+        string token,
+        CancellationToken cancellationToken)
+    {
+        if (!QuicConnection.IsSupported) return null;
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(QuicTunnelConnectTimeout);
+
+        var options = new QuicClientConnectionOptions
+        {
+            RemoteEndPoint = new DnsEndPoint(quicEndpoint.Host, quicEndpoint.Port),
+            DefaultStreamErrorCode = 0x0A,
+            DefaultCloseErrorCode = 0x0B,
+            MaxInboundBidirectionalStreams = 4,
+            MaxInboundUnidirectionalStreams = 1,
+            IdleTimeout = TimeSpan.FromSeconds(60),
+            ClientAuthenticationOptions = new SslClientAuthenticationOptions
+            {
+                ApplicationProtocols = [QuicRelayAlpn],
+                TargetHost = quicEndpoint.Host,
+                // End-to-end device identity and record encryption are enforced by SecureChannel inside the tunnel.
+#pragma warning disable CA5359
+                RemoteCertificateValidationCallback = static (_, _, _, _) => true,
+#pragma warning restore CA5359
+            },
+        };
+
+        QuicConnection connection;
+        try
+        {
+            connection = await QuicConnection.ConnectAsync(options, limit.Token).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is QuicException or IOException or System.Net.Sockets.SocketException or OperationCanceledException)
+        {
+            if (cancellationToken.IsCancellationRequested) throw;
+            return null;
+        }
+
+        QuicStream? stream = null;
+        try
+        {
+            stream = await connection.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, limit.Token).ConfigureAwait(false);
+            var joinBytes = JsonSerializer.SerializeToUtf8Bytes(
+                new RelayQuicJoinRequest { Tunnel = tunnelId, Role = role, Token = token },
+                RelayJsonContext.Default.RelayQuicJoinRequest);
+            await WriteFramedAsync(stream, joinBytes, limit.Token).ConfigureAwait(false);
+
+            var replyBytes = await ReadFramedAsync(stream, 4096, limit.Token).ConfigureAwait(false);
+            var reply = replyBytes is { Length: > 0 } ? JsonSerializer.Deserialize(replyBytes, RelayJsonContext.Default.RelayQuicJoinResponse) : null;
+            if (reply is { Ok: true })
+            {
+                return new FramedStreamTransport(stream, asyncOwner: connection);
+            }
+
+            await stream.DisposeAsync().ConfigureAwait(false);
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw reply?.Error switch
+            {
+                "unauthorized" or "forbidden" => new RelayException(RelayFailure.Unauthorized, "The relay does not accept the access token."),
+                "not_found" or "conflict" => new RelayException(RelayFailure.HostOffline, "The connection through the relay is no longer there."),
+                _ => new RelayException(RelayFailure.Protocol, $"The relay refused the QUIC tunnel ({reply?.Error ?? "unknown"})."),
+            };
+        }
+        catch (RelayException)
+        {
+            throw;
+        }
+        catch (Exception e) when (e is QuicException or IOException or JsonException or OperationCanceledException)
+        {
+            if (stream is not null) { try { await stream.DisposeAsync().ConfigureAwait(false); } catch { } }
+            try { await connection.DisposeAsync().ConfigureAwait(false); } catch { }
+            if (cancellationToken.IsCancellationRequested) throw;
+            return null;
+        }
+    }
+
+    private static async Task WriteFramedAsync(Stream stream, byte[] payload, CancellationToken cancellationToken)
+    {
+        var header = new byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(header, payload.Length);
+        await stream.WriteAsync(header, cancellationToken).ConfigureAwait(false);
+        await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<byte[]?> ReadFramedAsync(Stream stream, int maxBytes, CancellationToken cancellationToken)
+    {
+        var header = new byte[4];
+        if (!await ReadExactAsync(stream, header, cancellationToken).ConfigureAwait(false)) return null;
+        var length = BinaryPrimitives.ReadInt32LittleEndian(header);
+        if (length <= 0 || length > maxBytes) return null;
+        var payload = new byte[length];
+        return await ReadExactAsync(stream, payload, cancellationToken).ConfigureAwait(false) ? payload : null;
+    }
+
+    private static async Task<bool> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken cancellationToken)
+    {
+        var offset = 0;
+        while (offset < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(offset), cancellationToken).ConfigureAwait(false);
+            if (read == 0) return false;
+            offset += read;
+        }
+        return true;
+    }
 
     public static async Task<ClientWebSocket> ConnectAsync(RelayEndpoint relay, string path, CancellationToken cancellationToken)
     {
@@ -191,6 +378,15 @@ public static class RelayDialer
                 };
             }
         }
+        if (QuicMessageTransport.IsSupported)
+        {
+            var info = await RelayCapabilitiesCache.GetAsync(relay.Url, cancellationToken).ConfigureAwait(false);
+            if (info?.TryGetQuicUri() is { } quicUri)
+            {
+                var quicTransport = await RelaySockets.TryConnectQuicTunnelAsync(quicUri, tunnel, "device", relay.Token, cancellationToken).ConfigureAwait(false);
+                if (quicTransport is not null) return quicTransport;
+            }
+        }
         return new WebSocketTransport(await RelaySockets.ConnectAsync(relay, $"v1/tunnel/{tunnel}?role=device", cancellationToken).ConfigureAwait(false));
     }
 }
@@ -246,6 +442,8 @@ public sealed class RelayHostLink : IAsyncDisposable
     public RelayLinkState State { get; private set; } = RelayLinkState.Connecting;
     /// <summary>Why it is not online; null while it is or has not failed yet.</summary>
     public string? Error { get; private set; }
+    /// <summary>Capabilities reported by the relay's <c>GET /v1/info</c> (STUN / QUIC endpoints), when supported.</summary>
+    public RelayServerInfo? ServerInfo { get; private set; }
     /// <summary>The state changed. Raised on a background thread.</summary>
     public event Action? Changed;
 
@@ -299,6 +497,7 @@ public sealed class RelayHostLink : IAsyncDisposable
                 fresh = false;
                 using var socket = await RelaySockets.ConnectAsync(relay, "v1/host", _stop.Token).ConfigureAwait(false);
                 await RegisterAsync(socket).ConfigureAwait(false);
+                ServerInfo = await RelayCapabilitiesCache.GetAsync(relay.Url, _stop.Token).ConfigureAwait(false);
                 failures = 0;
                 pause = Pauses[0];
                 Volatile.Write(ref _socket, socket);
@@ -364,18 +563,14 @@ public sealed class RelayHostLink : IAsyncDisposable
             Features = Features?.Invoke() is { Count: > 0 } features ? [.. features] : null,
         };
         await socket.SendAsync((ReadOnlyMemory<byte>)JsonSerializer.SerializeToUtf8Bytes(register, RelayJsonContext.Default.RelayControlMessage), WebSocketMessageType.Text, true, limit.Token).ConfigureAwait(false);
-        var answer = await ReceiveAsync(socket, limit.Token).ConfigureAwait(false);
-        if (answer is null)
+        var answer = await ReceiveAsync(socket, limit.Token).ConfigureAwait(false) ?? throw (int?)socket.CloseStatus switch
         {
-            throw (int?)socket.CloseStatus switch
-            {
-                FullCloseCode => new RelayException(RelayFailure.Busy, "The relay has no room for another host."),
-                AccountFullCloseCode => new RelayException(RelayFailure.Busy, "The account has as many computers connected to the relay as it may."),
-                // The sign-in is another device's (this one's key changed since): signing in again sets it right.
-                BadRegistrationCloseCode => new RelayException(RelayFailure.Unauthorized, "The relay does not accept this computer's key with its sign-in. Sign in to the relay again."),
-                _ => new RelayException(RelayFailure.Protocol, "The relay refused this device's registration."),
-            };
-        }
+            FullCloseCode => new RelayException(RelayFailure.Busy, "The relay has no room for another host."),
+            AccountFullCloseCode => new RelayException(RelayFailure.Busy, "The account has as many computers connected to the relay as it may."),
+            // The sign-in is another device's (this one's key changed since): signing in again sets it right.
+            BadRegistrationCloseCode => new RelayException(RelayFailure.Unauthorized, "The relay does not accept this computer's key with its sign-in. Sign in to the relay again."),
+            _ => new RelayException(RelayFailure.Protocol, "The relay refused this device's registration."),
+        };
         if (answer.Type != "registered" || answer.DeviceId != _identity.Id) throw new RelayException(RelayFailure.Protocol, "The relay registered this device under another id.");
     }
 
@@ -387,7 +582,16 @@ public sealed class RelayHostLink : IAsyncDisposable
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
             limit.CancelAfter(TimeSpan.FromSeconds(15));
             if (await _endpoint(false, limit.Token).ConfigureAwait(false) is not { } relay) return;
-            var transport = new WebSocketTransport(await RelaySockets.ConnectAsync(relay, $"v1/tunnel/{tunnel}?role=host", limit.Token).ConfigureAwait(false));
+            IMessageTransport? transport = null;
+            if (QuicMessageTransport.IsSupported)
+            {
+                var info = ServerInfo ?? await RelayCapabilitiesCache.GetAsync(relay.Url, limit.Token).ConfigureAwait(false);
+                if (info?.TryGetQuicUri() is { } quicUri)
+                {
+                    transport = await RelaySockets.TryConnectQuicTunnelAsync(quicUri, tunnel, "host", relay.Token, limit.Token).ConfigureAwait(false);
+                }
+            }
+            transport ??= new WebSocketTransport(await RelaySockets.ConnectAsync(relay, $"v1/tunnel/{tunnel}?role=host", limit.Token).ConfigureAwait(false));
             _serving[transport] = true;
             try
             {

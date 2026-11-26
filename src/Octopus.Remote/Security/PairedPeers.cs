@@ -53,7 +53,7 @@ public sealed class PairedPeerStore
 {
     private readonly object _gate = new();
     private readonly string? _path;
-    private List<PairedPeer> _peers;
+    private readonly List<PairedPeer> _peers;
 
     /// <param name="path">The file; null keeps the list in memory only (tests).</param>
     public PairedPeerStore(string? path)

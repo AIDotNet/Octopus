@@ -327,7 +327,11 @@ public static partial class TerminalLinks
     {
         // The scheme must be written out: on Unix a bare "/etc/hosts" also parses as a file address.
         if (!url.StartsWith("file:", StringComparison.OrdinalIgnoreCase)
-            || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || !uri.IsFile || !IsThisHost(uri.Host)) return null;
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || !uri.IsFile || !IsThisHost(uri.Host))
+        {
+            return null;
+        }
+
         var path = Uri.UnescapeDataString(uri.AbsolutePath);
         // Windows: "/C:/Users/x" → "C:\Users\x".
         return OperatingSystem.IsWindows() ? path.TrimStart('/').Replace('/', '\\') : path;

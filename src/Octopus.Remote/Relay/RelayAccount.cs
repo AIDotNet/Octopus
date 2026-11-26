@@ -31,7 +31,17 @@ public sealed record RelayDeviceLogin(string DeviceCode, string UserCode, Uri Ve
 /// <param name="Current">It is the device that asks.</param>
 /// <param name="PasswordAccess">While online: the host takes devices of the account that come with its access password (design/16).</param>
 /// <param name="Platform">The system it runs ("macOS", "iOS"…), when it said.</param>
-public sealed record RelayDevice(string Id, string Name, string Kind, bool Online, bool Current, DateTimeOffset LastSeenAt, bool PasswordAccess = false, string? Platform = null);
+/// <param name="Features">Live host feature tags advertised while online (relay protocol v2).</param>
+public sealed record RelayDevice(
+    string Id,
+    string Name,
+    string Kind,
+    bool Online,
+    bool Current,
+    DateTimeOffset LastSeenAt,
+    bool PasswordAccess = false,
+    string? Platform = null,
+    IReadOnlyList<string>? Features = null);
 
 public enum RelayLoginStatus
 {
@@ -47,10 +57,83 @@ public enum RelayLoginStatus
 }
 
 /// <summary>Public capabilities advertised by a self-hosted relay at <c>GET /v1/info</c>.</summary>
-public sealed record RelayServerInfo(int Protocol, string Mode, string Name, IReadOnlyList<string> Auth)
+public sealed record RelayServerInfo(
+    int Protocol,
+    string Mode,
+    string Name,
+    IReadOnlyList<string> Auth,
+    IReadOnlyList<string>? Transports = null,
+    IReadOnlyList<string>? StunServers = null,
+    string? QuicEndpoint = null,
+    int? IdleTimeoutSeconds = null)
 {
     public bool SupportsDeviceCode => Auth.Contains("device_code", StringComparer.OrdinalIgnoreCase);
     public bool SupportsAccessKey => Auth.Contains("access_key", StringComparer.OrdinalIgnoreCase);
+    public bool SupportsQuic => TryGetQuicUri() is not null && (Transports is null || Transports.Contains("quic", StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>Parses <see cref="QuicEndpoint"/> as a <c>quic://host:port</c> URI when advertised.</summary>
+    public Uri? TryGetQuicUri() =>
+        !string.IsNullOrWhiteSpace(QuicEndpoint)
+        && Uri.TryCreate(QuicEndpoint, UriKind.Absolute, out var uri)
+        && uri.Scheme.Equals("quic", StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrEmpty(uri.Host)
+        && uri.Port > 0
+            ? uri
+            : null;
+
+    /// <summary>Resolves the first reachable <c>stun:host:port</c> entry in <see cref="StunServers"/> to an <see cref="IPEndPoint"/>.</summary>
+    public async Task<IPEndPoint?> ResolveStunEndPointAsync(CancellationToken cancellationToken = default)
+    {
+        if (StunServers is null || StunServers.Count == 0) return null;
+        foreach (var raw in StunServers)
+        {
+            if (TryParseStunHostPort(raw, out var host, out var port))
+            {
+                if (IPAddress.TryParse(host, out var ip)) return new IPEndPoint(ip, port);
+                try
+                {
+                    var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+                    var ipv4 = addresses.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+                    if (ipv4 is not null) return new IPEndPoint(ipv4, port);
+                    if (addresses.Length > 0) return new IPEndPoint(addresses[0], port);
+                }
+                catch (Exception e) when (e is System.Net.Sockets.SocketException or OperationCanceledException)
+                {
+                    if (cancellationToken.IsCancellationRequested) throw;
+                }
+            }
+        }
+        return null;
+    }
+
+    internal static bool TryParseStunHostPort(string? raw, out string host, out int port)
+    {
+        host = "";
+        port = 3478;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+        var text = raw.Trim();
+        if (text.StartsWith("stun:", StringComparison.OrdinalIgnoreCase)) text = text["stun:".Length..];
+        if (text.StartsWith("//", StringComparison.Ordinal)) text = text[2..];
+        if (text.Length == 0) return false;
+        if (text.StartsWith('['))
+        {
+            var close = text.IndexOf(']');
+            if (close <= 1) return false;
+            host = text[1..close];
+            var rest = text[(close + 1)..];
+            if (rest.Length == 0) return true;
+            if (rest[0] != ':' || !int.TryParse(rest[1..], out port) || port is <= 0 or > 65535) return false;
+            return true;
+        }
+        var colon = text.LastIndexOf(':');
+        if (colon < 0)
+        {
+            host = text;
+            return true;
+        }
+        host = text[..colon];
+        return host.Length > 0 && int.TryParse(text[(colon + 1)..], out port) && port is > 0 and <= 65535;
+    }
 }
 
 /// <summary>
@@ -108,6 +191,10 @@ internal sealed class RelayInfoResponse
     public string? Mode { get; set; }
     public string? Name { get; set; }
     public List<string>? Auth { get; set; }
+    public List<string>? Transports { get; set; }
+    public List<string>? StunServers { get; set; }
+    public string? QuicEndpoint { get; set; }
+    public int? IdleTimeoutSeconds { get; set; }
 }
 
 internal sealed class RelayKeyChallengeResponse
@@ -183,6 +270,7 @@ internal sealed class RelayDeviceBody
     public DateTimeOffset LastSeenAt { get; set; }
     public bool PasswordAccess { get; set; }
     public string? Platform { get; set; }
+    public List<string>? Features { get; set; }
 }
 
 internal sealed class RelayDevicesResponse
@@ -270,7 +358,15 @@ public static class RelayAccountClient
         if (status != HttpStatusCode.OK || bytes.Length > MaxAnswerBytes) return null;
         var parsed = Parse(bytes, RelayAccountJsonContext.Default.RelayInfoResponse);
         if (parsed is not { Protocol: >= 1, Auth.Count: > 0 }) return null;
-        return new RelayServerInfo(parsed.Protocol, parsed.Mode ?? "cloud", parsed.Name ?? relay.Host, parsed.Auth);
+        return new RelayServerInfo(
+            parsed.Protocol,
+            parsed.Mode ?? "cloud",
+            parsed.Name ?? relay.Host,
+            parsed.Auth,
+            parsed.Transports,
+            parsed.StunServers,
+            parsed.QuicEndpoint,
+            parsed.IdleTimeoutSeconds);
     }
 
     /// <summary>
@@ -340,8 +436,11 @@ public static class RelayAccountClient
         // does not know these two fields ignores them.
         var request = new RelayDeviceLoginRequest
         {
-            DeviceName = deviceName, Kind = kind, PublicKey = Convert.ToBase64String(identity.PublicKey.Bytes),
-            Platform = RelayClientInfo.Platform, AppVersion = RelayClientInfo.AppVersion,
+            DeviceName = deviceName,
+            Kind = kind,
+            PublicKey = Convert.ToBase64String(identity.PublicKey.Bytes),
+            Platform = RelayClientInfo.Platform,
+            AppVersion = RelayClientInfo.AppVersion,
         };
         var (status, bytes) = await PostAsync(new Uri(relay, "v1/auth/device"), JsonSerializer.SerializeToUtf8Bytes(request, RelayAccountJsonContext.Default.RelayDeviceLoginRequest), cancellationToken).ConfigureAwait(false);
         if (status == HttpStatusCode.TooManyRequests) throw new RelayException(RelayFailure.Busy, "The relay is busy; try again later.");
@@ -426,7 +525,7 @@ public static class RelayAccountClient
         // Only what looks like a device: an id of the form the apps derive, and a name of a bounded length.
         return [.. devices.Where(d => d.Id is { Length: 26 } id && id.All(char.IsAsciiLetterOrDigit))
             .Select(d => new RelayDevice(d.Id!, d.Name is { Length: > 0 and <= 128 } name ? name : d.Id!, d.Kind == "phone" ? "phone" : "desktop", d.Online, d.Current, d.LastSeenAt,
-                d.Online && d.PasswordAccess, d.Platform is { Length: > 0 and <= 32 } platform ? platform : null))];
+                d.Online && d.PasswordAccess, d.Platform is { Length: > 0 and <= 32 } platform ? platform : null, d.Online ? d.Features : null))];
     }
 
     /// <summary>Signs this device out at the relay. Best effort: a relay that cannot be reached is not waited for.</summary>

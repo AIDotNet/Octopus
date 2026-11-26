@@ -41,6 +41,8 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
     private readonly record struct Incoming(IncomingKind Kind, FrameType Type = default, byte[]? Payload = null, int? ExitCode = null);
 
     private readonly bool _claimOnAttach;
+    private bool _hasScreen;
+    private ulong _lastPosition;
 
     /// <param name="claimOnAttach">False: only look, at whatever size the terminal has; the size is taken by typing or by <see cref="ClaimSizeAsync"/>.</param>
     public RemoteTerminalConnection(RemoteHostClient client, string itemId, int columns, int rows, bool restart, bool claimOnAttach = true)
@@ -130,6 +132,8 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
         var snapshot = new MemoryStream();
         var native = attached.Snapshot == SnapshotFormats.Native;
         ulong processed = attached.Position, acknowledged = attached.Position;
+        _lastPosition = processed;
+        if (attached.Resumed) _hasScreen = true;
         if (!attached.IsRunning && attached.ExitCode is { } already) exit = new TerminalExit(already, null);
 
         await foreach (var item in ReadIncomingAsync(token).ConfigureAwait(false))
@@ -137,7 +141,7 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
             if (item.Kind == IncomingKind.Lost) break;
             if (item.Kind == IncomingKind.Resync)
             {
-                // The host stopped feeding this terminal because it fell behind: start over from a fresh snapshot.
+                // The host stopped feeding this terminal because it fell behind: start over from a fresh snapshot (or ring delta if still within window).
                 _client.Unregister(_channel);
                 _channel = _client.Register(this);
                 AttachedMessage? again = null;
@@ -147,7 +151,8 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
                 native = again.Snapshot == SnapshotFormats.Native;
                 snapshot = new MemoryStream();
                 processed = acknowledged = again.Position;
-                if (!native) yield return Announce(new TerminalMirrorEvent(TerminalMirrorEventKind.Reset));
+                _lastPosition = processed;
+                if (!again.Resumed && !native) yield return Announce(new TerminalMirrorEvent(TerminalMirrorEventKind.Reset));
                 yield return Announce(new TerminalMirrorEvent(TerminalMirrorEventKind.Resize, again.Columns, again.Rows));
                 continue;
             }
@@ -165,12 +170,16 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
                     if ((payload[0] & 1) == 0) break;
                     var whole = snapshot.ToArray();
                     snapshot = new MemoryStream();
+                    _hasScreen = true;
+                    _lastPosition = processed;
                     if (native) yield return Announce(new TerminalMirrorEvent(TerminalMirrorEventKind.Snapshot, Snapshot: whole));
                     else if (whole.Length > 0) yield return whole;
                     break;
                 case FrameType.Output when payload.Length >= 8:
                     var bytes = payload.AsMemory(8);
                     processed = BinaryPrimitives.ReadUInt64LittleEndian(payload) + (ulong)bytes.Length;
+                    _hasScreen = true;
+                    _lastPosition = processed;
                     if (!bytes.IsEmpty) yield return bytes;
                     if (processed - acknowledged >= AckEvery)
                     {
@@ -180,6 +189,8 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
                     break;
                 case FrameType.Record when payload.Length >= 9:
                     processed = BinaryPrimitives.ReadUInt64LittleEndian(payload) + 1;
+                    _hasScreen = true;
+                    _lastPosition = processed;
                     if (payload[8] == RecordKinds.Resize && payload.Length >= 13)
                     {
                         lock (_sizeGate) SizeChanged?.Invoke(BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(9)), BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(11)), _ownsSize);
@@ -238,6 +249,7 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
     private async Task<AttachedMessage> AttachAsync(bool claim, CancellationToken cancellationToken)
     {
         var call = Interlocked.Increment(ref _sizeCalls);
+        var resumeFrom = _hasScreen && _client.SupportsSessionResume ? (ulong?)_lastPosition : null;
         var attached = await _client.CallAsync(RemoteMethods.SessionAttach, new AttachMessage
         {
             ItemId = _itemId,
@@ -246,6 +258,7 @@ internal sealed class RemoteTerminalConnection : ITerminalMirrorConnection
             Rows = _rows,
             Snapshot = _client.NativeSnapshots ? SnapshotFormats.Native : SnapshotFormats.Vt,
             ClaimSize = claim,
+            ResumeFrom = resumeFrom,
         }, RemoteJsonContext.Default.AttachMessage, RemoteJsonContext.Default.AttachedMessage, cancellationToken).ConfigureAwait(false);
         ApplySize(call, attached.Columns, attached.Rows, attached.OwnsSize);
         return attached;

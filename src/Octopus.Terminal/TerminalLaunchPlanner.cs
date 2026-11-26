@@ -61,7 +61,7 @@ public sealed class TerminalLaunchPlanner(
     public LaunchSpec PlanRemoteShell(string host, string? remoteDirectory, string? shellPath = null, IReadOnlyList<string>? sshOptions = null)
     {
         // ssh is started directly, with its arguments as they are: no shell in between, so no quoting for the shell's dialect.
-        IReadOnlyList<string> options = sshOptions ?? [];
+        var options = sshOptions ?? [];
         var built = environment.Build();
         var ssh = FindSsh(built);
         return new LaunchSpec(

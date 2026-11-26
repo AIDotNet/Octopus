@@ -311,9 +311,14 @@ public class ProtocolTests
         host.Handle(RemoteMethods.WorkspaceCreate, json.CreateWorkspaceMessage, json.WorkspaceMessage,
             (req, _) => Task.FromResult(new WorkspaceMessage
             {
-                Id = "ws-1", Name = req.BranchName, Branch = req.BranchName,
+                Id = "ws-1",
+                Name = req.BranchName,
+                Branch = req.BranchName,
                 Path = "/home/ada/.octopus/workspaces/Octopus/feat-142",
-                TaskKind = req.TaskKind, TaskKey = req.TaskKey, TaskTitle = req.TaskTitle, TaskUrl = req.TaskUrl,
+                TaskKind = req.TaskKind,
+                TaskKey = req.TaskKey,
+                TaskTitle = req.TaskTitle,
+                TaskUrl = req.TaskUrl,
             }));
         device.Start();
         host.Start();
@@ -355,5 +360,285 @@ public class ProtocolTests
             using var client = new System.Net.WebSockets.ClientWebSocket();
             await client.ConnectAsync(address, CancellationToken.None).WaitAsync(Limit);
         }
+    }
+
+    [Fact]
+    public async Task Protocol_v2_negotiates_version_compression_and_inlined_host_info_while_staying_compatible_with_v1()
+    {
+        // 1. v2 device <-> v2 host: negotiates version 2, Brotli compression, and inlined HostInfo.
+        {
+            var (device, host) = await Pair();
+            await using var _ = device;
+            await using var __ = host;
+            var hostHello = new HelloMessage
+            {
+                Protocol = 1,
+                MinProtocol = 1,
+                MaxProtocol = 2,
+                AppVersion = "1.0.1200",
+                Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityProtocolV2, RemoteMethods.CapabilityCompression],
+                Transport = TransportNegotiation.CreateDefault([new TransportOffer { Kind = TransportKinds.Quic, Address = "quic://127.0.0.1:47601", Priority = 100 }]),
+                HostInfo = new HostInfoMessage { Name = "Studio", Os = "macos", AppVersion = "1.0.1200", Home = "/Users/ada" },
+            };
+            RemoteHello.Answer(host, hostHello);
+            device.Start();
+            host.Start();
+
+            var deviceHello = new HelloMessage
+            {
+                Protocol = 1,
+                MinProtocol = 1,
+                MaxProtocol = 2,
+                AppVersion = "1.0.1200",
+                Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityProtocolV2, RemoteMethods.CapabilityCompression],
+                Transport = TransportNegotiation.CreateDefault(),
+            };
+            var answer = await RemoteHello.SendAsync(device, deviceHello).WaitAsync(Limit);
+            Assert.Equal(2, device.NegotiatedVersion);
+            Assert.Equal(2, host.NegotiatedVersion);
+            Assert.Equal(FrameCompressionKind.Brotli, device.Compression);
+            Assert.Equal(FrameCompressionKind.Brotli, host.Compression);
+            Assert.NotNull(answer.HostInfo);
+            Assert.Equal("Studio", answer.HostInfo!.Name);
+            Assert.Single(answer.Transport!.Transports!);
+        }
+
+        // 2. v2 device <-> v1 legacy host: seamlessly falls back to version 1 without error.
+        {
+            var (device, host) = await Pair();
+            await using var _ = device;
+            await using var __ = host;
+            var v1HostHello = new HelloMessage { Protocol = 1, AppVersion = "1.0.1000", Capabilities = [RemoteMethods.CapabilityWorkspace] };
+            RemoteHello.Answer(host, v1HostHello);
+            device.Start();
+            host.Start();
+
+            var v2DeviceHello = new HelloMessage
+            {
+                Protocol = 1,
+                MinProtocol = 1,
+                MaxProtocol = 2,
+                AppVersion = "1.0.1200",
+                Transport = TransportNegotiation.CreateDefault(),
+            };
+            var answer = await RemoteHello.SendAsync(device, v2DeviceHello).WaitAsync(Limit);
+            Assert.Equal(1, device.NegotiatedVersion);
+            Assert.Equal(FrameCompressionKind.None, device.Compression);
+            Assert.Null(answer.Transport);
+        }
+    }
+
+    [Theory]
+    [InlineData(FrameCompressionKind.Brotli)]
+    [InlineData(FrameCompressionKind.Deflate)]
+    public async Task Adaptive_frame_compression_shrinks_large_payloads_on_the_wire_and_leaves_small_ones_alone(FrameCompressionKind algorithm)
+    {
+        var (a, b) = InMemoryTransport.CreatePair();
+        var wireLengths = new List<int>();
+        a.Outgoing = bytes => { lock (wireLengths) wireLengths.Add(bytes.Length); return bytes; };
+        var (device, host) = await Pair(a, b);
+        await using var _ = device;
+        await using var __ = host;
+
+        device.ConfigureNegotiatedProtocol(2, algorithm, compressThreshold: 512);
+        host.ConfigureNegotiatedProtocol(2, algorithm, compressThreshold: 512);
+
+        host.Handle("echo", TestJsonContext.Default.EchoMessage, TestJsonContext.Default.EchoMessage, (msg, _) => Task.FromResult(msg));
+        var receivedData = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.DataReceived = (_, payload) => receivedData.TrySetResult(payload.ToArray());
+        device.Start();
+        host.Start();
+
+        // Small message below threshold: not compressed.
+        var small = await Echo(device, "echo", new EchoMessage { Text = "short", Times = 1 });
+        Assert.Equal("short", small.Text);
+
+        // Large repetitive payload: compressed significantly on the wire and restored bit-for-bit.
+        var largeText = string.Concat(Enumerable.Repeat("Octopus terminal snapshot line with ANSI \u001b[32mgreen\u001b[0m text!\n", 400));
+        var rawBytes = Encoding.UTF8.GetBytes(largeText);
+        lock (wireLengths) wireLengths.Clear();
+        await device.SendDataAsync(FrameType.Snapshot, 3, rawBytes);
+        var arrived = await receivedData.Task.WaitAsync(Limit);
+        Assert.Equal(rawBytes, arrived);
+        int sentOnWire;
+        lock (wireLengths) sentOnWire = wireLengths.Single();
+        Assert.True(sentOnWire < rawBytes.Length / 4, $"Expected compressed wire size ({sentOnWire}) to be < 25% of raw ({rawBytes.Length}).");
+    }
+
+    [Fact]
+    public async Task Ping_measures_round_trip_time_and_high_priority_frames_jump_ahead_of_bulk_frames()
+    {
+        var (a, b) = InMemoryTransport.CreatePair();
+        var (device, host) = await Pair(a, b);
+        await using var _ = device;
+        await using var __ = host;
+
+        var holdWire = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstBlocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blockFirst = 1;
+        a.Outgoing = bytes =>
+        {
+            if (Interlocked.Exchange(ref blockFirst, 0) == 1)
+            {
+                firstBlocked.TrySetResult();
+                holdWire.Task.GetAwaiter().GetResult();
+            }
+            return bytes;
+        };
+        var order = new List<FrameType>();
+        var allArrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.DataReceived = (header, _) =>
+        {
+            lock (order)
+            {
+                order.Add(header.Type);
+                if (order.Count == 3) allArrived.TrySetResult();
+            }
+        };
+        device.Start();
+        host.Start();
+
+        // 1. Start a bulk send that blocks in the transport, then queue a second bulk send and a high-priority Input send.
+        var bulk1 = Task.Run(async () => await device.SendDataAsync(FrameType.Output, 1, new byte[8192]).AsTask());
+        await firstBlocked.Task.WaitAsync(Limit);
+        var bulk2 = device.SendDataAsync(FrameType.Snapshot, 1, new byte[8192]).AsTask();
+        var highInput = device.SendDataAsync(FrameType.Input, 1, "k"u8.ToArray()).AsTask();
+        holdWire.TrySetResult();
+        await Task.WhenAll(bulk1, bulk2, highInput, allArrived.Task).WaitAsync(Limit);
+
+        // Input jumped ahead of the waiting Snapshot frame!
+        Assert.Equal([FrameType.Output, FrameType.Input, FrameType.Snapshot], order);
+
+        // 2. Ping / Pong measures RTT.
+        var rtt = await device.PingAsync().WaitAsync(Limit);
+        Assert.True(rtt > TimeSpan.Zero);
+        Assert.NotNull(device.LastRtt);
+    }
+
+    [Fact]
+    public async Task Stun_client_and_webrtc_p2p_transport_punch_udp_recover_lost_packets_and_migrate_live_connections()
+    {
+        // 1. RFC 5389 STUN Binding request/response round-trip for IPv4 and IPv6.
+        var txId = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+        var req = StunClient.BuildBindingRequest(txId);
+        var mappedV4 = new IPEndPoint(IPAddress.Parse("203.0.113.42"), 54321);
+        var respV4 = StunClient.TryBuildBindingResponse(req, mappedV4)!;
+        Assert.Equal(mappedV4, StunClient.TryParseBindingResponse(respV4, txId));
+
+        var mappedV6 = new IPEndPoint(IPAddress.Parse("2001:db8::1234"), 61000);
+        var respV6 = StunClient.TryBuildBindingResponse(req, mappedV6)!;
+        Assert.Equal(mappedV6, StunClient.TryParseBindingResponse(respV6, txId));
+
+        // 2. WebRTC P2P ICE hole punching + multi-fragment message reassembly + SACK packet loss recovery.
+        var (p2pA, p2pB) = await WebRtcP2pTransport.CreateLoopbackPairAsync().WaitAsync(Limit);
+        await using var _ = p2pA;
+        await using var __ = p2pB;
+
+        // Drop every 7th outgoing packet from p2pA to force SACK and retransmission.
+        var packetCounter = 0;
+        p2pA.OutgoingFilter = _ => Interlocked.Increment(ref packetCounter) % 7 != 0;
+
+        // Establish a SecureChannel over the lossy UDP P2P transport and send a 100 KB multi-fragment message.
+        var (device, host) = await Pair(p2pA, p2pB);
+        await using var ___ = device;
+        await using var ____ = host;
+        host.Handle("echo", TestJsonContext.Default.EchoMessage, TestJsonContext.Default.EchoMessage, (msg, _) => Task.FromResult(msg));
+        device.Start();
+        host.Start();
+
+        var payload100K = new string('P', 100_000);
+        var echoed = await Echo(device, "echo", new EchoMessage { Text = payload100K, Times = 1 });
+        Assert.Equal(payload100K, echoed.Text);
+
+        // 3. Live transport migration: start a connection over InMemoryTransport (e.g. Relay), then migrate live to a new SecureChannel!
+        using var clientKey = DeviceIdentity.Create();
+        using var hostKey = DeviceIdentity.Create();
+        var (relayA, relayB) = InMemoryTransport.CreatePair();
+        var accepting1 = SecureChannel.AcceptAsync(relayB, hostKey, Station, new Door { Paired = { clientKey.PublicKey } });
+        var chClient1 = await SecureChannel.ConnectAsync(relayA, clientKey, Laptop, PeerExpectation.Paired(hostKey.PublicKey)).WaitAsync(Limit);
+        var chHost1 = await accepting1.WaitAsync(Limit);
+
+        await using var connClient = new RemoteConnection(chClient1);
+        await using var connHost = new RemoteConnection(chHost1);
+        connHost.Handle("echo", TestJsonContext.Default.EchoMessage, TestJsonContext.Default.EchoMessage, (msg, _) => Task.FromResult(msg));
+        connClient.Start();
+        connHost.Start();
+
+        Assert.Equal("before-migrate", (await Echo(connClient, "echo", new EchoMessage { Text = "before-migrate", Times = 1 })).Text);
+
+        // Open a second transport pair (e.g. direct P2P or QUIC), authenticate with the same device keys, and migrate both ends live.
+        var (directA, directB) = InMemoryTransport.CreatePair();
+        var accepting2 = SecureChannel.AcceptAsync(directB, hostKey, Station, new Door { Paired = { clientKey.PublicKey } });
+        var chClient2 = await SecureChannel.ConnectAsync(directA, clientKey, Laptop, PeerExpectation.Paired(hostKey.PublicKey)).WaitAsync(Limit);
+        var chHost2 = await accepting2.WaitAsync(Limit);
+
+        await connHost.MigrateTransportAsync(chHost2).WaitAsync(Limit);
+        await connClient.MigrateTransportAsync(chClient2).WaitAsync(Limit);
+        Assert.Equal(1, connClient.MigrationCount);
+        Assert.Equal(1, connHost.MigrationCount);
+
+        Assert.Equal("after-migrate", (await Echo(connClient, "echo", new EchoMessage { Text = "after-migrate", Times = 1 })).Text);
+    }
+
+    [Fact]
+    public async Task Framed_stream_transport_and_transport_registry_support_custom_and_quic_schemes()
+    {
+        // 1. TransportRegistry resolves built-in and custom schemes.
+        var registry = TransportRegistry.CreateDefault();
+        Assert.True(registry.IsSupported("ws"));
+        Assert.True(registry.IsSupported("wss"));
+        Assert.NotNull(registry.Find("quic"));
+
+        var (memA, memB) = InMemoryTransport.CreatePair();
+        registry.Register(new CustomProvider("custom-p2p", memA));
+        Assert.True(registry.IsSupported("custom-p2p"));
+        var dialed = await registry.ConnectAsync(new Uri("custom-p2p://host-1"));
+        Assert.Same(memA, dialed);
+        await memB.DisposeAsync();
+
+        // 2. FramedStreamTransport over full-duplex TCP socket streams (the framing layer used by QUIC / IPC / SSH stdio).
+        using var tcpListener = new TcpListener(IPAddress.Loopback, 0);
+        tcpListener.Start();
+        var port = ((IPEndPoint)tcpListener.LocalEndpoint).Port;
+        var acceptTask = tcpListener.AcceptTcpClientAsync();
+        using var tcpClient = new TcpClient();
+        await tcpClient.ConnectAsync(IPAddress.Loopback, port).WaitAsync(Limit);
+        using var tcpServer = await acceptTask.WaitAsync(Limit);
+
+        await using var framedClient = new FramedStreamTransport(tcpClient.GetStream(), owner: tcpClient);
+        await using var framedServer = new FramedStreamTransport(tcpServer.GetStream(), owner: tcpServer);
+        var (device, host) = await Pair(framedClient, framedServer);
+        await using var _ = device;
+        await using var __ = host;
+        host.Handle("echo", TestJsonContext.Default.EchoMessage, TestJsonContext.Default.EchoMessage, (msg, _) => Task.FromResult(msg));
+        device.Start();
+        host.Start();
+
+        var bigText = new string('Q', 200_000);
+        Assert.Equal(bigText, (await Echo(device, "echo", new EchoMessage { Text = bigText, Times = 1 })).Text);
+
+        // 3. If libmsquic is installed on this runner, also run a real QUIC listener + client exchange.
+        if (QuicMessageTransport.IsSupported && QuicTransportListener.IsSupported)
+        {
+            await using var quicListener = new QuicTransportListener(IPAddress.Loopback, 0);
+            await quicListener.StartAsync().WaitAsync(Limit);
+            var quicAccepting = quicListener.AcceptAsync();
+            var quicClientTransport = await QuicMessageTransport.ConnectAsync(new Uri($"quic://127.0.0.1:{quicListener.Port}")).WaitAsync(Limit);
+            var quicAccepted = await quicAccepting.WaitAsync(Limit);
+            var (qDevice, qHost) = await Pair(quicClientTransport, quicAccepted.Transport);
+            await using var ___ = qDevice;
+            await using var ____ = qHost;
+            qHost.Handle("echo", TestJsonContext.Default.EchoMessage, TestJsonContext.Default.EchoMessage, (msg, _) => Task.FromResult(msg));
+            qDevice.Start();
+            qHost.Start();
+            Assert.Equal("over-quic", (await Echo(qDevice, "echo", new EchoMessage { Text = "over-quic", Times = 1 })).Text);
+        }
+    }
+
+    private sealed class CustomProvider(string scheme, IMessageTransport transport) : ITransportProvider
+    {
+        public string Scheme { get; } = scheme;
+        public bool IsSupported => true;
+        public Task<IMessageTransport> ConnectAsync(Uri address, CancellationToken cancellationToken = default) => Task.FromResult(transport);
     }
 }

@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using Octopus.Core.Terminals;
-using Octopus.Terminal;
 using Octopus.Terminal.Avalonia;
 using TKCode.Terminal.Avalonia;
 using TKCode.Terminal.Core;
@@ -136,9 +135,9 @@ public class KeyInputTests
     }
 
     [Theory]
-    [InlineData("/tmp/octopus-paste/paste-1.png", "ESC[200~/tmp/octopus-paste/paste-1.png ESC[201~", true)]
-    [InlineData(null, "", true)]
-    public async Task An_image_only_clipboard_pastes_the_path_of_the_saved_file(string? saved, string expectedWithoutSpaceFix, bool bracketed)
+    [InlineData("/tmp/octopus-paste/paste-1.png", true)]
+    [InlineData(null, true)]
+    public async Task An_image_only_clipboard_pastes_the_path_of_the_saved_file(string? saved, bool bracketed)
     {
         var rec = new Recorder();
         await using var session = new TerminalSession(
@@ -150,7 +149,7 @@ public class KeyInputTests
             () => Task.FromResult<string?>(null), () => Task.FromResult(saved), _ => Task.CompletedTask,
             (_, _) => Task.FromResult(true), () => { });
         await router.PasteAsync();
-        await Task.Delay(200);
+        await Task.Delay(200, cancellationToken: TestContext.Current.CancellationToken);
         var sent = rec.Text().Replace("\x1b", "ESC");
         if (saved is null) Assert.Equal("", sent);
         else Assert.Equal($"ESC[200~{saved}ESC[201~", sent);

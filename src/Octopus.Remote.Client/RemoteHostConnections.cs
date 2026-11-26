@@ -33,6 +33,7 @@ public class RemoteHostConnections : IDisposable
     private readonly object _gate = new();
     private readonly Dictionary<string, Link> _links = new(StringComparer.Ordinal);
     private readonly Lazy<PairedPeerStore> _hosts;
+    private CancellationTokenSource _retryWake = new();
     private bool _disposed;
 
     private sealed class Link
@@ -61,12 +62,15 @@ public class RemoteHostConnections : IDisposable
         _hosts = new Lazy<PairedPeerStore>(hosts);
     }
 
+    /// <summary>The registry of transport providers used to dial non-relay addresses (<c>ws://</c>, <c>wss://</c>, <c>quic://</c>, etc.).</summary>
+    public TransportRegistry Transports { get; } = TransportRegistry.CreateDefault();
+
     /// <summary>How a transport to an address is opened; replaced in tests.</summary>
     public Func<Uri, CancellationToken, Task<IMessageTransport>> Dial { get; set; }
 
     private async Task<IMessageTransport> DialAsync(Uri address, CancellationToken cancellationToken)
     {
-        if (address.Scheme != RelayScheme) return await WebSocketTransport.ConnectAsync(address, cancellationToken).ConfigureAwait(false);
+        if (address.Scheme != RelayScheme) return await Transports.ConnectAsync(address, cancellationToken).ConfigureAwait(false);
         if (_relay is null) throw new IOException("No relay is set up on this computer.");
         var relay = await _relay.GetAsync(false, cancellationToken).ConfigureAwait(false) ?? throw new IOException("This computer is not signed in to a relay.");
         try
@@ -88,6 +92,27 @@ public class RemoteHostConnections : IDisposable
     public bool IsThroughRelay(string hostId)
     {
         lock (_gate) return _links.GetValueOrDefault(hostId) is { Client: not null, ThroughRelay: true };
+    }
+
+    /// <summary>
+    /// Resolves the active relay's advertised STUN endpoint (if any) from <c>GET /v1/info</c>, for automatic
+    /// internet WebRTC P2P upgrades via <see cref="RemoteHostClient.UpgradeToP2pAsync"/>.
+    /// </summary>
+    public async Task<System.Net.IPEndPoint?> ResolveRelayStunEndPointAsync(CancellationToken cancellationToken = default)
+    {
+        if (_relay is null) return null;
+        try
+        {
+            var endpoint = await _relay.GetAsync(false, cancellationToken).ConfigureAwait(false);
+            if (endpoint is null) return null;
+            var info = await RelayCapabilitiesCache.GetAsync(endpoint.Url, cancellationToken).ConfigureAwait(false);
+            return info is null ? null : await info.ResolveStunEndPointAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is RelayException or IOException or OperationCanceledException)
+        {
+            if (cancellationToken.IsCancellationRequested) throw;
+            return null;
+        }
     }
 
     /// <summary>The hosts this computer is paired with.</summary>
@@ -277,7 +302,8 @@ public class RemoteHostConnections : IDisposable
             try { client = await connecting.ConfigureAwait(false); }
             catch (Exception e) when (e is IOException or HandshakeException or RemoteException
                                           or System.Net.WebSockets.WebSocketException or System.Net.Sockets.SocketException
-                                          or OperationCanceledException or ObjectDisposedException) { }
+                                          or OperationCanceledException or ObjectDisposedException)
+            { }
         }
         if (client is not null) await client.DisposeAsync().ConfigureAwait(false);
     }
@@ -291,7 +317,7 @@ public class RemoteHostConnections : IDisposable
     }
 
     /// <summary>
-    /// An address as people type it: <c>host:port</c>, <c>ws://host:port</c>, or a host alone (then the default port);
+    /// An address as people type it: <c>host:port</c>, <c>ws://host:port</c>, <c>quic://host:port</c>, or a host alone (then the default port);
     /// or a host through the relay (<c>octopus-relay://id</c>, as a pairing link carries it). Null when it is none of these.
     /// </summary>
     public static Uri? ParseAddress(string? text)
@@ -303,21 +329,68 @@ public class RemoteHostConnections : IDisposable
             return Uri.TryCreate(trimmed, UriKind.Absolute, out var relay) && relay.Host.Length == 26 && relay.Host.All(char.IsAsciiLetterOrDigit) ? relay : null;
         }
         if (!trimmed.Contains("://", StringComparison.Ordinal)) trimmed = "ws://" + trimmed;
-        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) || uri.Scheme is not ("ws" or "wss") || uri.Host.Length == 0) return null;
-        return uri.IsDefaultPort && uri.Scheme == "ws"
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) || uri.Scheme is not ("ws" or "wss" or QuicTransportProvider.SchemeName) || uri.Host.Length == 0) return null;
+        return uri.IsDefaultPort && uri.Scheme is "ws" or QuicTransportProvider.SchemeName
             ? new UriBuilder(uri) { Port = Octopus.Core.Settings.RemoteSettings.DefaultLanPort }.Uri
             : uri;
+    }
+
+    /// <summary>
+    /// Wakes sleeping retry loops and probes every currently connected host with a short ping.
+    /// Any connection that became half-open while the device was suspended or changed networks is dropped immediately
+    /// so callers reconnect without waiting for OS TCP timeouts or long retry backoffs.
+    /// </summary>
+    public async Task ProbeAndReconnectAsync(TimeSpan? pingTimeout = null)
+    {
+        List<(string HostId, RemoteHostClient Client)> active;
+        CancellationTokenSource oldWake;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            active = [.. _links
+                .Where(pair => pair.Value.Client is not null)
+                .Select(pair => (pair.Key, pair.Value.Client!))];
+            oldWake = _retryWake;
+            _retryWake = new CancellationTokenSource();
+        }
+        try { oldWake.Cancel(); }
+        catch (ObjectDisposedException) { }
+        finally { oldWake.Dispose(); }
+
+        if (active.Count == 0) return;
+        var limit = pingTimeout ?? TimeSpan.FromSeconds(3);
+        await Task.WhenAll(active.Select(item => ProbeOneAsync(item.HostId, item.Client, limit))).ConfigureAwait(false);
+    }
+
+    private async Task ProbeOneAsync(string hostId, RemoteHostClient client, TimeSpan timeout)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            await client.PingAsync(cts.Token).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Half-open or dead after backgrounding: mark lost right away and dispose in the background.
+            OnLost(hostId, client);
+            _ = Task.Run(() => client.DisposeAsync().AsTask());
+        }
     }
 
     public void Dispose()
     {
         List<RemoteHostClient> clients;
+        CancellationTokenSource wake;
         lock (_gate)
         {
             _disposed = true;
             clients = [.. _links.Values.Select(link => link.Client).OfType<RemoteHostClient>()];
             _links.Clear();
+            wake = _retryWake;
         }
+        try { wake.Cancel(); }
+        catch (ObjectDisposedException) { }
+        finally { wake.Dispose(); }
         foreach (var client in clients) _ = client.DisposeAsync().AsTask();
     }
 
@@ -462,7 +535,25 @@ public class RemoteHostConnections : IDisposable
     {
         for (var attempt = 0; ; attempt++)
         {
-            await Task.Delay(RetryPauses[Math.Min(attempt, RetryPauses.Length - 1)]).ConfigureAwait(false);
+            CancellationToken wakeToken;
+            lock (_gate)
+            {
+                if (_disposed || !_links.TryGetValue(hostId, out var current) || !ReferenceEquals(current, link) || link.Client is not null)
+                {
+                    link.Retrying = false;
+                    return;
+                }
+                wakeToken = _retryWake.Token;
+            }
+            try
+            {
+                await Task.Delay(RetryPauses[Math.Min(attempt, RetryPauses.Length - 1)], wakeToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Woken by foreground resume or disposal: reset backoff and try right away if still alive.
+                attempt = 0;
+            }
             Task<RemoteHostClient> connecting;
             lock (_gate)
             {

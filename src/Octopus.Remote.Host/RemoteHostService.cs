@@ -91,6 +91,8 @@ public sealed class RemoteHostService : IAsyncDisposable
     private readonly List<(HostConnection Connection, IPEndPoint? Remote)> _connections = [];
     private WebSocketListener? _listener;
     private CancellationTokenSource? _listening;
+    private QuicTransportListener? _quicListener;
+    private CancellationTokenSource? _quicListening;
     private PairingWindow? _pairing;
     private readonly PasswordDoor _password = new();
 
@@ -103,6 +105,9 @@ public sealed class RemoteHostService : IAsyncDisposable
         _hello = hello;
     }
 
+    /// <summary>Optional STUN server used when gathering server-reflexive candidates for WebRTC P2P upgrades.</summary>
+    public IPEndPoint? StunServer { get; set; }
+
     /// <summary>Connections, pairing requests or the listening state changed. Raised on any thread.</summary>
     public event Action? Changed;
 
@@ -113,6 +118,12 @@ public sealed class RemoteHostService : IAsyncDisposable
     public int? LanPort
     {
         get { lock (_gate) return _listener?.Port; }
+    }
+
+    /// <summary>The UDP QUIC port this host listens on; null while QUIC listening is not active.</summary>
+    public int? QuicPort
+    {
+        get { lock (_gate) return _quicListener?.Port; }
     }
 
     public IReadOnlyList<ConnectedDevice> Connections
@@ -164,6 +175,54 @@ public sealed class RemoteHostService : IAsyncDisposable
             _listener = null;
             _listening?.Cancel();
             _listening = null;
+        }
+        if (listener is not null) await listener.DisposeAsync().ConfigureAwait(false);
+        Changed?.Invoke();
+    }
+
+    /// <summary>Starts listening for QUIC connections (<c>quic://host:port</c>) on the local network when supported.</summary>
+    public async Task StartQuicAsync(int port, IPAddress? address = null, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (_quicListener is not null) return;
+        }
+        var listener = new QuicTransportListener(address ?? IPAddress.Any, port);
+        try
+        {
+            await listener.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await listener.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+        CancellationToken token;
+        lock (_gate)
+        {
+            if (_quicListener is not null)
+            {
+                _ = listener.DisposeAsync().AsTask();
+                return;
+            }
+            _quicListener = listener;
+            _quicListening = new CancellationTokenSource();
+            token = _quicListening.Token;
+        }
+        _ = AcceptQuicLoopAsync(listener, token);
+        Changed?.Invoke();
+    }
+
+    /// <summary>Stops listening for QUIC connections.</summary>
+    public async Task StopQuicAsync()
+    {
+        QuicTransportListener? listener;
+        lock (_gate)
+        {
+            listener = _quicListener;
+            _quicListener = null;
+            _quicListening?.Cancel();
+            _quicListening = null;
         }
         if (listener is not null) await listener.DisposeAsync().ConfigureAwait(false);
         Changed?.Invoke();
@@ -288,7 +347,18 @@ public sealed class RemoteHostService : IAsyncDisposable
             return;
         }
         _devices.Touch(channel.Peer.DeviceId, channel.PeerDescription.Name);
-        var connection = new HostConnection(new RemoteConnection(channel), _workspace, _hello);
+        var helloWithInfo = _hello.HostInfo is not null ? _hello : new HelloMessage
+        {
+            Protocol = _hello.Protocol,
+            MinProtocol = _hello.MinProtocol,
+            MaxProtocol = _hello.MaxProtocol,
+            AppVersion = _hello.AppVersion,
+            Capabilities = _hello.Capabilities,
+            TerminalBuild = _hello.TerminalBuild,
+            Transport = _hello.Transport,
+            HostInfo = _workspace.Info,
+        };
+        var connection = new HostConnection(new RemoteConnection(channel), _workspace, helloWithInfo, HandleP2pHandshakeAsync);
         lock (_gate) _connections.Add((connection, remote));
         connection.Start();
         Changed?.Invoke();
@@ -308,6 +378,7 @@ public sealed class RemoteHostService : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await StopLanAsync().ConfigureAwait(false);
+        await StopQuicAsync().ConfigureAwait(false);
         ClosePairing();
         List<HostConnection> connections;
         lock (_gate) connections = [.. _connections.Select(c => c.Connection)];
@@ -324,6 +395,60 @@ public sealed class RemoteHostService : IAsyncDisposable
             // Not tied to the listener: turning "local network access" off does not cut off who is already in.
             _ = ServeAsync(accepted.Transport, accepted.Remote);
         }
+    }
+
+    private async Task AcceptQuicLoopAsync(QuicTransportListener listener, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            AcceptedTransport accepted;
+            try { accepted = await listener.AcceptAsync(cancellationToken).ConfigureAwait(false); }
+            catch (Exception e) when (e is OperationCanceledException or System.Threading.Channels.ChannelClosedException) { return; }
+            _ = ServeAsync(accepted.Transport, accepted.Remote);
+        }
+    }
+
+    private async Task<P2pHandshakeMessage> HandleP2pHandshakeAsync(HostConnection connection, P2pHandshakeMessage remoteHandshake, CancellationToken cancellationToken)
+    {
+        var bindAddress = remoteHandshake.Candidates.Any(c => IPAddress.TryParse(c.Address, out var ip) && IPAddress.IsLoopback(ip))
+            && remoteHandshake.Candidates.All(c => IPAddress.TryParse(c.Address, out var ip) && IPAddress.IsLoopback(ip))
+            ? IPAddress.Loopback
+            : IPAddress.Any;
+        var endpoint = new IceP2pEndpoint(bindAddress, 0);
+        try
+        {
+            var ownHandshake = await endpoint.GatherAsync(StunServer, includeLoopback: true, cancellationToken).ConfigureAwait(false);
+            _ = Task.Run(async () =>
+            {
+                using (endpoint)
+                {
+                    try
+                    {
+                        var p2pTransport = await endpoint.PunchAsync(remoteHandshake, TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+                        using var deadline = new CancellationTokenSource(HandshakeLimit);
+                        var policy = new ExpectedPeerDoor(connection.Peer);
+                        var newChannel = await SecureChannel.AcceptAsync(p2pTransport, _identity, _description(), policy, deadline.Token).ConfigureAwait(false);
+                        await connection.Connection.MigrateTransportAsync(newChannel, deadline.Token).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // P2P upgrade failed or timed out; the existing connection stays untouched.
+                    }
+                }
+            });
+            return ownHandshake;
+        }
+        catch
+        {
+            endpoint.Dispose();
+            throw;
+        }
+    }
+
+    private sealed class ExpectedPeerDoor(DevicePublicKey expected) : IAcceptPolicy
+    {
+        public AcceptDecision Decide(PeerOffer offer) =>
+            offer.Key.Equals(expected) ? AcceptDecision.Accept : AcceptDecision.Reject(HandshakeStatus.UnknownDevice);
     }
 
     private static void RefusePending(PairingWindow? window)

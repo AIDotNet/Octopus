@@ -37,7 +37,10 @@ public sealed class SelectionOverlay : Control
         var matches = frame?.Search?.Matches ?? [];
         var current = frame?.Search?.Selected ?? [];
         if (spans.Length == 0 && _spans.Length == 0 && matches.Length == 0 && _matches.Length == 0
-            && current.Length == 0 && _current.Length == 0) return;
+            && current.Length == 0 && _current.Length == 0)
+        {
+            return;
+        }
         // The capturer reuses the same arrays while nothing changed: no repaint then.
         if (ReferenceEquals(spans, _spans) && ReferenceEquals(matches, _matches) && ReferenceEquals(current, _current)) return;
         (_spans, _matches, _current) = (spans, matches, current);

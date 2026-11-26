@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
@@ -19,9 +20,14 @@ public sealed class WebSocketTransport(WebSocket socket, IDisposable? owner = nu
     {
         var client = new ClientWebSocket();
         client.Options.KeepAliveInterval = KeepAlive;
+        // Detect silently dropped TCP flows (e.g. mobile backgrounding or Wi-Fi/NAT reset) when Pong never returns.
+        client.Options.KeepAliveTimeout = KeepAlive;
         try
         {
-            await client.ConnectAsync(new UriBuilder(address) { Path = Path }.Uri, cancellationToken).ConfigureAwait(false);
+            var target = string.IsNullOrEmpty(address.AbsolutePath) || address.AbsolutePath == "/"
+                ? new UriBuilder(address) { Path = Path }.Uri
+                : address;
+            await client.ConnectAsync(target, cancellationToken).ConfigureAwait(false);
             return new WebSocketTransport(client);
         }
         catch
@@ -37,7 +43,7 @@ public sealed class WebSocketTransport(WebSocket socket, IDisposable? owner = nu
         {
             await socket.SendAsync(message, WebSocketMessageType.Binary, endOfMessage: true, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception e) when (e is WebSocketException or ObjectDisposedException or InvalidOperationException)
+        catch (Exception e) when (e is WebSocketException or SocketException or ObjectDisposedException or InvalidOperationException)
         {
             throw new IOException("The connection is closed.", e);
         }
@@ -45,36 +51,49 @@ public sealed class WebSocketTransport(WebSocket socket, IDisposable? owner = nu
 
     public async ValueTask<byte[]?> ReceiveAsync(int maxLength, CancellationToken cancellationToken = default)
     {
-        var buffer = new byte[Math.Min(maxLength, 16 * 1024)];
+        var buffer = ArrayPool<byte>.Shared.Rent(Math.Min(maxLength, 16 * 1024));
+        var capacity = Math.Min(buffer.Length, maxLength);
         var length = 0;
-        while (true)
+        try
         {
-            ValueWebSocketReceiveResult result;
-            try
+            while (true)
             {
-                result = await socket.ReceiveAsync(buffer.AsMemory(length), cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception e) when (e is WebSocketException or ObjectDisposedException or InvalidOperationException)
-            {
-                return null; // the other side went away without a closing handshake
-            }
-            if (result.MessageType == WebSocketMessageType.Close) return null;
-            if (result.MessageType != WebSocketMessageType.Binary)
-            {
-                socket.Abort();
-                throw new IOException("Only binary messages are expected.");
-            }
-            length += result.Count;
-            if (result.EndOfMessage) return buffer.AsSpan(0, length).ToArray();
-            if (length == buffer.Length)
-            {
-                if (buffer.Length >= maxLength)
+                ValueWebSocketReceiveResult result;
+                try
+                {
+                    result = await socket.ReceiveAsync(buffer.AsMemory(length, capacity - length), cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is WebSocketException or SocketException or IOException or ObjectDisposedException or InvalidOperationException)
+                {
+                    return null; // the other side went away without a closing handshake
+                }
+                if (result.MessageType == WebSocketMessageType.Close) return null;
+                if (result.MessageType != WebSocketMessageType.Binary)
                 {
                     socket.Abort();
-                    throw new IOException($"A message exceeds the limit of {maxLength} bytes.");
+                    throw new IOException("Only binary messages are expected.");
                 }
-                Array.Resize(ref buffer, (int)Math.Min((long)buffer.Length * 2, maxLength));
+                length += result.Count;
+                if (result.EndOfMessage) return buffer.AsSpan(0, length).ToArray();
+                if (length == capacity)
+                {
+                    if (capacity >= maxLength)
+                    {
+                        socket.Abort();
+                        throw new IOException($"A message exceeds the limit of {maxLength} bytes.");
+                    }
+                    var nextCapacity = (int)Math.Min((long)capacity * 2, maxLength);
+                    var next = ArrayPool<byte>.Shared.Rent(nextCapacity);
+                    buffer.AsSpan(0, length).CopyTo(next);
+                    ArrayPool<byte>.Shared.Return(buffer);
+                    buffer = next;
+                    capacity = Math.Min(buffer.Length, maxLength);
+                }
             }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
@@ -88,7 +107,11 @@ public sealed class WebSocketTransport(WebSocket socket, IDisposable? owner = nu
                 await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, limit.Token).ConfigureAwait(false);
             }
         }
-        catch (Exception e) when (e is WebSocketException or OperationCanceledException or ObjectDisposedException or IOException or InvalidOperationException) { }
+        catch (Exception e) when (e is WebSocketException or SocketException or OperationCanceledException or ObjectDisposedException or IOException or InvalidOperationException)
+        {
+            try { socket.Abort(); }
+            catch (ObjectDisposedException) { }
+        }
         socket.Dispose();
         owner?.Dispose();
     }
@@ -161,8 +184,7 @@ public sealed class WebSocketListener : IAsyncDisposable
     {
         try
         {
-            var remote = client.Client.RemoteEndPoint as IPEndPoint;
-            if (remote is null || !AllowRemote(remote.Address))
+            if (client.Client.RemoteEndPoint is not IPEndPoint remote || !AllowRemote(remote.Address))
             {
                 client.Dispose();
                 return;
@@ -171,17 +193,20 @@ public sealed class WebSocketListener : IAsyncDisposable
             var stream = client.GetStream();
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
             deadline.CancelAfter(UpgradeDeadline);
-            var key = await ReadUpgradeRequestAsync(stream, deadline.Token).ConfigureAwait(false);
+            var (key, remainder) = await ReadUpgradeRequestAsync(stream, deadline.Token).ConfigureAwait(false);
             if (key is null)
             {
                 await stream.WriteAsync("HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"u8.ToArray(), deadline.Token).ConfigureAwait(false);
                 client.Dispose();
                 return;
             }
+#pragma warning disable CA5350 // RFC 6455 规定 Sec-WebSocket-Accept 使用 SHA-1，非安全用途
             var accept = Convert.ToBase64String(SHA1.HashData(Encoding.ASCII.GetBytes(key + AcceptGuid)));
+#pragma warning restore CA5350
             var response = $"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n";
             await stream.WriteAsync(Encoding.ASCII.GetBytes(response), deadline.Token).ConfigureAwait(false);
-            var socket = WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true, KeepAliveInterval = KeepAlive });
+            Stream effectiveStream = remainder is { Length: > 0 } ? new PrefixedStream(remainder, stream) : stream;
+            var socket = WebSocket.CreateFromStream(effectiveStream, new WebSocketCreationOptions { IsServer = true, KeepAliveInterval = KeepAlive });
             var accepted = new AcceptedTransport(new WebSocketTransport(socket, client), remote);
             if (!_ready.Writer.TryWrite(accepted)) await accepted.Transport.DisposeAsync().ConfigureAwait(false); // nobody is accepting fast enough
         }
@@ -191,33 +216,103 @@ public sealed class WebSocketListener : IAsyncDisposable
         }
     }
 
-    /// <summary>The request's Sec-WebSocket-Key when it is a WebSocket upgrade for our path; null for anything else.</summary>
-    private static async Task<string?> ReadUpgradeRequestAsync(NetworkStream stream, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads the HTTP upgrade request in batch reads rather than 1 byte per syscall. If any pipelined bytes follow the
+    /// <c>\r\n\r\n</c> terminator, they are returned as <c>Remainder</c> so the WebSocket stream consumes them first.
+    /// </summary>
+    private static async Task<(string? Key, byte[]? Remainder)> ReadUpgradeRequestAsync(NetworkStream stream, CancellationToken cancellationToken)
     {
-        var buffer = new byte[MaxRequestBytes];
-        var length = 0;
-        // Byte by byte up to the blank line: nothing after the request may be taken from the stream.
-        while (length < buffer.Length)
+        var buffer = ArrayPool<byte>.Shared.Rent(MaxRequestBytes);
+        try
         {
-            var read = await stream.ReadAsync(buffer.AsMemory(length, 1), cancellationToken).ConfigureAwait(false);
-            if (read == 0) return null;
-            length++;
-            if (length >= 4 && buffer.AsSpan(length - 4, 4).SequenceEqual("\r\n\r\n"u8)) break;
+            var length = 0;
+            var headerEnd = -1;
+            while (length < MaxRequestBytes)
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(length, MaxRequestBytes - length), cancellationToken).ConfigureAwait(false);
+                if (read == 0) return (null, null);
+                var searchStart = Math.Max(0, length - 3);
+                length += read;
+                var idx = buffer.AsSpan(searchStart, length - searchStart).IndexOf("\r\n\r\n"u8);
+                if (idx >= 0)
+                {
+                    headerEnd = searchStart + idx + 4;
+                    break;
+                }
+            }
+            if (headerEnd < 0) return (null, null);
+            var lines = Encoding.ASCII.GetString(buffer, 0, headerEnd).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0) return (null, null);
+            var request = lines[0].Split(' ');
+            if (request.Length != 3 || request[0] != "GET" || request[1] != WebSocketTransport.Path || request[2] != "HTTP/1.1") return (null, null);
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var line in lines.Skip(1))
+            {
+                var colon = line.IndexOf(':');
+                if (colon > 0) headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
+            }
+            if (!headers.TryGetValue("Upgrade", out var upgrade) || !upgrade.Equals("websocket", StringComparison.OrdinalIgnoreCase)) return (null, null);
+            if (!headers.TryGetValue("Connection", out var connection) || !connection.Contains("upgrade", StringComparison.OrdinalIgnoreCase)) return (null, null);
+            if (!headers.TryGetValue("Sec-WebSocket-Version", out var version) || version != "13") return (null, null);
+            if (!headers.TryGetValue("Sec-WebSocket-Key", out var key) || key.Length is <= 0 or > 64) return (null, null);
+            var remainder = length > headerEnd ? buffer.AsSpan(headerEnd, length - headerEnd).ToArray() : null;
+            return (key, remainder);
         }
-        if (length == buffer.Length) return null;
-        var lines = Encoding.ASCII.GetString(buffer, 0, length).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-        var request = lines[0].Split(' ');
-        if (request.Length != 3 || request[0] != "GET" || request[1] != WebSocketTransport.Path || request[2] != "HTTP/1.1") return null;
-        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var line in lines.Skip(1))
+        finally
         {
-            var colon = line.IndexOf(':');
-            if (colon > 0) headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
+            ArrayPool<byte>.Shared.Return(buffer);
         }
-        if (!headers.TryGetValue("Upgrade", out var upgrade) || !upgrade.Equals("websocket", StringComparison.OrdinalIgnoreCase)) return null;
-        if (!headers.TryGetValue("Connection", out var connection) || !connection.Contains("upgrade", StringComparison.OrdinalIgnoreCase)) return null;
-        if (!headers.TryGetValue("Sec-WebSocket-Version", out var version) || version != "13") return null;
-        return headers.TryGetValue("Sec-WebSocket-Key", out var key) && key.Length is > 0 and <= 64 ? key : null;
+    }
+
+    /// <summary>Feeds any bytes read past the HTTP upgrade header before delegating to the underlying socket stream.</summary>
+    private sealed class PrefixedStream(byte[] prefix, Stream inner) : Stream
+    {
+        private int _offset;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() => inner.Flush();
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+        public override int Read(Span<byte> buffer)
+        {
+            if (_offset < prefix.Length)
+            {
+                var take = Math.Min(buffer.Length, prefix.Length - _offset);
+                prefix.AsSpan(_offset, take).CopyTo(buffer);
+                _offset += take;
+                return take;
+            }
+            return inner.Read(buffer);
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_offset < prefix.Length)
+            {
+                var take = Math.Min(buffer.Length, prefix.Length - _offset);
+                prefix.AsMemory(_offset, take).CopyTo(buffer);
+                _offset += take;
+                return ValueTask.FromResult(take);
+            }
+            return inner.ReadAsync(buffer, cancellationToken);
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+        public override void Write(ReadOnlySpan<byte> buffer) => inner.Write(buffer);
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) => inner.WriteAsync(buffer, cancellationToken);
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => inner.WriteAsync(buffer, offset, count, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        protected override void Dispose(bool disposing) { if (disposing) inner.Dispose(); base.Dispose(disposing); }
     }
 }
 

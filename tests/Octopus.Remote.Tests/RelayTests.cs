@@ -1,13 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Sockets;
-using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using Octopus.Remote.Relay;
 using Octopus.Remote.Security;
-using Octopus.Remote.Transport;
 using Xunit;
 
 namespace Octopus.Remote.Tests;
@@ -35,7 +31,8 @@ public class RelayTests
             {
                 await channel.SendAsync(Encoding.UTF8.GetBytes("echo: " + Encoding.UTF8.GetString(message)));
             }
-        }) { RetryPause = TimeSpan.FromMilliseconds(50) };
+        })
+        { RetryPause = TimeSpan.FromMilliseconds(50) };
 
     private static async Task<string> AskAsync(RelayEndpoint relay, DeviceIdentity host, DeviceIdentity device, string words)
     {
@@ -268,11 +265,18 @@ public class RelayTests
         Assert.Null(await RelayAccountClient.GetInfoAsync(url).WaitAsync(Limit));
 
         relay.SelfHostedAccessKey = "ork_test_self_hosted_key_123456";
+        relay.StunServers = ["stun:127.0.0.1:3478"];
+        relay.QuicEndpoint = "quic://127.0.0.1:8443";
         var info = await RelayAccountClient.GetInfoAsync(url).WaitAsync(Limit);
         Assert.NotNull(info);
-        Assert.Equal("self-hosted", info!.Mode);
+        Assert.Equal(2, info!.Protocol);
+        Assert.Equal("self-hosted", info.Mode);
         Assert.True(info.SupportsAccessKey);
         Assert.True(info.SupportsDeviceCode);
+        Assert.True(info.SupportsQuic);
+        Assert.Equal(new Uri("quic://127.0.0.1:8443"), info.TryGetQuicUri());
+        var stun = await info.ResolveStunEndPointAsync().WaitAsync(Limit);
+        Assert.Equal(new IPEndPoint(IPAddress.Loopback, 3478), stun);
 
         var bad = await Assert.ThrowsAsync<RelayException>(() => RelayAccountClient.SignInWithKeyAsync(url, "ork_wrong_key", device, "Ada's Mac"));
         Assert.Equal(RelayFailure.Unauthorized, bad.Failure);
@@ -281,8 +285,23 @@ public class RelayTests
         Assert.StartsWith("oa1.", tokens.AccessToken);
         Assert.StartsWith("or1.", tokens.RefreshToken);
         Assert.Equal("Ada", tokens.Account.Name);
+
+        await using var hostLink = new RelayHostLink(new RelayEndpoint(url, tokens.AccessToken), device, () => "Ada's Mac", _ => Task.CompletedTask)
+        {
+            Features = () => [RelayHostFeatures.ProtocolV2, RelayHostFeatures.P2p, RelayHostFeatures.PasswordAccess],
+        };
+        hostLink.Start();
+        await Until(() => hostLink.State == RelayLinkState.Online, "the host registers at the self-hosted relay: " + hostLink.Error);
+        Assert.NotNull(hostLink.ServerInfo);
+        Assert.Equal(2, hostLink.ServerInfo!.Protocol);
+
         var listed = await RelayAccountClient.ListDevicesAsync(new RelayEndpoint(url, tokens.AccessToken)).WaitAsync(Limit);
-        Assert.Single(listed, d => d.Id == device.Id && d.Current);
+        var self = Assert.Single(listed, d => d.Id == device.Id && d.Current);
+        Assert.True(self.Online);
+        Assert.True(self.PasswordAccess);
+        Assert.NotNull(self.Features);
+        Assert.Contains(RelayHostFeatures.ProtocolV2, self.Features!);
+        Assert.Contains(RelayHostFeatures.P2p, self.Features!);
     }
 
     [Fact]

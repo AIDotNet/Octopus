@@ -1,8 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Cursor = Avalonia.Input.Cursor;
-using StandardCursorType = Avalonia.Input.StandardCursorType;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -11,11 +9,13 @@ using Avalonia.Threading;
 using Octopus.Core.Terminals;
 using TKCode.Terminal.Avalonia;
 using TKCode.Terminal.Core;
+using Cursor = Avalonia.Input.Cursor;
+using StandardCursorType = Avalonia.Input.StandardCursorType;
 
 namespace Octopus.Terminal.Avalonia;
 
 /// <summary>
-/// A real terminal: give it a <see cref="LaunchSpec"/> and a connection factory with <see cref="Start"/>. Put it in a
+/// A real terminal: give it a <see cref="LaunchSpec"/> and a connection factory with <see cref="Start(LaunchSpec, ITerminalConnectionFactory)"/>. Put it in a
 /// layout that stretches (a star-sized grid cell, a dock fill), not in an auto-sized panel.
 /// </summary>
 public sealed class TerminalControl : Decorator
@@ -447,7 +447,7 @@ public sealed class TerminalControl : Decorator
     {
         base.OnAttachedToVisualTree(e);
         _topLevel = TopLevel.GetTopLevel(this);
-        if (_topLevel is not null) _topLevel.ScalingChanged += OnScalingChanged;
+        _topLevel?.ScalingChanged += OnScalingChanged;
         ApplyTheme();
         if (_session is not null)
         {
@@ -464,7 +464,7 @@ public sealed class TerminalControl : Decorator
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        if (_topLevel is not null) _topLevel.ScalingChanged -= OnScalingChanged;
+        _topLevel?.ScalingChanged -= OnScalingChanged;
         _topLevel = null;
         _session?.SetVisible(false);
         // The process is deliberately left alone: a tab that is switched away comes back.
@@ -512,7 +512,8 @@ public sealed class TerminalControl : Decorator
             else
             {
                 session = new TerminalSession(_spec, _factory, grid, TerminalPalettes.For(_dark),
-                    TerminalPalettes.SchemeFor(_dark), Math.Max(100, ScrollbackLines), IsOnScreen) { IsMirror = IsMirror };
+                    TerminalPalettes.SchemeFor(_dark), Math.Max(100, ScrollbackLines), IsOnScreen)
+                { IsMirror = IsMirror };
                 try { session.Start(); }
                 catch
                 {
@@ -750,7 +751,11 @@ public sealed class TerminalControl : Decorator
     private void SetHover(LinkHit? link)
     {
         if (link?.Url == _hoverLink?.Url && link?.Spans.Count == _hoverLink?.Spans.Count
-            && (link is null || link.Spans[0] == _hoverLink!.Spans[0])) return;
+            && (link is null || link.Spans[0] == _hoverLink!.Spans[0]))
+        {
+            return;
+        }
+
         _hoverLink = link;
         _overlay.SetLink(link);
         _view.Cursor = link is null ? null : HandCursor;

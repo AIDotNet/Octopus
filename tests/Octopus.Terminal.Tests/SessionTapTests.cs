@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Channels;
 using Octopus.Core.Terminals;
-using Octopus.Terminal;
 using Octopus.Terminal.Avalonia;
 using TKCode.Terminal.Core;
 using Xunit;
@@ -330,6 +329,46 @@ public class SessionTapTests
         await wire.DisposeAsync();
         await Until(() => session.LastExit is not null);
         Assert.Equal(0, session.LastExit!.Value.ExitCode);
+    }
+
+    [Fact]
+    public async Task A_tap_resumes_from_the_ring_buffer_without_a_snapshot_and_falls_back_when_too_old()
+    {
+        var wire = new Wire();
+        await using var session = Session(wire);
+        session.Start();
+        wire.Feed("initial line\r\n");
+        await Until(() => session.ReadText().Contains("initial line"));
+
+        using var mirror = new Mirror();
+        ulong resumePos;
+        using (session.Tap(mirror, TerminalSnapshotFormat.Native, out var start))
+        {
+            Assert.False(start.Resumed);
+            Assert.NotEmpty(start.Snapshot);
+            mirror.Begin(start);
+            resumePos = start.Position;
+        }
+
+        // Output and resize happen while the tap is disconnected.
+        wire.Feed("missed while away 1\r\n");
+        await Until(() => session.ReadText().Contains("missed while away 1"));
+        session.Resize(new TerminalSize(50, 14, 0, 0));
+        wire.Feed("missed while away 2\r\n");
+        await Until(() => session.ReadText().Contains("missed while away 2"));
+
+        // Re-tap with resumeFrom: skips snapshot encoding and replays the exact delta from the ring buffer!
+        using (session.Tap(mirror, TerminalSnapshotFormat.Native, resumePos, out var resumedStart))
+        {
+            Assert.True(resumedStart.Resumed);
+            Assert.Empty(resumedStart.Snapshot);
+            Assert.Equal(new TerminalSize(50, 14, 0, 0), mirror.Size);
+            Assert.Equal(session.ReadText(), mirror.Text);
+
+            wire.Feed("live after resume\r\n");
+            await Until(() => session.ReadText().Contains("live after resume"));
+            Assert.Equal(session.ReadText(), mirror.Text);
+        }
     }
 }
 

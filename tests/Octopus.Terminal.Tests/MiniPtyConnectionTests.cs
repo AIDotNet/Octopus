@@ -116,7 +116,7 @@ public class MiniPtyConnectionTests
         var c = new MiniPtyConnectionFactory().Start(spec, 80, 24);
         using var process = System.Diagnostics.Process.GetProcessById(c.ProcessId);
         _ = Collect(c, new StringBuilder());
-        await c.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(6));
+        await c.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(6), TestContext.Current.CancellationToken);
         Assert.True(c.Exited.IsCompleted);
         Assert.True(process.HasExited);
     }
@@ -138,11 +138,11 @@ public class MiniPtyConnectionTests
         var reading = Collect(connection, output);
         await WaitFor(output, ">");
         await connection.ResizeAsync(100, 30, 0, 0);
-        await connection.WriteAsync(Encoding.UTF8.GetBytes("[Console]::WriteLine(('WINDOW_{0}_{1}' -f [Console]::WindowWidth, [Console]::WindowHeight))\r"));
+        await connection.WriteAsync(Encoding.UTF8.GetBytes("[Console]::WriteLine(('WINDOW_{0}_{1}' -f [Console]::WindowWidth, [Console]::WindowHeight))\r"), cancellationToken: TestContext.Current.CancellationToken);
         await WaitFor(output, "WINDOW_100_30");
-        await connection.WriteAsync("exit 7\r"u8.ToArray());
-        var exit = await connection.Exited.WaitAsync(TimeSpan.FromSeconds(15));
-        await reading.WaitAsync(TimeSpan.FromSeconds(5));
+        await connection.WriteAsync("exit 7\r"u8.ToArray(), cancellationToken: TestContext.Current.CancellationToken);
+        var exit = await connection.Exited.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken: TestContext.Current.CancellationToken);
+        await reading.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(7, exit.ExitCode);
     }
 
@@ -154,15 +154,15 @@ public class MiniPtyConnectionTests
         try
         {
             var file = Path.Combine(directory.FullName, "agent shim.cmd");
-            await File.WriteAllTextAsync(file, "@echo off\r\necho OCTOPUS_QUOTED_PATH_OK\r\necho [%1]\r\n");
+            await File.WriteAllTextAsync(file, "@echo off\r\necho OCTOPUS_QUOTED_PATH_OK\r\necho [%1]\r\n", cancellationToken: TestContext.Current.CancellationToken);
             var shell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
             var command = new Octopus.Platform.ShellCommandBuilder().Build(file, ["hello world"], Octopus.Platform.ShellKind.Cmd);
             await using var connection = new MiniPtyConnectionFactory().Start(
                 Spec(shell, ["/d", "/s", "/e:on", "/v:off", "/c", command], env: []), 80, 24);
             var output = new StringBuilder();
             var reading = Collect(connection, output);
-            var exit = await connection.Exited.WaitAsync(TimeSpan.FromSeconds(15));
-            await reading.WaitAsync(TimeSpan.FromSeconds(5));
+            var exit = await connection.Exited.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken: TestContext.Current.CancellationToken);
+            await reading.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(0, exit.ExitCode);
             Assert.Contains("OCTOPUS_QUOTED_PATH_OK", output.ToString());
             Assert.Contains("[\"hello world\"]", output.ToString());

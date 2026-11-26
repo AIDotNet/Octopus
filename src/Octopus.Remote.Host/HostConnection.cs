@@ -13,20 +13,29 @@ internal sealed class HostConnection : IAsyncDisposable
     private readonly IHostWorkspace _workspace;
     private readonly HelloMessage _hello;
     private readonly ConcurrentDictionary<uint, Subscriber> _subscribers = new();
+    private readonly ConcurrentDictionary<uint, StreamSendWindow> _streamSenders = new();
+    private readonly ConcurrentDictionary<uint, StreamWriteReceiver> _streamReceivers = new();
     private readonly ConcurrentDictionary<string, IDisposable> _watches = new(StringComparer.Ordinal);
     // The GUI conversations the device looks at, by item id; guarded by itself.
     private readonly Dictionary<string, ConversationSubscriber> _conversations = new(StringComparer.Ordinal);
     // Highest sequence sent on this connection for each item, so re-attaching never rewinds past an in-flight update.
     private readonly Dictionary<string, long> _conversationSequences = new(StringComparer.Ordinal);
+    private readonly Func<HostConnection, P2pHandshakeMessage, CancellationToken, Task<P2pHandshakeMessage>>? _onP2pHandshake;
     private volatile HelloMessage? _theirs;
 
-    public HostConnection(RemoteConnection connection, IHostWorkspace workspace, HelloMessage hello)
+    public HostConnection(
+        RemoteConnection connection,
+        IHostWorkspace workspace,
+        HelloMessage hello,
+        Func<HostConnection, P2pHandshakeMessage, CancellationToken, Task<P2pHandshakeMessage>>? onP2pHandshake = null)
     {
         _connection = connection;
         _workspace = workspace;
         _hello = hello;
+        _onP2pHandshake = onP2pHandshake;
     }
 
+    public RemoteConnection Connection => _connection;
     public DevicePublicKey Peer => _connection.Peer;
     public DeviceDescription PeerDescription => _connection.PeerDescription;
     public DateTimeOffset ConnectedAt { get; } = DateTimeOffset.UtcNow;
@@ -42,6 +51,8 @@ internal sealed class HostConnection : IAsyncDisposable
         _connection.Handle(RemoteMethods.ProjectList, json.Nothing, json.ProjectListMessage,
             async (_, _) => new ProjectListMessage { Projects = [.. await _workspace.ListProjectsAsync().ConfigureAwait(false)] });
         _connection.Handle(RemoteMethods.ProjectCreate, json.CreateProjectMessage, json.ProjectMessage, (request, _) => _workspace.CreateProjectAsync(request));
+        _connection.Handle(RemoteMethods.ProjectIcon, json.ProjectRefMessage, json.ProjectIconMessage,
+            async (request, _) => await _workspace.GetProjectIconAsync(request.ProjectId).ConfigureAwait(false) ?? new ProjectIconMessage());
         _connection.Handle(RemoteMethods.ItemList, json.ProjectRefMessage, json.ItemListMessage,
             async (request, _) => new ItemListMessage { Items = [.. await _workspace.ListItemsAsync(request.ProjectId).ConfigureAwait(false)] });
         _connection.Handle(RemoteMethods.ItemCreate, json.CreateItemMessage, json.ItemMessage, (request, _) => _workspace.CreateItemAsync(request));
@@ -86,6 +97,17 @@ internal sealed class HostConnection : IAsyncDisposable
         });
         RegisterFiles(json);
         RegisterConversations(json);
+        _connection.Handle(RemoteMethods.SystemMetrics, json.SystemMetricsRequestMessage, json.SystemMetricsSnapshotMessage,
+            (request, ct) => _workspace.GetSystemMetricsAsync(request, ct));
+        _connection.Handle(RemoteMethods.SystemSignalProcess, json.SignalProcessMessage, json.SignalProcessResultMessage,
+            async (request, ct) => new SignalProcessResultMessage { Ok = await _workspace.SignalProcessAsync(request, ct).ConfigureAwait(false) });
+        _connection.Handle(RemoteMethods.ProcessRun, json.RemoteProcessRunMessage, json.RemoteProcessRunResultMessage,
+            (request, ct) => _workspace.RunProcessAsync(request, ct));
+        if (_onP2pHandshake is { } p2p)
+        {
+            _connection.Handle(RemoteMethods.TransportP2pHandshake, json.P2pHandshakeMessage, json.P2pHandshakeMessage,
+                (request, ct) => p2p(this, request, ct));
+        }
         _connection.DataReceived = OnData;
         _workspace.Changed += OnWorkspaceChanged;
         _workspace.ItemChanged += OnItemChanged;
@@ -106,6 +128,14 @@ internal sealed class HostConnection : IAsyncDisposable
         foreach (var channel in _subscribers.Keys)
         {
             if (_subscribers.TryRemove(channel, out var subscriber)) subscriber.Dispose();
+        }
+        foreach (var channel in _streamSenders.Keys)
+        {
+            if (_streamSenders.TryRemove(channel, out var sender)) sender.Abort();
+        }
+        foreach (var channel in _streamReceivers.Keys)
+        {
+            if (_streamReceivers.TryRemove(channel, out var receiver)) receiver.Abort();
         }
         foreach (var project in _watches.Keys)
         {
@@ -194,6 +224,11 @@ internal sealed class HostConnection : IAsyncDisposable
             async (request, _) => new ResolvedMessage { Path = await _workspace.BrowseCreateDirectoryAsync(request).ConfigureAwait(false) });
         _connection.Handle(RemoteMethods.GitCall, json.CallMessage, json.CallResultMessage,
             async (request, _) => new CallResultMessage { Result = await _workspace.GitAsync(request.Method, request.Arguments).ConfigureAwait(false) });
+        _connection.Handle(RemoteMethods.FsReadStream, json.ReadStreamMessage, json.ReadStreamReadyMessage, (request, _) => StartReadStreamAsync(request));
+        _connection.Handle(RemoteMethods.FsWriteStream, json.WriteStreamMessage, json.Nothing, (request, _) => StartWriteStreamAsync(request));
+        _connection.Handle(RemoteMethods.FsWriteFinish, json.ChannelMessage, json.Nothing, (request, _) => FinishWriteStreamAsync(request.Channel));
+        _connection.Handle(RemoteMethods.FsUploadStream, json.UploadStreamMessage, json.Nothing, (request, _) => StartUploadStreamAsync(request));
+        _connection.Handle(RemoteMethods.FsUploadFinish, json.ChannelMessage, json.UploadedMessage, (request, _) => FinishUploadStreamAsync(request.Channel));
     }
 
     private void RegisterConversations(RemoteJsonContext json)
@@ -244,10 +279,9 @@ internal sealed class HostConnection : IAsyncDisposable
             throw;
         }
         long floor;
-        ConversationSubscriber? replaced;
         lock (_conversations)
         {
-            _conversations.Remove(itemId, out replaced);
+            _conversations.Remove(itemId, out var replaced);
             if (replaced is not null)
             {
                 var last = replaced.DisposeAndGetLastSequence();
@@ -373,8 +407,9 @@ internal sealed class HostConnection : IAsyncDisposable
         {
             // The library's own snapshot only between two builds of the same terminal library (design/12 §4.3).
             var native = request.Snapshot == SnapshotFormats.Native && _theirs?.TerminalBuild is { Length: > 0 } theirs && theirs == _hello.TerminalBuild;
-            var attachment = await _workspace.AttachAsync(request.ItemId, request.Columns, request.Rows, native, request.ClaimSize, subscriber).ConfigureAwait(false);
+            var attachment = await _workspace.AttachAsync(request.ItemId, request.Columns, request.Rows, native, request.ClaimSize, subscriber, request.ResumeFrom).ConfigureAwait(false);
             var snapshotLength = attachment.SnapshotLength;
+            var resumed = attachment.Resumed;
             subscriber.Begin(attachment);
             return new AttachedMessage
             {
@@ -382,6 +417,7 @@ internal sealed class HostConnection : IAsyncDisposable
                 Position = attachment.Position,
                 Snapshot = attachment.IsNative ? SnapshotFormats.Native : SnapshotFormats.Vt,
                 SnapshotLength = snapshotLength,
+                Resumed = resumed,
                 Columns = attachment.Columns,
                 Rows = attachment.Rows,
                 Title = attachment.Title,
@@ -400,9 +436,256 @@ internal sealed class HostConnection : IAsyncDisposable
 
     private void OnData(FrameHeader header, ReadOnlyMemory<byte> payload)
     {
-        if (!_subscribers.TryGetValue(header.Channel, out var subscriber)) return;
-        if (header.Type == FrameType.Input) subscriber.Attachment?.Input(payload.Span);
-        else if (header.Type == FrameType.Ack && payload.Length >= 8) subscriber.Acknowledge(BinaryPrimitives.ReadUInt64LittleEndian(payload.Span));
+        switch (header.Type)
+        {
+            case FrameType.Input when _subscribers.TryGetValue(header.Channel, out var subscriber):
+                subscriber.Attachment?.Input(payload.Span);
+                break;
+            case FrameType.Ack when payload.Length >= 8 && _subscribers.TryGetValue(header.Channel, out var subscriber):
+                subscriber.Acknowledge(BinaryPrimitives.ReadUInt64LittleEndian(payload.Span));
+                break;
+            case FrameType.StreamWindow when payload.Length >= 8 && _streamSenders.TryGetValue(header.Channel, out var sender):
+                sender.Advance(BinaryPrimitives.ReadUInt64LittleEndian(payload.Span));
+                break;
+            case FrameType.StreamData when _streamReceivers.TryGetValue(header.Channel, out var receiver):
+                receiver.OnData(payload);
+                break;
+            case FrameType.StreamEnd when _streamReceivers.TryGetValue(header.Channel, out var receiver):
+                receiver.OnEnd(payload.Length > 0 ? payload.Span[0] : (byte)0);
+                break;
+        }
+    }
+
+    private async Task<ReadStreamReadyMessage> StartReadStreamAsync(ReadStreamMessage request)
+    {
+        if (request.Channel == 0) throw new RemoteException(RemoteProtocol.InvalidParams, "A stream channel is needed.");
+        var window = new StreamSendWindow();
+        if (!_streamSenders.TryAdd(request.Channel, window)) throw new RemoteException(RemoteProtocol.InvalidParams, "The channel is in use.");
+        try
+        {
+            var (firstChunk, size) = await _workspace.ReadAsync(request.Path, 0, 0).ConfigureAwait(false);
+            _ = firstChunk;
+            if (request.MaxBytes > 0 && size > request.MaxBytes)
+            {
+                _streamSenders.TryRemove(request.Channel, out _);
+                return new ReadStreamReadyMessage { Size = size };
+            }
+            _ = Task.Run(() => PumpReadStreamAsync(request.Path, request.Channel, size, window));
+            return new ReadStreamReadyMessage { Size = size };
+        }
+        catch
+        {
+            _streamSenders.TryRemove(request.Channel, out _);
+            throw;
+        }
+    }
+
+    private async Task PumpReadStreamAsync(string path, uint channel, long size, StreamSendWindow window)
+    {
+        try
+        {
+            var chunkSize = Math.Clamp(_connection.MaxChunkBytes, 16 * 1024, RemoteMethods.FilePieceBytes);
+            long offset = 0;
+            while (offset < size && !window.IsAborted)
+            {
+                var length = (int)Math.Min(chunkSize, size - offset);
+                if (!await window.WaitForCreditAsync((ulong)offset, length).ConfigureAwait(false)) return;
+                var (data, _) = await _workspace.ReadAsync(path, offset, length).ConfigureAwait(false);
+                if (data.Length == 0) break;
+                await _connection.SendDataAsync(FrameType.StreamData, channel, (ReadOnlyMemory<byte>)data).ConfigureAwait(false);
+                offset += data.Length;
+            }
+            await _connection.SendDataAsync(FrameType.StreamEnd, channel, new byte[] { 0 }).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is RemoteException or IOException or OperationCanceledException or ObjectDisposedException)
+        {
+            try { await _connection.SendDataAsync(FrameType.StreamEnd, channel, new byte[] { 1 }).ConfigureAwait(false); }
+            catch { }
+        }
+        finally
+        {
+            _streamSenders.TryRemove(channel, out _);
+        }
+    }
+
+    private async Task<Nothing> StartWriteStreamAsync(WriteStreamMessage request)
+    {
+        if (request.Channel == 0) throw new RemoteException(RemoteProtocol.InvalidParams, "A stream channel is needed.");
+        var upload = Guid.NewGuid().ToString("N");
+        // Verify path permissions upfront before opening the stream channel.
+        if (request.Size == 0)
+        {
+            await _workspace.WriteAsync(request.Path, upload, [], last: false).ConfigureAwait(false);
+        }
+        var receiver = new StreamWriteReceiver(this, request.Channel,
+            chunk => _workspace.WriteAsync(request.Path, upload, chunk, last: false),
+            async () =>
+            {
+                await _workspace.WriteAsync(request.Path, upload, [], last: true).ConfigureAwait(false);
+                return null;
+            });
+        if (!_streamReceivers.TryAdd(request.Channel, receiver))
+        {
+            receiver.Abort();
+            throw new RemoteException(RemoteProtocol.InvalidParams, "The channel is in use.");
+        }
+        return new Nothing();
+    }
+
+    private async Task<Nothing> FinishWriteStreamAsync(uint channel)
+    {
+        if (!_streamReceivers.TryRemove(channel, out var receiver))
+        {
+            throw new RemoteException(RemoteMethods.NotFound, "No write stream is active on this channel.");
+        }
+        await receiver.FinishAsync().ConfigureAwait(false);
+        return new Nothing();
+    }
+
+    private Task<Nothing> StartUploadStreamAsync(UploadStreamMessage request)
+    {
+        if (request.Channel == 0) throw new RemoteException(RemoteProtocol.InvalidParams, "A stream channel is needed.");
+        if (request.Size > RemoteMethods.UploadMaxBytes) throw new RemoteException(RemoteProtocol.InvalidParams, "The picture is too large.");
+        var upload = Guid.NewGuid().ToString("N");
+        var receiver = new StreamWriteReceiver(this, request.Channel,
+            chunk => _workspace.UploadAsync(request.ItemId, upload, request.Name, chunk, last: false),
+            () => _workspace.UploadAsync(request.ItemId, upload, request.Name, [], last: true));
+        if (!_streamReceivers.TryAdd(request.Channel, receiver))
+        {
+            receiver.Abort();
+            throw new RemoteException(RemoteProtocol.InvalidParams, "The channel is in use.");
+        }
+        return Task.FromResult(new Nothing());
+    }
+
+    private async Task<UploadedMessage> FinishUploadStreamAsync(uint channel)
+    {
+        if (!_streamReceivers.TryRemove(channel, out var receiver))
+        {
+            throw new RemoteException(RemoteMethods.NotFound, "No upload stream is active on this channel.");
+        }
+        var path = await receiver.FinishAsync().ConfigureAwait(false);
+        return new UploadedMessage { Path = path };
+    }
+
+    /// <summary>Tracks the receiver's sliding window for an outbound <see cref="RemoteMethods.FsReadStream"/>.</summary>
+    private sealed class StreamSendWindow
+    {
+        private readonly object _gate = new();
+        private ulong _acknowledged;
+        private TaskCompletionSource? _waiter;
+        private bool _aborted;
+
+        public bool IsAborted => Volatile.Read(ref _aborted);
+
+        public void Advance(ulong acknowledged)
+        {
+            TaskCompletionSource? wake = null;
+            lock (_gate)
+            {
+                if (acknowledged > _acknowledged)
+                {
+                    _acknowledged = acknowledged;
+                    wake = _waiter;
+                    _waiter = null;
+                }
+            }
+            wake?.TrySetResult();
+        }
+
+        public void Abort()
+        {
+            TaskCompletionSource? wake;
+            lock (_gate)
+            {
+                _aborted = true;
+                wake = _waiter;
+                _waiter = null;
+            }
+            wake?.TrySetResult();
+        }
+
+        public async ValueTask<bool> WaitForCreditAsync(ulong sentSoFar, int nextBytes)
+        {
+            while (true)
+            {
+                Task wait;
+                lock (_gate)
+                {
+                    if (_aborted) return false;
+                    if (sentSoFar + (ulong)nextBytes - _acknowledged <= RemoteMethods.StreamWindowBytes) return true;
+                    _waiter ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    wait = _waiter.Task;
+                }
+                await wait.ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>Receives <see cref="FrameType.StreamData"/> chunks on a channel and writes them in order.</summary>
+    private sealed class StreamWriteReceiver
+    {
+        private readonly HostConnection _owner;
+        private readonly uint _channel;
+        private readonly Func<byte[], Task> _writeChunk;
+        private readonly Func<Task<string?>> _commit;
+        private readonly Channel<byte[]?> _chunks = Channel.CreateUnbounded<byte[]?>(new UnboundedChannelOptions { SingleReader = true });
+        private readonly Task<string?> _processing;
+        private byte _endStatus;
+
+        public StreamWriteReceiver(HostConnection owner, uint channel, Func<byte[], Task> writeChunk, Func<Task<string?>> commit)
+        {
+            _owner = owner;
+            _channel = channel;
+            _writeChunk = writeChunk;
+            _commit = commit;
+            _processing = Task.Run(ProcessLoopAsync);
+        }
+
+        public void OnData(ReadOnlyMemory<byte> payload) => _chunks.Writer.TryWrite(payload.ToArray());
+
+        public void OnEnd(byte status)
+        {
+            _endStatus = status;
+            _chunks.Writer.TryComplete();
+        }
+
+        public void Abort()
+        {
+            _endStatus = 1;
+            _chunks.Writer.TryComplete();
+        }
+
+        public Task<string?> FinishAsync()
+        {
+            _chunks.Writer.TryComplete();
+            return _processing;
+        }
+
+        private async Task<string?> ProcessLoopAsync()
+        {
+            ulong consumed = 0;
+            ulong acknowledged = 0;
+            await foreach (var chunk in _chunks.Reader.ReadAllAsync().ConfigureAwait(false))
+            {
+                if (chunk is null) break;
+                if (chunk.Length > 0)
+                {
+                    await _writeChunk(chunk).ConfigureAwait(false);
+                    consumed += (ulong)chunk.Length;
+                    if (consumed - acknowledged >= RemoteMethods.StreamAckEveryBytes)
+                    {
+                        acknowledged = consumed;
+                        var win = new byte[8];
+                        BinaryPrimitives.WriteUInt64LittleEndian(win, acknowledged);
+                        try { await _owner._connection.SendDataAsync(FrameType.StreamWindow, _channel, (ReadOnlyMemory<byte>)win).ConfigureAwait(false); }
+                        catch { }
+                    }
+                }
+            }
+            if (_endStatus != 0) throw new RemoteException(RemoteProtocol.InvalidParams, "The binary stream was aborted.");
+            return await _commit().ConfigureAwait(false);
+        }
     }
 
     private void OnWorkspaceChanged() => _ = NotifyAsync(RemoteMethods.WorkspaceChanged, new Nothing(), RemoteJsonContext.Default.Nothing);
@@ -443,8 +726,9 @@ internal sealed class HostConnection : IAsyncDisposable
         {
             Attachment = attachment;
             lock (_gate) _acknowledged = attachment.Position;
-            var snapshot = attachment.TakeSnapshot();
-            _ = Task.Run(() => SendLoopAsync(snapshot));
+            var resumed = attachment.Resumed;
+            var snapshot = resumed ? [] : attachment.TakeSnapshot();
+            _ = Task.Run(() => SendLoopAsync(snapshot, resumed));
         }
 
         public void Acknowledge(ulong position)
@@ -484,20 +768,24 @@ internal sealed class HostConnection : IAsyncDisposable
             Attachment?.Dispose();
         }
 
-        private async Task SendLoopAsync(byte[] snapshot)
+        private async Task SendLoopAsync(byte[] snapshot, bool resumed)
         {
             try
             {
                 var connection = owner._connection;
-                for (var offset = 0; ; offset += SnapshotPiece)
+                if (!resumed)
                 {
-                    var length = Math.Min(SnapshotPiece, snapshot.Length - offset);
-                    var last = offset + length >= snapshot.Length;
-                    var piece = new byte[1 + length];
-                    piece[0] = last ? (byte)1 : (byte)0;
-                    snapshot.AsSpan(offset, length).CopyTo(piece.AsSpan(1));
-                    await connection.SendDataAsync(FrameType.Snapshot, channel, piece).ConfigureAwait(false);
-                    if (last) break;
+                    var pieceSize = Math.Clamp(connection.MaxChunkBytes, 16 * 1024, SnapshotPiece);
+                    for (var offset = 0; ; offset += pieceSize)
+                    {
+                        var length = Math.Min(pieceSize, snapshot.Length - offset);
+                        var last = offset + length >= snapshot.Length;
+                        var piece = new byte[1 + length];
+                        piece[0] = last ? (byte)1 : (byte)0;
+                        snapshot.AsSpan(offset, length).CopyTo(piece.AsSpan(1));
+                        await connection.SendDataAsync(FrameType.Snapshot, channel, piece).ConfigureAwait(false);
+                        if (last) break;
+                    }
                 }
 
                 var frame = new byte[8 + MaxFrame];

@@ -48,6 +48,10 @@ internal sealed class FakeRelay : IAsyncDisposable
 
     /// <summary>When set, this fake relay also exposes <c>/v1/info</c> and <c>/v1/auth/key*</c> as a self-hosted relay.</summary>
     public string? SelfHostedAccessKey { get; set; }
+    /// <summary>Optional STUN servers advertised by <c>/v1/info</c> (relay protocol v2).</summary>
+    public List<string>? StunServers { get; set; }
+    /// <summary>Optional QUIC tunnel endpoint advertised by <c>/v1/info</c> (relay protocol v2).</summary>
+    public string? QuicEndpoint { get; set; }
 
     public FakeRelay()
     {
@@ -154,7 +158,17 @@ internal sealed class FakeRelay : IAsyncDisposable
             }
             else
             {
-                Respond(context, 200, """{"protocol":1,"mode":"self-hosted","name":"Fake Self-Hosted","auth":["device_code","access_key"]}""");
+                var info = new Dictionary<string, object>
+                {
+                    ["protocol"] = 2,
+                    ["mode"] = "self-hosted",
+                    ["name"] = "Fake Self-Hosted",
+                    ["auth"] = new[] { "device_code", "access_key" },
+                    ["transports"] = QuicEndpoint is not null ? new[] { "ws", "quic" } : new[] { "ws" },
+                };
+                if (StunServers is { Count: > 0 }) info["stunServers"] = StunServers;
+                if (QuicEndpoint is not null) info["quicEndpoint"] = QuicEndpoint;
+                Respond(context, 200, JsonSerializer.Serialize(info));
             }
             return;
         }
@@ -166,8 +180,14 @@ internal sealed class FakeRelay : IAsyncDisposable
         // Everything else is for who is signed in: the caller's account, and the device the token was given to.
         var bearer = context.Request.Headers["Authorization"] is { } header && header.StartsWith("Bearer ", StringComparison.Ordinal) ? header["Bearer ".Length..] : "";
         (string Account, string? DeviceId) caller;
-        if (bearer == Token) caller = (TokenAccount, null);
-        else if (_access.TryGetValue(bearer, out var signedIn)) caller = signedIn;
+        if (bearer == Token)
+        {
+            caller = (TokenAccount, null);
+        }
+        else if (_access.TryGetValue(bearer, out var signedIn))
+        {
+            caller = signedIn;
+        }
         else
         {
             Respond(context, 401, """{"error":"unauthorized"}""");
@@ -175,12 +195,22 @@ internal sealed class FakeRelay : IAsyncDisposable
         }
         if (path == "/v1/devices" && context.Request.HttpMethod == "GET")
         {
-            var devices = _devices.Where(device => device.Value.Account == caller.Account).OrderBy(device => device.Value.Name, StringComparer.Ordinal).Select(device => new Dictionary<string, object>
+            var devices = _devices.Where(device => device.Value.Account == caller.Account).OrderBy(device => device.Value.Name, StringComparer.Ordinal).Select(device =>
             {
-                ["id"] = device.Key, ["name"] = device.Value.Name, ["kind"] = device.Value.Kind,
-                ["online"] = _hosts.ContainsKey(device.Key), ["current"] = device.Key == caller.DeviceId,
-                ["passwordAccess"] = _hosts.ContainsKey(device.Key) && FeaturesOf(device.Key).Contains("password-access"),
-                ["createdAt"] = DateTimeOffset.UtcNow, ["lastSeenAt"] = DateTimeOffset.UtcNow,
+                var online = _hosts.ContainsKey(device.Key);
+                var row = new Dictionary<string, object>
+                {
+                    ["id"] = device.Key,
+                    ["name"] = device.Value.Name,
+                    ["kind"] = device.Value.Kind,
+                    ["online"] = online,
+                    ["current"] = device.Key == caller.DeviceId,
+                    ["passwordAccess"] = online && FeaturesOf(device.Key).Contains("password-access"),
+                    ["createdAt"] = DateTimeOffset.UtcNow,
+                    ["lastSeenAt"] = DateTimeOffset.UtcNow,
+                };
+                if (online) row["features"] = FeaturesOf(device.Key);
+                return row;
             }).ToList();
             Respond(context, 200, JsonSerializer.Serialize(new Dictionary<string, object> { ["devices"] = devices }));
         }
@@ -322,8 +352,12 @@ internal sealed class FakeRelay : IAsyncDisposable
                 LoginClients.Enqueue((Text("platform"), Text("appVersion")));
                 Respond(context, 200, JsonSerializer.Serialize(new Dictionary<string, object>
                 {
-                    ["deviceCode"] = deviceCode, ["userCode"] = login.UserCode, ["verificationUri"] = $"{Url}/device",
-                    ["verificationUriComplete"] = $"{Url}/device?code={login.UserCode}", ["expiresIn"] = 600, ["interval"] = 1,
+                    ["deviceCode"] = deviceCode,
+                    ["userCode"] = login.UserCode,
+                    ["verificationUri"] = $"{Url}/device",
+                    ["verificationUriComplete"] = $"{Url}/device?code={login.UserCode}",
+                    ["expiresIn"] = 600,
+                    ["interval"] = 1,
                 }));
                 break;
             case "/v1/auth/token" when Text("grantType") == "device_code":
@@ -381,7 +415,10 @@ internal sealed class FakeRelay : IAsyncDisposable
         _refresh[refresh] = (account, deviceId);
         return JsonSerializer.Serialize(new Dictionary<string, object>
         {
-            ["accessToken"] = access, ["refreshToken"] = refresh, ["expiresIn"] = AccessSeconds, ["deviceId"] = deviceId,
+            ["accessToken"] = access,
+            ["refreshToken"] = refresh,
+            ["expiresIn"] = AccessSeconds,
+            ["deviceId"] = deviceId,
             ["account"] = new Dictionary<string, string> { ["id"] = "id-" + account, ["name"] = char.ToUpperInvariant(account[0]) + account[1..], ["email"] = account + "@example.com" },
         });
     }
