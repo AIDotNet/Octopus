@@ -19,15 +19,22 @@ public sealed class NetModule : IPluginApiModule, IDisposable
     public const int RequestsPerMinute = 60;
 
     private readonly HttpClient _client;
+    private readonly IWebProxy? _proxy;
+    private readonly Func<string, CancellationToken, Task<IPAddress[]>> _resolveHost;
     private readonly ConcurrentDictionary<(string Plugin, string Host), RateWindow> _rates = new();
 
-    public NetModule()
+    public NetModule() : this(proxy: null) { }
+
+    internal NetModule(IWebProxy? proxy, Func<string, CancellationToken, Task<IPAddress[]>>? resolveHost = null)
     {
+        _proxy = proxy;
+        _resolveHost = resolveHost ?? Dns.GetHostAddressesAsync;
         var handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
             UseCookies = false,
             UseProxy = true,
+            Proxy = proxy,
             Credentials = null,
             ConnectTimeout = TimeSpan.FromSeconds(10),
             ConnectCallback = ConnectAsync,
@@ -39,7 +46,7 @@ public sealed class NetModule : IPluginApiModule, IDisposable
 
     public void Register(PluginApiRouter router) => router.Request("net.fetch", FetchAsync);
 
-    private async Task<PluginReply> FetchAsync(PluginCall call, CancellationToken cancellationToken)
+    private Task<PluginReply> FetchAsync(PluginCall call, CancellationToken cancellationToken)
     {
         var grants = call.Plugin.Grants;
         grants.Require("net");
@@ -48,17 +55,46 @@ public sealed class NetModule : IPluginApiModule, IDisposable
         {
             throw PluginApiException.Unsupported("Sending a stored secret with net.fetch");
         }
-        var url = ParseUrl(call.RequiredString("url"), hosts);
-        var method = new HttpMethod((call.String("method") ?? "GET").ToUpperInvariant());
-        byte[]? body = call.Text.Length == 0 ? null
+        var body = call.Text.Length == 0 ? null
             : call.Bool("bodyIsBase64") ? Convert.FromBase64String(call.Text) : Encoding.UTF8.GetBytes(call.Text);
+        return FetchCoreAsync(
+            call.Plugin.Id,
+            hosts,
+            call.RequiredString("url"),
+            call.String("method"),
+            call["headers"] as JsonObject,
+            body,
+            cancellationToken);
+    }
+
+    internal async Task<PluginReply> FetchCoreAsync(
+        string pluginId,
+        IReadOnlyList<string> hosts,
+        string rawUrl,
+        string? methodName,
+        JsonObject? headers,
+        byte[]? body,
+        CancellationToken cancellationToken)
+    {
+        var url = ParseUrl(rawUrl, hosts);
+        var methodText = (methodName ?? "GET").ToUpperInvariant();
+        if (methodText is "CONNECT" or "TRACE" or "TRACK")
+        {
+            throw PluginApiException.Invalid($"HTTP method \"{methodText}\" is not allowed.");
+        }
+        var method = new HttpMethod(methodText);
+        var allowLocal = hosts.Contains("localhost", StringComparer.OrdinalIgnoreCase);
 
         for (var hop = 0; ; hop++)
         {
-            Throttle(call.Plugin.Id, url.Host);
+            if (!allowLocal && IsInternalHost(url))
+            {
+                throw new PluginApiException("Io", $"{url.Host} resolves only to internal addresses.");
+            }
+            Throttle(pluginId, url.Host);
             using var request = new HttpRequestMessage(method, url);
             if (body is not null) request.Content = new ByteArrayContent(body);
-            if (call["headers"] is JsonObject headers)
+            if (headers is not null)
             {
                 foreach (var (name, value) in headers)
                 {
@@ -68,37 +104,65 @@ public sealed class NetModule : IPluginApiModule, IDisposable
                 }
             }
             request.Options.Set(PluginKey, hosts);
-            using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is { } location)
+            HttpResponseMessage response;
+            try
             {
-                if (hop >= MaxRedirects) throw new PluginApiException("Io", "Too many redirects.");
-                var next = location.IsAbsoluteUri ? location : new Uri(url, location);
-                url = ParseUrl(next.ToString(), hosts);
-                if (response.StatusCode is HttpStatusCode.SeeOther || ((int)response.StatusCode is 301 or 302 && method == HttpMethod.Post))
+                response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException e)
+            {
+                throw new PluginApiException("Io", e.Message);
+            }
+            catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new PluginApiException("Timeout", $"Request to {url.Host} timed out.");
+            }
+
+            using (response)
+            {
+                if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is { } location)
                 {
-                    method = HttpMethod.Get;
-                    body = null;
+                    if (hop >= MaxRedirects) throw new PluginApiException("Io", "Too many redirects.");
+                    var next = location.IsAbsoluteUri ? location : new Uri(url, location);
+                    url = ParseUrl(next.ToString(), hosts);
+                    if (response.StatusCode is HttpStatusCode.SeeOther || ((int)response.StatusCode is 301 or 302 && method == HttpMethod.Post))
+                    {
+                        method = HttpMethod.Get;
+                        body = null;
+                    }
+                    continue;
                 }
-                continue;
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    var wait = response.Headers.RetryAfter?.Delta ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow) ?? TimeSpan.FromSeconds(60);
+                    _rates.GetOrAdd((pluginId, url.Host), _ => new RateWindow()).PauseUntil = DateTimeOffset.UtcNow + wait;
+                }
+                byte[] bytes;
+                try
+                {
+                    bytes = await ReadCappedAsync(response, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is HttpRequestException or IOException)
+                {
+                    throw new PluginApiException("Io", e.Message);
+                }
+                catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    throw new PluginApiException("Timeout", $"Reading response from {url.Host} timed out.");
+                }
+                var outHeaders = new JsonObject();
+                foreach (var header in response.Headers.Concat(response.Content.Headers))
+                {
+                    if (header.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase)) continue;
+                    outHeaders[header.Key.ToLowerInvariant()] = string.Join(", ", header.Value);
+                }
+                return PluginReply.Of(new JsonObject
+                {
+                    ["status"] = (int)response.StatusCode,
+                    ["headers"] = outHeaders,
+                    ["body"] = Convert.ToBase64String(bytes),
+                });
             }
-            if (response.StatusCode == HttpStatusCode.TooManyRequests)
-            {
-                var wait = response.Headers.RetryAfter?.Delta ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow) ?? TimeSpan.FromSeconds(60);
-                _rates.GetOrAdd((call.Plugin.Id, url.Host), _ => new RateWindow()).PauseUntil = DateTimeOffset.UtcNow + wait;
-            }
-            var bytes = await ReadCappedAsync(response, cancellationToken).ConfigureAwait(false);
-            var outHeaders = new JsonObject();
-            foreach (var header in response.Headers.Concat(response.Content.Headers))
-            {
-                if (header.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase)) continue;
-                outHeaders[header.Key.ToLowerInvariant()] = string.Join(", ", header.Value);
-            }
-            return PluginReply.Of(new JsonObject
-            {
-                ["status"] = (int)response.StatusCode,
-                ["headers"] = outHeaders,
-                ["body"] = Convert.ToBase64String(bytes),
-            });
         }
     }
 
@@ -129,21 +193,26 @@ public sealed class NetModule : IPluginApiModule, IDisposable
             ? host.EndsWith(pattern[1..], StringComparison.OrdinalIgnoreCase) && host.Length > pattern.Length - 1
             : string.Equals(host, pattern, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Connects only to addresses that are not internal, unless the plugin listed localhost.</summary>
-    private static async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+    /// <summary>
+    /// Connects only to addresses that are not internal, unless the plugin listed localhost or the connection is to the
+    /// configured system proxy (which commonly runs on 127.0.0.1 or a LAN address).
+    /// </summary>
+    private async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken cancellationToken)
     {
         var allowLocal = context.InitialRequestMessage.Options.TryGetValue(PluginKey, out var hosts)
             && hosts.Contains("localhost", StringComparer.OrdinalIgnoreCase);
-        var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken).ConfigureAwait(false);
-        var usable = addresses.Where(a => allowLocal || !IsInternal(a)).ToList();
-        if (usable.Count == 0)
+        var proxy = _proxy ?? HttpClient.DefaultProxy;
+        var isProxy = IsConfiguredProxyConnection(proxy, context.InitialRequestMessage, context.DnsEndPoint);
+        var addresses = await _resolveHost(context.DnsEndPoint.Host, cancellationToken).ConfigureAwait(false);
+        var usable = isProxy || allowLocal ? addresses : addresses.Where(a => !IsInternal(a)).ToArray();
+        if (usable.Length == 0)
         {
             throw new HttpRequestException($"{context.DnsEndPoint.Host} resolves only to internal addresses.");
         }
         var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
         try
         {
-            await socket.ConnectAsync(usable.ToArray(), context.DnsEndPoint.Port, cancellationToken).ConfigureAwait(false);
+            await socket.ConnectAsync(usable, context.DnsEndPoint.Port, cancellationToken).ConfigureAwait(false);
             return new NetworkStream(socket, ownsSocket: true);
         }
         catch
@@ -152,6 +221,61 @@ public sealed class NetModule : IPluginApiModule, IDisposable
             throw;
         }
     }
+
+    /// <summary>
+    /// True when <see cref="SocketsHttpHandler"/> is connecting to the configured proxy rather than the target host.
+    /// For HTTPS tunnels through an HTTP proxy, <see cref="SocketsHttpHandler"/> passes an internal
+    /// <c>CONNECT</c> request whose <c>RequestUri</c> is the proxy itself and whose <c>Host</c> header is the target.
+    /// </summary>
+    internal static bool IsConfiguredProxyConnection(IWebProxy? proxy, HttpRequestMessage request, DnsEndPoint endPoint)
+    {
+        var targetUri = request.RequestUri;
+        if (request.Method == HttpMethod.Connect
+            && request.Headers.Host is { Length: > 0 } authority
+            && Uri.TryCreate($"https://{authority}", UriKind.Absolute, out var tunnelTarget))
+        {
+            targetUri = tunnelTarget;
+        }
+        return IsConfiguredProxy(proxy, targetUri, endPoint);
+    }
+
+    internal static bool IsConfiguredProxy(IWebProxy? proxy, Uri? requestUri, DnsEndPoint endPoint)
+    {
+        if (proxy is null || requestUri is null) return false;
+        try
+        {
+            if (proxy.IsBypassed(requestUri)) return false;
+            var proxyUri = proxy.GetProxy(requestUri);
+            if (proxyUri is null || proxyUri == requestUri || !proxyUri.IsAbsoluteUri) return false;
+            var proxyPort = proxyUri.Port > 0
+                ? proxyUri.Port
+                : proxyUri.Scheme.StartsWith("socks", StringComparison.OrdinalIgnoreCase) ? 1080 : -1;
+            if (proxyPort != endPoint.Port) return false;
+            return string.Equals(
+                TrimBrackets(endPoint.Host),
+                TrimBrackets(proxyUri.IdnHost),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    internal static bool IsInternalHost(Uri uri)
+    {
+        if (uri.IsLoopback) return true;
+        var host = TrimBrackets(uri.IdnHost);
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return IPAddress.TryParse(host, out var ip) && IsInternal(ip);
+    }
+
+    private static string TrimBrackets(string host) =>
+        host.Length >= 2 && host[0] == '[' && host[^1] == ']' ? host[1..^1] : host;
 
     internal static bool IsInternal(IPAddress address)
     {
@@ -184,7 +308,7 @@ public sealed class NetModule : IPluginApiModule, IDisposable
             if (window.Times.Count >= RequestsPerMinute)
             {
                 throw new PluginApiException("Busy", $"More than {RequestsPerMinute} requests a minute to {host}.")
-                    { RetryAfterMs = (long)(window.Times[0] + TimeSpan.FromMinutes(1) - now).TotalMilliseconds };
+                { RetryAfterMs = (long)(window.Times[0] + TimeSpan.FromMinutes(1) - now).TotalMilliseconds };
             }
             window.Times.Add(now);
         }

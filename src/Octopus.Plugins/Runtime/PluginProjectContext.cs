@@ -1,6 +1,14 @@
 namespace Octopus.Plugins.Runtime;
 
-public sealed record PluginProjectInfo(string Id, string Name, string Path, string? Color);
+public sealed record PluginProjectInfo(
+    string Id,
+    string Name,
+    string Path,
+    string? Color,
+    string DeviceKey = "local",
+    string LocationKind = "local",
+    string? SshHost = null,
+    string? RemoteHost = null);
 
 /// <summary>The projects as plugins see them; implemented by the app (the plugin layer does not know its project service).</summary>
 public interface IPluginProjectContext

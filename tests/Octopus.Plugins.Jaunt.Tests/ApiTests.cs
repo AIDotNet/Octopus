@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using Octopus.Plugins.Runtime;
 using Xunit;
 
 namespace Octopus.Plugins.Jaunt.Tests;
@@ -34,25 +33,25 @@ public sealed class ApiTests : IAsyncDisposable
             }
             """, """ "contributes": { "views": [ { "id": "acme.v.board", "title": "Board" } ] } """);
         var manager = await _h.StartAsync();
-        var host = (await manager.EnsureActiveAsync("acme.v"))!;
+        var host = (await manager.EnsureActiveAsync("acme.v", cancellationToken: TestContext.Current.CancellationToken))!;
         Assert.Contains(("view", "acme.v.board"), host.Providers);
 
         var opened = JsonNode.Parse(await host.InvokeAsync("view.open",
-            ["view", "acme.v.board", new JsonObject { ["instanceId"] = "i1", ["state"] = new JsonObject { ["start"] = 5 } }]))!;
+            ["view", "acme.v.board", new JsonObject { ["instanceId"] = "i1", ["state"] = new JsonObject { ["start"] = 5 } }], cancellationToken: TestContext.Current.CancellationToken))!;
         var tree = opened["tree"]!;
         Assert.Equal("Column", Str(tree["t"]));
         Assert.Equal("count 5", Str(tree["c"]![0]!["p"]!["value"]));
         var handler = Str(tree["c"]![1]!["p"]!["onClick"]!["$h"]);
 
-        await host.InvokeAsync("view.event", ["i1", handler, new JsonArray()]);
+        await host.InvokeAsync("view.event", ["i1", handler, new JsonArray()], cancellationToken: TestContext.Current.CancellationToken);
         await Harness.WaitUntil(() => _h.Captured.Notifications.Any(n => n.Method == "view.update"));
 
         var update = _h.Captured.Notifications.Last(n => n.Method == "view.update").Args!;
         Assert.Equal("i1", Str(update["instanceId"]));
         Assert.Equal("count 6", Str(update["tree"]!["c"]![0]!["p"]!["value"]));
         Assert.Contains(_h.Captured.Notifications, n => n.Method == "view.chrome" && Str(n.Args!["title"]) == "Board");
-        Assert.Equal(6, JsonNode.Parse(await host.InvokeAsync("view.getState", ["i1"]))!["start"]!.GetValue<double>());
-        Assert.Equal("null", await host.InvokeAsync("view.event", ["i1", "r/9:onClick", new JsonArray()]));
+        Assert.Equal(6, JsonNode.Parse(await host.InvokeAsync("view.getState", ["i1"], cancellationToken: TestContext.Current.CancellationToken))!["start"]!.GetValue<double>());
+        Assert.Equal("null", await host.InvokeAsync("view.event", ["i1", "r/9:onClick", new JsonArray()], cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -71,7 +70,7 @@ public sealed class ApiTests : IAsyncDisposable
         var manager = await _h.StartAsync();
 
         // The first question waits for the first sync, so it is answered from the catalog, not the built-in table.
-        var answer = (await manager.ExecuteCommandAsync("acme.p.ask"))!;
+        var answer = (await manager.ExecuteCommandAsync("acme.p.ask", cancellationToken: TestContext.Current.CancellationToken))!;
         Assert.Equal("models.dev", answer["source"]!.GetValue<string>());
         Assert.Equal(4, answer["prices"]!["claude-opus-5.5"]!["input"]!.GetValue<double>());
         Assert.Equal(0.6, answer["prices"]!["deepseek-flash"]!["output"]!.GetValue<double>());
@@ -91,18 +90,18 @@ public sealed class ApiTests : IAsyncDisposable
             }
             """, """ "contributes": { "views": [ { "id": "acme.v.board", "title": "B" } ], "commands": [ { "id": "acme.v.poke", "title": "Poke" } ] } """);
         var manager = await _h.StartAsync();
-        var host = (await manager.EnsureActiveAsync("acme.v"))!;
-        await host.InvokeAsync("view.open", ["view", "acme.v.board", new JsonObject { ["instanceId"] = "i1" }]);
+        var host = (await manager.EnsureActiveAsync("acme.v", cancellationToken: TestContext.Current.CancellationToken))!;
+        await host.InvokeAsync("view.open", ["view", "acme.v.board", new JsonObject { ["instanceId"] = "i1" }], cancellationToken: TestContext.Current.CancellationToken);
 
-        await manager.ExecuteCommandAsync("acme.v.poke");
+        await manager.ExecuteCommandAsync("acme.v.poke", cancellationToken: TestContext.Current.CancellationToken);
         await Harness.WaitUntil(() => _h.Captured.Notifications.Count(n => n.Method == "view.update") == 1);
 
-        await host.InvokeAsync("view.visibility", ["i1", false]);
-        await manager.ExecuteCommandAsync("acme.v.poke");
-        await Task.Delay(100);
+        await host.InvokeAsync("view.visibility", ["i1", false], cancellationToken: TestContext.Current.CancellationToken);
+        await manager.ExecuteCommandAsync("acme.v.poke", cancellationToken: TestContext.Current.CancellationToken);
+        await Task.Delay(100, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(1, _h.Captured.Notifications.Count(n => n.Method == "view.update"));
 
-        await host.InvokeAsync("view.visibility", ["i1", true]);
+        await host.InvokeAsync("view.visibility", ["i1", true], cancellationToken: TestContext.Current.CancellationToken);
         await Harness.WaitUntil(() => _h.Captured.Notifications.Count(n => n.Method == "view.update") == 2);
         Assert.Equal("n3", Str(_h.Captured.Notifications.Last(n => n.Method == "view.update").Args!["tree"]!["p"]!["value"]));
     }
@@ -125,7 +124,7 @@ public sealed class ApiTests : IAsyncDisposable
             """, """ "contributes": { "usageProviders": [ { "id": "octopus.agent-usage.claude", "agent": "claude" } ], "commands": [ { "id": "octopus.agent-usage.refresh", "title": "Refresh" } ] } """);
         var manager = await _h.StartAsync();
 
-        await manager.ExecuteCommandAsync("octopus.agent-usage.refresh");
+        await manager.ExecuteCommandAsync("octopus.agent-usage.refresh", cancellationToken: TestContext.Current.CancellationToken);
         await Harness.WaitUntil(() => _h.Usage.Get("claude") is not null);
 
         var state = _h.Usage.Get("claude", "a1")!;
@@ -157,7 +156,7 @@ public sealed class ApiTests : IAsyncDisposable
             """, """ "contributes": { "commands": [ { "id": "acme.c.run", "title": "Run" } ], "configuration": { "properties": { "acme.c.delimiter": { "type": "enum", "options": ["auto", ",", ";"], "default": "auto", "label": "Delimiter" } } } } """);
         var manager = await _h.StartAsync();
 
-        var result = (JsonObject)(await manager.ExecuteCommandAsync("acme.c.run"))!;
+        var result = (JsonObject)(await manager.ExecuteCommandAsync("acme.c.run", cancellationToken: TestContext.Current.CancellationToken))!;
 
         Assert.Equal("auto", Str(result["before"]));
         Assert.Equal(";", Str(result["after"]));
@@ -187,7 +186,7 @@ public sealed class ApiTests : IAsyncDisposable
             """, """ "contributes": { "commands": [ { "id": "acme.t.run", "title": "Run" } ] } """, ("l10n/zh-CN.json", """{ "hello": "你好，{name}" }"""));
         var manager = await _h.StartAsync();
 
-        var r = (JsonObject)(await manager.ExecuteCommandAsync("acme.t.run"))!;
+        var r = (JsonObject)(await manager.ExecuteCommandAsync("acme.t.run", cancellationToken: TestContext.Current.CancellationToken))!;
 
         Assert.Equal("héllo 世界", Str(r["roundTrip"]));
         Assert.Equal(13, r["length"]!.GetValue<double>());

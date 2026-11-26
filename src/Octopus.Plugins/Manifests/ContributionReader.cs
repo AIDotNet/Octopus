@@ -66,7 +66,7 @@ internal sealed class ContributionReader(string pluginId, string? packageDirecto
             Commands = commands,
             Views = views,
             Editors = Each(c, "editors", ReadEditor, "id", "title", "icon", "selector", "priority", "access", "maxSize", "binary", "localized"),
-            Panels = Named(c, "panels"),
+            Panels = Each(c, "panels", ReadPanel, "id", "title", "icon", "scope", "when", "order", "localized"),
             SidebarSections = Named(c, "sidebarSections"),
             Indicators = Named(c, "indicators"),
             UsageProviders = Each(c, "usageProviders", item => new UsageProviderContribution(item.String("id", true)!, item.String("agent", true)!), "id", "agent"),
@@ -119,6 +119,16 @@ internal sealed class ContributionReader(string pluginId, string? packageDirecto
     private IReadOnlyList<NamedContribution> Named(ManifestObject c, string kind) =>
         Each(c, kind, item => new NamedContribution(item.String("id", true)!, item.String("title"), item.String("icon"), item.Localized()),
             "id", "title", "icon", "localized");
+
+    private static PanelContribution ReadPanel(ManifestObject item)
+    {
+        var id = item.String("id", true)!;
+        var title = item.String("title") ?? id;
+        var scope = Choice(item, "scope", PanelScope.Device,
+            ("project", PanelScope.Project), ("device", PanelScope.Device), ("global", PanelScope.Global));
+        var order = (int)(item.Integer("order") ?? 100);
+        return new PanelContribution(id, title, item.String("icon"), scope, item.String("when"), order, item.Localized());
+    }
 
     private bool CheckId(ManifestObject item, string id)
     {

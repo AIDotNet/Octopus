@@ -27,6 +27,10 @@ public sealed class ProjectsModule : IPluginApiModule
         ["name"] = project.Name,
         ["path"] = project.Path,
         ["color"] = project.Color,
+        ["deviceKey"] = project.DeviceKey,
+        ["locationKind"] = project.LocationKind,
+        ["sshHost"] = project.SshHost,
+        ["remoteHost"] = project.RemoteHost,
     };
 
     public void Register(PluginApiRouter router)

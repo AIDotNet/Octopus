@@ -55,6 +55,7 @@ public sealed class PluginCall(PluginHost plugin, string method, string json, st
     /// <summary>A large string argument passed outside the JSON (file contents, request bodies).</summary>
     public string Text { get; } = text;
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1065", Justification = "Lazily parsed plugin arguments: invalid JSON must surface to the plugin as PluginApiException.Invalid.")]
     public JsonNode? Args
     {
         get

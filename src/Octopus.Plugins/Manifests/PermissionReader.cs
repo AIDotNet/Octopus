@@ -18,7 +18,7 @@ internal static class PermissionReader
 
     private static readonly string[] Known =
     [
-        "fs", "git", "projects", "workspace", "clipboard", "notifications", "shell", "net", "theme", "settings",
+        "fs", "git", "projects", "devices", "system", "workspace", "clipboard", "notifications", "shell", "net", "theme", "settings",
         "secrets", "terminal", "agents", "process",
     ];
 
@@ -41,6 +41,8 @@ internal static class PermissionReader
             }
             Level(permissions, "git", ["read"], PermissionRisk.Low, requests);
             Level(permissions, "projects", ["read"], PermissionRisk.Low, requests);
+            Level(permissions, "devices", ["read"], PermissionRisk.Low, requests);
+            ReadSystem(permissions, requests);
             Level(permissions, "workspace", ["write"], PermissionRisk.Medium, requests);
             Level(permissions, "settings", ["read"], PermissionRisk.Low, requests);
             Flag(permissions, "notifications", PermissionRisk.Low, requests);
@@ -50,7 +52,7 @@ internal static class PermissionReader
             Each(permissions, "terminal", new() { ["read"] = PermissionRisk.High, ["write"] = PermissionRisk.High, ["create"] = PermissionRisk.High }, requests);
             List(permissions, "net", "hosts", PermissionRisk.Medium, requests);
             List(permissions, "shell", "open", PermissionRisk.Medium, requests, key: "shell.open");
-            List(permissions, "process", "run", PermissionRisk.High, requests, key: "process.run");
+            ReadProcess(permissions, requests);
             ReadAgents(permissions, requests);
         }
         if (unsafeEval)
@@ -68,8 +70,14 @@ internal static class PermissionReader
         if (permissions.Raw(name) is not { } value) return;
         var optional = false;
         string? level = null;
-        if (value.ValueKind == JsonValueKind.String) level = value.GetString();
-        else if (value.ValueKind == JsonValueKind.True) level = levels[0];
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            level = value.GetString();
+        }
+        else if (value.ValueKind == JsonValueKind.True)
+        {
+            level = levels[0];
+        }
         else if (value.ValueKind == JsonValueKind.Object)
         {
             var obj = permissions.Object(name)!.Value;
@@ -195,6 +203,73 @@ internal static class PermissionReader
     }
 
     private static string AccessText(FileAccessKind access) => access == FileAccessKind.ReadWrite ? "readwrite" : "read";
+
+    // ---------------------------------------------------------------- system & process
+
+    /// <summary>
+    /// <c>"system": ["metrics", "process.signal"]</c> or
+    /// <c>"system": {"metrics": true, "processSignal": {"optional": true}}</c>.
+    /// </summary>
+    private static void ReadSystem(ManifestObject permissions, List<PermissionRequest> requests)
+    {
+        if (permissions.Raw("system") is not { } value) return;
+        if (value.ValueKind is JsonValueKind.Array or JsonValueKind.String)
+        {
+            Each(permissions, "system", new()
+            {
+                ["metrics"] = PermissionRisk.Medium,
+                ["process.signal"] = PermissionRisk.High,
+            }, requests);
+            return;
+        }
+        if (permissions.Object("system") is not { } system) return;
+        system.WarnUnknown("metrics", "processSignal", "process.signal");
+        ReadSystemFlag(system, "metrics", "system.metrics", PermissionRisk.Medium, requests);
+        ReadSystemFlag(system, "processSignal", "system.process.signal", PermissionRisk.High, requests);
+        ReadSystemFlag(system, "process.signal", "system.process.signal", PermissionRisk.High, requests);
+    }
+
+    private static void ReadSystemFlag(ManifestObject system, string property, string key, PermissionRisk risk, List<PermissionRequest> requests)
+    {
+        if (system.Raw(property) is not { } value || value.ValueKind == JsonValueKind.False) return;
+        if (requests.Any(r => r.Key == key)) return;
+        var optional = false;
+        if (value.ValueKind == JsonValueKind.Object && system.Object(property) is { } obj)
+        {
+            obj.WarnUnknown("optional");
+            optional = obj.Bool("optional");
+        }
+        else if (value.ValueKind != JsonValueKind.True)
+        {
+            system.Log.Error(system.At(property), "must be true or an object");
+            return;
+        }
+        requests.Add(new PermissionRequest(key, risk, optional, []));
+    }
+
+    /// <summary>
+    /// <c>"process": {"run": ["docker", "ps"], "devices": ["local", "ssh", "remote"], "optional": false}</c>.
+    /// When <c>devices</c> is omitted, execution stays restricted to the local computer.
+    /// </summary>
+    private static void ReadProcess(ManifestObject permissions, List<PermissionRequest> requests)
+    {
+        if (permissions.Object("process") is not { } obj) return;
+        obj.WarnUnknown("run", "devices", "optional");
+        var programs = obj.Strings("run").Where(s => s.Trim().Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        if (programs.Count == 0)
+        {
+            obj.Log.Error(obj.At("run"), "must list at least one entry");
+            return;
+        }
+        var optional = obj.Bool("optional");
+        requests.Add(new PermissionRequest("process.run", PermissionRisk.High, optional, programs));
+
+        var devices = obj.Strings("devices").Select(s => s.Trim()).Where(s => s.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        if (devices.Count > 0)
+        {
+            requests.Add(new PermissionRequest("process.run.devices", PermissionRisk.High, optional, devices));
+        }
+    }
 
     // ---------------------------------------------------------------- agents
 

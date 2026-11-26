@@ -1,4 +1,3 @@
-using Xunit;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -11,6 +10,7 @@ using Octopus.Plugins.Manifests;
 using Octopus.Plugins.Runtime;
 using Octopus.Plugins.Runtime.Modules;
 using Octopus.Plugins.Security;
+using Xunit;
 
 namespace Octopus.Plugins.Jaunt.Tests;
 
@@ -116,7 +116,7 @@ public sealed class AgentUsagePluginTests
         await Harness.WaitUntil(() => agents.Indicator?["text"]?.GetValue<string>() == "92%");
         Assert.Equal("danger", agents.Indicator!["level"]!.GetValue<string>());
 
-        var json = await manager.Find(Id)!.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5));
+        var json = await manager.Find(Id)!.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
         var tree = JsonNode.Parse(json)!["tree"]!;
         var tabs = Find(tree, "Tabs")!;
         var titles = tabs["p"]!["tabs"]!.AsArray().Select(tab => tab!["title"]!.GetValue<string>()).ToList();
@@ -140,7 +140,7 @@ public sealed class AgentUsagePluginTests
         var (harness, manager, _) = await StartAsync();
         await using var _ = harness;
         var plugin = manager.Find(Id)!;
-        var clicked = JsonNode.Parse(await plugin.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5)))!;
+        var clicked = JsonNode.Parse(await plugin.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken))!;
         var instance = clicked["instanceId"]!.GetValue<string>();
         var onSelect = Find(clicked["tree"], "Tabs")!["p"]!["onSelect"]!["$h"]!.GetValue<string>();
 
@@ -169,7 +169,7 @@ public sealed class AgentUsagePluginTests
         await Harness.WaitUntil(() => harness.Usage.Get("claude", "a1b2c3d4e5f6")?.Snapshot["plan"] is not null, 10_000);
 
         async Task<JsonNode> Popover() =>
-            JsonNode.Parse(await manager.Find(Id)!.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5)))!["tree"]!;
+            JsonNode.Parse(await manager.Find(Id)!.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken))!["tree"]!;
 
         // Compact: short window labels ("5h"), the plan as plain text, no footnote line.
         var compact = await Popover();
@@ -180,7 +180,7 @@ public sealed class AgentUsagePluginTests
 
         var manifest = PluginManifestReader.ReadPackage(Path.Combine(harness.BuiltinRoot, Id), PluginSource.Builtin, requireDirectoryName: true).Manifest!;
         harness.Config.Set(manifest, "octopus.agent-usage.style", JsonValue.Create("comfortable"), byUser: true);
-        await Task.Delay(200);
+        await Task.Delay(200, cancellationToken: TestContext.Current.CancellationToken);
         var comfortable = await Popover();
         Assert.NotNull(Find(comfortable, "Badge"));
         Assert.DoesNotContain("\"value\":\"5h\"", comfortable.ToJsonString());
@@ -224,7 +224,7 @@ public sealed class AgentUsagePluginTests
         Assert.Equal(resets * 1000, snapshot["windows"]![0]!["resetsAt"]!.GetValue<long>());
         // In command mode a status line no longer decides the windows.
         agents.Signal("claude", "statusline", new JsonObject { ["rate_limits"] = new JsonObject { ["five_hour"] = new JsonObject { ["used_percentage"] = 5 } } });
-        await Task.Delay(200);
+        await Task.Delay(200, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(71.5, harness.Usage.Get("claude")!.Snapshot["windows"]![0]!["usedPercent"]!.GetValue<double>());
     }
 
@@ -252,17 +252,17 @@ public sealed class AgentUsagePluginTests
         agents.Signal("claude", "statusline", StatusLine(83, resets), account: "a1b2c3d4e5f6");
         // 95 is a new level, but the last note on this window was moments ago.
         agents.Signal("claude", "statusline", StatusLine(96, resets), account: "a1b2c3d4e5f6");
-        await Task.Delay(500);
+        await Task.Delay(500, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(1, Toasts());
 
         // Without the pause the new level is announced, once.
         var manifest = PluginManifestReader.ReadPackage(Path.Combine(harness.BuiltinRoot, Id), PluginSource.Builtin, requireDirectoryName: true).Manifest!;
         harness.Config.Set(manifest, "octopus.agent-usage.notifyInterval", JsonValue.Create(0.0), byUser: true);
-        await Task.Delay(300);
+        await Task.Delay(300, cancellationToken: TestContext.Current.CancellationToken);
         agents.Signal("claude", "statusline", StatusLine(96, resets), account: "a1b2c3d4e5f6");
         await Harness.WaitUntil(() => Toasts() == 2);
         agents.Signal("claude", "statusline", StatusLine(97, resets), account: "a1b2c3d4e5f6");
-        await Task.Delay(500);
+        await Task.Delay(500, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(2, Toasts());
     }
 
@@ -278,7 +278,7 @@ public sealed class AgentUsagePluginTests
         agents.Signal("claude", "statusline", StatusLine(80, resets), account: "a1b2c3d4e5f6");
         await Harness.WaitUntil(() => harness.Usage.Get("claude", "a1b2c3d4e5f6") is not null);
         agents.Signal("claude", "statusline", StatusLine(79, resets + 30), account: "a1b2c3d4e5f6");
-        await Task.Delay(300);
+        await Task.Delay(300, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(80, FiveHour());
         await Harness.WaitUntil(() => agents.Indicator?["text"]?.GetValue<string>() == "80%");
 
@@ -320,11 +320,11 @@ public sealed class AgentUsagePluginTests
         Assert.Empty(agents.Probes);
 
         // The start-up queries (Codex at 3 s, Agy at 3.5 s, Claude's plan at 4 s, Copilot at 4.5 s, Cursor at 5 s) find fresh readings and stay quiet.
-        await Task.Delay(6_000);
+        await Task.Delay(6_000, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Empty(agents.Probes);
 
         // The refresh button asks anyway.
-        await manager.ExecuteCommandAsync("octopus.agent-usage.refresh");
+        await manager.ExecuteCommandAsync("octopus.agent-usage.refresh", cancellationToken: TestContext.Current.CancellationToken);
         await Harness.WaitUntil(() =>
             agents.Probes.Contains("codex:c0dex0000001")
             && agents.Probes.Contains("agy:")
@@ -342,7 +342,7 @@ public sealed class AgentUsagePluginTests
             Directory.CreateDirectory(h.DataDirectory);
             var old = DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeMilliseconds();
             File.WriteAllText(Path.Combine(h.DataDirectory, "usage-cache.json"),
-                new JsonArray((JsonNode)new JsonObject { ["agent"] = "codex", ["account"] = "", ["provider"] = Id, ["updatedAt"] = old, ["snapshot"] = Cached(null, 10) }).ToJsonString());
+                new JsonArray(new JsonObject { ["agent"] = "codex", ["account"] = "", ["provider"] = Id, ["updatedAt"] = old, ["snapshot"] = Cached(null, 10) }).ToJsonString());
         });
         await using var _ = harness;
 
@@ -375,7 +375,7 @@ public sealed class AgentUsagePluginTests
         });
         await using var _ = harness;
 
-        var json = await manager.Find(Id)!.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5));
+        var json = await manager.Find(Id)!.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
         // Not escaped: the hint is Chinese or English, whichever the test machine's language is.
         var tree = JsonNode.Parse(json)!["tree"]!.ToJsonString(new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         Assert.Contains("55232/config", tree);
@@ -511,7 +511,7 @@ public sealed class AgentUsagePluginTests
             Assert.True(plugin.State == PluginHostState.Running, plugin.LastError);
 
             var context = new JsonObject { ["instanceId"] = "tab:history", ["visible"] = true };
-            await plugin.InvokeAsync("view.open", ["view", "octopus.agent-usage.history", context], TimeSpan.FromSeconds(5));
+            await plugin.InvokeAsync("view.open", ["view", "octopus.agent-usage.history", context], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
 
             // Wait for the scan to populate the Table with all three agents' models.
             JsonNode? table = null;
@@ -590,10 +590,10 @@ public sealed class AgentUsagePluginTests
                   ]
                 }
                 """);
-            var renderedBeforeRescan = JsonNode.Parse(await plugin.InvokeAsync("view.render", ["tab:history"], TimeSpan.FromSeconds(5)))!;
+            var renderedBeforeRescan = JsonNode.Parse(await plugin.InvokeAsync("view.render", ["tab:history"], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken))!;
             var rescanButton = FindButtonByIcon(renderedBeforeRescan, "lucide:refresh-cw")!;
             var onClick = rescanButton["p"]!["onClick"]!["$h"]!.GetValue<string>();
-            await plugin.InvokeAsync("view.event", ["tab:history", onClick, new JsonArray()], TimeSpan.FromSeconds(5));
+            await plugin.InvokeAsync("view.event", ["tab:history", onClick, new JsonArray()], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
 
             await Harness.WaitUntil(() =>
             {
@@ -603,7 +603,7 @@ public sealed class AgentUsagePluginTests
                 return grokRow?["cells"]?[7]?.GetValue<long>() == 31500;
             }, 10_000);
 
-            var finalTree = JsonNode.Parse(await plugin.InvokeAsync("view.render", ["tab:history"], TimeSpan.FromSeconds(5)))!;
+            var finalTree = JsonNode.Parse(await plugin.InvokeAsync("view.render", ["tab:history"], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken))!;
             var finalGrok = Find(finalTree, "Table")!["p"]!["rows"]!.AsArray().First(x => x!["id"]!.GetValue<string>() == "grok|grok-4.7-build")!["cells"]!.AsArray();
             Assert.Equal(0.75, finalGrok[2]!.GetValue<double>());
             Assert.Equal(23000, finalGrok[4]!.GetValue<long>());
@@ -611,7 +611,7 @@ public sealed class AgentUsagePluginTests
             Assert.Equal(7000, finalGrok[6]!.GetValue<long>());
             Assert.Equal(31500, finalGrok[7]!.GetValue<long>());
 
-            await plugin.InvokeAsync("view.close", ["tab:history"], TimeSpan.FromSeconds(5));
+            await plugin.InvokeAsync("view.close", ["tab:history"], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
         }
         finally
         {
@@ -643,12 +643,12 @@ public sealed class AgentUsagePluginTests
         var (harness, manager, _) = await StartAsync();
         await using var __ = harness;
         var context = new JsonObject { ["instanceId"] = "tab:1", ["visible"] = true };
-        var json = await manager.Find(Id)!.InvokeAsync("view.open", ["view", "octopus.agent-usage.history", context], TimeSpan.FromSeconds(5));
+        var json = await manager.Find(Id)!.InvokeAsync("view.open", ["view", "octopus.agent-usage.history", context], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
         var tree = JsonNode.Parse(json)!["tree"]!.ToJsonString();
         Assert.Contains("\"Segmented\"", tree);
         // The bill export (issue #5) starts from the history tab.
         Assert.Contains("lucide:receipt-text", tree);
-        await manager.Find(Id)!.InvokeAsync("view.close", ["tab:1"], TimeSpan.FromSeconds(5));
+        await manager.Find(Id)!.InvokeAsync("view.close", ["tab:1"], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
     }
 
     private static void CopyDirectory(string from, string to)
@@ -710,7 +710,9 @@ public sealed class AgentUsagePluginTests
                     // As this machine's codex app-server answered in P0 (design 13 §3), with a weekly window added.
                     "codex" => new JsonObject
                     {
-                        ["ok"] = true, ["account"] = call.String("account") ?? "", ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        ["ok"] = true,
+                        ["account"] = call.String("account") ?? "",
+                        ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         ["data"] = JsonNode.Parse("""
                             { "rateLimits": { "planType": "plus",
                               "primary": { "usedPercent": 43, "windowDurationMins": 43200, "resetsAt": 4102444800 },
@@ -720,7 +722,9 @@ public sealed class AgentUsagePluginTests
                     // As agy 1.5.15 answered for `agy --print /usage --output-format json`.
                     "agy" => new JsonObject
                     {
-                        ["ok"] = true, ["account"] = "", ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        ["ok"] = true,
+                        ["account"] = "",
+                        ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         ["data"] = JsonNode.Parse($$"""
                             { "status": "SUCCESS", "command": { "data": { "groups": [
                               { "name": "Gemini Models", "buckets": [
@@ -737,7 +741,9 @@ public sealed class AgentUsagePluginTests
                     // As Copilot CLI's headless JSON-RPC server answers for `account.getQuota`.
                     "copilot" => new JsonObject
                     {
-                        ["ok"] = true, ["account"] = call.String("account") ?? "", ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        ["ok"] = true,
+                        ["account"] = call.String("account") ?? "",
+                        ["completedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         ["data"] = call.String("account") == "c0p110700002"
                             ? JsonNode.Parse("""{ "quotaSnapshots": { "premium_interactions": { "isUnlimitedEntitlement": true } } }""")
                             : JsonNode.Parse($$"""{ "quotaSnapshots": { "premium_interactions": { "entitlementRequests": 300, "usedRequests": 60, "remainingPercentage": 80, "resetDate": "{{futureWeekIso}}" } } }"""),
@@ -772,8 +778,11 @@ public sealed class AgentUsagePluginTests
             if (!_signals.TryGetValue($"{agent}:{channel}", out var target)) throw new InvalidOperationException($"The plugin does not listen to {agent}/{channel}.");
             target.Plugin.EmitTo(target.Subscription.Key, new JsonObject
             {
-                ["agentId"] = agent, ["channel"] = channel, ["account"] = account,
-                ["receivedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ["payload"] = payload,
+                ["agentId"] = agent,
+                ["channel"] = channel,
+                ["account"] = account,
+                ["receivedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                ["payload"] = payload,
             });
         }
     }

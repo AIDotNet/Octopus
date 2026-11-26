@@ -417,7 +417,10 @@ public sealed class PluginHost : IPluginRuntimeSink, IAsyncDisposable
                 if (Parse(json)?["id"]?.GetValue<string>() is { } command)
                 {
                     if (IsOwnCommand(command)) { _commands[command] = 0; _owner.OnRegistrationsChanged(this); }
-                    else Write(PluginLogLevel.Warn, $"commands.register: \"{command}\" must be declared in plugin.json contributes.commands");
+                    else
+                    {
+                        Write(PluginLogLevel.Warn, $"commands.register: \"{command}\" must be declared in plugin.json contributes.commands");
+                    }
                 }
                 return;
             case "commands.unregister":
@@ -427,7 +430,10 @@ public sealed class PluginHost : IPluginRuntimeSink, IAsyncDisposable
                 if (Parse(json) is { } regArgs && regArgs["kind"]?.GetValue<string>() is { } kind && regArgs["id"]?.GetValue<string>() is { } providerId)
                 {
                     if (IsDeclaredProvider(kind, providerId)) { _providers[(kind, providerId)] = 0; _owner.OnRegistrationsChanged(this); }
-                    else Write(PluginLogLevel.Warn, $"{kind} \"{providerId}\" must be declared in plugin.json contributes");
+                    else
+                    {
+                        Write(PluginLogLevel.Warn, $"{kind} \"{providerId}\" must be declared in plugin.json contributes");
+                    }
                 }
                 return;
             case "providers.unregister":

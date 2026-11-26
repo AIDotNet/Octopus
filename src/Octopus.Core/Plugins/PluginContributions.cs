@@ -31,7 +31,7 @@ public sealed class PluginContributions
     public IReadOnlyList<CommandContribution> Commands { get; init; } = [];
     public IReadOnlyList<ViewContribution> Views { get; init; } = [];
     public IReadOnlyList<EditorContribution> Editors { get; init; } = [];
-    public IReadOnlyList<NamedContribution> Panels { get; init; } = [];
+    public IReadOnlyList<PanelContribution> Panels { get; init; } = [];
     public IReadOnlyList<NamedContribution> SidebarSections { get; init; } = [];
     public IReadOnlyList<NamedContribution> Indicators { get; init; } = [];
     public IReadOnlyList<UsageProviderContribution> UsageProviders { get; init; } = [];
@@ -159,7 +159,28 @@ public sealed record EditorContribution(
     bool Binary,
     PluginLocalized Localized);
 
-/// <summary>A contribution that only needs an id, a title and an icon in the manifest (panels, indicators, providers…).</summary>
+/// <summary>When a right-panel tab contributed by a plugin is eligible to appear.</summary>
+public enum PanelScope
+{
+    /// <summary>Only while a project is open.</summary>
+    Project,
+    /// <summary>Available for the active device even when no project is open.</summary>
+    Device,
+    /// <summary>Always available regardless of device or project.</summary>
+    Global,
+}
+
+/// <summary>A right-panel tab contributed by a plugin (shown alongside Files, Git, Tunnels and Sessions).</summary>
+public sealed record PanelContribution(
+    string Id,
+    string Title,
+    string? Icon,
+    PanelScope Scope,
+    string? When,
+    int Order,
+    PluginLocalized Localized);
+
+/// <summary>A contribution that only needs an id, a title and an icon in the manifest (indicators, providers…).</summary>
 public sealed record NamedContribution(string Id, string? Title, string? Icon, PluginLocalized Localized);
 
 public sealed record UsageProviderContribution(string Id, string Agent);

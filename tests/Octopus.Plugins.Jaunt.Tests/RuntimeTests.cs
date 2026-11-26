@@ -26,7 +26,7 @@ public sealed class RuntimeTests : IAsyncDisposable
             """, Commands);
         var manager = await _h.StartAsync();
 
-        var result = await manager.ExecuteCommandAsync("acme.t.run", [2, 3]);
+        var result = await manager.ExecuteCommandAsync("acme.t.run", [2, 3], cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("sum=5", Str(result));
         var host = manager.Find("acme.t")!;
@@ -49,8 +49,8 @@ public sealed class RuntimeTests : IAsyncDisposable
             """, Commands);
         var manager = await _h.StartAsync();
 
-        await manager.ExecuteCommandAsync("acme.t.run");
-        var second = (JsonArray)(await manager.ExecuteCommandAsync("acme.t.run"))!;
+        await manager.ExecuteCommandAsync("acme.t.run", cancellationToken: TestContext.Current.CancellationToken);
+        var second = (JsonArray)(await manager.ExecuteCommandAsync("acme.t.run", cancellationToken: TestContext.Current.CancellationToken))!;
 
         Assert.Equal(2, second[0]!.GetValue<double>());
         Assert.Equal("项目", Str(second[1]));
@@ -76,7 +76,7 @@ public sealed class RuntimeTests : IAsyncDisposable
             """, Commands);
         var manager = await _h.StartAsync();
 
-        var fired = (JsonArray)(await manager.ExecuteCommandAsync("acme.t.run"))!;
+        var fired = (JsonArray)(await manager.ExecuteCommandAsync("acme.t.run", cancellationToken: TestContext.Current.CancellationToken))!;
 
         Assert.Equal(["once", "interval"], fired.Select(Str).Order().Reverse());
     }
@@ -147,7 +147,7 @@ public sealed class RuntimeTests : IAsyncDisposable
 
         foreach (var id in new[] { "acme.tla", "acme.syntax", "acme.bare", "acme.noactivate", "acme.throws" })
         {
-            await manager.EnsureActiveAsync(id);
+            await manager.EnsureActiveAsync(id, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(PluginHostState.Failed, manager.Find(id)!.State);
         }
         Assert.Contains("top-level await", manager.Find("acme.tla")!.LastError);
@@ -175,7 +175,7 @@ public sealed class RuntimeTests : IAsyncDisposable
         File.WriteAllText(Path.Combine(_h.BuiltinRoot, "escape.js"), "export const x = 1;");
         var manager = await _h.StartAsync();
 
-        var result = (JsonArray)(await manager.ExecuteCommandAsync("acme.t.run"))!;
+        var result = (JsonArray)(await manager.ExecuteCommandAsync("acme.t.run", cancellationToken: TestContext.Current.CancellationToken))!;
 
         Assert.Equal(42, result[0]!.GetValue<double>());
         Assert.False(result[1]!.GetValue<bool>());
@@ -194,8 +194,8 @@ public sealed class RuntimeTests : IAsyncDisposable
         _h.Plugin("acme.u", main.Replace("acme.t.run", "acme.u.run"), """ "unsafeEval": true, "contributes": { "commands": [ { "id": "acme.u.run", "title": "Run" } ] } """);
         var manager = await _h.StartAsync();
 
-        Assert.Equal("EvalError", Str(await manager.ExecuteCommandAsync("acme.t.run")));
-        Assert.Equal(42, (await manager.ExecuteCommandAsync("acme.u.run"))!.GetValue<double>());
+        Assert.Equal("EvalError", Str(await manager.ExecuteCommandAsync("acme.t.run", cancellationToken: TestContext.Current.CancellationToken)));
+        Assert.Equal(42, (await manager.ExecuteCommandAsync("acme.u.run", cancellationToken: TestContext.Current.CancellationToken))!.GetValue<double>());
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed class RuntimeTests : IAsyncDisposable
             new Dictionary<string, string>());
         var manager = await _h.StartAsync();
 
-        var result = (JsonObject)(await manager.ExecuteCommandAsync("acme.t.run"))!;
+        var result = (JsonObject)(await manager.ExecuteCommandAsync("acme.t.run", cancellationToken: TestContext.Current.CancellationToken))!;
 
         Assert.False(result["before"]!.GetValue<bool>());
         Assert.False(result["asked"]!.GetValue<bool>());
@@ -244,7 +244,7 @@ public sealed class RuntimeTests : IAsyncDisposable
             """, Commands);
         var manager = await _h.StartAsync();
 
-        var codes = (JsonArray)(await manager.ExecuteCommandAsync("acme.t.run"))!;
+        var codes = (JsonArray)(await manager.ExecuteCommandAsync("acme.t.run", cancellationToken: TestContext.Current.CancellationToken))!;
 
         Assert.Equal(["Unsupported", "Unsupported"], codes.Select(Str));
     }
@@ -260,12 +260,12 @@ public sealed class RuntimeTests : IAsyncDisposable
             }
             """, Commands);
         var manager = await _h.StartAsync();
-        await manager.EnsureActiveAsync("acme.t");
+        await manager.EnsureActiveAsync("acme.t", cancellationToken: TestContext.Current.CancellationToken);
 
         var host = manager.Find("acme.t")!;
         Assert.Equal(["acme.t.run"], host.Commands);
         Assert.Contains(host.Log, e => e.Text.Contains("someone.else"));
-        var error = await Assert.ThrowsAsync<PluginApiException>(() => manager.ExecuteCommandAsync("acme.t.other"));
+        var error = await Assert.ThrowsAsync<PluginApiException>(() => manager.ExecuteCommandAsync("acme.t.other", cancellationToken: TestContext.Current.CancellationToken));
         Assert.Contains("did not register", error.Message);
     }
 

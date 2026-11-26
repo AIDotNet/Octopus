@@ -273,6 +273,28 @@ export const projects = Object.freeze({
   all: () => request('projects.all'),
 });
 
+export const devices = Object.freeze({
+  get current() { return sync('devices.current') ?? { key: 'local', kind: 'local', name: '', status: 'local', capabilities: [] }; },
+  onDidChangeCurrent: onHost('devices.current'),
+  list: () => request('devices.list'),
+  onDidChangeList: onHost('devices.list'),
+});
+
+export const system = Object.freeze({
+  snapshot: (options = {}) => cancellable('system.snapshot', {
+    device: options.device,
+    include: options.include,
+    processLimit: options.processLimit,
+    processSort: options.processSort,
+    processFilter: options.processFilter,
+  }, options.signal),
+  signalProcess: (pid, signal = 'TERM', options = {}) => request('system.signalProcess', {
+    pid,
+    signal,
+    device: options.device,
+  }),
+});
+
 export const workspace = Object.freeze({
   items: projectId => request('workspace.items', { projectId }),
   get activeItem() { return sync('workspace.activeItem') ?? undefined; },
@@ -660,7 +682,13 @@ export const views = Object.freeze({ register: provider('view') });
 export const editors = Object.freeze({ register: provider('editor') });
 export const panels = Object.freeze({
   register: provider('panel'),
-  setBadge: (panelId, text) => notify('panels.badge', { panelId, text: text ?? null }),
+  setBadge: (panelId, text, options = {}) => notify('panels.badge', {
+    panelId,
+    text: text ?? null,
+    color: options.color ?? null,
+    tooltip: options.tooltip ?? null,
+  }),
+  open: panelId => request('panels.open', { panelId }),
 });
 
 export const sidebar = Object.freeze({
@@ -822,7 +850,7 @@ export const net = Object.freeze({
 });
 
 export const process = Object.freeze({
-  run: (command, args, options = {}) => cancellable('process.run', { command, args, cwd: options.cwd, env: options.env, timeoutMs: options.timeoutMs }, options.signal, options.stdin ?? ''),
+  run: (command, args, options = {}) => cancellable('process.run', { command, args, cwd: options.cwd, env: options.env, timeoutMs: options.timeoutMs, device: options.device }, options.signal, options.stdin ?? ''),
 });
 
 export const secrets = Object.freeze({

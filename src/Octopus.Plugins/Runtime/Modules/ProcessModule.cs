@@ -1,16 +1,17 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
+using Octopus.Core.Projects;
 using Octopus.Platform;
 
 namespace Octopus.Plugins.Runtime.Modules;
 
 /// <summary>
 /// <c>octopus.process.run</c> (high risk, design/plugins/04-权限与文件系统.md §8): only programs the manifest lists, found
-/// on the login PATH, started without a shell, with a time limit and capped output. The working directory is checked
-/// by <see cref="WorkingDirectoryCheck"/> (the file access policy), and Octopus's own variables never reach the child.
+/// on the login PATH, started without a shell, with a time limit and capped output. When <c>options.device</c> targets an
+/// SSH or remote Octopus device, <c>process.run.devices</c> must also allow that device scope.
 /// </summary>
-public sealed class ProcessModule(IExecutableLocator locator, ILoginEnvironment login) : IPluginApiModule
+public sealed class ProcessModule(IExecutableLocator locator, ILoginEnvironment login, IPluginSystemService? system = null) : IPluginApiModule
 {
     public const int MaxOutputBytes = 4 * 1024 * 1024;
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
@@ -30,6 +31,15 @@ public sealed class ProcessModule(IExecutableLocator locator, ILoginEnvironment 
         {
             throw PluginApiException.Denied($"process.run:{command}", canRequest: false);
         }
+
+        var timeout = TimeSpan.FromMilliseconds(Math.Clamp(call.Long("timeoutMs") ?? (long)DefaultTimeout.TotalMilliseconds, 100, (long)MaxTimeout.TotalMilliseconds));
+        var rawDevice = call.String("device");
+        var deviceKey = string.IsNullOrWhiteSpace(rawDevice) ? DeviceKeys.Local : DeviceKeys.Normalize(rawDevice);
+        if (!string.Equals(deviceKey, DeviceKeys.Local, StringComparison.Ordinal))
+        {
+            return await RunRemoteDeviceAsync(call, deviceKey, command, timeout, cancellationToken).ConfigureAwait(false);
+        }
+
         var cwd = call.String("cwd") ?? call.Plugin.DataDirectory;
         var allowed = cwd == call.Plugin.DataDirectory || (WorkingDirectoryCheck?.Invoke(call.Plugin, cwd) ?? false);
         if (!allowed)
@@ -45,7 +55,6 @@ public sealed class ProcessModule(IExecutableLocator locator, ILoginEnvironment 
         var environment = await login.GetAsync(cancellationToken).ConfigureAwait(false);
         var executable = locator.FindAll(command, environment.GetValueOrDefault("PATH")).FirstOrDefault()
             ?? throw new PluginApiException("NotFound", $"{command} is not installed (not on PATH).");
-        var timeout = TimeSpan.FromMilliseconds(Math.Clamp(call.Long("timeoutMs") ?? (long)DefaultTimeout.TotalMilliseconds, 100, (long)MaxTimeout.TotalMilliseconds));
 
         var start = new ProcessStartInfo(executable)
         {
@@ -98,6 +107,76 @@ public sealed class ProcessModule(IExecutableLocator locator, ILoginEnvironment 
             ["stdout"] = await stdout.ConfigureAwait(false),
             ["stderr"] = await stderr.ConfigureAwait(false),
         });
+    }
+
+    private async Task<PluginReply> RunRemoteDeviceAsync(PluginCall call, string deviceKey, string command, TimeSpan timeout, CancellationToken ct)
+    {
+        if (system is null) throw PluginApiException.Unsupported("Multi-device process execution");
+        var grants = call.Plugin.Grants;
+        grants.Require("process.run.devices");
+        if (!DeviceAllowed(deviceKey, grants.Details("process.run.devices")))
+        {
+            throw PluginApiException.Denied($"process.run.devices:{deviceKey}", canRequest: false);
+        }
+
+        Dictionary<string, string>? env = null;
+        if (call["env"] is JsonObject extra)
+        {
+            env = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (k, v) in extra)
+            {
+                if (v is JsonValue jv && jv.TryGetValue<string>(out var s) && !k.StartsWith("OCTOPUS_", StringComparison.Ordinal))
+                {
+                    env[k] = s;
+                }
+            }
+        }
+
+        try
+        {
+            var result = await system.RunOnDeviceAsync(
+                deviceKey,
+                command,
+                call.Strings("args"),
+                call.String("cwd"),
+                env,
+                call.Text.Length > 0 ? call.Text : null,
+                timeout,
+                ct).ConfigureAwait(false);
+            if (result.TimedOut)
+            {
+                throw new PluginApiException("Timeout", $"{command} on {deviceKey} did not finish within {timeout.TotalSeconds:0} s.");
+            }
+            call.Plugin.Write(PluginLogLevel.Info, $"process.run: device={deviceKey} command={command} exit={result.ExitCode}");
+            return PluginReply.Of(new JsonObject
+            {
+                ["exitCode"] = result.ExitCode,
+                ["stdout"] = result.StandardOutput,
+                ["stderr"] = result.StandardError,
+            });
+        }
+        catch (NotSupportedException e)
+        {
+            throw PluginApiException.Unsupported(e.Message);
+        }
+        catch (Exception e) when (e is not PluginApiException and not OperationCanceledException)
+        {
+            throw new PluginApiException("Io", e.Message);
+        }
+    }
+
+    internal static bool DeviceAllowed(string deviceKey, IReadOnlyList<string> scopes)
+    {
+        var (kind, _) = DeviceKeys.Parse(deviceKey);
+        foreach (var raw in scopes)
+        {
+            var scope = raw.Trim();
+            if (scope == "*" || string.Equals(scope, deviceKey, StringComparison.Ordinal)) return true;
+            if (kind == ProjectLocationKind.Ssh && scope is "ssh" or "ssh:*") return true;
+            if (kind == ProjectLocationKind.Remote && scope is "remote" or "remote:*") return true;
+            if (kind == ProjectLocationKind.Local && scope.Equals("local", StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 
     private static async Task<string> ReadCappedAsync(Stream stream)
