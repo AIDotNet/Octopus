@@ -54,7 +54,7 @@ public sealed class MobileRemote : IDisposable
         MaxProtocol = RemoteProtocol.LatestVersion,
         AppVersion = typeof(MobileRemote).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "",
         Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityBrowse,
-            RemoteMethods.CapabilityAcpGui,
+            RemoteMethods.CapabilityAcpGui, RemoteMethods.CapabilityAcpMentions,
             // Looking at the projects' files and their uncommitted changes (Files/).
             RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit,
             // Pictures for a terminal session's program (Terminals/).

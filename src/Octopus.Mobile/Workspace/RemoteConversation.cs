@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Octopus.App.Common.Mentions;
 
 namespace Octopus.Mobile.Workspace;
 
@@ -41,6 +42,18 @@ public abstract partial class RemoteConversation : ObservableObject, IDisposable
 
     /// <summary>Sends a prompt; while a turn runs the host queues it.</summary>
     public abstract Task SendAsync(string text, IReadOnlyList<string>? attachments = null, CancellationToken cancellationToken = default);
+
+    /// <summary>True when the host takes inline @session / @agent mentions.</summary>
+    public virtual bool SupportsMentions => false;
+
+    /// <summary>Sessions and agents the prompt may @-mention; everything when <paramref name="query"/> is empty.</summary>
+    public virtual Task<IReadOnlyList<ConversationMentionTarget>> ListMentionTargetsAsync(string query, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ConversationMentionTarget>>([]);
+
+    /// <summary>Sends a prompt whose text @-mentions <paramref name="mentions"/> (in order of appearance).</summary>
+    public virtual Task SendAsync(string text, IReadOnlyList<string>? attachments, IReadOnlyList<MentionToken> mentions,
+        CancellationToken cancellationToken = default) =>
+        SendAsync(text, attachments, cancellationToken);
 
     /// <summary>Stops the turn that runs.</summary>
     public abstract Task CancelAsync(CancellationToken cancellationToken = default);

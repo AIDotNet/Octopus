@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using Octopus.App.Common.Mentions;
 using Octopus.Mobile.Workspace;
 using Octopus.Remote.Protocol;
 
@@ -70,9 +71,41 @@ public sealed partial class DemoWorkspace
         /// <summary>The prompts sent, in order, for tests.</summary>
         public List<string> Sent { get; } = [];
 
+        /// <summary>The @mentions sent with each prompt of <see cref="Sent"/> (empty when there were none), for tests.</summary>
+        public List<IReadOnlyList<MentionToken>> SentMentions { get; } = [];
+
+        public override bool SupportsMentions => true;
+
+        public override Task<IReadOnlyList<ConversationMentionTarget>> ListMentionTargetsAsync(string query, CancellationToken cancellationToken = default)
+        {
+            // The other sessions of the made-up project, then the agents a host would offer.
+            var targets = Session.Project.Sessions
+                .Where(s => s.IsGui && !ReferenceEquals(s, Session))
+                .Select(s => new ConversationMentionTarget("session", s.Id, "Codex", s.Title, "codex", "main · idle"))
+                .Concat([
+                    new ConversationMentionTarget("agent", "claude", "Claude Code", null, "claude", null),
+                    new ConversationMentionTarget("agent", "codex", "Codex", null, "codex", null),
+                ])
+                .Where(t => query.Length == 0
+                    || t.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || (t.Detail?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+                    || t.TargetId.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return Task.FromResult<IReadOnlyList<ConversationMentionTarget>>(targets);
+        }
+
+        public override Task SendAsync(string text, IReadOnlyList<string>? attachments, IReadOnlyList<MentionToken> mentions,
+            CancellationToken cancellationToken = default)
+        {
+            var sent = SendAsync(text, attachments, cancellationToken);
+            SentMentions[^1] = mentions;
+            return sent;
+        }
+
         public override Task SendAsync(string text, IReadOnlyList<string>? attachments = null, CancellationToken cancellationToken = default)
         {
             Sent.Add(text);
+            SentMentions.Add([]);
             // A turn runs: the host queues it, as the desktop's tab does.
             if (_state is AcpStates.Working or AcpStates.Waiting)
             {

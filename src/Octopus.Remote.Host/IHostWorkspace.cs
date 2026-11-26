@@ -79,6 +79,8 @@ public interface IHostWorkspace
     Task RespondAsync(AcpRespondMessage answer) => throw NoConversations();
     /// <summary>Chooses a model, mode or effort above the input.</summary>
     Task SetConversationOptionAsync(AcpSetOptionMessage option) => throw NoConversations();
+    /// <summary>Sessions and agents a prompt of the conversation may @-mention (<see cref="RemoteMethods.AcpMentionTargets"/>).</summary>
+    Task<AcpMentionTargetsMessage> ListMentionTargetsAsync(AcpMentionTargetsRequestMessage request) => throw NoConversations();
 
     /// <summary>
     /// Takes one piece of a picture for a session (<see cref="RemoteMethods.FsUpload"/>): the pieces collect in the

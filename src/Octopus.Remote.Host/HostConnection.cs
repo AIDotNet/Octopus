@@ -260,6 +260,8 @@ internal sealed class HostConnection : IAsyncDisposable
             await _workspace.SetConversationOptionAsync(request).ConfigureAwait(false);
             return new Nothing();
         });
+        _connection.Handle(RemoteMethods.AcpMentionTargets, json.AcpMentionTargetsRequestMessage, json.AcpMentionTargetsMessage,
+            (request, _) => _workspace.ListMentionTargetsAsync(request));
     }
 
     private void RegisterBots(RemoteJsonContext json)

@@ -290,8 +290,23 @@ public sealed class RemoteHostClient : IAsyncDisposable
         CallAsync(RemoteMethods.AcpDetach, new AcpRefMessage { ItemId = itemId }, RemoteJsonContext.Default.AcpRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
     public Task SendPromptAsync(string itemId, string text, IReadOnlyList<string>? attachments = null, CancellationToken cancellationToken = default) =>
-        CallAsync(RemoteMethods.AcpPrompt, new AcpPromptMessage { ItemId = itemId, Text = text, Attachments = attachments is { Count: > 0 } ? [.. attachments] : null },
-            RemoteJsonContext.Default.AcpPromptMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+        SendPromptAsync(itemId, text, attachments, mentions: null, cancellationToken);
+
+    /// <summary>Sends a prompt with inline @mentions (<see cref="RemoteMethods.CapabilityAcpMentions"/>).</summary>
+    public Task SendPromptAsync(string itemId, string text, IReadOnlyList<string>? attachments, IReadOnlyList<AcpMentionMessage>? mentions,
+        CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.AcpPrompt, new AcpPromptMessage
+        {
+            ItemId = itemId,
+            Text = text,
+            Attachments = attachments is { Count: > 0 } ? [.. attachments] : null,
+            Mentions = mentions is { Count: > 0 } ? [.. mentions] : null,
+        }, RemoteJsonContext.Default.AcpPromptMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    /// <summary>Sessions and agents a prompt of the conversation may @-mention (<see cref="RemoteMethods.CapabilityAcpMentions"/>).</summary>
+    public Task<AcpMentionTargetsMessage> ListMentionTargetsAsync(string itemId, string query, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.AcpMentionTargets, new AcpMentionTargetsRequestMessage { ItemId = itemId, Query = query },
+            RemoteJsonContext.Default.AcpMentionTargetsRequestMessage, RemoteJsonContext.Default.AcpMentionTargetsMessage, cancellationToken);
 
     public Task CancelTurnAsync(string itemId, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.AcpCancel, new AcpRefMessage { ItemId = itemId }, RemoteJsonContext.Default.AcpRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);

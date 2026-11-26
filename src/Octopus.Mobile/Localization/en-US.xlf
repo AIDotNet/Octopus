@@ -205,6 +205,7 @@
     <unit id="ConversationExitCode"><segment><source>exit {0}</source></segment></unit>
     <unit id="ConversationResolved"><segment><source>Answered</source></segment></unit>
     <unit id="ConversationPlaceholder"><segment><source>Message, or queue the next one…</source></segment></unit>
+    <unit id="ConversationMention"><segment><source>Mention a session or agent</source></segment></unit>
     <unit id="ConversationStop"><segment><source>Stop</source></segment></unit>
     <unit id="ConversationQueued"><segment><source>{0} queued</source></segment></unit>
     <unit id="ConversationModel"><segment><source>Model</source></segment></unit>

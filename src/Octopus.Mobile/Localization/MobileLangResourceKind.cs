@@ -216,6 +216,7 @@ public enum MobileLangResourceKind
     ConversationExitCode,
     ConversationResolved,
     ConversationPlaceholder,
+    ConversationMention,
     ConversationStop,
     ConversationQueued,
     ConversationModel,

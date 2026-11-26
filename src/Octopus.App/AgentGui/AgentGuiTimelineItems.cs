@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -141,12 +143,12 @@ public sealed partial class UserTurnItem : AgentTimelineItem
 
     public ObservableCollection<AttachmentChipViewModel> Attachments { get; } = [];
     public bool HasAttachments => Attachments.Count > 0;
-    public bool CanReuse => !IsCollabMessage && _onReuse is not null && !string.IsNullOrWhiteSpace(Text);
+    public bool CanReuse => !IsCollabMessage && _onReuse is not null && !string.IsNullOrWhiteSpace(PromptText);
 
     [RelayCommand]
     private void Reuse()
     {
-        if (CanReuse) _onReuse!(Text);
+        if (CanReuse) _onReuse!(PromptText);
     }
 
     private void ParseCollabMetadata()
@@ -175,7 +177,48 @@ public sealed partial class UserTurnItem : AgentTimelineItem
 
         IsCollabMessage = false;
         CollabHeader = "";
-        _displaySource = Text;
+        _displaySource = StripMentionContextBlock(Text);
+        if (!ReferenceEquals(_displaySource, Text)) RestoreMentionChips();
+    }
+
+    /// <summary>The prompt as the person wrote it: without the <c>&lt;octopus-mentions&gt;</c> block a replayed turn carries.</summary>
+    public string PromptText => IsCollabMessage ? Text : _displaySource;
+
+    private const string MentionBlockOpen = "<octopus-mentions>";
+
+    [GeneratedRegex(@"<(session|agent)(?: order=""\d+"")? id=""([^""]*)"" label=""([^""]*)""(?: agent=""([^""]*)"")?")]
+    private static partial Regex MentionEntryRegex();
+
+    /// <summary>
+    /// Drops the mention context block appended to a sent prompt (<c>CollabCoordinator.FormatMentionContextBlock</c>);
+    /// live turns never show it, but <c>session/load</c> replays the prompt as the agent received it. A block still
+    /// streaming in (no closing tag yet) is dropped too.
+    /// </summary>
+    private static string StripMentionContextBlock(string text)
+    {
+        var at = text.LastIndexOf("\n" + MentionBlockOpen, StringComparison.Ordinal);
+        return at < 0 ? text : text[..at].TrimEnd();
+    }
+
+    /// <summary>Rebuilds session / agent chips of a replayed turn from its mention block (live turns already have them).</summary>
+    private void RestoreMentionChips()
+    {
+        var at = Text.LastIndexOf(MentionBlockOpen, StringComparison.Ordinal);
+        if (at < 0 || Text.IndexOf("</octopus-mentions>", at, StringComparison.Ordinal) < 0) return;
+        foreach (Match m in MentionEntryRegex().Matches(Text, at))
+        {
+            var kind = m.Groups[1].Value;
+            var id = WebUtility.HtmlDecode(m.Groups[2].Value);
+            if (Attachments.Any(c => c.Attachment.Kind == kind && c.Attachment.Path == id)) continue;
+            Attachments.Add(new AttachmentChipViewModel(new AcpPromptAttachment
+            {
+                Kind = kind,
+                Path = id,
+                DisplayName = WebUtility.HtmlDecode(m.Groups[3].Value),
+                MimeType = m.Groups[4].Success ? WebUtility.HtmlDecode(m.Groups[4].Value) : null,
+            }));
+        }
+        OnPropertyChanged(nameof(HasAttachments));
     }
 
     private static string StripCollabInstructionFooter(string body)

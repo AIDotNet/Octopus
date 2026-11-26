@@ -65,6 +65,12 @@ public interface ICollabCoordinator
     /// <summary>Delivers a user-initiated direct message to another session (bypassing the current model).</summary>
     Task<CollabThreadRecord?> SendUserDirectMessageAsync(string fromItemId, string targetItemId, string text, CancellationToken ct = default);
 
+    /// <summary>
+    /// Delivers one user message to several sessions at once (bypassing the current model): one shared thread, each
+    /// target told who else was addressed. One target behaves like <see cref="SendUserDirectMessageAsync"/>.
+    /// </summary>
+    Task<CollabThreadRecord?> SendUserBroadcastAsync(string fromItemId, IReadOnlyList<string> targetItemIds, string text, CancellationToken ct = default);
+
     /// <summary>User interjection inside a negotiation thread: records the message and broadcasts to participants.</summary>
     Task<bool> InterjectInThreadAsync(string threadId, string text, bool extendBudget = false, CancellationToken ct = default);
 
@@ -370,6 +376,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         var sb = new StringBuilder();
         sb.AppendLine();
         sb.AppendLine("<octopus-mentions>");
+        var order = 0;
         foreach (var m in mentions)
         {
             if (m.Kind == "session")
@@ -377,7 +384,8 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 var status = DescribeStatus(m.TargetId);
                 var item = _projects.FindItem(m.TargetId);
                 var surface = item?.Surface == AgentSurface.Gui ? "gui" : "terminal";
-                sb.Append("  <session id=\"").Append(EscapeXml(m.TargetId))
+                sb.Append("  <session order=\"").Append(++order)
+                  .Append("\" id=\"").Append(EscapeXml(m.TargetId))
                   .Append("\" label=\"").Append(EscapeXml(m.DisplayLabel))
                   .Append("\" agent=\"").Append(EscapeXml(m.AgentId ?? item?.AgentId ?? "terminal"))
                   .Append("\" surface=\"").Append(surface)
@@ -390,10 +398,15 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             }
             else if (m.Kind == "agent")
             {
-                sb.Append("  <agent id=\"").Append(EscapeXml(m.TargetId))
+                sb.Append("  <agent order=\"").Append(++order)
+                  .Append("\" id=\"").Append(EscapeXml(m.TargetId))
                   .Append("\" label=\"").Append(EscapeXml(m.DisplayLabel))
                   .AppendLine("\" action=\"delegate_or_spawn\" />");
             }
+        }
+        if (order > 1)
+        {
+            sb.AppendLine("  <!-- The user addressed these participants inline (each label appears verbatim in the message). Give each the part the sentence assigns to it, dispatch them in parallel, then await_events for their results. -->");
         }
         sb.AppendLine("  <!-- Use octopus-collab MCP tools: send_message(target_session_id, ...) or read_session(target_session_id) for <session>, and delegate_task(target, goal) for <agent>. -->");
         sb.Append("</octopus-mentions>");
@@ -414,6 +427,40 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             isDirectUserRelay: true,
             ct).ConfigureAwait(false);
         return res.Thread;
+    }
+
+    public async Task<CollabThreadRecord?> SendUserBroadcastAsync(string fromItemId, IReadOnlyList<string> targetItemIds, string text, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var targets = targetItemIds
+            .Where(id => !string.IsNullOrWhiteSpace(id) && !string.Equals(id, fromItemId, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (targets.Count == 0) return null;
+        if (targets.Count == 1) return await SendUserDirectMessageAsync(fromItemId, targets[0], text, ct).ConfigureAwait(false);
+
+        var body = text.Trim();
+        var labels = targets.Select(id => _projects.FindItem(id) is { } item ? "@" + FormatCallerLabel(item) : id).ToList();
+        // Every delivery counts as a hop; widen the new thread's budget so the fan-out itself does not eat the replies'.
+        var defaultMaxHops = Math.Clamp(_settings.Current.Agents.Collab.MaxNegotiationHops, CollabSettings.MinNegotiationHops, CollabSettings.MaxAllowedNegotiationHops);
+        CollabThreadRecord? thread = null;
+        for (var i = 0; i < targets.Count; i++)
+        {
+            var others = labels.Where((_, j) => j != i);
+            var message = $"{body}\n\n(Also addressed in this message: {string.Join(", ", others)}.)";
+            var res = await SendMessageInternalAsync(
+                callerItemId: fromItemId,
+                targetItemId: targets[i],
+                message: message,
+                threadId: thread?.ThreadId,
+                title: TruncateTitle(body),
+                expectReply: false,
+                maxTurnsOverride: thread is null ? defaultMaxHops + targets.Count - 1 : null,
+                isDirectUserRelay: true,
+                ct).ConfigureAwait(false);
+            thread ??= res.Thread;
+        }
+        return thread;
     }
 
     public async Task<bool> InterjectInThreadAsync(string threadId, string text, bool extendBudget = false, CancellationToken ct = default)

@@ -7,6 +7,7 @@
            xmlns:ws="using:Octopus.Mobile.Workspace"
            xmlns:common="using:Octopus.Mobile.Common"
            xmlns:ticker="using:Octopus.Ticker"
+           xmlns:mentions="using:Octopus.App.Common.Mentions"
            x:Class="Octopus.Mobile.Conversations.ConversationPage"
            x:DataType="vm:ConversationViewModel"
            AvoidKeyboard="True">
@@ -15,6 +16,7 @@
         <StreamGeometry x:Key="ClipGlyph">M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7</StreamGeometry>
         <StreamGeometry x:Key="ChevronDownGlyph">M6 9l6 6 6-6</StreamGeometry>
         <StreamGeometry x:Key="ChevronRightGlyph">M9 6l6 6-6 6</StreamGeometry>
+        <StreamGeometry x:Key="AtGlyph">M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8</StreamGeometry>
         <StreamGeometry x:Key="StopGlyph">M6 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z</StreamGeometry>
     </arcm:Page.Resources>
 
@@ -827,21 +829,64 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                <!-- @ suggestions for the query before the caret, just above the keyboard; a tap writes the token. -->
+                <ScrollViewer Name="MentionStrip"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled"
+                              IsVisible="{Binding IsMentionStripOpen}">
+                    <ItemsControl ItemsSource="{Binding MentionSuggestions}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="ws:ConversationMentionTarget">
+                                <Button Classes="optionChip"
+                                        Command="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).InsertMentionCommand}"
+                                        CommandParameter="{Binding}">
+                                    <StackPanel Spacing="1">
+                                        <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="Medium" />
+                                        <TextBlock Text="{Binding Subtitle}" Classes="secondary" FontSize="11"
+                                                   IsVisible="{Binding Subtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                    <arcm:IconButton Name="MentionButton"
+                                     Grid.Column="0"
+                                     Variant="Plain"
+                                     Icon="{StaticResource AtGlyph}"
+                                     Command="{Binding StartMentionCommand}"
+                                     IsVisible="{Binding SupportsMentions}"
+                                     AutomationProperties.Name="{l:MobileLangResource ConversationMention}" />
+                    <!-- Grows to a few lines so a sentence with several @tokens stays readable; tokens are plain text
+                         kept atomic by MentionEditing, so the system keyboard, IME and selection work as usual. -->
                     <arcm:TextField Name="PromptField"
-                                    Grid.Column="0"
+                                    Grid.Column="1"
                                     Text="{Binding PromptText, Mode=TwoWay}"
+                                    CaretIndex="{Binding PromptCaretIndex, Mode=TwoWay}"
+                                    mentions:MentionEditing.Tokens="{Binding MentionTokens}"
+                                    mentions:MentionEditing.HighlightBrush="{arc:ArcDesignTokenResource AccentSubtle}"
+                                    TextWrapping="Wrap"
+                                    Height="NaN"
+                                    MinHeight="44"
+                                    MaxHeight="132"
                                     PlaceholderText="{l:MobileLangResource ConversationPlaceholder}"
                                     VerticalAlignment="Center" />
                     <arcm:IconButton Name="StopButton"
-                                     Grid.Column="1"
+                                     Grid.Column="2"
                                      Variant="Tinted"
                                      Icon="{StaticResource StopGlyph}"
                                      Command="{Binding CancelCommand}"
                                      IsVisible="{Binding CanStop}"
                                      AutomationProperties.Name="{l:MobileLangResource ConversationStop}" />
                     <arcm:IconButton Name="SendButton"
-                                     Grid.Column="2"
+                                     Grid.Column="3"
                                      Variant="Filled"
                                      Icon="{x:Static arc:ArcIcons.ArrowUp}"
                                      Command="{Binding SendCommand}"

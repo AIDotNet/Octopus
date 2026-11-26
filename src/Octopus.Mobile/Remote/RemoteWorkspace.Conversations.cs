@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Octopus.App.Common.Mentions;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Workspace;
 using Octopus.Remote.Client;
@@ -278,6 +279,22 @@ internal sealed partial class RemoteWorkspace
 
         public override Task SendAsync(string text, IReadOnlyList<string>? attachments = null, CancellationToken cancellationToken = default) =>
             workspace.WithClientAsync(Host, client => client.SendPromptAsync(Session.Id, text, attachments, cancellationToken));
+
+        public override bool SupportsMentions => workspace.Shares(Host, RemoteMethods.CapabilityAcpMentions);
+
+        public override Task SendAsync(string text, IReadOnlyList<string>? attachments, IReadOnlyList<MentionToken> mentions,
+            CancellationToken cancellationToken = default) =>
+            workspace.WithClientAsync(Host, client => client.SendPromptAsync(Session.Id, text, attachments,
+                SupportsMentions ? [.. mentions.Select(m => new AcpMentionMessage { Kind = m.Kind, TargetId = m.TargetId, Text = m.Text, AgentId = m.AgentId })] : null,
+                cancellationToken));
+
+        public override async Task<IReadOnlyList<ConversationMentionTarget>> ListMentionTargetsAsync(string query, CancellationToken cancellationToken = default)
+        {
+            if (!SupportsMentions) return [];
+            AcpMentionTargetsMessage? answer = null;
+            await workspace.WithClientAsync(Host, async client => answer = await client.ListMentionTargetsAsync(Session.Id, query, cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+            return answer?.Targets.Select(t => new ConversationMentionTarget(t.Kind, t.TargetId, t.Name, t.Detail, t.AgentId, t.Subtitle)).ToList() ?? [];
+        }
 
         public override Task CancelAsync(CancellationToken cancellationToken = default) =>
             workspace.WithClientAsync(Host, client => client.CancelTurnAsync(Session.Id, cancellationToken));

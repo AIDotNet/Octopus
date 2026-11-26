@@ -4,6 +4,7 @@
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:common="using:Octopus.App.Common"
+             xmlns:mentions="using:Octopus.App.Common.Mentions"
              xmlns:gui="using:Octopus.App.AgentGui"
              x:Class="Octopus.App.AgentGui.AgentGuiTabView"
              x:DataType="gui:AgentGuiTabViewModel">
@@ -1704,9 +1705,13 @@
                         </ItemsControl>
 
                         <!-- Frameless prompt input -->
+                        <!-- Inline @session / @agent tokens stay plain text; MentionEditing highlights them and keeps them atomic. -->
                         <TextBox x:Name="ComposerInput"
                                  Classes="composerInput"
                                  Text="{Binding InputText, Mode=TwoWay}"
+                                 CaretIndex="{Binding ComposerCaretIndex, Mode=TwoWay}"
+                                 mentions:MentionEditing.Tokens="{Binding MentionTokens}"
+                                 mentions:MentionEditing.HighlightBrush="{arc:ArcDesignTokenResource AccentSubtle}"
                                  PlaceholderText="{Binding ComposerPlaceholder}"
                                  AutomationProperties.Name="{Binding ComposerPlaceholder}" />
 

@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Avalonia.Threading;
 using Octopus.App.AgentGui;
+using Octopus.App.Common.Mentions;
 using Octopus.App.Localization;
 using Octopus.App.Workspace;
 using Octopus.Core.Projects;
@@ -51,13 +52,39 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
         return conversation.Add(updated);
     }
 
-    public async Task PromptAsync(Project project, ProjectItem item, string text, IReadOnlyList<string> attachments)
+    public async Task PromptAsync(Project project, ProjectItem item, string text, IReadOnlyList<string> attachments,
+        IReadOnlyList<AcpMentionMessage>? mentions = null)
     {
         var model = ModelOf(project, item);
-        if (!await model.SendExternalPromptAsync(text, attachments))
+        // Only sessions and agents, and only tokens the text really contains: the rest of the prompt path trusts them.
+        var tokens = (mentions ?? [])
+            .Where(m => m.Kind is "session" or "agent" && !string.IsNullOrWhiteSpace(m.TargetId)
+                && m.Text.StartsWith('@') && text.Contains(m.Text, StringComparison.Ordinal))
+            .Select(m => new MentionToken(m.Kind, m.TargetId, m.Text, m.AgentId))
+            .ToList();
+        if (!await model.SendExternalPromptAsync(text, attachments, tokens))
         {
             throw new RemoteException(RemoteMethods.NotAllowed, "The agent is not connected on the host yet.");
         }
+    }
+
+    public AcpMentionTargetsMessage ListMentionTargets(Project project, ProjectItem item, string query)
+    {
+        var model = ModelOf(project, item);
+        var result = new AcpMentionTargetsMessage();
+        foreach (var suggestion in model.ListCollabMentionSuggestions(query))
+        {
+            result.Targets.Add(new AcpMentionTargetMessage
+            {
+                Kind = suggestion.Kind,
+                TargetId = suggestion.TargetId,
+                Name = suggestion.IsSession ? model.MentionAgentName(suggestion) : suggestion.RelativePath,
+                Detail = suggestion.IsSession ? suggestion.RelativePath : null,
+                AgentId = suggestion.AgentId,
+                Subtitle = suggestion.Subtitle,
+            });
+        }
+        return result;
     }
 
     public Task CancelAsync(Project project, ProjectItem item)

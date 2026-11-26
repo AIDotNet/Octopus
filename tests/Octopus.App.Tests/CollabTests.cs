@@ -212,11 +212,65 @@ public sealed class CollabTests
         Assert.True(vm.IsFilePopupOpen);
         Assert.Contains(vm.FilteredFiles, m => m.IsSession && m.TargetId == peer.Id);
 
-        // Selecting a session mention attaches a session chip and exposes the Direct Relay route toggle.
+        // Selecting a session mention writes an inline token in place of "@Peer" and exposes the Direct Relay toggle.
         var sessionSuggestion = vm.FilteredFiles.First(m => m.IsSession && m.TargetId == peer.Id);
         vm.InsertFileMention(sessionSuggestion);
         Assert.True(vm.HasSessionMention);
-        Assert.Contains(vm.Attachments, c => c.Attachment.Kind == "session" && c.Attachment.Path == peer.Id);
+        Assert.False(vm.IsFilePopupOpen);
+        var peerToken = Assert.Single(vm.MentionTokens);
+        Assert.Equal(peer.Id, peerToken.TargetId);
+        Assert.StartsWith("@", peerToken.Text, StringComparison.Ordinal);
+        Assert.Equal(peerToken.Text + " ", vm.InputText);
+        Assert.DoesNotContain(vm.Attachments, c => c.Attachment.Kind == "session");
+
+        // A second mention typed later in the same sentence is added, not swapped: several targets per prompt.
+        vm.InputText += "和 @codex";
+        vm.ComposerCaretIndex = vm.InputText.Length;
+        Frames.Pump();
+        Assert.True(vm.IsFilePopupOpen);
+        vm.InsertFileMention(vm.FilteredFiles.First(m => m.IsAgent && m.TargetId == "codex"));
+        Assert.Equal(2, vm.MentionTokens.Count);
+        Assert.Equal($"{peerToken.Text} 和 {vm.MentionTokens[1].Text} ", vm.InputText);
+
+        // Deleting the session token's text turns the direct relay toggle off again.
+        vm.IsDirectRelayMode = true;
+        vm.InputText = vm.InputText.Replace(peerToken.Text, "", StringComparison.Ordinal);
+        Assert.False(vm.HasSessionMention);
+        Assert.False(vm.IsDirectRelayMode);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task User_broadcast_delivers_one_message_to_every_mentioned_session_in_one_thread()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dir = Directory.CreateTempSubdirectory("octopus-collab-broadcast-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var me = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Lead", Surface = AgentSurface.Gui };
+        var codex = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "codex", Title = "Login", Surface = AgentSurface.Gui };
+        var agy = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "agy", Title = "Docs", Surface = AgentSurface.Gui };
+        projects.AddItem(project, me);
+        projects.AddItem(project, codex, activate: false);
+        projects.AddItem(project, agy, activate: false);
+
+        var coordinator = (CollabCoordinator)AppHost.Get<ICollabCoordinator>();
+        coordinator.Server.Start();
+        var codexBridge = new FakeGuiBridge(codex.Id, "codex", codex.Title, dir);
+        var agyBridge = new FakeGuiBridge(agy.Id, "agy", agy.Title, dir);
+        coordinator.RegisterGuiSession(new FakeGuiBridge(me.Id, "claude", me.Title, dir));
+        coordinator.RegisterGuiSession(codexBridge);
+        coordinator.RegisterGuiSession(agyBridge);
+
+        var thread = await coordinator.SendUserBroadcastAsync(me.Id, [codex.Id, agy.Id, codex.Id], "Ship the login page together.", ct);
+
+        Assert.NotNull(thread);
+        Assert.Equal([me.Id, codex.Id, agy.Id], thread.ParticipantItemIds.ToArray());
+        var toCodex = Assert.Single(codexBridge.DeliveredPrompts);
+        var toAgy = Assert.Single(agyBridge.DeliveredPrompts);
+        Assert.Contains("Ship the login page together.", toCodex, StringComparison.Ordinal);
+        Assert.Contains("Docs", toCodex, StringComparison.Ordinal);   // Codex learns Agy was addressed too
+        Assert.Contains("Login", toAgy, StringComparison.Ordinal);    // and the other way round
+        Assert.True(thread.MaxHops > thread.Hops, "the fan-out must leave budget for replies");
     }
 
     [AvaloniaFact, FreshApp]

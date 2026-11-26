@@ -11,6 +11,8 @@ namespace Octopus.Remote.Protocol;
 // acp/cancel    device → host  AcpRefMessage           → Nothing
 // acp/respond   device → host  AcpRespondMessage       → Nothing (a permission or question card)
 // acp/setOption device → host  AcpSetOptionMessage     → Nothing
+// acp/mentionTargets device → host  AcpMentionTargetsRequestMessage → AcpMentionTargetsMessage (sessions and agents
+//               the prompt may @-mention; only with the acp.mentions capability)
 // acp/update    host → device  AcpUpdateMessage (event, for each attached item; Sequence grows by one per event)
 //
 // A device that sees a gap in Sequence (it was away) attaches again for a fresh snapshot.
@@ -216,6 +218,50 @@ public sealed class AcpPromptMessage
     public string Text { get; set; } = "";
     /// <summary>Paths inside the item's project to attach (a picture uploaded with <c>fs/write</c> first, for example).</summary>
     public List<string>? Attachments { get; set; }
+    /// <summary>
+    /// Sessions and agents @-mentioned inline in <see cref="Text"/>, in order of appearance; each one's
+    /// <see cref="AcpMentionMessage.Text"/> appears verbatim in the text. Sent only to hosts with the acp.mentions capability.
+    /// </summary>
+    public List<AcpMentionMessage>? Mentions { get; set; }
+}
+
+/// <summary>One inline mention of a prompt: the token as written (<c>@Codex（重构登录）</c>) and what it points at.</summary>
+public sealed class AcpMentionMessage
+{
+    /// <summary><c>session</c> (an existing session of the host) or <c>agent</c> (an agent the conversation may start).</summary>
+    public string Kind { get; set; } = "";
+    /// <summary>The session's item id, or the agent's id.</summary>
+    public string TargetId { get; set; } = "";
+    public string Text { get; set; } = "";
+    public string? AgentId { get; set; }
+}
+
+public sealed class AcpMentionTargetsRequestMessage
+{
+    /// <summary>The conversation being written in (it is left out of the sessions).</summary>
+    public string ItemId { get; set; } = "";
+    /// <summary>What follows the <c>@</c>; empty for everything.</summary>
+    public string Query { get; set; } = "";
+}
+
+public sealed class AcpMentionTargetsMessage
+{
+    public List<AcpMentionTargetMessage> Targets { get; set; } = [];
+}
+
+/// <summary>Something a prompt can @-mention, with what the device needs to write its token and show it in a list.</summary>
+public sealed class AcpMentionTargetMessage
+{
+    /// <summary><c>session</c> or <c>agent</c>.</summary>
+    public string Kind { get; set; } = "";
+    public string TargetId { get; set; } = "";
+    /// <summary>The agent's name (<c>Codex</c>): the token's main part.</summary>
+    public string Name { get; set; } = "";
+    /// <summary>A session's title, which tells sessions of the same agent apart: <c>@Codex（重构登录）</c>.</summary>
+    public string? Detail { get; set; }
+    public string? AgentId { get; set; }
+    /// <summary>A second line for the list: a session's branch and status.</summary>
+    public string? Subtitle { get; set; }
 }
 
 /// <summary>An answer to a card: <see cref="OptionId"/> for a permission; <see cref="Answers"/> for a question.</summary>

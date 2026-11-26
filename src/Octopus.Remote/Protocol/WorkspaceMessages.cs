@@ -89,6 +89,7 @@ public static class RemoteMethods
     public const string AcpCancel = "acp/cancel";
     public const string AcpRespond = "acp/respond";
     public const string AcpSetOption = "acp/setOption";
+    public const string AcpMentionTargets = "acp/mentionTargets";
     /// <summary>Event: an attached GUI conversation changed.</summary>
     public const string AcpUpdate = "acp/update";
 
@@ -112,6 +113,8 @@ public static class RemoteMethods
     public const string CapabilityBrowse = "fs.browse";
     /// <summary>The host shows its GUI conversations (<see cref="AcpAttach"/> and the rest of <c>acp/*</c>).</summary>
     public const string CapabilityAcpGui = "acp.gui";
+    /// <summary>The host answers <see cref="AcpMentionTargets"/> and reads <c>AcpPromptMessage.Mentions</c>.</summary>
+    public const string CapabilityAcpMentions = "acp.mentions";
     /// <summary>The host exposes branch workspaces (<see cref="WorkspaceOptions"/>, <see cref="WorkspaceCreate"/>, and workspace ids on items).</summary>
     public const string CapabilityWorkspaces = "workspaces";
     /// <summary>The host takes pictures for its sessions (<see cref="FsUpload"/>).</summary>

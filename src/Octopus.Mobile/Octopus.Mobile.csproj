@@ -23,6 +23,9 @@
         <Compile Include="../Octopus.App/Common/PixelIconView.cs" Link="Common/PixelIconView.cs" />
         <!-- Shared clipped spring-animated 3-line work ticker so desktop and mobile motion stay identical. -->
         <Compile Include="../Octopus.App/AgentGui/WorkTickerViewport.cs" Link="Conversations/WorkTickerViewport.cs" />
+        <!-- Inline @session / @agent tokens: the same plain-text rules and TextBox behaviour as the desktop composer. -->
+        <Compile Include="../Octopus.App/Common/Mentions/MentionText.cs" Link="Common/Mentions/MentionText.cs" />
+        <Compile Include="../Octopus.App/Common/Mentions/MentionEditing.cs" Link="Common/Mentions/MentionEditing.cs" />
     </ItemGroup>
 
     <ItemGroup>

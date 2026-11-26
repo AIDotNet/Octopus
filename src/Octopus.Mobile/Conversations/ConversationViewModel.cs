@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Octopus.App.Common.Mentions;
 using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
@@ -30,6 +31,15 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private string? _openError;
     private bool _isOpening;
     private bool _disposed;
+    // Inline @mentions of the draft (the same rules as the desktop composer: Octopus.App/Common/Mentions).
+    private readonly List<MentionToken> _draftMentions = [];
+    private IReadOnlyList<MentionSpan> _mentionSpans = [];
+    private IReadOnlyList<ConversationMentionTarget> _mentionTargets = [];
+    private DateTime _mentionTargetsAt;
+    private Task? _mentionFetch;
+    private int _mentionCaret;
+    private int _lastPromptLength;
+    private static readonly TimeSpan MentionTargetsLifetime = TimeSpan.FromSeconds(20);
 
     public ConversationViewModel(RemoteSession session, IRemoteWorkspace workspace, INavigator navigator, Action<Uri>? openBrowser = null)
     {
@@ -75,6 +85,21 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSend))]
     public partial bool IsSending { get; private set; }
+
+    /// <summary>The prompt field's caret, two-way bound: an <c>@</c> query is the word before it.</summary>
+    [ObservableProperty] public partial int PromptCaretIndex { get; set; }
+
+    /// <summary>Session / agent tokens of the draft, bound to the prompt field's <c>MentionEditing.Tokens</c>.</summary>
+    public IReadOnlyList<MentionToken> MentionTokens { get; private set; } = [];
+
+    /// <summary>What the suggestion strip above the keyboard offers for the <c>@</c> query being typed.</summary>
+    public ObservableCollection<ConversationMentionTarget> MentionSuggestions { get; } = [];
+
+    /// <summary>The suggestion strip shows: an <c>@</c> query is being typed and something matches it.</summary>
+    [ObservableProperty] public partial bool IsMentionStripOpen { get; private set; }
+
+    /// <summary>The host takes @mentions: the <c>@</c> button shows.</summary>
+    public bool SupportsMentions => _conversation?.SupportsMentions == true;
 
     public string Title => Session.Title;
 
@@ -183,11 +208,15 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         if (_conversation is null || IsSending) return;
         var text = PromptText.Trim();
         if (text.Length == 0) return;
+        var mentions = MentionText.DistinctInOrder(MentionText.Scan(text, _draftMentions));
         IsSending = true;
         PromptText = "";
         try
         {
-            await _conversation.SendAsync(text, cancellationToken: _lifetime.Token);
+            if (mentions.Count > 0) await _conversation.SendAsync(text, null, mentions, _lifetime.Token);
+            else await _conversation.SendAsync(text, cancellationToken: _lifetime.Token);
+            // Kept until the prompt is out, so a failed send gives the text back with its tokens.
+            if (PromptText.Length == 0) ClearMentions();
             ScrollToBottomRequested?.Invoke();
         }
         catch (IOException e)
@@ -203,6 +232,131 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         {
             IsSending = false;
         }
+    }
+
+    partial void OnPromptTextChanged(string value)
+    {
+        // The field moves its caret right after changing the text; until then assume the edit happened at the caret.
+        var delta = value.Length - _lastPromptLength;
+        _lastPromptLength = value.Length;
+        _mentionCaret = Math.Clamp(PromptCaretIndex + delta, 0, value.Length);
+        _mentionSpans = MentionText.Scan(value, _draftMentions);
+        UpdateMentionStrip();
+    }
+
+    partial void OnPromptCaretIndexChanged(int value)
+    {
+        _mentionCaret = Math.Clamp(value, 0, PromptText.Length);
+        UpdateMentionStrip();
+    }
+
+    /// <summary>The <c>@</c> button: types an <c>@</c> at the caret (typing one on a phone keyboard takes a layer switch).</summary>
+    [RelayCommand]
+    private void StartMention()
+    {
+        if (!SupportsMentions) return;
+        var text = PromptText;
+        var caret = Math.Clamp(_mentionCaret, 0, text.Length);
+        var lead = caret > 0 && !char.IsWhiteSpace(text[caret - 1]) ? " " : "";
+        PromptText = string.Concat(text.AsSpan(0, caret), lead + "@", text.AsSpan(caret));
+        PromptCaretIndex = caret + lead.Length + 1;
+        UpdateMentionStrip();
+    }
+
+    /// <summary>Writes the chosen target's token in place of the <c>@</c> query.</summary>
+    [RelayCommand]
+    private void InsertMention(ConversationMentionTarget? target)
+    {
+        if (target is null) return;
+        var text = PromptText;
+        var caret = Math.Clamp(_mentionCaret, 0, text.Length);
+        var range = MentionText.FindQuery(text, caret, _mentionSpans) is { } query ? (query.Start, query.End) : (caret, caret);
+        var label = MentionText.BuildLabel(target.Name, target.IsSession ? target.Detail : null, target.Kind, target.TargetId, _draftMentions);
+        if (!_draftMentions.Any(m => m.Kind == target.Kind && m.TargetId == target.TargetId))
+        {
+            _draftMentions.Add(new MentionToken(target.Kind, target.TargetId, label, target.AgentId));
+            PublishMentions();
+        }
+        var inserted = MentionText.InsertToken(text, range.Item1, range.Item2, label);
+        CloseMentionStrip();
+        PromptText = inserted.Text;
+        PromptCaretIndex = inserted.Caret;
+    }
+
+    private void UpdateMentionStrip()
+    {
+        if (!SupportsMentions || MentionText.FindQuery(PromptText, _mentionCaret, _mentionSpans) is not { } query)
+        {
+            CloseMentionStrip();
+            return;
+        }
+        if (_mentionTargets.Count == 0 || DateTime.UtcNow - _mentionTargetsAt > MentionTargetsLifetime)
+        {
+            // One list per few seconds, filtered here while typing: no round trip per keystroke.
+            _mentionFetch ??= FetchMentionTargetsAsync();
+            if (_mentionTargets.Count == 0) return;
+        }
+        FilterMentionSuggestions(query.Query);
+    }
+
+    private async Task FetchMentionTargetsAsync()
+    {
+        try
+        {
+            if (_conversation is not { } conversation) return;
+            _mentionTargets = await conversation.ListMentionTargetsAsync("", _lifetime.Token);
+            _mentionTargetsAt = DateTime.UtcNow;
+        }
+        catch (Exception e) when (e is IOException or OperationCanceledException)
+        {
+            // No list this time: the strip stays closed and plain text still sends.
+        }
+        finally
+        {
+            _mentionFetch = null;
+        }
+        if (!_disposed && _mentionTargets.Count > 0 && MentionText.FindQuery(PromptText, _mentionCaret, _mentionSpans) is { } query)
+        {
+            FilterMentionSuggestions(query.Query);
+        }
+    }
+
+    private void FilterMentionSuggestions(string query)
+    {
+        MentionSuggestions.Clear();
+        foreach (var target in _mentionTargets)
+        {
+            if (query.Length == 0
+                || target.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || (target.Detail?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || target.TargetId.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || (target.AgentId?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false))
+            {
+                MentionSuggestions.Add(target);
+                if (MentionSuggestions.Count >= 12) break;
+            }
+        }
+        IsMentionStripOpen = MentionSuggestions.Count > 0;
+    }
+
+    private void CloseMentionStrip()
+    {
+        IsMentionStripOpen = false;
+        if (MentionSuggestions.Count > 0) MentionSuggestions.Clear();
+    }
+
+    private void PublishMentions()
+    {
+        MentionTokens = _draftMentions.ToArray();
+        OnPropertyChanged(nameof(MentionTokens));
+        _mentionSpans = MentionText.Scan(PromptText, _draftMentions);
+    }
+
+    private void ClearMentions()
+    {
+        if (_draftMentions.Count == 0) return;
+        _draftMentions.Clear();
+        PublishMentions();
     }
 
     [RelayCommand]
@@ -441,6 +595,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private void NotifyState()
     {
         OnPropertyChanged(nameof(IsLoaded));
+        OnPropertyChanged(nameof(SupportsMentions));
         OnPropertyChanged(nameof(State));
         OnPropertyChanged(nameof(IsConnecting));
         OnPropertyChanged(nameof(IsWorking));

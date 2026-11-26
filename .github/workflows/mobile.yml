@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths: &mobile-paths
       - src/Octopus.Mobile*/**
+      # Shared with the desktop composer and compiled into the phone app (Octopus.Mobile.csproj links it).
+      - src/Octopus.App/Common/Mentions/**
       - src/Octopus.Remote/**
       - src/Octopus.Remote.Client/**
       - src/Octopus.Terminal/**

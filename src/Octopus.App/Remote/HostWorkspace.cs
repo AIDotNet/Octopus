@@ -467,8 +467,14 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             if (!File.Exists(full)) throw new RemoteException(RemoteMethods.NotFound, $"The file '{full}' does not exist on the host.");
             paths.Add(full);
         }
-        await OnUiAsync(() => _conversations.PromptAsync(project, item, prompt.Text, paths)).ConfigureAwait(false);
+        await OnUiAsync(() => _conversations.PromptAsync(project, item, prompt.Text, paths, prompt.Mentions)).ConfigureAwait(false);
     }
+
+    public Task<AcpMentionTargetsMessage> ListMentionTargetsAsync(AcpMentionTargetsRequestMessage request) => OnUi(() =>
+    {
+        var (project, item) = FindConversation(request.ItemId);
+        return _conversations.ListMentionTargets(project, item, request.Query ?? "");
+    });
 
     public async Task CancelTurnAsync(string itemId)
     {

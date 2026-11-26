@@ -17,6 +17,7 @@ using Octopus.App.Activity;
 using Octopus.App.Bots;
 using Octopus.App.Collab;
 using Octopus.App.Common;
+using Octopus.App.Common.Mentions;
 using Octopus.App.Explorer.Subagent;
 using Octopus.App.Files;
 using Octopus.App.Localization;
@@ -244,6 +245,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private string[] _workspaceFiles = [];
     private bool _workspaceIndexing;
     private string _lastFileFilterQuery = "";
+    private readonly List<MentionToken> _draftMentions = [];
+    private IReadOnlyList<MentionSpan> _mentionSpans = [];
+    private int _caretForPickers;
+    private int _lastInputLength;
     private readonly List<string> _promptHistory = [];
     private int _historyCursor = -1;
     private string _historyDraft = "";
@@ -389,7 +394,17 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public bool HasCollabTopology => CollabRibbonNodes.Count > 0;
     public bool HasBubbledApprovals => BubbledApprovals.Count > 0;
     public bool HasActiveCollabThread => ActiveCollabThread is not null;
-    public bool HasSessionMention => Attachments.Any(c => c.Attachment.Kind == "session");
+    /// <summary>True when the draft @-mentions at least one existing session (the direct-relay toggle applies).</summary>
+    public bool HasSessionMention => _mentionSpans.Any(s => s.Token.Kind == "session");
+
+    /// <summary>
+    /// Session / agent mention tokens of the current draft, written inline in <see cref="InputText"/> (for example
+    /// <c>让 @Codex（重构登录） 和 @Claude Code 一起处理</c>). Bound to the composer's <c>MentionEditing.Tokens</c>.
+    /// </summary>
+    public IReadOnlyList<MentionToken> MentionTokens { get; private set; } = [];
+
+    /// <summary>The composer's caret, two-way bound so <c>@</c> queries and insertion follow the caret, not the text's end.</summary>
+    [ObservableProperty] public partial int ComposerCaretIndex { get; set; }
     public string RouteModeLabel => AppLangResources.Get(
         IsDirectRelayMode ? AppLangResourceKind.CollabRouteDirectRelay : AppLangResourceKind.CollabRouteOrchestrate);
 
@@ -973,7 +988,19 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             _historyCursor = -1;
         }
         NotifyComposerActionStateChanged();
+        // The TextBox moves its caret right after changing the text; until that arrives, assume the edit happened at
+        // the caret (true for typing, deleting and IME commits) so the @ picker does not flicker.
+        var delta = value.Length - _lastInputLength;
+        _lastInputLength = value.Length;
+        _caretForPickers = Math.Clamp(ComposerCaretIndex + delta, 0, value.Length);
+        RefreshMentionSpans();
         UpdateInlinePickers(value);
+    }
+
+    partial void OnComposerCaretIndexChanged(int value)
+    {
+        _caretForPickers = Math.Clamp(value, 0, InputText.Length);
+        UpdateInlinePickers(InputText);
     }
 
     /// <summary>
@@ -1246,8 +1273,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         var text = InputText.Trim();
         if (text.Length == 0 && Attachments.Count == 0) return null;
 
-        var attached = Attachments.Select(c => c.Attachment).ToList();
+        var attached = CurrentDraftAttachments();
         InputText = "";
+        ClearDraftMentions();
         Attachments.Clear();
         IsCommandPopupOpen = false;
         IsFilePopupOpen = false;
@@ -1281,12 +1309,13 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         if (CaptureComposerPrompt() is not { } captured) return;
 
-        // Direct relay mode: send straight to the first @-mentioned existing session without burning a turn here.
-        if (IsDirectRelayMode && _collab is not null
-            && captured.Attachments.FirstOrDefault(a => a.Kind == "session") is { } directTarget)
+        // Direct relay mode: send straight to every @-mentioned existing session (one shared thread) without burning a
+        // turn here.
+        var directTargets = captured.Attachments.Where(a => a.Kind == "session").Select(a => a.Path).Distinct(StringComparer.Ordinal).ToList();
+        if (IsDirectRelayMode && _collab is not null && directTargets.Count > 0)
         {
             var body = string.IsNullOrWhiteSpace(captured.Text) ? "(ping)" : captured.Text;
-            var thread = await _collab.SendUserDirectMessageAsync(_item.Id, directTarget.Path, body);
+            var thread = await _collab.SendUserBroadcastAsync(_item.Id, directTargets, body);
             SetUi(() =>
             {
                 IsDirectRelayMode = false;
@@ -1356,18 +1385,27 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         QueuedPrompts.RemoveAt(idx);
 
         var existingText = InputText.Trim();
-        var existingAttachments = Attachments.Select(c => c.Attachment).ToList();
+        var existingAttachments = CurrentDraftAttachments();
         if (existingText.Length > 0 || existingAttachments.Count > 0)
         {
             QueuedPrompts.Add(CreateQueuedPrompt(existingText, existingAttachments));
         }
 
         Attachments.Clear();
+        ClearDraftMentions();
         foreach (var att in item.Attachments)
         {
+            if (att.Kind is "session" or "agent" && !string.IsNullOrEmpty(att.DisplayName))
+            {
+                // Mentions travel as attachments once captured; bring them back as inline tokens.
+                _draftMentions.Add(new MentionToken(att.Kind, att.Path, att.DisplayName, att.MimeType));
+                continue;
+            }
             Attachments.Add(AttachmentChipViewModel.Removable(att, RemoveAttachment));
         }
+        PublishMentionTokens();
         InputText = item.Text;
+        ComposerCaretIndex = item.Text.Length;
         OnPropertyChanged(nameof(HasAttachments));
         NotifyComposerActionStateChanged();
         RefreshQueueState();
@@ -1857,10 +1895,21 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     /// queued like the composer's while a turn runs, and whatever the person here is typing stays where it is.
     /// Returns once the prompt is sent or queued, not when the turn ends; false when there is no session to send to.
     /// </summary>
-    internal async Task<bool> SendExternalPromptAsync(string text, IEnumerable<string> attachmentPaths)
+    internal async Task<bool> SendExternalPromptAsync(string text, IEnumerable<string> attachmentPaths, IReadOnlyList<MentionToken>? mentions = null)
     {
         if (_disposed || _session is null) return false;
         var attached = await ReadAttachmentsAsync(attachmentPaths);
+        if (mentions is { Count: > 0 })
+        {
+            // Inline @mentions from a device travel like the composer's: session / agent attachments ahead of the files.
+            attached.InsertRange(0, MentionText.DistinctInOrder(MentionText.Scan(text, mentions)).Select(m => new AcpPromptAttachment
+            {
+                Kind = m.Kind,
+                Path = m.TargetId,
+                DisplayName = m.Text,
+                MimeType = m.AgentId,
+            }));
+        }
         text = text.Trim();
         if (text.Length == 0 && attached.Count == 0) return true;
         if (_session is null) return false;
@@ -2141,12 +2190,25 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (IsCommandPopupOpen) FilterCommands("");
     }
 
+    /// <summary>
+    /// The composer's <c>@</c> button: types an <c>@</c> at the caret (which opens the picker through the normal query
+    /// path, so the picker and the text never disagree), or closes an open picker.
+    /// </summary>
     [RelayCommand]
     private void ToggleFilePopup()
     {
         IsCommandPopupOpen = false;
-        IsFilePopupOpen = !IsFilePopupOpen;
-        if (IsFilePopupOpen) FilterFiles("");
+        if (IsFilePopupOpen)
+        {
+            IsFilePopupOpen = false;
+            return;
+        }
+        var text = InputText;
+        var caret = Math.Clamp(_caretForPickers, 0, text.Length);
+        var lead = caret > 0 && !char.IsWhiteSpace(text[caret - 1]) ? " " : "";
+        InputText = string.Concat(text.AsSpan(0, caret), lead + "@", text.AsSpan(caret));
+        ComposerCaretIndex = caret + lead.Length + 1;
+        FocusComposerRequested?.Invoke(this, EventArgs.Empty);
     }
 
     [RelayCommand]
@@ -2164,42 +2226,93 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public void InsertFileMention(FileMentionSuggestion? file)
     {
         if (file is null) return;
-        if (file.IsSession)
+        var text = InputText;
+        var caret = Math.Clamp(_caretForPickers, 0, text.Length);
+        var range = MentionText.FindQuery(text, caret, _mentionSpans) is { } query ? (query.Start, query.End) : (caret, caret);
+
+        if (file.IsSession || file.IsAgent)
         {
-            AddAttachment(new AcpPromptAttachment
+            // Sessions and agents become inline tokens: the sentence itself says who does what.
+            var label = MentionText.BuildLabel(
+                file.IsSession ? MentionAgentName(file) : file.RelativePath,
+                file.IsSession ? file.RelativePath : null,
+                file.Kind,
+                file.TargetId,
+                _draftMentions);
+            if (!_draftMentions.Any(m => m.Kind == file.Kind && m.TargetId == file.TargetId))
             {
-                Kind = "session",
-                Path = file.TargetId,
-                DisplayName = $"@{file.RelativePath}",
-                MimeType = file.AgentId,
-            });
+                _draftMentions.Add(new MentionToken(file.Kind, file.TargetId, label, file.AgentId));
+                PublishMentionTokens();
+            }
+            var inserted = MentionText.InsertToken(text, range.Item1, range.Item2, label);
+            IsFilePopupOpen = false;
+            InputText = inserted.Text;
+            ComposerCaretIndex = inserted.Caret;
+            return;
         }
-        else if (file.IsAgent)
+
+        AddAttachment(new AcpPromptAttachment
         {
-            AddAttachment(new AcpPromptAttachment
-            {
-                Kind = "agent",
-                Path = file.TargetId,
-                DisplayName = $"@{file.RelativePath}",
-                MimeType = file.AgentId,
-            });
-        }
-        else
-        {
-            AddAttachment(new AcpPromptAttachment
-            {
-                Kind = "file",
-                Path = file.FullPath,
-                DisplayName = file.RelativePath,
-            });
-        }
-        var at = InputText.LastIndexOf('@');
-        if (at >= 0)
-        {
-            InputText = InputText[..at].TrimEnd();
-            if (InputText.Length > 0) InputText += " ";
-        }
+            Kind = "file",
+            Path = file.FullPath,
+            DisplayName = file.RelativePath,
+        });
         IsFilePopupOpen = false;
+        InputText = string.Concat(text.AsSpan(0, range.Item1), text.AsSpan(range.Item2));
+        ComposerCaretIndex = range.Item1;
+    }
+
+    /// <summary>Agent display name for a session suggestion (its title goes in the token's detail).</summary>
+    internal string MentionAgentName(FileMentionSuggestion session)
+    {
+        if (_collab is not null && !string.IsNullOrEmpty(session.AgentId))
+        {
+            foreach (var agent in _collab.ListAvailableAgents())
+            {
+                if (string.Equals(agent.AgentId, session.AgentId, StringComparison.OrdinalIgnoreCase)) return agent.Name;
+            }
+        }
+        return string.IsNullOrEmpty(session.AgentId) ? session.RelativePath : session.AgentId;
+    }
+
+    /// <summary>Session / agent mentions of the draft (in order of appearance) followed by the attached files and images.</summary>
+    private List<AcpPromptAttachment> CurrentDraftAttachments()
+    {
+        var result = new List<AcpPromptAttachment>();
+        foreach (var token in MentionText.DistinctInOrder(_mentionSpans))
+        {
+            result.Add(new AcpPromptAttachment
+            {
+                Kind = token.Kind,
+                Path = token.TargetId,
+                DisplayName = token.Text,
+                MimeType = token.AgentId,
+            });
+        }
+        result.AddRange(Attachments.Select(c => c.Attachment));
+        return result;
+    }
+
+    private void RefreshMentionSpans()
+    {
+        var hadSession = HasSessionMention;
+        _mentionSpans = MentionText.Scan(InputText, _draftMentions);
+        if (hadSession != HasSessionMention) OnPropertyChanged(nameof(HasSessionMention));
+        if (!HasSessionMention) IsDirectRelayMode = false;
+    }
+
+    private void PublishMentionTokens()
+    {
+        MentionTokens = _draftMentions.ToArray();
+        OnPropertyChanged(nameof(MentionTokens));
+        RefreshMentionSpans();
+    }
+
+    private void ClearDraftMentions()
+    {
+        if (_draftMentions.Count == 0) return;
+        _draftMentions.Clear();
+        PublishMentionTokens();
     }
 
     public void AddAttachment(AcpPromptAttachment attachment)
@@ -2230,16 +2343,15 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
         IsCommandPopupOpen = false;
 
-        var at = text.LastIndexOf('@');
-        if (at >= 0 && (at == 0 || char.IsWhiteSpace(text[at - 1])))
+        if (MentionText.FindQuery(text, _caretForPickers, _mentionSpans) is { } query)
         {
-            var query = text[(at + 1)..];
-            if (!query.Contains(' ') && !query.Contains('\n'))
+            // Caret moves inside the same query must not reset the highlighted suggestion.
+            if (!IsFilePopupOpen || !string.Equals(query.Query, _lastFileFilterQuery, StringComparison.Ordinal))
             {
-                IsFilePopupOpen = true;
-                FilterFiles(query);
-                return;
+                FilterFiles(query.Query);
             }
+            IsFilePopupOpen = true;
+            return;
         }
         IsFilePopupOpen = false;
     }
@@ -2261,12 +2373,13 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         SyncPickerHighlights();
     }
 
-    private void FilterFiles(string query)
+    /// <summary>
+    /// Sessions of this project / workspace group (not this one) and installed agents an <c>@query</c> may mention;
+    /// shared by the composer's picker and devices (<c>acp/mentionTargets</c>).
+    /// </summary>
+    internal List<FileMentionSuggestion> ListCollabMentionSuggestions(string query)
     {
-        _lastFileFilterQuery = query;
-        EnsureWorkspaceFilesIndexed();
-        FilteredFiles.Clear();
-
+        var result = new List<FileMentionSuggestion>();
         var q = query.Trim();
         if (_collab is { IsEnabled: true })
         {
@@ -2283,8 +2396,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 var sub = peer.ParentItemId == _item.Id
                     ? $"↳ {peer.Status}"
                     : string.IsNullOrEmpty(peer.Branch) ? $"{peer.Surface} · {peer.Status}" : $"{peer.Branch} · {peer.Status}";
-                FilteredFiles.Add(new FileMentionSuggestion("session", peer.ItemId, peer.Title, peer.AgentId, sub, peer.Status));
-                if (FilteredFiles.Count >= 6) break;
+                result.Add(new FileMentionSuggestion("session", peer.ItemId, peer.Title, peer.AgentId, sub, peer.Status));
+                if (result.Count >= 6) break;
             }
 
             // 2. Installed coding agents eligible for delegation (e.g. @codex, @agy / @反重力, @claude).
@@ -2296,9 +2409,23 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     || ag.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || ag.Aliases.Any(a => a.Contains(q, StringComparison.OrdinalIgnoreCase));
                 if (!matches) continue;
-                FilteredFiles.Add(new FileMentionSuggestion("agent", ag.AgentId, ag.Name, ag.AgentId, ag.DefaultSurface));
+                result.Add(new FileMentionSuggestion("agent", ag.AgentId, ag.Name, ag.AgentId, ag.DefaultSurface));
                 if (++agentCount >= 5) break;
             }
+        }
+        return result;
+    }
+
+    private void FilterFiles(string query)
+    {
+        _lastFileFilterQuery = query;
+        EnsureWorkspaceFilesIndexed();
+        FilteredFiles.Clear();
+
+        var q = query.Trim();
+        foreach (var suggestion in ListCollabMentionSuggestions(q))
+        {
+            FilteredFiles.Add(suggestion);
         }
 
         // 3. Workspace files.
@@ -2666,7 +2793,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             foreach (var user in built.OfType<UserTurnItem>())
             {
-                if (!user.IsCollabMessage && !string.IsNullOrWhiteSpace(user.Text)) _promptHistory.Add(user.Text.Trim());
+                if (!user.IsCollabMessage && !string.IsNullOrWhiteSpace(user.PromptText)) _promptHistory.Add(user.PromptText.Trim());
             }
         }
         // The tab already carries a title from the original conversation.
