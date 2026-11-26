@@ -565,13 +565,7 @@ public sealed record UiDensityMetrics
          .Token("Sidebar", "SectionHeaderHeight", Num(SidebarSectionHeaderHeight))
          .Token("Sidebar", "PanePadding", SidebarPanePadding)
          .Token("PopoverSurface", "PanelPadding", PopoverPanelPadding)
-         .Token("Textarea", "FramePadding", TextareaFramePadding)
-         // No backdrop blur behind dialogs and drawers: the scrim alone dims the window. Arc blurs the whole window
-         // content as an Effect, and on a Retina Metal window each blurred frame takes several window-sized scratch
-         // textures (3072x2048 RGBA, about 24 MB each) that the Metal driver keeps after the modal closes: about 100 MB
-         // of GPU memory for a 7px blur.
-         .Token("BackdropBlurDialog", "0")
-         .Token("BackdropBlurDrawer", "0");
+         .Token("Textarea", "FramePadding", TextareaFramePadding);
     }
 
     /// <summary>Writes all Octopus dynamic resources for this style into <paramref name="resources"/>.</summary>
