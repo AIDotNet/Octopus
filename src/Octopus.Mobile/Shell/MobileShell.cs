@@ -11,6 +11,7 @@ using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Sessions;
 using Octopus.Mobile.Terminals;
 using Octopus.Mobile.Updates;
+using Octopus.Mobile.Voice;
 using Octopus.Mobile.Workspace;
 using TKCode.Arc.Mobile;
 
@@ -241,6 +242,8 @@ public sealed class MobileShell : ContentControl, INavigator
 
     public void ShowCustomServer(string? initialLink) =>
         Push(new CustomServerPage(new CustomServerViewModel(_account, this, _openBrowser, initialLink)));
+
+    public void ShowVoiceSettings() => Push(new VoiceSettingsPage(new VoiceSettingsViewModel(MobileHost.Voice, this)));
 
     public void ShowFirst() => _stack?.PopToRoot();
 

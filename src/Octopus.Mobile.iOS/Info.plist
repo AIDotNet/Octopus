@@ -44,5 +44,10 @@
   <!-- Asked the first time the user scans a pairing or relay QR code inside the app. -->
   <key>NSCameraUsageDescription</key>
   <string>Octopus uses the camera to scan pairing and relay setup QR codes from your computer.</string>
+  <!-- Asked the first time the person holds "hold to talk" in a conversation. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Octopus records your voice only while you hold "Hold to talk", to turn it into a message.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Octopus uses speech recognition to turn what you say into a message for your agent.</string>
 </dict>
 </plist>

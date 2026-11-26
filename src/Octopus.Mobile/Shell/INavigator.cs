@@ -52,6 +52,8 @@ public interface INavigator
     void ShowCustomServer();
     /// <summary>Opens the custom-server page pre-filled with a scanned/deep-linked <c>octopus://relay?…</c> setup link.</summary>
     void ShowCustomServer(string? initialLink) => ShowCustomServer();
+    /// <summary>Me › Voice input: which engine turns speech into text, and its keys.</summary>
+    void ShowVoiceSettings() { }
     /// <summary>Back to the first page, whatever is on top of it.</summary>
     void ShowFirst();
     /// <summary>Leaves the page on top.</summary>

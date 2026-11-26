@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Octopus.Mobile.Shell;
+using Octopus.Mobile.Voice;
 using Octopus.Mobile.Workspace;
 using TKCode.Arc.Mobile;
 
@@ -12,9 +13,13 @@ namespace Octopus.Mobile.Conversations;
 public partial class ConversationPage : Page, IClosablePage
 {
     private const double BottomPinTolerance = 36;
+    /// <summary>How far above the bar the finger must go to be over "cancel" or "send" (the targets sit about this high).</summary>
+    private const double TargetRise = 72;
 
     private readonly ConversationViewModel _viewModel;
     private bool _pinnedToBottom = true;
+    private Point _holdOrigin;
+    private bool _holding;
 
     public ConversationPage(ConversationViewModel viewModel)
     {
@@ -26,6 +31,10 @@ public partial class ConversationPage : Page, IClosablePage
         viewModel.ScrollToBottomRequested += ScrollToBottomOnEntry;
         TimelineScroll.ScrollChanged += OnTimelineScrollChanged;
         PromptField.AddHandler(KeyDownEvent, OnPromptKeyDown, RoutingStrategies.Tunnel);
+        HoldToTalkBar.PointerPressed += OnHoldPressed;
+        HoldToTalkBar.PointerMoved += OnHoldMoved;
+        HoldToTalkBar.PointerReleased += OnHoldReleased;
+        HoldToTalkBar.PointerCaptureLost += OnHoldCaptureLost;
         if (viewModel.IsLoaded) ScrollToBottomOnEntry();
     }
 
@@ -42,6 +51,10 @@ public partial class ConversationPage : Page, IClosablePage
         _viewModel.ScrollToBottomRequested -= ScrollToBottomOnEntry;
         TimelineScroll.ScrollChanged -= OnTimelineScrollChanged;
         PromptField.RemoveHandler(KeyDownEvent, OnPromptKeyDown);
+        HoldToTalkBar.PointerPressed -= OnHoldPressed;
+        HoldToTalkBar.PointerMoved -= OnHoldMoved;
+        HoldToTalkBar.PointerReleased -= OnHoldReleased;
+        HoldToTalkBar.PointerCaptureLost -= OnHoldCaptureLost;
         _viewModel.Dispose();
     }
 
@@ -124,6 +137,47 @@ public partial class ConversationPage : Page, IClosablePage
     {
         if (_pinnedToBottom) TimelineScroll.ScrollToEnd();
     }, DispatcherPriority.Background);
+
+    // Hold to talk: the bar captures the finger, so it keeps getting moves while the overlay is drawn over everything.
+    private void OnHoldPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_holding || !e.GetCurrentPoint(HoldToTalkBar).Properties.IsLeftButtonPressed) return;
+        _holding = true;
+        _holdOrigin = e.GetPosition(this);
+        e.Pointer.Capture(HoldToTalkBar);
+        e.Handled = true;
+        _viewModel.Voice.Press();
+    }
+
+    private void OnHoldMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_holding) return;
+        var at = e.GetPosition(this);
+        _viewModel.Voice.Move(ZoneAt(at, _holdOrigin, Bounds.Width));
+    }
+
+    private void OnHoldReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_holding) return;
+        _holding = false;
+        e.Pointer.Capture(null);
+        e.Handled = true;
+        _viewModel.Voice.Release();
+    }
+
+    // The system took the finger away (a call, a gesture of the OS): nothing half-heard goes anywhere.
+    private void OnHoldCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (!_holding) return;
+        _holding = false;
+        _viewModel.Voice.Abort();
+    }
+
+    /// <summary>Over the bar: fill the field. Dragged up: "cancel" on the left half, "send" on the right.</summary>
+    internal static VoiceZone ZoneAt(Point at, Point origin, double width) =>
+        origin.Y - at.Y < TargetRise ? VoiceZone.Fill
+        : at.X < width / 2 ? VoiceZone.Cancel
+        : VoiceZone.Send;
 
     private void OnPromptKeyDown(object? sender, KeyEventArgs e)
     {

@@ -6,6 +6,15 @@
     <!-- Optional camera permission for scanning desktop pairing / relay QR codes inside the app. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Voice input in the conversation composer: only while "hold to talk" is held. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <!-- Android 11+ package visibility: without this SpeechRecognizer cannot see the system's recognition service. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
     <!-- In-app updates (design/10-自动更新.md §15): the verified APK is handed to the system installer, which asks first. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- A host on the same network is ws://address:port. That is not plain text: everything in it is the app's own

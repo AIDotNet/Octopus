@@ -2,6 +2,7 @@
            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
            xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
            xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:voice="using:Octopus.Mobile.Voice"
            xmlns:l="using:Octopus.Mobile.Localization"
            xmlns:bots="using:Octopus.Mobile.Bots"
            xmlns:common="using:Octopus.Mobile.Common"
@@ -681,6 +682,16 @@
                                Subtitle="{l:MobileLangResource UseLocalHint}"
                                ShowChevron="True"
                                Command="{Binding AddHostCommand}" />
+            </arcm:ListGroup>
+
+            <!-- Input: voice input, where the phone can recognize or record speech -->
+            <arcm:ListGroup Name="MeInputGroup" Header="{l:MobileLangResource MeSectionInput}" IsVisible="{Binding IsVoiceSupported}">
+                <arcm:ListItem Name="MeVoiceRow"
+                               Icon="{x:Static voice:VoiceGlyphs.Microphone}"
+                               Content="{l:MobileLangResource MeVoiceInput}"
+                               Subtitle="{Binding VoiceEngineName}"
+                               ShowChevron="True"
+                               Command="{Binding OpenVoiceSettingsCommand}" />
             </arcm:ListGroup>
 
             <!-- App version and updates (Android only: a platform without an updater shows no group) -->

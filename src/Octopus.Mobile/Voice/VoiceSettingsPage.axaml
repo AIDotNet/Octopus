@@ -1,0 +1,170 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Voice"
+           x:Class="Octopus.Mobile.Voice.VoiceSettingsPage"
+           x:DataType="vm:VoiceSettingsViewModel"
+           AvoidKeyboard="True">
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource VoiceSettingsTitle}"
+                     ShowBack="True"
+                     BackText="{l:MobileLangResource Back}"
+                     BackCommand="{Binding BackCommand}" />
+    </arcm:Page.Header>
+
+    <arcm:Page.Styles>
+        <Style Selector="TextBlock.engineCheck">
+            <Setter Property="Text" Value="✓" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+    </arcm:Page.Styles>
+
+    <ScrollViewer>
+        <StackPanel Spacing="18" Margin="0,12,0,36">
+            <!-- Which engine: the phone's own by default; a cloud one with the person's own key. -->
+            <StackPanel Spacing="6">
+                <arcm:ListGroup Name="VoiceEngineGroup" Header="{l:MobileLangResource VoiceSectionEngine}">
+                    <arcm:ListItem Name="VoiceEngineSystemRow"
+                                   Content="{l:MobileLangResource VoiceEngineSystem}"
+                                   Subtitle="{Binding SystemSubtitle}"
+                                   Command="{Binding SelectEngineCommand}"
+                                   CommandParameter="System"
+                                   IsEnabled="{Binding IsSystemUsable}">
+                        <arcm:ListItem.Trailing>
+                            <TextBlock Classes="engineCheck" IsVisible="{Binding IsSystem}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Name="VoiceEngineOctopusRow"
+                                   Content="{l:MobileLangResource VoiceEngineOctopus}"
+                                   Subtitle="{l:MobileLangResource VoiceEngineOctopusHint}"
+                                   Command="{Binding SelectEngineCommand}"
+                                   CommandParameter="Octopus"
+                                   IsVisible="{Binding CanUseOctopus}">
+                        <arcm:ListItem.Trailing>
+                            <TextBlock Classes="engineCheck" IsVisible="{Binding IsOctopus}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Name="VoiceEngineAliyunRow"
+                                   Content="{l:MobileLangResource VoiceEngineAliyun}"
+                                   Subtitle="{l:MobileLangResource VoiceEngineAliyunHint}"
+                                   Command="{Binding SelectEngineCommand}"
+                                   CommandParameter="Aliyun"
+                                   IsEnabled="{Binding CanRecord}">
+                        <arcm:ListItem.Trailing>
+                            <TextBlock Classes="engineCheck" IsVisible="{Binding IsAliyun}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Name="VoiceEngineVolcengineRow"
+                                   Content="{l:MobileLangResource VoiceEngineVolcengine}"
+                                   Subtitle="{l:MobileLangResource VoiceEngineVolcengineHint}"
+                                   Command="{Binding SelectEngineCommand}"
+                                   CommandParameter="Volcengine"
+                                   IsEnabled="{Binding CanRecord}">
+                        <arcm:ListItem.Trailing>
+                            <TextBlock Classes="engineCheck" IsVisible="{Binding IsVolcengine}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Name="VoiceEngineOpenAiRow"
+                                   Content="{l:MobileLangResource VoiceEngineOpenAi}"
+                                   Subtitle="{l:MobileLangResource VoiceEngineOpenAiHint}"
+                                   Command="{Binding SelectEngineCommand}"
+                                   CommandParameter="OpenAi"
+                                   IsEnabled="{Binding CanRecord}">
+                        <arcm:ListItem.Trailing>
+                            <TextBlock Classes="engineCheck" IsVisible="{Binding IsOpenAi}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                </arcm:ListGroup>
+                <TextBlock Classes="hint" Margin="20,0" Text="{l:MobileLangResource VoiceEngineNote}" />
+            </StackPanel>
+
+            <!-- Through the Octopus account: no key here, the server's daily allowance -->
+            <StackPanel Name="VoiceOctopusPanel" Spacing="8" Margin="16,0" IsVisible="{Binding IsOctopus}">
+                <TextBlock Classes="sectionHeader" Text="{l:MobileLangResource VoiceSectionOctopus}" />
+                <TextBlock Name="VoiceOctopusStatus" Text="{Binding OctopusStatusText}" TextWrapping="Wrap" />
+                <TextBlock Classes="hint" Text="{l:MobileLangResource VoiceOctopusHint}" />
+            </StackPanel>
+
+            <!-- Alibaba Cloud Model Studio -->
+            <StackPanel Name="VoiceAliyunPanel" Spacing="8" Margin="16,0" IsVisible="{Binding IsAliyun}">
+                <TextBlock Classes="sectionHeader" Text="{l:MobileLangResource VoiceSectionKeys}" />
+                <TextBlock Classes="fieldLabel" Text="API Key" />
+                <arcm:TextField Name="VoiceAliyunKey"
+                                Text="{Binding AliyunApiKey, Mode=TwoWay}"
+                                PasswordChar="•"
+                                PlaceholderText="sk-…" />
+                <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource VoiceAliyunRegion}" />
+                <arcm:Segmented ItemsSource="{Binding RegionLabels}"
+                                SelectedIndex="{Binding AliyunRegionIndex, Mode=TwoWay}" />
+                <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource VoiceAliyunWorkspace}" />
+                <arcm:TextField Text="{Binding AliyunWorkspaceId, Mode=TwoWay}" PlaceholderText="{l:MobileLangResource VoiceOptional}" />
+                <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource VoiceModel}" />
+                <arcm:TextField Text="{Binding AliyunModel, Mode=TwoWay}" PlaceholderText="fun-asr-realtime" />
+                <TextBlock Classes="hint" Text="{l:MobileLangResource VoiceAliyunHint}" />
+            </StackPanel>
+
+            <!-- Volcengine Doubao -->
+            <StackPanel Name="VoiceVolcenginePanel" Spacing="8" Margin="16,0" IsVisible="{Binding IsVolcengine}">
+                <TextBlock Classes="sectionHeader" Text="{l:MobileLangResource VoiceSectionKeys}" />
+                <TextBlock Classes="fieldLabel" Text="API Key / Access Token" />
+                <arcm:TextField Name="VoiceVolcengineToken"
+                                Text="{Binding VolcengineAccessToken, Mode=TwoWay}"
+                                PasswordChar="•" />
+                <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource VoiceVolcengineAppId}" />
+                <arcm:TextField Name="VoiceVolcengineAppId"
+                                Text="{Binding VolcengineAppId, Mode=TwoWay}"
+                                PlaceholderText="{l:MobileLangResource VoiceOptional}" />
+                <TextBlock Classes="fieldLabel" Text="Resource ID" />
+                <arcm:TextField Text="{Binding VolcengineResourceId, Mode=TwoWay}" PlaceholderText="volc.bigasr.sauc.duration" />
+                <TextBlock Classes="hint" Text="{l:MobileLangResource VoiceVolcengineHint}" />
+            </StackPanel>
+
+            <!-- OpenAI, or any service with the same /audio/transcriptions -->
+            <StackPanel Name="VoiceOpenAiPanel" Spacing="8" Margin="16,0" IsVisible="{Binding IsOpenAi}">
+                <TextBlock Classes="sectionHeader" Text="{l:MobileLangResource VoiceSectionKeys}" />
+                <TextBlock Classes="fieldLabel" Text="API Key" />
+                <arcm:TextField Name="VoiceOpenAiKey"
+                                Text="{Binding OpenAiApiKey, Mode=TwoWay}"
+                                PasswordChar="•"
+                                PlaceholderText="sk-…" />
+                <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource VoiceBaseUrl}" />
+                <arcm:TextField Text="{Binding OpenAiBaseUrl, Mode=TwoWay}" PlaceholderText="https://api.openai.com/v1" />
+                <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource VoiceModel}" />
+                <arcm:TextField Text="{Binding OpenAiModel, Mode=TwoWay}" PlaceholderText="gpt-transcribe" />
+                <TextBlock Classes="hint" Text="{l:MobileLangResource VoiceOpenAiHint}" />
+            </StackPanel>
+
+            <!-- How it recognizes and behaves -->
+            <StackPanel Spacing="8" Margin="16,0">
+                <TextBlock Classes="sectionHeader" Text="{l:MobileLangResource VoiceSectionRecognition}" />
+                <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource VoiceLanguage}" />
+                <arcm:Segmented Name="VoiceLanguageChoice"
+                                ItemsSource="{Binding LanguageLabels}"
+                                SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}" />
+            </StackPanel>
+            <arcm:ListGroup>
+                <arcm:ListItem Content="{l:MobileLangResource VoicePunctuation}">
+                    <arcm:ListItem.Trailing>
+                        <arcm:Switch Name="VoicePunctuationSwitch" IsChecked="{Binding Punctuation, Mode=TwoWay}" />
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+                <arcm:ListItem Content="{l:MobileLangResource VoiceHaptics}">
+                    <arcm:ListItem.Trailing>
+                        <arcm:Switch Name="VoiceHapticsSwitch" IsChecked="{Binding Haptics, Mode=TwoWay}" />
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+            </arcm:ListGroup>
+
+            <TextBlock Name="VoicePrivacy" Classes="hint" Margin="20,0" Text="{Binding PrivacyText}" />
+        </StackPanel>
+    </ScrollViewer>
+</arcm:Page>

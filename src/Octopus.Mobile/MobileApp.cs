@@ -38,6 +38,15 @@ public static class MobileHost
     /// </summary>
     public static Func<Task<string?>>? ScanQrCode { get; set; }
 
+    /// <summary>
+    /// Voice input (design/ui/移动端输入框重写与语音输入方案.html): a head makes one with the phone's own recognizer and
+    /// microphone. The default has neither, so the microphone button stays hidden (tests, the desktop preview).
+    /// </summary>
+    public static Voice.VoiceService Voice { get; set; } = new();
+
+    /// <summary>A tap the phone can feel; the heads with haptics set it.</summary>
+    public static Action<Voice.HapticKind> Haptic { get; set; } = _ => { };
+
     private static readonly object DeepLinkGate = new();
     private static Uri? s_pendingDeepLink;
 

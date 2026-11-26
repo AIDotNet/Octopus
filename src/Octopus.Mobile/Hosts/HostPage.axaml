@@ -48,6 +48,8 @@
                             </Border>
                         </Grid>
                         <TextBlock Classes="secondary" Text="{Binding Detail}" IsVisible="{Binding !!Detail}" />
+                        <TextBlock Classes="secondary" Text="{Binding OriginText}" IsVisible="{Binding HasOrigin}"
+                                   Foreground="{arc:ArcDesignTokenResource Accent}" TextTrimming="CharacterEllipsis" />
                         <TextBlock Classes="preview" Text="{Binding Preview}" IsVisible="{Binding HasPreview}" />
                     </StackPanel>
                 </Grid>

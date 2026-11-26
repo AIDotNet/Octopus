@@ -44,6 +44,7 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         IsSignedIn = account.IsSignedIn;
         Bots = new BotsTabViewModel(workspace, navigator);
         Bots.SummaryChanged += OnBotsSummaryChanged;
+        MobileHost.Voice.Changed += OnVoiceChanged;
         workspace.Hosts.CollectionChanged += OnHostsChanged;
         workspace.OtherDevices.CollectionChanged += OnOtherDevicesChanged;
         RebuildAll();
@@ -209,6 +210,17 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenCustomServer() => _navigator.ShowCustomServer();
 
+    /// <summary>Some voice engine could work on this phone: the "Voice input" row shows.</summary>
+    public bool IsVoiceSupported => MobileHost.Voice.IsSupported;
+
+    /// <summary>The engine voice input uses now, under the row.</summary>
+    public string VoiceEngineName => Voice.VoiceService.NameOf(MobileHost.Voice.Settings.Engine);
+
+    [RelayCommand]
+    private void OpenVoiceSettings() => _navigator.ShowVoiceSettings();
+
+    private void OnVoiceChanged() => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(VoiceEngineName)));
+
     [RelayCommand]
     private void OpenAccountWeb()
     {
@@ -239,6 +251,7 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         _workspace.OtherDevices.CollectionChanged -= OnOtherDevicesChanged;
         Updater.PropertyChanged -= OnUpdaterChanged;
         Bots.SummaryChanged -= OnBotsSummaryChanged;
+        MobileHost.Voice.Changed -= OnVoiceChanged;
         Bots.Dispose();
         UnwatchAll();
         ClearRows();

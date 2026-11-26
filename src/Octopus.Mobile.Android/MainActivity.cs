@@ -100,12 +100,16 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
     {
         // The app's own files folder: no other app can read it, and it goes with the app when it is removed.
         var directory = Path.Combine(context.FilesDir!.AbsolutePath, "octopus");
-        var remote = new MobileRemote(new KeystoreMobileStore(directory), DeviceName());
+        var store = new KeystoreMobileStore(directory);
+        var remote = new MobileRemote(store, DeviceName());
         remote.Load();
         MobileHost.Workspace = remote.Workspace;
         MobileHost.Account = remote.Account;
         MobileHost.OpenBrowser = address => OpenBrowser(context, address);
         MobileHost.ScanQrCode = () => AndroidQrScanner.ScanAsync(context);
+        MobileHost.Voice = new Voice.VoiceService(store, new AndroidSpeechDictation(context), () => new AndroidAudioCapture(),
+            account: remote.GetServerAsync, signedIn: () => remote.Account.IsSignedIn);
+        MobileHost.Haptic = AndroidHaptics.Perform;
         MobileHost.Updater = Updates.MobileUpdater.Create(new AndroidUpdatePlatform(context), MobileHost.OpenBrowser);
     }
 
@@ -157,6 +161,12 @@ public sealed class MainActivity : AvaloniaMainActivity
     {
         base.OnStop();
         MobileHost.NotifyBackgrounded();
+    }
+
+    public override void OnRequestPermissionsResult(int requestCode, string[] permissions, [GeneratedEnum] Permission[] grantResults)
+    {
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        AndroidPermissions.Complete(requestCode, grantResults);
     }
 
     protected override void OnNewIntent(Intent? intent)

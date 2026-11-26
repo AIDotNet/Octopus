@@ -32,12 +32,16 @@ public static class Program
     {
         // Library/Application Support: kept, backed up, never shown to the person in the Files app.
         var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Octopus");
-        var remote = new MobileRemote(new KeychainMobileStore(directory), DeviceName());
+        var store = new KeychainMobileStore(directory);
+        var remote = new MobileRemote(store, DeviceName());
         remote.Load();
         MobileHost.Workspace = remote.Workspace;
         MobileHost.Account = remote.Account;
         MobileHost.OpenBrowser = OpenBrowser;
         MobileHost.ScanQrCode = IosQrScanner.ScanAsync;
+        MobileHost.Voice = new Voice.VoiceService(store, new IosSpeechDictation(), () => new IosAudioCapture(),
+            account: remote.GetServerAsync, signedIn: () => remote.Account.IsSignedIn);
+        MobileHost.Haptic = IosHaptics.Perform;
     }
 
     /// <summary>What a computer shows for this phone. Since iOS 16 the name the person gave it needs an entitlement; without, it is "iPhone".</summary>

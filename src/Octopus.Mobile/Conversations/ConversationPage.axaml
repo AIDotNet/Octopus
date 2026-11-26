@@ -8,6 +8,7 @@
            xmlns:common="using:Octopus.Mobile.Common"
            xmlns:ticker="using:Octopus.Ticker"
            xmlns:mentions="using:Octopus.App.Common.Mentions"
+           xmlns:voice="using:Octopus.Mobile.Voice"
            x:Class="Octopus.Mobile.Conversations.ConversationPage"
            x:DataType="vm:ConversationViewModel"
            AvoidKeyboard="True">
@@ -18,6 +19,10 @@
         <StreamGeometry x:Key="ChevronRightGlyph">M9 6l6 6-6 6</StreamGeometry>
         <StreamGeometry x:Key="AtGlyph">M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8</StreamGeometry>
         <StreamGeometry x:Key="StopGlyph">M6 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z</StreamGeometry>
+        <StreamGeometry x:Key="MicGlyph">M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z M5 11a7 7 0 0 0 14 0 M12 18v3</StreamGeometry>
+        <StreamGeometry x:Key="KeyboardGlyph">M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z M6 10h.01 M10 10h.01 M14 10h.01 M18 10h.01 M7 14h10</StreamGeometry>
+        <StreamGeometry x:Key="CloseGlyph">M18 6L6 18 M6 6l12 12</StreamGeometry>
+        <StreamGeometry x:Key="SendUpGlyph">M12 19V5 M5 12l7-7 7 7</StreamGeometry>
     </arcm:Page.Resources>
 
     <arcm:Page.Styles>
@@ -217,6 +222,112 @@
         <Style Selector="Border.choiceMark.selected">
             <Setter Property="Background" Value="{arc:ArcDesignTokenResource Accent}" />
             <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        </Style>
+
+        <!-- Hold to talk (design/ui/移动端输入框重写与语音输入方案.html, scheme B): the bar, the overlay and its targets. -->
+        <Style Selector="Border.holdToTalk">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="MinHeight" Value="44" />
+        </Style>
+        <Style Selector="Border.holdToTalk.pressed">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Border}" />
+        </Style>
+        <Style Selector="Border.holdToTalk TextBlock">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+        </Style>
+        <Style Selector="Border.voiceProblem">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource WarningSubtle}" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="12,6,6,6" />
+        </Style>
+        <Style Selector="Border.voiceBackdrop">
+            <Setter Property="Background" Value="#A6000000" />
+        </Style>
+        <Style Selector="Border.voiceBubble">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="Padding" Value="16,12" />
+        </Style>
+        <Style Selector="Grid.cancel Border.voiceBubble">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+        <Style Selector="voice|VoiceWaveform">
+            <Setter Property="BarBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        </Style>
+        <Style Selector="Grid.cancel voice|VoiceWaveform">
+            <Setter Property="BarBrush" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+        <Style Selector="TextBlock.voiceMeta">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+        <Style Selector="TextBlock.voiceMeta.warn">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
+        </Style>
+        <Style Selector="TextBlock.voiceText">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="LineHeight" Value="24" />
+        </Style>
+        <Style Selector="Run.voiceFaint">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+        </Style>
+        <Style Selector="Border.voiceTarget">
+            <Setter Property="Width" Value="68" />
+            <Setter Property="Height" Value="68" />
+            <Setter Property="CornerRadius" Value="34" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="RenderTransform" Value="scale(1)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.voiceTarget TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="Border.voiceTarget arc|ArcGlyph">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        </Style>
+        <Style Selector="Grid.cancel Border.cancelTarget">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Danger}" />
+            <Setter Property="RenderTransform" Value="scale(1.2)" />
+        </Style>
+        <Style Selector="Grid.send Border.sendTarget">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="RenderTransform" Value="scale(1.2)" />
+        </Style>
+        <Style Selector="Grid.cancel Border.cancelTarget TextBlock, Grid.send Border.sendTarget TextBlock">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentForeground}" />
+        </Style>
+        <Style Selector="Grid.cancel Border.cancelTarget arc|ArcGlyph, Grid.send Border.sendTarget arc|ArcGlyph">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentForeground}" />
+        </Style>
+        <Style Selector="Border.voiceArc">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="CornerRadius" Value="220,220,0,0" />
+            <Setter Property="Margin" Value="-80,0,-80,0" />
+            <Setter Property="Height" Value="140" />
+        </Style>
+        <Style Selector="TextBlock#VoiceReleaseHint">
+            <Setter Property="FontWeight" Value="{arc:ArcDesignTokenResource WeightMedium}" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+        <Style Selector="Grid.cancel TextBlock#VoiceReleaseHint">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Danger}" />
+        </Style>
+        <Style Selector="Grid.send TextBlock#VoiceReleaseHint">
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Accent}" />
         </Style>
 
         <!-- Composer option chips above the prompt field. -->
@@ -856,18 +967,55 @@
                     </ItemsControl>
                 </ScrollViewer>
 
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
-                    <arcm:IconButton Name="MentionButton"
-                                     Grid.Column="0"
-                                     Variant="Plain"
-                                     Icon="{StaticResource AtGlyph}"
-                                     Command="{Binding StartMentionCommand}"
-                                     IsVisible="{Binding SupportsMentions}"
-                                     AutomationProperties.Name="{l:MobileLangResource ConversationMention}" />
+                <!-- Why the microphone cannot be used right now, with the way to the voice settings. -->
+                <Border Name="VoiceProblemBanner" Classes="voiceProblem" IsVisible="{Binding Voice.HasProblem}">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                        <TextBlock Name="VoiceProblemText"
+                                   Text="{Binding Voice.ProblemText}"
+                                   TextWrapping="Wrap"
+                                   FontSize="12.5"
+                                   VerticalAlignment="Center" />
+                        <Button Name="VoiceProblemSettings"
+                                Grid.Column="1"
+                                Classes="inlineLinkBtn"
+                                Content="{l:MobileLangResource VoiceOpenSettings}"
+                                Command="{Binding Voice.OpenSettingsCommand}" />
+                        <Button Grid.Column="2"
+                                Classes="inlineLinkBtn"
+                                Content="✕"
+                                Command="{Binding Voice.DismissProblemCommand}"
+                                AutomationProperties.Name="{l:MobileLangResource Cancel}" />
+                    </Grid>
+                </Border>
+
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="6">
+                    <!-- Microphone / keyboard: switches the field for the "hold to talk" bar and back. -->
+                    <Panel Grid.Column="0" IsVisible="{Binding Voice.IsSupported}">
+                        <arcm:IconButton Name="VoiceModeButton"
+                                         Variant="Plain"
+                                         Icon="{StaticResource MicGlyph}"
+                                         Command="{Binding Voice.ToggleVoiceModeCommand}"
+                                         IsVisible="{Binding !Voice.IsVoiceMode}"
+                                         AutomationProperties.Name="{l:MobileLangResource VoiceSwitchToVoice}" />
+                        <arcm:IconButton Name="KeyboardModeButton"
+                                         Variant="Plain"
+                                         Icon="{StaticResource KeyboardGlyph}"
+                                         Command="{Binding Voice.ToggleVoiceModeCommand}"
+                                         IsVisible="{Binding Voice.IsVoiceMode}"
+                                         AutomationProperties.Name="{l:MobileLangResource VoiceSwitchToKeyboard}" />
+                    </Panel>
+                    <Panel Grid.Column="1" IsVisible="{Binding !Voice.IsVoiceMode}">
+                        <arcm:IconButton Name="MentionButton"
+                                         Variant="Plain"
+                                         Icon="{StaticResource AtGlyph}"
+                                         Command="{Binding StartMentionCommand}"
+                                         IsVisible="{Binding SupportsMentions}"
+                                         AutomationProperties.Name="{l:MobileLangResource ConversationMention}" />
+                    </Panel>
                     <!-- Grows to a few lines so a sentence with several @tokens stays readable; tokens are plain text
                          kept atomic by MentionEditing, so the system keyboard, IME and selection work as usual. -->
                     <arcm:TextField Name="PromptField"
-                                    Grid.Column="1"
+                                    Grid.Column="2"
                                     Text="{Binding PromptText, Mode=TwoWay}"
                                     CaretIndex="{Binding PromptCaretIndex, Mode=TwoWay}"
                                     mentions:MentionEditing.Tokens="{Binding MentionTokens}"
@@ -877,21 +1025,32 @@
                                     MinHeight="44"
                                     MaxHeight="132"
                                     PlaceholderText="{l:MobileLangResource ConversationPlaceholder}"
+                                    IsVisible="{Binding !Voice.IsVoiceMode}"
                                     VerticalAlignment="Center" />
+                    <!-- Pressed, held, dragged and released: ConversationPage.axaml.cs reports the finger to Voice. -->
+                    <Border Name="HoldToTalkBar"
+                            Grid.Column="2"
+                            Classes="holdToTalk"
+                            Classes.pressed="{Binding Voice.IsRecording}"
+                            IsVisible="{Binding Voice.IsVoiceMode}"
+                            AutomationProperties.Name="{l:MobileLangResource VoiceHoldToTalk}">
+                        <TextBlock Text="{Binding Voice.HoldText}" />
+                    </Border>
                     <arcm:IconButton Name="StopButton"
-                                     Grid.Column="2"
+                                     Grid.Column="3"
                                      Variant="Tinted"
                                      Icon="{StaticResource StopGlyph}"
                                      Command="{Binding CancelCommand}"
                                      IsVisible="{Binding CanStop}"
                                      AutomationProperties.Name="{l:MobileLangResource ConversationStop}" />
-                    <arcm:IconButton Name="SendButton"
-                                     Grid.Column="3"
-                                     Variant="Filled"
-                                     Icon="{x:Static arc:ArcIcons.ArrowUp}"
-                                     Command="{Binding SendCommand}"
-                                     IsEnabled="{Binding CanSend}"
-                                     AutomationProperties.Name="{l:MobileLangResource Send}" />
+                    <Panel Grid.Column="4" IsVisible="{Binding !Voice.IsVoiceMode}">
+                        <arcm:IconButton Name="SendButton"
+                                         Variant="Filled"
+                                         Icon="{x:Static arc:ArcIcons.ArrowUp}"
+                                         Command="{Binding SendCommand}"
+                                         IsEnabled="{Binding CanSend}"
+                                         AutomationProperties.Name="{l:MobileLangResource Send}" />
+                    </Panel>
                 </Grid>
             </StackPanel>
         </Border>
@@ -899,6 +1058,55 @@
 
     <arcm:Page.Overlay>
         <Panel>
+            <!-- Hold to talk: the live text above the finger, "cancel" / "send" to drag onto, what releasing does.
+                 Not hit-testable: the bar keeps the pointer captured while the finger moves over all of this. -->
+            <Grid Name="VoiceOverlay"
+                  IsVisible="{Binding Voice.IsRecording}"
+                  IsHitTestVisible="False"
+                  Classes.cancel="{Binding Voice.IsCancelZone}"
+                  Classes.send="{Binding Voice.IsSendZone}"
+                  RowDefinitions="*,Auto,Auto,Auto">
+                <Border Grid.RowSpan="4" Classes="voiceBackdrop" />
+                <Border Name="VoiceBubble" Grid.Row="1" Classes="voiceBubble" Margin="32,0,32,28">
+                    <StackPanel Spacing="8">
+                        <TextBlock Name="VoiceMeta"
+                                   Classes="voiceMeta"
+                                   Classes.warn="{Binding Voice.IsNearLimit}"
+                                   Text="{Binding Voice.MetaText}" />
+                        <TextBlock Name="VoiceText" Classes="voiceText" TextWrapping="Wrap" MaxHeight="168">
+                            <Run Text="{Binding Voice.SettledText}" /><Run Classes="voiceFaint" Text="{Binding Voice.TailText}" /><Run Classes="voiceFaint" Text="{Binding Voice.Placeholder}" />
+                        </TextBlock>
+                        <voice:VoiceWaveform Name="VoiceWave"
+                                             Height="28"
+                                             Level="{Binding Voice.Level}"
+                                             IsVisible="{Binding !Voice.IsFinishing}" />
+                        <arc:ArcSpinner Width="16"
+                                        Height="16"
+                                        HorizontalAlignment="Center"
+                                        IsVisible="{Binding Voice.IsFinishing}" />
+                    </StackPanel>
+                </Border>
+                <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="40,0,40,22">
+                    <Border Name="VoiceCancelTarget" Classes="voiceTarget cancelTarget">
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <arc:ArcGlyph Data="{StaticResource CloseGlyph}" Size="20" HorizontalAlignment="Center" />
+                            <TextBlock Text="{l:MobileLangResource Cancel}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Name="VoiceSendTarget" Grid.Column="2" Classes="voiceTarget sendTarget">
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <arc:ArcGlyph Data="{StaticResource SendUpGlyph}" Size="20" HorizontalAlignment="Center" />
+                            <TextBlock Text="{l:MobileLangResource VoiceSendDirect}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+                <Border Name="VoiceReleaseArc" Grid.Row="3" Classes="voiceArc">
+                    <TextBlock Name="VoiceReleaseHint"
+                               Text="{Binding Voice.ReleaseText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,36,0,0" />
+                </Border>
+            </Grid>
             <arcm:ActionSheet Name="OptionSheet" CancelText="{l:MobileLangResource Cancel}" />
             <common:SessionWorkspaceOverlay Name="WorkspaceOverlay" DataContext="{Binding WorkspaceMenu}" />
         </Panel>

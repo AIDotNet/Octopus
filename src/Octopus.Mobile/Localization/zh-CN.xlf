@@ -476,5 +476,72 @@
     <unit id="ScanQrToConnect"><segment><source>Scan QR code to connect</source><target state="translated">扫码连接电脑</target></segment></unit>
     <unit id="ScanQrToConnectHint"><segment><source>Scan the pairing QR code on your computer to connect directly</source><target state="translated">扫描电脑上的配对二维码，免输地址直连</target></segment></unit>
     <unit id="ScanRelayQrCode"><segment><source>Scan relay QR code</source><target state="translated">扫描中转配置二维码</target></segment></unit>
+    <unit id="VoiceHoldToTalk"><segment><source>Hold to talk</source><target state="translated">按住 说话</target></segment></unit>
+    <unit id="VoiceReleaseToEnd"><segment><source>Release to finish</source><target state="translated">松开 结束</target></segment></unit>
+    <unit id="VoiceListening"><segment><source>Listening</source><target state="translated">正在听</target></segment></unit>
+    <unit id="VoiceFinishing"><segment><source>Finishing…</source><target state="translated">正在整理…</target></segment></unit>
+    <unit id="VoiceSpeakNow"><segment><source>Speak now…</source><target state="translated">请说话…</target></segment></unit>
+    <unit id="VoiceReleaseFill"><segment><source>Release to put it in the message box</source><target state="translated">松开 填入输入框</target></segment></unit>
+    <unit id="VoiceReleaseCancel"><segment><source>Release to cancel</source><target state="translated">松开 取消</target></segment></unit>
+    <unit id="VoiceReleaseSend"><segment><source>Release to send now</source><target state="translated">松开 直接发送</target></segment></unit>
+    <unit id="VoiceSendDirect"><segment><source>Send now</source><target state="translated">直接发送</target></segment></unit>
+    <unit id="VoiceSwitchToVoice"><segment><source>Voice input</source><target state="translated">语音输入</target></segment></unit>
+    <unit id="VoiceSwitchToKeyboard"><segment><source>Keyboard</source><target state="translated">键盘输入</target></segment></unit>
+    <unit id="VoiceOpenSettings"><segment><source>Settings</source><target state="translated">去设置</target></segment></unit>
+    <unit id="VoiceProblemNoSystem"><segment><source>This phone has no speech recognition of its own. Choose a cloud engine in Voice input settings.</source><target state="translated">这台手机没有系统语音识别，可以在语音输入设置里改用云端识别。</target></segment></unit>
+    <unit id="VoiceProblemNotConfigured"><segment><source>{0} needs its key. Fill it in under Voice input settings.</source><target state="translated">{0} 还没有填写密钥，请在语音输入设置里填写。</target></segment></unit>
+    <unit id="VoiceProblemNoMicrophone"><segment><source>This device cannot record.</source><target state="translated">这台设备不能录音。</target></segment></unit>
+    <unit id="VoiceErrorPermission"><segment><source>Voice input needs the microphone (and speech recognition). Allow it in the system settings.</source><target state="translated">语音输入需要麦克风（和语音识别）权限，请在系统设置里允许。</target></segment></unit>
+    <unit id="VoiceErrorAuth"><segment><source>{0} refused the key. Check it in Voice input settings.</source><target state="translated">{0} 拒绝了密钥，请在语音输入设置里检查。</target></segment></unit>
+    <unit id="VoiceErrorNetwork"><segment><source>Voice input could not reach the service: {0}</source><target state="translated">语音识别连接失败：{0}</target></segment></unit>
+    <unit id="VoiceErrorTimeout"><segment><source>The service took too long to answer.</source><target state="translated">识别服务响应超时。</target></segment></unit>
+    <unit id="VoiceErrorNoSpeech"><segment><source>Nothing was heard. Try again.</source><target state="translated">没有听清，请再说一次。</target></segment></unit>
+    <unit id="VoiceEngineSystem"><segment><source>System speech recognition</source><target state="translated">系统语音识别</target></segment></unit>
+    <unit id="VoiceEngineAliyun"><segment><source>Alibaba Cloud Fun-ASR</source><target state="translated">阿里云百炼 Fun-ASR</target></segment></unit>
+    <unit id="VoiceEngineVolcengine"><segment><source>Volcengine Doubao</source><target state="translated">火山引擎 豆包语音</target></segment></unit>
+    <unit id="VoiceEngineOpenAi"><segment><source>OpenAI</source><target state="translated">OpenAI</target></segment></unit>
+    <unit id="VoiceSettingsTitle"><segment><source>Voice input</source><target state="translated">语音输入</target></segment></unit>
+    <unit id="VoiceSectionEngine"><segment><source>Recognition engine</source><target state="translated">识别来源</target></segment></unit>
+    <unit id="VoiceEngineSystemHint"><segment><source>Default · free · no account needed</source><target state="translated">默认 · 免费 · 不需要账号</target></segment></unit>
+    <unit id="VoiceEngineSystemMissing"><segment><source>Not available on this phone (no system speech service)</source><target state="translated">这台手机不可用（没有系统语音服务）</target></segment></unit>
+    <unit id="VoiceEngineAliyunHint"><segment><source>Live text · mixed Chinese and English · your own key</source><target state="translated">边说边出字 · 中英混说 · 自带密钥</target></segment></unit>
+    <unit id="VoiceEngineVolcengineHint"><segment><source>Large-model streaming recognition · your own key</source><target state="translated">大模型流式识别 · 自带密钥</target></segment></unit>
+    <unit id="VoiceEngineOpenAiHint"><segment><source>Text after you release · any compatible service · your own key</source><target state="translated">松手后出字 · 兼容服务也可用 · 自带密钥</target></segment></unit>
+    <unit id="VoiceEngineNote"><segment><source>The system engine is the default. When it is not available, nothing is sent to a cloud service until you choose one here.</source><target state="translated">默认使用系统识别。系统识别不可用时，不会自动改用云端；需要你在这里手动选择。</target></segment></unit>
+    <unit id="VoiceSectionKeys"><segment><source>Key</source><target state="translated">密钥</target></segment></unit>
+    <unit id="VoiceAliyunRegion"><segment><source>Region</source><target state="translated">地域</target></segment></unit>
+    <unit id="VoiceAliyunRegionChina"><segment><source>Chinese mainland</source><target state="translated">中国内地</target></segment></unit>
+    <unit id="VoiceAliyunRegionIntl"><segment><source>International</source><target state="translated">国际</target></segment></unit>
+    <unit id="VoiceAliyunWorkspace"><segment><source>Workspace ID</source><target state="translated">Workspace ID</target></segment></unit>
+    <unit id="VoiceModel"><segment><source>Model</source><target state="translated">模型</target></segment></unit>
+    <unit id="VoiceOptional"><segment><source>Optional</source><target state="translated">选填</target></segment></unit>
+    <unit id="VoiceAliyunHint"><segment><source>Create an API key in the Model Studio console. With a workspace ID the workspace's own endpoint is used; keys of the international site need the International region.</source><target state="translated">在阿里云百炼控制台创建 API Key。填了 Workspace ID 就走该工作空间的专属地址；国际站的 Key 请选「国际」。</target></segment></unit>
+    <unit id="VoiceVolcengineAppId"><segment><source>APP ID (older console only)</source><target state="translated">APP ID（仅旧版控制台）</target></segment></unit>
+    <unit id="VoiceVolcengineHint"><segment><source>Volcengine console › Doubao speech › streaming recognition (large model). Newer console: the API key alone. Older console: the Access Token here and the APP ID below.</source><target state="translated">火山引擎控制台 › 豆包语音 › 大模型流式语音识别。新版控制台只填 API Key；旧版控制台填 Access Token 和下面的 APP ID。</target></segment></unit>
+    <unit id="VoiceBaseUrl"><segment><source>Address</source><target state="translated">服务地址</target></segment></unit>
+    <unit id="VoiceOpenAiHint"><segment><source>Any service with an OpenAI-compatible /audio/transcriptions works. The text comes after you release.</source><target state="translated">任何兼容 OpenAI /audio/transcriptions 的服务都可以。文字在松手后出现。</target></segment></unit>
+    <unit id="VoiceSectionRecognition"><segment><source>Recognition</source><target state="translated">识别</target></segment></unit>
+    <unit id="VoiceLanguage"><segment><source>Language</source><target state="translated">语言</target></segment></unit>
+    <unit id="VoiceLanguageAuto"><segment><source>Auto</source><target state="translated">自动</target></segment></unit>
+    <unit id="VoiceLanguageChinese"><segment><source>Chinese</source><target state="translated">中文</target></segment></unit>
+    <unit id="VoiceLanguageEnglish"><segment><source>English</source><target state="translated">English</target></segment></unit>
+    <unit id="VoicePunctuation"><segment><source>Add punctuation</source><target state="translated">自动加标点</target></segment></unit>
+    <unit id="VoiceHaptics"><segment><source>Haptic feedback</source><target state="translated">触感反馈</target></segment></unit>
+    <unit id="VoicePrivacySystem"><segment><source>With the system engine the audio stays on the phone when it recognizes on the device; otherwise Apple or Google processes it.</source><target state="translated">使用系统识别时，支持本机识别则音频不离开手机；否则由 Apple 或 Google 处理。</target></segment></unit>
+    <unit id="VoicePrivacyCloud"><segment><source>The audio goes to {0} over an encrypted connection, only while you hold the button. Octopus keeps none of it.</source><target state="translated">只在按住期间录音，音频经加密连接发送到 {0}，Octopus 不保存任何音频。</target></segment></unit>
+    <unit id="MeSectionInput"><segment><source>Input</source><target state="translated">输入</target></segment></unit>
+    <unit id="MeVoiceInput"><segment><source>Voice input</source><target state="translated">语音输入</target></segment></unit>
+    <unit id="VoiceEngineOctopus"><segment><source>Octopus cloud recognition</source><target state="translated">Octopus 云端识别</target></segment></unit>
+    <unit id="VoiceEngineOctopusHint"><segment><source>Through your Octopus account · no key of your own</source><target state="translated">经你的 Octopus 账号 · 不用自己的密钥</target></segment></unit>
+    <unit id="VoiceSectionOctopus"><segment><source>Your account</source><target state="translated">账号额度</target></segment></unit>
+    <unit id="VoiceOctopusStatusLoading"><segment><source>Asking your Octopus server…</source><target state="translated">正在询问 Octopus 服务器…</target></segment></unit>
+    <unit id="VoiceOctopusStatusUnknown"><segment><source>Your Octopus server could not be asked right now (offline, or an older server).</source><target state="translated">现在问不到 Octopus 服务器（网络不通，或服务器版本较旧）。</target></segment></unit>
+    <unit id="VoiceOctopusStatusUnlimited"><segment><source>On · no daily limit</source><target state="translated">已开启 · 不限时长</target></segment></unit>
+    <unit id="VoiceOctopusStatusQuota"><segment><source>On · {0} of {1} minutes used today</source><target state="translated">已开启 · 今天已用 {0} / {1} 分钟</target></segment></unit>
+    <unit id="VoiceOctopusHint"><segment><source>The server recognizes with its own service and key, and keeps a daily allowance for each account. The allowance starts again every day (UTC).</source><target state="translated">由服务器用它自己的识别服务和密钥完成，每个账号每天有固定额度，按 UTC 每天重置。</target></segment></unit>
+    <unit id="VoiceProblemNotSignedIn"><segment><source>Octopus cloud recognition needs an Octopus account. Sign in under Me, or choose another engine.</source><target state="translated">Octopus 云端识别需要登录 Octopus 账号。请在「我的」里登录，或改用其他识别来源。</target></segment></unit>
+    <unit id="VoiceErrorServerOff"><segment><source>Your Octopus server has no speech recognition set up.</source><target state="translated">你的 Octopus 服务器没有开启语音识别。</target></segment></unit>
+    <unit id="VoiceErrorQuota"><segment><source>Today's voice allowance of your account is used up, or too many dictations are under way.</source><target state="translated">今天的语音识别额度已用完，或同时进行的识别太多。</target></segment></unit>
+    <unit id="VoicePrivacyOctopus"><segment><source>Only while you hold the button, the audio goes to your Octopus server over an encrypted connection, and from there to its recognition service. Neither keeps it.</source><target state="translated">只在按住期间录音，音频经加密连接发送到你的 Octopus 服务器，再由服务器转给它使用的识别服务，都不保存音频。</target></segment></unit>
   </file>
 </xliff>

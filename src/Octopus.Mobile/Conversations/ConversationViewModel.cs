@@ -9,6 +9,7 @@ using Octopus.App.Common.Mentions;
 using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
+using Octopus.Mobile.Voice;
 using Octopus.Mobile.Workspace;
 
 namespace Octopus.Mobile.Conversations;
@@ -54,6 +55,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
             PrimaryActionLabel = Text(MobileLangResourceKind.ConversationReconnect),
             PrimaryActionCommand = ReloadCommand,
         };
+        Voice = new VoiceComposerViewModel(MobileHost.Voice, InsertDictation, SendDictationAsync, navigator.ShowVoiceSettings, Actions.ShowNotice, CollectHotwords);
         session.PropertyChanged += OnSessionChanged;
         MobileHost.Backgrounded += OnAppBackgrounded;
         MobileHost.Foregrounded += OnAppForegrounded;
@@ -70,6 +72,9 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
 
     /// <summary>The live conversation once attached; null while opening or if opening failed.</summary>
     public RemoteConversation? Conversation => _conversation;
+
+    /// <summary>"Hold to talk" of the composer: the microphone switch, the bar, and the overlay.</summary>
+    public VoiceComposerViewModel Voice { get; }
 
     /// <summary>The timeline entries in chronological order.</summary>
     [ObservableProperty] public partial ObservableCollection<ConversationEntry> Entries { get; private set; } = [];
@@ -223,6 +228,68 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         {
             // Keep what the person typed when sending failed so they do not lose it.
             if (string.IsNullOrEmpty(PromptText)) PromptText = text;
+            Actions.ShowNotice(e.Message);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            IsSending = false;
+        }
+    }
+
+    /// <summary>
+    /// What this conversation talks about, for the recognizer to expect: the project, who can be @-mentioned, the files
+    /// the agent touched lately, and the code-like words of the last messages.
+    /// </summary>
+    internal IReadOnlyList<string> CollectHotwords()
+    {
+        var recent = Entries.Reverse().Take(30).ToList();
+        return VoiceHotwords.Collect(
+            [Session.Project.Name, .. _mentionTargets.Select(target => target.Name)],
+            recent.OfType<ConversationAssistantEntry>().SelectMany(entry => entry.Tools.Reverse()).Select(tool => tool.Path),
+            recent.Select(entry => entry switch
+            {
+                ConversationUserEntry user => user.Text,
+                ConversationAssistantEntry assistant => assistant.Text,
+                _ => null,
+            }));
+    }
+
+    /// <summary>Dictated text into the prompt field at the caret, to be checked before it is sent.</summary>
+    internal void InsertDictation(string text)
+    {
+        var current = PromptText;
+        var caret = Math.Clamp(PromptCaretIndex, 0, current.Length);
+        // Only words in Latin letters need a space between them; Chinese runs straight on.
+        var lead = caret > 0 && IsWordChar(current[caret - 1]) && IsWordChar(text[0]) ? " " : "";
+        var tail = caret < current.Length && IsWordChar(current[caret]) && IsWordChar(text[^1]) ? " " : "";
+        var inserted = lead + text + tail;
+        PromptText = string.Concat(current.AsSpan(0, caret), inserted, current.AsSpan(caret));
+        PromptCaretIndex = caret + inserted.Length;
+
+        static bool IsWordChar(char c) => char.IsAsciiLetterOrDigit(c);
+    }
+
+    /// <summary>Dictated text released on "send": goes out as it is, the draft in the field stays.</summary>
+    private async Task SendDictationAsync(string text)
+    {
+        if (_conversation is null || IsSending)
+        {
+            InsertDictation(text);
+            return;
+        }
+        IsSending = true;
+        try
+        {
+            await _conversation.SendAsync(text, cancellationToken: _lifetime.Token);
+            ScrollToBottomRequested?.Invoke();
+        }
+        catch (IOException e)
+        {
+            // Not lost: it waits in the field.
+            InsertDictation(text);
             Actions.ShowNotice(e.Message);
         }
         catch (OperationCanceledException)
@@ -487,6 +554,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _disposed = true;
         MobileHost.Backgrounded -= OnAppBackgrounded;
         MobileHost.Foregrounded -= OnAppForegrounded;
+        Voice.Dispose();
         StopStatusPhraseTimer();
         _lifetime.Cancel();
         _lifetime.Dispose();
@@ -619,7 +687,12 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         EnsureStatusPhraseTimer();
     }
 
-    private void OnAppBackgrounded() => Dispatcher.UIThread.Post(StopStatusPhraseTimer);
+    private void OnAppBackgrounded() => Dispatcher.UIThread.Post(() =>
+    {
+        StopStatusPhraseTimer();
+        // A call came in or the app was left mid-sentence: nothing half-heard goes anywhere.
+        Voice.Abort();
+    });
 
     private void OnAppForegrounded() => Dispatcher.UIThread.Post(EnsureStatusPhraseTimer);
 
