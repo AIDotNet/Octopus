@@ -1,7 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using Avalonia.Threading;
 using Octopus.App.AgentGui;
@@ -31,7 +30,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
 
     // Ids for the life of a timeline item on this computer, the same for every device and every attachment.
     private static readonly ConditionalWeakTable<AgentTimelineItem, string> Ids = new();
-    private static long _lastId;
+    private static long s_lastId;
 
     private readonly Dictionary<string, Conversation> _conversations = new(StringComparer.Ordinal);
 
@@ -193,7 +192,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
     }
 
     private static string IdOf(AgentTimelineItem item) =>
-        Ids.GetValue(item, static _ => "e" + Interlocked.Increment(ref _lastId).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Ids.GetValue(item, static _ => "e" + Interlocked.Increment(ref s_lastId).ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     /// <summary>
     /// One tab's conversation while at least one device looks at it: watches the timeline, its items and the composer,

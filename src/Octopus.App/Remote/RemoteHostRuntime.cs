@@ -4,7 +4,6 @@ using System.Net.Sockets;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Styling;
-using Octopus.Platform;
 using Octopus.Remote.Host;
 using Octopus.Remote.Protocol;
 using Octopus.Remote.Relay;
@@ -44,7 +43,7 @@ public sealed class RemoteHostRuntime : IDisposable
         _workspace = workspace;
         // Signed in, signed out, or signed out by the relay: the standing connection follows, whether or not the
         // settings page is open.
-        if (relay is not null) relay.Changed += OnRelayAccessChanged;
+        relay?.Changed += OnRelayAccessChanged;
         workspace.IsDark = static () => Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
     }
 
@@ -72,9 +71,22 @@ public sealed class RemoteHostRuntime : IDisposable
     /// <summary>What this app says about itself to a device: its version, what it can do, and its terminal library's build.</summary>
     public static HelloMessage Hello { get; } = new()
     {
+        Protocol = RemoteProtocol.Version,
+        MinProtocol = RemoteProtocol.Version,
+        MaxProtocol = RemoteProtocol.LatestVersion,
         AppVersion = HostWorkspace.AppVersion,
-        Capabilities = [RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilityFiles, RemoteMethods.CapabilityGit, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityBrowse, RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityAcpGui, RemoteMethods.CapabilityUpload],
+        Capabilities =
+        [
+            RemoteMethods.CapabilityWorkspace, RemoteMethods.CapabilityNativeSnapshot, RemoteMethods.CapabilityFiles,
+            RemoteMethods.CapabilityGit, RemoteMethods.CapabilitySizeRelease, RemoteMethods.CapabilityBrowse,
+            RemoteMethods.CapabilityWorkspaces, RemoteMethods.CapabilityAcpGui, RemoteMethods.CapabilityUpload,
+            RemoteMethods.CapabilitySystemMetrics, RemoteMethods.CapabilitySystemSignal, RemoteMethods.CapabilityProcessRun,
+            RemoteMethods.CapabilityProtocolV2, RemoteMethods.CapabilityCompression, RemoteMethods.CapabilityFileStream,
+            RemoteMethods.CapabilitySessionResume, RemoteMethods.CapabilityTransportQuic, RemoteMethods.CapabilityTransportP2p,
+            RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons,
+        ],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+        Transport = TransportNegotiation.CreateDefault(),
     };
 
     /// <summary>The service, made on first use: the device key is read from the keystore (or made), the paired devices from their file.</summary>
@@ -169,7 +181,28 @@ public sealed class RemoteHostRuntime : IDisposable
         link.Start();
     }
 
-    private void OnRelayChanged() => Changed?.Invoke();
+    private void OnRelayChanged()
+    {
+        if (_service is { StunServer: null } service && _relayLink?.ServerInfo is { StunServers.Count: > 0 } info)
+        {
+            _ = ApplyRelayStunAsync(service, info);
+        }
+        Changed?.Invoke();
+    }
+
+    private static async Task ApplyRelayStunAsync(RemoteHostService service, RelayServerInfo info)
+    {
+        try
+        {
+            if (await info.ResolveStunEndPointAsync().ConfigureAwait(false) is { } stun)
+            {
+                service.StunServer ??= stun;
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
 
     // ---- the access password (design/16-账号设备与访问密码.md) ----
 
@@ -219,7 +252,13 @@ public sealed class RemoteHostRuntime : IDisposable
     }
 
     /// <summary>What this host tells the relay it offers, for the account's device list.</summary>
-    private IReadOnlyList<string> RelayFeatures() => AcceptsPassword ? [RelayHostFeatures.PasswordAccess] : [];
+    private IReadOnlyList<string> RelayFeatures()
+    {
+        var features = new List<string>(4) { RelayHostFeatures.ProtocolV2, RelayHostFeatures.P2p };
+        if (QuicMessageTransport.IsSupported) features.Add(RelayHostFeatures.Quic);
+        if (AcceptsPassword) features.Add(RelayHostFeatures.PasswordAccess);
+        return features;
+    }
 
     private void OnPasswordAccessChanged()
     {
@@ -298,7 +337,7 @@ public sealed class RemoteHostRuntime : IDisposable
     public void Dispose()
     {
         // At exit: devices are cut off and the port is given back; nothing waits for them.
-        if (_relay is not null) _relay.Changed -= OnRelayAccessChanged;
+        _relay?.Changed -= OnRelayAccessChanged;
         if (_service is { } running) running.PasswordAccessSuspendedChanged -= OnPasswordAccessChanged;
         if (_relayLink is { } link) _ = link.DisposeAsync().AsTask();
         if (_service is { } service) _ = service.DisposeAsync().AsTask();

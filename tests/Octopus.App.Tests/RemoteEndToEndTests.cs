@@ -98,12 +98,12 @@ public class RemoteEndToEndTests
         public IProjectService Projects { get; } = AppHost.Get<IProjectService>();
         public TerminalSessionRegistry Sessions { get; } = AppHost.Get<TerminalSessionRegistry>();
 
-        public HostSide(string terminalBuild = "build-1")
+        public HostSide(string terminalBuild = "build-1", HelloMessage? hello = null)
         {
             Workspace = new HostWorkspace(Projects, AppHost.Get<IItemLaunchService>(), Programs, Sessions, AppHost.Get<ITabContentRegistry>(),
                 AppHost.Get<IItemActivityService>(), AppHost.Get<IAgentCatalog>(), AppHost.Get<IAgentScanner>(), AppHost.Get<ISettingsStore>(), AppHost.Get<IShellResolver>(),
                 AppHost.Get<Octopus.FileSystem.IFileTreeService>(), AppHost.Get<Octopus.Git.IGitService>(), AppHost.Get<Octopus.App.Common.PathComparer>());
-            Service = new RemoteHostService(Identity, () => new DeviceDescription("Studio", DeviceKind.Desktop), Devices, Workspace, Hello(terminalBuild));
+            Service = new RemoteHostService(Identity, () => new DeviceDescription("Studio", DeviceKind.Desktop), Devices, Workspace, hello ?? Hello(terminalBuild));
         }
 
         public async ValueTask DisposeAsync()
@@ -165,7 +165,8 @@ public class RemoteEndToEndTests
     private static TerminalSession Mirror(RemoteHostClient client, string itemId, int columns = 50, int rows = 15)
     {
         var mirror = new TerminalSession(Remote, client.OpenTerminal(itemId), new TerminalSize(columns, rows, 0, 0),
-            TerminalPalettes.Dark, ColorScheme.Dark, 20_000, () => false) { IsMirror = true };
+            TerminalPalettes.Dark, ColorScheme.Dark, 20_000, () => false)
+        { IsMirror = true };
         mirror.Start();
         return mirror;
     }
@@ -400,7 +401,11 @@ public class RemoteEndToEndTests
 
         var item = await Wait(client.CreateItemAsync(new CreateItemMessage
         {
-            ProjectId = project.Id, Kind = ItemKinds.Agent, AgentId = "claude", Model = claude.Models[0].Id, Prompt = "fix the resize bug",
+            ProjectId = project.Id,
+            Kind = ItemKinds.Agent,
+            AgentId = "claude",
+            Model = claude.Models[0].Id,
+            Prompt = "fix the resize bug",
         }));
         Assert.Equal(ItemKinds.Agent, item.Kind);
         var onHost = project.Items.Single(i => i.Id == item.Id);
@@ -636,5 +641,67 @@ public class RemoteEndToEndTests
         await using var client = await Connect(host, device);
         await using var mirror = Mirror(client, item.Id, 80, 24);
         await Until(() => mirror.ReadText().Contains("AFTER-THE-FLOOD"), "a fresh view has everything");
+    }
+
+    [AvaloniaFact]
+    public async Task Protocol_v2_streams_files_resumes_terminals_from_ring_buffer_and_upgrades_live_to_webrtc_p2p()
+    {
+        await using var host = new HostSide(hello: RemoteHostRuntime.Hello);
+        using var device = DeviceIdentity.Create();
+        host.Devices.Add(device.PublicKey, Laptop);
+        var project = AddHostProject();
+
+        // Connect with full v2 capabilities (compression, binary file streams, session resume, WebRTC P2P upgrade).
+        var (a, b) = InMemoryTransport.CreatePair();
+        _ = host.Service.ServeAsync(b);
+        await using var client = await Wait(RemoteHostClient.ConnectAsync(a, device, Laptop, PeerExpectation.Paired(host.Identity.PublicKey), RemoteHostRuntime.Hello));
+
+        Assert.True(client.SupportsFileStream);
+        Assert.True(client.SupportsSessionResume);
+        Assert.True(client.SupportsTransportP2p);
+
+        // 1. Live WebRTC P2P UDP upgrade: migrates the active connection from InMemoryTransport to a real UDP WebRtcP2pTransport!
+        await Wait(client.UpgradeToP2pAsync(device, Laptop, loopbackOnly: true));
+        Assert.Equal(1, client.Connection.MigrationCount);
+
+        // 2. Binary file streaming over the migrated P2P connection (multi-chunk, zero Base64).
+        var fileBytes = new byte[RemoteMethods.StreamChunkBytes * 3 + 777];
+        Random.Shared.NextBytes(fileBytes);
+        var filePath = Path.Combine(project.Path, "streamed.bin");
+        await Wait(client.WriteFileAsync(filePath, fileBytes));
+        Assert.Equal(fileBytes, File.ReadAllBytes(filePath));
+        var readBack = await Wait(client.ReadFileAsync(filePath, 5 * 1024 * 1024));
+        Assert.Equal(fileBytes, readBack);
+
+        // 3. Binary image upload streaming with progress reporting.
+        var shell = await Wait(client.CreateItemAsync(new CreateItemMessage { ProjectId = project.Id, Kind = ItemKinds.Terminal }));
+        var picBytes = new byte[RemoteMethods.FilePieceBytes * 2 + 123];
+        Random.Shared.NextBytes(picBytes);
+        var progressReports = new List<double>();
+        var uploadedPath = await Wait(client.UploadAsync(shell.Id, "p2p.png", picBytes, new SyncProgress(progressReports.Add)));
+        try
+        {
+            Assert.Equal(picBytes, File.ReadAllBytes(uploadedPath));
+            Assert.Equal(3, progressReports.Count);
+            Assert.Equal(1.0, progressReports[^1]);
+        }
+        finally { File.Delete(uploadedPath); }
+
+        // 4. Terminal ring-buffer delta resume via ResumeFrom.
+        await using var mirror = Mirror(client, shell.Id, 60, 15);
+        await Until(() => host.Programs.Count == 1, "program starts");
+        var program = host.Programs.Last;
+        program.Print("line before gap\r\n");
+        await Until(() => mirror.ReadText().Contains("line before gap"), "initial output arrives");
+
+        // Direct protocol check of ResumeFrom on the same session:
+        var session = host.Sessions.Find(shell.Id)!;
+        program.Print("line during gap\r\n");
+        await Until(() => session.ReadText().Contains("line during gap"), "host processes gap output");
+        var resumedAttach = await Wait(client.Connection.RequestAsync(RemoteMethods.SessionAttach,
+            new AttachMessage { ItemId = shell.Id, Channel = 99, Columns = 60, Rows = 15, Snapshot = SnapshotFormats.Native, ResumeFrom = 0 },
+            RemoteJsonContext.Default.AttachMessage, RemoteJsonContext.Default.AttachedMessage));
+        Assert.True(resumedAttach.Resumed);
+        Assert.Equal(0, resumedAttach.SnapshotLength);
     }
 }

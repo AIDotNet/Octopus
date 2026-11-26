@@ -4,7 +4,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
-using Avalonia.Layout;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,6 +32,7 @@ public sealed class WorkbenchModule(IServiceProvider services) : IPluginApiModul
     private PluginWorkbench Workbench => services.GetRequiredService<PluginWorkbench>();
     private IProjectService Projects => services.GetRequiredService<IProjectService>();
     private PluginIndicators Indicators => services.GetRequiredService<PluginIndicators>();
+    private PluginPanels Panels => services.GetRequiredService<PluginPanels>();
     private PluginThemes Themes => services.GetRequiredService<PluginThemes>();
 
     private TopLevel Window => services.GetRequiredService<IWindowAccessor>().Window
@@ -120,6 +120,21 @@ public sealed class WorkbenchModule(IServiceProvider services) : IPluginApiModul
         });
         router.Notify("indicators.remove", call => Indicators.Remove(call.Plugin, call.RequiredString("id")));
 
+        // right panels
+        router.Notify("panels.badge", call =>
+        {
+            Panels.SetBadge(call.Plugin, call.RequiredString("panelId"), call.String("text"), call.String("color"), call.String("tooltip"));
+        });
+        router.Request("panels.open", (call, _) =>
+        {
+            var panelId = call.RequiredString("panelId");
+            if (!Panels.RequestOpen(panelId))
+            {
+                throw new PluginApiException("NotFound", $"Panel \"{panelId}\" is not registered by an enabled plugin.");
+            }
+            return Task.FromResult(PluginReply.Empty);
+        });
+
         // themes (design/plugins/07-主题.md §6)
         router.Notify("theme.register", call =>
         {
@@ -145,6 +160,7 @@ public sealed class WorkbenchModule(IServiceProvider services) : IPluginApiModul
     public void Reset(PluginHost plugin)
     {
         Indicators.RemoveAll(plugin);
+        Panels.RemoveBadgesFor(plugin);
         Themes.Forget(plugin.Id);
         foreach (var key in _progress.Keys.Where(k => k.Plugin == plugin.Id).ToList())
         {
@@ -223,7 +239,7 @@ public sealed class WorkbenchModule(IServiceProvider services) : IPluginApiModul
         var id = call.RequiredString("id");
         var plugin = call.Plugin;
         var title = call.String("title") ?? PluginWorkbench.NameOf(plugin);
-        ToastAction? cancel = call.Bool("cancellable")
+        var cancel = call.Bool("cancellable")
             ? new ToastAction(PluginText.Get("取消", "Cancel"), () => plugin.Emit("ui.progress.cancel", null, a => a?["id"]?.GetValue<string>() == id))
             : null;
         var toastId = $"plugin-progress:{plugin.Id}:{id}";
@@ -416,7 +432,7 @@ public sealed class WorkbenchModule(IServiceProvider services) : IPluginApiModul
         if (!accepted) return PluginReply.Of((JsonNode?)null);
 
         var storage = Window.StorageProvider;
-        string? path = folder
+        var path = folder
             ? (await storage.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = title, AllowMultiple = false })).FirstOrDefault()?.TryGetLocalPath()
             : (await storage.OpenFilePickerAsync(new FilePickerOpenOptions { Title = title, AllowMultiple = false })).FirstOrDefault()?.TryGetLocalPath();
         if (path is null) return PluginReply.Of((JsonNode?)null);

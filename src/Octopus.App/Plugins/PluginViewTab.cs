@@ -7,7 +7,6 @@ using Avalonia.Threading;
 using Octopus.App.Plugins.Rendering;
 using Octopus.App.Services;
 using Octopus.App.Workspace;
-using Octopus.Core.Plugins;
 using Octopus.Core.Projects;
 using Octopus.Plugins.Runtime;
 using TKCode.Arc;
@@ -114,7 +113,16 @@ public sealed class PluginViewTab : UserControl, ITabContent, IPluginSurface
             var context = new JsonObject
             {
                 ["instanceId"] = InstanceId,
-                ["project"] = new JsonObject { ["id"] = _project.Id, ["name"] = _project.Name, ["path"] = _project.Path },
+                ["project"] = new JsonObject
+                {
+                    ["id"] = _project.Id,
+                    ["name"] = _project.Name,
+                    ["path"] = _project.Path,
+                    ["deviceKey"] = DeviceKeys.Of(_project),
+                    ["locationKind"] = _project.RemoteHost is { Length: > 0 } ? "remote" : _project.SshHost is { Length: > 0 } ? "ssh" : "local",
+                    ["sshHost"] = _project.SshHost,
+                    ["remoteHost"] = _project.RemoteHost,
+                },
                 ["state"] = PluginWorkbench.ParseState(_item.ViewState),
                 ["visible"] = _visible,
                 ["size"] = SizeOf(Bounds.Size),

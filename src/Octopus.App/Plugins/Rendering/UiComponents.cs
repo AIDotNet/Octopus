@@ -111,7 +111,10 @@ internal sealed class Flex(Orientation orientation, double defaultGap = 0) : IUi
             border.CornerRadius = new CornerRadius(6);
             UiRenderer.BindToken(state, border, Border.BorderBrushProperty, line);
         }
-        else border.BorderThickness = default;
+        else
+        {
+            border.BorderThickness = default;
+        }
     }
 
     public void SetChildren(Control control, NodeState state, IReadOnlyList<Control> children)
@@ -488,7 +491,11 @@ internal static class UiIcons
         ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".ico",
     };
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Path, long Ticks), Avalonia.Media.Imaging.Bitmap> BitmapCache = new();
+    private const int MaxCachedBitmaps = 64;
+    private static readonly object BitmapCacheGate = new();
+    private static readonly Dictionary<string, (long Ticks, WeakReference<Avalonia.Media.Imaging.Bitmap> Ref)> BitmapCache = new(StringComparer.Ordinal);
+    private static readonly LinkedList<(string Path, Avalonia.Media.Imaging.Bitmap Bitmap)> BitmapLru = new();
+    private static readonly Dictionary<string, LinkedListNode<(string Path, Avalonia.Media.Imaging.Bitmap Bitmap)>> BitmapLruNodes = new(StringComparer.Ordinal);
 
     /// <summary><c>lucide:chart-column</c> → <see cref="LucideIconKind.ChartColumn"/>; unknown names give null.</summary>
     public static LucideIconKind? Parse(string? reference)
@@ -515,16 +522,76 @@ internal static class UiIcons
             if (!fullPath.StartsWith(rootWithSep, StringComparison.Ordinal)) return null;
             if (!File.Exists(fullPath)) return null;
             var ticks = File.GetLastWriteTimeUtc(fullPath).Ticks;
-            return BitmapCache.GetOrAdd((fullPath, ticks), static key =>
+            lock (BitmapCacheGate)
             {
-                var bytes = File.ReadAllBytes(key.Path);
-                using var ms = new MemoryStream(bytes);
-                return new Avalonia.Media.Imaging.Bitmap(ms);
-            });
+                if (BitmapCache.TryGetValue(fullPath, out var cached)
+                    && cached.Ticks == ticks
+                    && cached.Ref.TryGetTarget(out var existing))
+                {
+                    TouchLruLocked(fullPath, existing);
+                    return existing;
+                }
+            }
+
+            var bytes = File.ReadAllBytes(fullPath);
+            using var ms = new MemoryStream(bytes);
+            var loaded = new Avalonia.Media.Imaging.Bitmap(ms);
+            lock (BitmapCacheGate)
+            {
+                if (BitmapCache.TryGetValue(fullPath, out var cached)
+                    && cached.Ticks == ticks
+                    && cached.Ref.TryGetTarget(out var existing))
+                {
+                    loaded.Dispose();
+                    TouchLruLocked(fullPath, existing);
+                    return existing;
+                }
+                BitmapCache[fullPath] = (ticks, new WeakReference<Avalonia.Media.Imaging.Bitmap>(loaded));
+                TouchLruLocked(fullPath, loaded);
+                PruneDeadWeakEntriesLocked();
+                return loaded;
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return null;
+        }
+    }
+
+    private static void TouchLruLocked(string fullPath, Avalonia.Media.Imaging.Bitmap bitmap)
+    {
+        if (BitmapLruNodes.TryGetValue(fullPath, out var node))
+        {
+            BitmapLru.Remove(node);
+            node.Value = (fullPath, bitmap);
+            BitmapLru.AddFirst(node);
+            return;
+        }
+        var added = BitmapLru.AddFirst((fullPath, bitmap));
+        BitmapLruNodes[fullPath] = added;
+        while (BitmapLru.Count > MaxCachedBitmaps && BitmapLru.Last is { } oldest)
+        {
+            BitmapLru.RemoveLast();
+            BitmapLruNodes.Remove(oldest.Value.Path);
+        }
+    }
+
+    private static void PruneDeadWeakEntriesLocked()
+    {
+        if (BitmapCache.Count <= MaxCachedBitmaps * 2) return;
+        List<string>? dead = null;
+        foreach (var (path, entry) in BitmapCache)
+        {
+            if (!entry.Ref.TryGetTarget(out _))
+            {
+                dead ??= [];
+                dead.Add(path);
+            }
+        }
+        if (dead is null) return;
+        foreach (var path in dead)
+        {
+            BitmapCache.Remove(path);
         }
     }
 
@@ -1349,11 +1416,10 @@ internal sealed class ListComponent : IUiComponent
                 var button = new TKCode.Arc.Button { Content = UiIcons.Create(Str(action, "icon"), 14), Variant = ButtonVariant.Ghost, Size = ControlSize.Small };
                 ToolTip.SetTip(button, Str(action, "tooltip"));
                 var command = Str(action, "command");
-                var args = action["args"] as JsonArray;
                 button.Click += (_, e) =>
                 {
                     e.Handled = true;
-                    if (command is not null) renderer.Sink.ExecuteCommand(command, args is null ? [] : (JsonArray)args.DeepClone());
+                    if (command is not null) renderer.Sink.ExecuteCommand(command, action["args"] is not JsonArray args ? [] : (JsonArray)args.DeepClone());
                 };
                 actions.Children.Add(button);
             }
@@ -1500,11 +1566,10 @@ internal sealed class MenuComponent : IUiComponent
             if (item["children"] is JsonArray children) entry.ItemsSource = Entries(children, renderer).ToList();
             var handler = UiRenderer.Handler(item, "onSelect");
             var command = Str(item, "command");
-            var args = item["args"] as JsonArray;
             entry.Click += (_, _) =>
             {
                 if (handler is not null) renderer.Sink.Fire(handler, []);
-                else if (command is not null) renderer.Sink.ExecuteCommand(command, args is null ? [] : (JsonArray)args.DeepClone());
+                else if (command is not null) renderer.Sink.ExecuteCommand(command, item["args"] is not JsonArray args ? [] : (JsonArray)args.DeepClone());
             };
             yield return entry;
         }

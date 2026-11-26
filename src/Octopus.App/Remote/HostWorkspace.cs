@@ -8,7 +8,9 @@ using Octopus.App.Services.Workspaces;
 using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
+using Octopus.Core.SystemMetrics;
 using Octopus.Platform;
+using Octopus.Platform.SystemMetrics;
 using Octopus.Remote.Host;
 using Octopus.Remote.Protocol;
 using Octopus.Storage;
@@ -40,18 +42,28 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     private readonly PathComparer _paths;
     private readonly IWorkspaceManager? _workspaces;
     private readonly IGitHubTaskProvider? _taskProvider;
+    private readonly ILocalSystemMetricsCollector? _metrics;
+    private readonly IExecutableLocator? _locator;
+    private readonly ILoginEnvironment? _login;
+    private readonly IProjectIconStore? _icons;
     private readonly HostConversations _conversations;
 
     public HostWorkspace(IProjectService projects, IItemLaunchService launcher, ITerminalConnectionFactory factory, TerminalSessionRegistry sessions,
         ITabContentRegistry tabs, IItemActivityService activity, IAgentCatalog catalog, IAgentScanner scanner, ISettingsStore settings, IShellResolver shells,
         Octopus.FileSystem.IFileTreeService files, Octopus.Git.IGitService git, PathComparer paths,
-        IWorkspaceManager? workspaces = null, IGitHubTaskProvider? taskProvider = null)
+        IWorkspaceManager? workspaces = null, IGitHubTaskProvider? taskProvider = null,
+        ILocalSystemMetricsCollector? metrics = null, IExecutableLocator? locator = null, ILoginEnvironment? login = null,
+        IProjectIconStore? icons = null)
     {
         _files = files;
         _git = git;
         _paths = paths;
         _workspaces = workspaces;
         _taskProvider = taskProvider;
+        _metrics = metrics;
+        _locator = locator;
+        _login = login;
+        _icons = icons;
         _projects = projects;
         _launcher = launcher;
         _factory = factory;
@@ -100,6 +112,25 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         }
         return ToMessage(_projects.AddProject(path, request.Name, activate: false));
     });
+
+    public async Task<ProjectIconMessage?> GetProjectIconAsync(string projectId)
+    {
+        var imageName = await OnUi(() => FindProject(projectId).Image).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(imageName) || _icons is null)
+        {
+            return new ProjectIconMessage();
+        }
+        var bytes = await Task.Run(() => _icons.ReadBytes(imageName)).ConfigureAwait(false);
+        if (bytes is not { Length: > 0 } || bytes.Length > RemoteMethods.ProjectIconMaxBytes)
+        {
+            return new ProjectIconMessage();
+        }
+        return new ProjectIconMessage
+        {
+            Image = imageName,
+            Data = Convert.ToBase64String(bytes),
+        };
+    }
 
     public Task<IReadOnlyList<ItemMessage>> ListItemsAsync(string projectId) => OnUi<IReadOnlyList<ItemMessage>>(() =>
     {
@@ -365,7 +396,10 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         return list;
     });
 
-    public Task<ISessionAttachment> AttachAsync(string itemId, int columns, int rows, bool nativeSnapshot, bool claimSize, ISessionSink sink) => OnUi<ISessionAttachment>(() =>
+    public Task<ISessionAttachment> AttachAsync(string itemId, int columns, int rows, bool nativeSnapshot, bool claimSize, ISessionSink sink) =>
+        AttachAsync(itemId, columns, rows, nativeSnapshot, claimSize, sink, resumeFrom: null);
+
+    public Task<ISessionAttachment> AttachAsync(string itemId, int columns, int rows, bool nativeSnapshot, bool claimSize, ISessionSink sink, ulong? resumeFrom) => OnUi<ISessionAttachment>(() =>
     {
         var (project, item) = FindItem(itemId);
         // Planning it as a terminal would start a second copy of the agent beside the GUI tab's own.
@@ -389,7 +423,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         {
             throw new RemoteException(RemoteMethods.StartFailed, e.Message);
         }
-        return new SessionAttachment(session, sink, nativeSnapshot, claimSize, size);
+        return new SessionAttachment(session, sink, nativeSnapshot, claimSize, size, resumeFrom);
     });
 
     public async Task RestartAsync(string itemId)
@@ -542,7 +576,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                 }
                 stream.Write(data);
             }
-            if (!last) return (string?)null;
+            if (!last) return null;
             ClipboardImages.Cleanup(folder);
             var path = ClipboardImages.NewPath(folder, extension);
             File.Move(partial, path);
@@ -733,6 +767,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             Path = project.Path,
             Color = project.Color,
             Icon = project.Icon,
+            Image = project.Image,
             IsGitRepository = isGit,
             DefaultBranch = defaultBranch,
             Workspaces = project.Workspaces.Count > 0 ? [.. project.Workspaces.Select(ToWorkspaceMessage)] : null,
@@ -837,6 +872,195 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[2..])
             : path;
 
+    public async Task<SystemMetricsSnapshotMessage> GetSystemMetricsAsync(SystemMetricsRequestMessage request, CancellationToken cancellationToken = default)
+    {
+        if (_metrics is null) throw new RemoteException(RemoteProtocol.MethodNotFound, "System metrics collector is not configured.");
+        var snapshot = await _metrics.CollectAsync(new SystemMetricsRequest
+        {
+            IncludeCpu = request.IncludeCpu,
+            IncludeMemory = request.IncludeMemory,
+            IncludeDisk = request.IncludeDisk,
+            IncludeNetwork = request.IncludeNetwork,
+            IncludeProcesses = request.IncludeProcesses,
+            ProcessLimit = Math.Clamp(request.ProcessLimit, 1, 200),
+            ProcessSort = request.ProcessSort,
+            ProcessFilter = request.ProcessFilter,
+        }, cancellationToken).ConfigureAwait(false);
+
+        return new SystemMetricsSnapshotMessage
+        {
+            SampledAtMs = snapshot.SampledAtMs,
+            DurationMs = snapshot.DurationMs,
+            Host = new SystemHostMessage
+            {
+                Hostname = snapshot.Host.Hostname,
+                Os = snapshot.Host.Os,
+                OsVersion = snapshot.Host.OsVersion,
+                Arch = snapshot.Host.Arch,
+                Kernel = snapshot.Host.Kernel,
+                UptimeSeconds = snapshot.Host.UptimeSeconds,
+            },
+            Cpu = snapshot.Cpu is null ? null : new CpuMetricsMessage
+            {
+                UsagePercent = snapshot.Cpu.UsagePercent,
+                UserPercent = snapshot.Cpu.UserPercent,
+                SystemPercent = snapshot.Cpu.SystemPercent,
+                IdlePercent = snapshot.Cpu.IdlePercent,
+                Cores = snapshot.Cpu.Cores,
+                Model = snapshot.Cpu.Model,
+                LoadAvg1 = snapshot.Cpu.LoadAvg1,
+                LoadAvg5 = snapshot.Cpu.LoadAvg5,
+                LoadAvg15 = snapshot.Cpu.LoadAvg15,
+                PerCore = snapshot.Cpu.PerCore,
+            },
+            Memory = snapshot.Memory is null ? null : new MemoryMetricsMessage
+            {
+                TotalBytes = snapshot.Memory.TotalBytes,
+                UsedBytes = snapshot.Memory.UsedBytes,
+                AvailableBytes = snapshot.Memory.AvailableBytes,
+                CachedBytes = snapshot.Memory.CachedBytes,
+                UsedPercent = snapshot.Memory.UsedPercent,
+                SwapTotalBytes = snapshot.Memory.SwapTotalBytes,
+                SwapUsedBytes = snapshot.Memory.SwapUsedBytes,
+                SwapPercent = snapshot.Memory.SwapPercent,
+            },
+            Disks = snapshot.Disks?.Select(d => new DiskMetricsMessage
+            {
+                Mount = d.Mount,
+                Filesystem = d.Filesystem,
+                TotalBytes = d.TotalBytes,
+                UsedBytes = d.UsedBytes,
+                AvailableBytes = d.AvailableBytes,
+                UsedPercent = d.UsedPercent,
+                ReadBytesPerSec = d.ReadBytesPerSec,
+                WriteBytesPerSec = d.WriteBytesPerSec,
+            }).ToList(),
+            Network = snapshot.Network?.Select(n => new NetworkInterfaceMessage
+            {
+                Name = n.Name,
+                RxBytesPerSec = n.RxBytesPerSec,
+                TxBytesPerSec = n.TxBytesPerSec,
+                RxTotalBytes = n.RxTotalBytes,
+                TxTotalBytes = n.TxTotalBytes,
+                Ipv4 = n.Ipv4,
+            }).ToList(),
+            Processes = snapshot.Processes?.Select(p => new ProcessMetricsMessage
+            {
+                Pid = p.Pid,
+                Ppid = p.Ppid,
+                Name = p.Name,
+                User = p.User,
+                State = p.State,
+                CpuPercent = p.CpuPercent,
+                MemPercent = p.MemPercent,
+                RssBytes = p.RssBytes,
+                Threads = p.Threads,
+                Command = p.Command,
+            }).ToList(),
+        };
+    }
+
+    public async Task<bool> SignalProcessAsync(SignalProcessMessage request, CancellationToken cancellationToken = default)
+    {
+        if (_metrics is null) throw new RemoteException(RemoteProtocol.MethodNotFound, "System metrics collector is not configured.");
+        var kind = (request.Signal ?? "TERM").ToUpperInvariant() switch
+        {
+            "KILL" => ProcessSignalKind.Kill,
+            "INT" => ProcessSignalKind.Int,
+            "HUP" => ProcessSignalKind.Hup,
+            _ => ProcessSignalKind.Term,
+        };
+        try
+        {
+            return await _metrics.SignalProcessAsync(request.Pid, kind, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ArgumentOutOfRangeException e) { throw new RemoteException(RemoteProtocol.InvalidParams, e.Message); }
+        catch (UnauthorizedAccessException e) { throw new RemoteException(RemoteMethods.NotAllowed, e.Message); }
+        catch (InvalidOperationException e) { throw new RemoteException(RemoteMethods.NotAllowed, e.Message); }
+    }
+
+    public async Task<RemoteProcessRunResultMessage> RunProcessAsync(RemoteProcessRunMessage request, CancellationToken cancellationToken = default)
+    {
+        if (_locator is null || _login is null) throw new RemoteException(RemoteProtocol.MethodNotFound, "Remote process execution is not configured.");
+        var command = (request.Command ?? "").Trim();
+        if (command.Length == 0 || command.IndexOfAny(['/', '\\']) >= 0)
+        {
+            throw new RemoteException(RemoteProtocol.InvalidParams, "Command must be a plain executable name.");
+        }
+        var cwd = string.IsNullOrWhiteSpace(request.Cwd) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : ExpandHome(request.Cwd.Trim());
+        if (!Directory.Exists(cwd)) throw new RemoteException(RemoteMethods.NotFound, $"Working directory '{cwd}' does not exist.");
+
+        var env = await _login.GetAsync(cancellationToken).ConfigureAwait(false);
+        var executable = _locator.FindAll(command, env.GetValueOrDefault("PATH")).FirstOrDefault()
+            ?? throw new RemoteException(RemoteMethods.NotFound, $"{command} is not installed (not on PATH).");
+        var timeout = TimeSpan.FromMilliseconds(Math.Clamp(request.TimeoutMs, 100, 600_000));
+
+        var start = new System.Diagnostics.ProcessStartInfo(executable)
+        {
+            WorkingDirectory = cwd,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        foreach (var arg in request.Args ?? []) start.ArgumentList.Add(arg);
+        start.Environment.Clear();
+        foreach (var (k, v) in env)
+        {
+            if (!k.StartsWith("OCTOPUS_", StringComparison.Ordinal)) start.Environment[k] = v;
+        }
+        if (request.Env is not null)
+        {
+            foreach (var (k, v) in request.Env)
+            {
+                if (!k.StartsWith("OCTOPUS_", StringComparison.Ordinal)) start.Environment[k] = v;
+            }
+        }
+
+        using var process = System.Diagnostics.Process.Start(start)
+            ?? throw new RemoteException(RemoteMethods.StartFailed, $"{command} did not start.");
+        var stdoutTask = ReadCappedStreamAsync(process.StandardOutput.BaseStream, 4 * 1024 * 1024);
+        var stderrTask = ReadCappedStreamAsync(process.StandardError.BaseStream, 4 * 1024 * 1024);
+        try
+        {
+            if (!string.IsNullOrEmpty(request.Stdin)) await process.StandardInput.WriteAsync(request.Stdin.AsMemory(), cancellationToken).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+        catch (IOException) { }
+
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(timeout);
+        var timedOut = false;
+        try
+        {
+            await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            timedOut = true;
+            try { process.Kill(entireProcessTree: true); } catch { }
+        }
+        return new RemoteProcessRunResultMessage
+        {
+            ExitCode = timedOut ? -1 : process.ExitCode,
+            StandardOutput = await stdoutTask.ConfigureAwait(false),
+            StandardError = await stderrTask.ConfigureAwait(false),
+            TimedOut = timedOut,
+        };
+    }
+
+    private static async Task<string> ReadCappedStreamAsync(Stream stream, int maxBytes)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[16384];
+        int read;
+        while ((read = await stream.ReadAsync(chunk).ConfigureAwait(false)) > 0)
+        {
+            if (buffer.Length < maxBytes) buffer.Write(chunk, 0, (int)Math.Min(read, maxBytes - buffer.Length));
+        }
+        return System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+    }
+
     private static Task<T> OnUi<T>(Func<T> action) =>
         Dispatcher.UIThread.CheckAccess() ? Run(action) : Dispatcher.UIThread.InvokeAsync(action).GetTask();
 
@@ -859,16 +1083,17 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         private TerminalSize _wanted;
         private int _disposed;
 
-        public SessionAttachment(TerminalSession session, ISessionSink sink, bool native, bool claimSize, TerminalSize size)
+        public SessionAttachment(TerminalSession session, ISessionSink sink, bool native, bool claimSize, TerminalSize size, ulong? resumeFrom = null)
         {
             _session = session;
             _sink = sink;
             _wanted = size;
             // First the size, then the snapshot: what the device gets is already laid out for its view.
             if (claimSize) session.ClaimSize(this, size);
-            _tap = session.Tap(this, native ? TerminalSnapshotFormat.Native : TerminalSnapshotFormat.Vt, out var start);
+            _tap = session.Tap(this, native ? TerminalSnapshotFormat.Native : TerminalSnapshotFormat.Vt, resumeFrom, out var start);
             Position = start.Position;
             IsNative = start.Format == TerminalSnapshotFormat.Native;
+            Resumed = start.Resumed;
             _snapshot = start.Snapshot;
             SnapshotLength = start.Snapshot.Length;
             (Columns, Rows) = (start.Size.Columns, start.Size.Rows);
@@ -883,6 +1108,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
 
         public ulong Position { get; }
         public bool IsNative { get; }
+        public bool Resumed { get; }
         public int SnapshotLength { get; }
         public byte[] TakeSnapshot() => Interlocked.Exchange(ref _snapshot, null) ?? [];
         public int Columns { get; }

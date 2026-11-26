@@ -1,10 +1,11 @@
 using System.Reflection;
-using System.Text.Json.Nodes;
 using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Octopus.App.Services;
 using Octopus.Core.Plugins;
 using Octopus.Core.Projects;
+using Octopus.Platform;
+using Octopus.Platform.SystemMetrics;
 using Octopus.Plugins;
 using Octopus.Plugins.Catalog;
 using Octopus.Plugins.Jaunt;
@@ -13,6 +14,7 @@ using Octopus.Plugins.Runtime;
 using Octopus.Plugins.Runtime.Modules;
 using Octopus.Plugins.Skills;
 using Octopus.Plugins.Usage;
+using Octopus.Ssh;
 using Octopus.Storage;
 using TKCode.Arc;
 
@@ -57,6 +59,13 @@ internal static class PluginsAppModule
         services.AddSingleton<Octopus.Agents.IAgentDefinitionSource, PluginAgentSource>();
         services.AddSingleton<AppProjectContext>();
         services.AddSingleton<IPluginProjectContext>(p => p.GetRequiredService<AppProjectContext>());
+        services.AddSingleton<ILocalSystemMetricsCollector, LocalSystemMetricsCollector>();
+        services.AddSingleton(p => new SshSystemMetricsCollector(
+            p.GetRequiredService<IProcessRunner>(),
+            () => p.GetRequiredService<RemoteFiles>().SharedOptions));
+        services.AddSingleton<AppDeviceContext>();
+        services.AddSingleton<IPluginDeviceContext>(p => p.GetRequiredService<AppDeviceContext>());
+        services.AddSingleton<IPluginSystemService, AppPluginSystemService>();
         services.AddSingleton<IPluginConsent, AppPluginConsent>();
 
         // Host modules: what plugins can call (design/plugins/09-API参考.md).
@@ -67,6 +76,8 @@ internal static class PluginsAppModule
         services.AddSingleton<IPluginApiModule, UsageModule>();
         services.AddSingleton<IPluginApiModule, ModelPricesModule>();
         services.AddSingleton<IPluginApiModule, ProjectsModule>();
+        services.AddSingleton<IPluginApiModule, DevicesModule>();
+        services.AddSingleton<IPluginApiModule, SystemMetricsModule>();
         services.AddSingleton<IPluginApiModule, GitModule>();
         services.AddSingleton<IPluginApiModule, AgentsListModule>();
         services.AddSingleton<IPluginApiModule, ProcessModule>();
@@ -86,6 +97,7 @@ internal static class PluginsAppModule
             consent: p.GetRequiredService<IPluginConsent>()));
         services.AddSingleton<PluginWorkbench>();
         services.AddSingleton<PluginIndicators>();
+        services.AddSingleton<PluginPanels>();
         services.AddSingleton<PluginThemes>();
         services.AddSingleton<PluginMarketplaceClient>();
         services.AddSingleton(_ => new PluginSkillInstaller(BuiltinSkillDirectory()));
@@ -129,7 +141,14 @@ public sealed class AppProjectContext : IPluginProjectContext
         if (changed) CurrentChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private static PluginProjectInfo Info(Project project) => new(project.Id, project.Name, project.Path, project.Color);
+    private static PluginProjectInfo Info(Project project)
+    {
+        var key = DeviceKeys.Of(project);
+        var kind = project.RemoteHost is { Length: > 0 } ? "remote"
+            : project.SshHost is { Length: > 0 } ? "ssh"
+            : "local";
+        return new PluginProjectInfo(project.Id, project.Name, project.Path, project.Color, key, kind, project.SshHost, project.RemoteHost);
+    }
 }
 
 /// <summary>Asks the user, in a dialog that names the plugin and the risk, for a permission requested at run time.</summary>
@@ -186,6 +205,9 @@ internal static class PermissionText
             "fs.external" => PluginText.Get($"访问 {details.FirstOrDefault()}", $"Access {details.FirstOrDefault()}"),
             "git" => PluginText.Get("读取 Git 状态与历史", "Read Git status and history"),
             "projects" => PluginText.Get("查看项目和标签列表", "See projects and tabs"),
+            "devices" => PluginText.Get("查看本机、远程与 SSH 设备列表", "See local, remote and SSH devices"),
+            "system.metrics" => PluginText.Get("读取设备的 CPU、内存、磁盘、网络与进程状态", "Read CPU, memory, disk, network and process telemetry"),
+            "system.process.signal" => PluginText.Get("向设备上的进程发送终止或中断信号", "Send termination or interrupt signals to running processes"),
             "workspace" => PluginText.Get("打开、切换标签", "Open and switch tabs"),
             "settings" => PluginText.Get("读取外观与语言设置", "Read appearance and language settings"),
             "notifications" => PluginText.Get("显示通知", "Show notifications"),
@@ -199,6 +221,7 @@ internal static class PermissionText
             "net" => PluginText.Get($"访问网络：{List(details)}", $"Network: {List(details)}"),
             "shell.open" => PluginText.Get($"在浏览器中打开 {List(details)}", $"Open {List(details)} in the browser"),
             "process.run" => PluginText.Get($"运行程序：{List(details)}", $"Run programs: {List(details)}"),
+            "process.run.devices" => PluginText.Get($"在以下设备上运行已允许的程序：{List(details)}", $"Run allowed programs on devices: {List(details)}"),
             "agents.launch" => PluginText.Get("启动智能体", "Launch agents"),
             "unsafeEval" => PluginText.Get("运行动态生成的代码", "Run generated code"),
             _ => key,

@@ -142,14 +142,14 @@ public sealed class PluginViewTests
     public void Split_KeepsDraggedSizesAndPanes_UntilItsShapeChanges()
     {
         var renderer = new UiRenderer(new RecordingSink());
-        const string Two = """{ "t": "Split", "c": [ { "t": "Text", "p": { "value": "%1" } }, { "t": "Text", "p": { "value": "%2" } } ] }""";
-        var split = (Grid)renderer.Render(Node(Two.Replace("%1", "a").Replace("%2", "b")), null);
+        const string two = """{ "t": "Split", "c": [ { "t": "Text", "p": { "value": "%1" } }, { "t": "Text", "p": { "value": "%2" } } ] }""";
+        var split = (Grid)renderer.Render(Node(two.Replace("%1", "a").Replace("%2", "b")), null);
         var splitter = split.Children.OfType<GridSplitter>().Single();
         var pane = split.Children.OfType<SelectableTextBlock>().First();
         // As if the user dragged the splitter.
         split.ColumnDefinitions[0].Width = new GridLength(3, GridUnitType.Star);
 
-        renderer.Render(Node(Two.Replace("%1", "c").Replace("%2", "d")), split);
+        renderer.Render(Node(two.Replace("%1", "c").Replace("%2", "d")), split);
         Assert.Equal(new GridLength(3, GridUnitType.Star), split.ColumnDefinitions[0].Width);
         Assert.Same(splitter, split.Children.OfType<GridSplitter>().Single());
         Assert.Same(pane, split.Children.OfType<SelectableTextBlock>().First());

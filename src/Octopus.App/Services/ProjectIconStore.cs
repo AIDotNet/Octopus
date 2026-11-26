@@ -17,6 +17,9 @@ public interface IProjectIconStore
     /// <summary>The thumbnail as a bitmap (cached); null when the file is missing or unreadable.</summary>
     Bitmap? Load(string? fileName);
 
+    /// <summary>Reads the raw PNG bytes of a stored thumbnail (for syncing to paired mobile devices); null when missing or unreadable.</summary>
+    byte[]? ReadBytes(string? fileName) => null;
+
     /// <summary>Deletes a thumbnail Octopus made. Names that are not plain file names are ignored.</summary>
     void Delete(string? fileName);
 }
@@ -91,6 +94,28 @@ public sealed class ProjectIconStore(IAppPaths paths) : IProjectIconStore
         }
         _cache[fileName!] = bitmap;
         return bitmap;
+    }
+
+    public byte[]? ReadBytes(string? fileName)
+    {
+        if (!IsOwnName(fileName))
+        {
+            return null;
+        }
+        try
+        {
+            var path = Path.Combine(Directory, fileName!);
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length == 0 || info.Length > 512 * 1024)
+            {
+                return null;
+            }
+            return File.ReadAllBytes(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     public void Delete(string? fileName)
