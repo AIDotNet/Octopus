@@ -28,7 +28,7 @@ public sealed partial class NdjsonLineFramer
 
     public NdjsonLineFramer(int maxLineBytes = DefaultMaxLineBytes)
     {
-        if (maxLineBytes < 256) throw new ArgumentOutOfRangeException(nameof(maxLineBytes));
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxLineBytes, 256);
         _maxLineBytes = maxLineBytes;
     }
 

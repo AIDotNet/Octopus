@@ -302,8 +302,9 @@ public sealed partial class CursorAcpDialect : IAcpDialect
 {
     private const string AskQuestionMethod = "cursor/ask_question";
     private const string CreatePlanMethod = "cursor/create_plan";
+    private const string GenerateImageMethod = "cursor/generate_image";
     private const string QuestionFallbackSkip = "__ask_question_skip__";
-    private static readonly HashSet<string> ReportMethods = ["cursor/update_todos", "cursor/task", "cursor/generate_image"];
+    private static readonly HashSet<string> ReportMethods = ["cursor/update_todos", "cursor/task"];
 
     public string Id => "cursor";
     public string FastConfigId => "fast";
@@ -344,6 +345,48 @@ public sealed partial class CursorAcpDialect : IAcpDialect
         if (ReportMethods.Contains(method))
         {
             return new AcpDialectRequestHandling { ImmediateReply = new JsonObject() };
+        }
+        if (method == GenerateImageMethod)
+        {
+            var prompt = DialectJsonHelpers.Str(parameters, "prompt")
+                ?? DialectJsonHelpers.Str(parameters, "description");
+            var callId = DialectJsonHelpers.Str(parameters, "toolCallId")
+                ?? DialectJsonHelpers.Str(parameters, "id")
+                ?? $"cursor-image-{requestId}";
+            var update = new AcpToolCallUpdate
+            {
+                ToolCallId = callId,
+                Name = GenerateImageMethod,
+                Title = string.IsNullOrWhiteSpace(prompt) ? "Generate image" : prompt,
+                Kind = "image",
+                IsImageGeneration = true,
+                ImagePrompt = prompt,
+                RawInput = parameters?.Clone(),
+                RawOutput = parameters?.Clone(),
+            };
+            if (parameters is { ValueKind: JsonValueKind.Object } imgObj)
+            {
+                update.ImageAspectRatio = AcpProtocolParser.ExtractAspectRatio(imgObj);
+                update.ImageProgress = AcpProtocolParser.ExtractProgress(imgObj);
+                AcpProtocolParser.ExtractImagesFromPayload(imgObj, update.Images, prompt);
+                update.Status = DialectJsonHelpers.Str(imgObj, "status")
+                    ?? (update.Images.Count > 0 ? "completed" : "in_progress");
+                if (DialectJsonHelpers.Str(imgObj, "error") is { Length: > 0 } err)
+                {
+                    update.Status = "failed";
+                    update.Stderr = err;
+                }
+            }
+            else
+            {
+                update.Status = "in_progress";
+            }
+            AcpProtocolParser.ClassifyToolSemantics(update);
+            return new AcpDialectRequestHandling
+            {
+                ImmediateReply = new JsonObject(),
+                ToolCallUpdate = update,
+            };
         }
         if (method == CreatePlanMethod)
         {
@@ -972,6 +1015,38 @@ public sealed class CodexAdapterDialect : IAcpDialect
             return "api-key";
         }
         return null;
+    }
+
+    public void NormalizeToolUpdate(AcpToolCallUpdate update)
+    {
+        var codexMeta = DialectJsonHelpers.Obj(update.Meta, "codex")
+            ?? DialectJsonHelpers.Obj(update.Meta, "openai");
+        if (string.IsNullOrEmpty(update.Name))
+        {
+            update.Name = DialectJsonHelpers.Str(codexMeta, "toolName")
+                ?? DialectJsonHelpers.Str(codexMeta, "type");
+        }
+        if (!update.IsImageGeneration
+            && (update.ToolCallId.StartsWith("ig_", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(DialectJsonHelpers.Str(codexMeta, "type"), "image_generation_call", StringComparison.OrdinalIgnoreCase)))
+        {
+            update.IsImageGeneration = true;
+            update.Name ??= "image_generation";
+            update.Kind = "image";
+        }
+        if (codexMeta is { ValueKind: JsonValueKind.Object } cm)
+        {
+            update.ImagePrompt ??= DialectJsonHelpers.Str(cm, "revised_prompt")
+                ?? DialectJsonHelpers.Str(cm, "revisedPrompt")
+                ?? DialectJsonHelpers.Str(cm, "prompt");
+            update.ImageProgress ??= AcpProtocolParser.ExtractProgress(cm);
+            update.ImageAspectRatio ??= AcpProtocolParser.ExtractAspectRatio(cm);
+            AcpProtocolParser.ExtractImagesFromPayload(cm, update.Images, update.ImagePrompt);
+        }
+        if (update.IsImageGeneration || update.Images.Count > 0)
+        {
+            AcpProtocolParser.ClassifyToolSemantics(update);
+        }
     }
 
     public void ApplyLaunchPreferences(IDictionary<string, string> env, string? modelId, string? effortId)

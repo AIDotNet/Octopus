@@ -22,7 +22,7 @@ public sealed class AcpPeerHandlers
 }
 
 /// <summary>
-/// Bidirectional JSON-RPC 2.0 peer over NDJSON streams (stdio).
+/// Bidirectional JSON-RPC 2.0 peer over pluggable <see cref="IAcpTransport"/> (NDJSON stdio, WebSocket, or Streamable HTTP).
 /// Uses a single serialized <see cref="Channel{T}"/> writer so concurrent responses and requests never interleave,
 /// supports request cancellation via <c>$/cancel_request</c>, and handles graceful shutdown with notification drain.
 /// </summary>
@@ -31,10 +31,8 @@ public sealed class AcpJsonRpcPeer : IAsyncDisposable
     private const int DefaultMaxPendingRequests = 128;
     private const int DefaultMaxIncomingRequests = 64;
 
-    private readonly Stream _input;
-    private readonly Stream _output;
+    private readonly IAcpTransport _transport;
     private readonly AcpPeerHandlers _handlers;
-    private readonly NdjsonLineFramer _framer;
     private readonly Channel<string> _writeQueue = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     private readonly ConcurrentDictionary<string, PendingCall> _pending = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _incoming = new(StringComparer.Ordinal);
@@ -47,11 +45,14 @@ public sealed class AcpJsonRpcPeer : IAsyncDisposable
     private int _closed;
 
     public AcpJsonRpcPeer(Stream input, Stream output, AcpPeerHandlers? handlers = null, int maxLineBytes = NdjsonLineFramer.DefaultMaxLineBytes)
+        : this(new AcpStreamTransport(input, output, maxLineBytes), handlers)
     {
-        _input = input;
-        _output = output;
+    }
+
+    public AcpJsonRpcPeer(IAcpTransport transport, AcpPeerHandlers? handlers = null)
+    {
+        _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _handlers = handlers ?? new AcpPeerHandlers();
-        _framer = new NdjsonLineFramer(maxLineBytes);
         _writeTask = Task.Run(WriteLoopAsync);
         _readTask = Task.Run(ReadLoopAsync);
     }
@@ -190,6 +191,7 @@ public sealed class AcpJsonRpcPeer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Close();
+        try { await _transport.DisposeAsync().ConfigureAwait(false); } catch { }
         try { await Task.WhenAll(_readTask, _writeTask).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false); }
         catch { /* Shutdown is best-effort. */ }
         _lifecycle.Dispose();
@@ -198,7 +200,7 @@ public sealed class AcpJsonRpcPeer : IAsyncDisposable
     private void EnqueueLine(string json)
     {
         var byteCount = Encoding.UTF8.GetByteCount(json) + 1;
-        if (byteCount > _framer.MaxLineBytes)
+        if (byteCount > _transport.MaxLineBytes)
         {
             throw new AcpException($"Outgoing ACP line exceeds max size ({byteCount} bytes).");
         }
@@ -222,14 +224,11 @@ public sealed class AcpJsonRpcPeer : IAsyncDisposable
 
     private async Task WriteLoopAsync()
     {
-        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         try
         {
             await foreach (var line in _writeQueue.Reader.ReadAllAsync(_lifecycle.Token).ConfigureAwait(false))
             {
-                var bytes = utf8NoBom.GetBytes(line + "\n");
-                await _output.WriteAsync(bytes, _lifecycle.Token).ConfigureAwait(false);
-                await _output.FlushAsync(_lifecycle.Token).ConfigureAwait(false);
+                await _transport.SendAsync(line, _lifecycle.Token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { }
@@ -241,17 +240,10 @@ public sealed class AcpJsonRpcPeer : IAsyncDisposable
 
     private async Task ReadLoopAsync()
     {
-        var buffer = new byte[16 * 1024];
         try
         {
-            while (!_lifecycle.IsCancellationRequested)
-            {
-                var read = await _input.ReadAsync(buffer, _lifecycle.Token).ConfigureAwait(false);
-                if (read == 0) break;
-                _framer.Feed(buffer.AsSpan(0, read), DispatchMessage, OnOtherLine, OnOversizedLine);
-            }
-            _framer.Complete(DispatchMessage, OnOtherLine, OnOversizedLine);
-            Close(new AcpConnectionClosedException("ACP agent closed stdout."));
+            await _transport.RunReceiveLoopAsync(DispatchMessage, OnOtherLine, OnOversizedLine, _lifecycle.Token).ConfigureAwait(false);
+            Close(new AcpConnectionClosedException("ACP transport closed."));
         }
         catch (OperationCanceledException)
         {

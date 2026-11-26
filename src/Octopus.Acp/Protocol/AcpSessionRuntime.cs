@@ -12,19 +12,29 @@ public abstract record AcpRuntimeEvent
 {
     /// <summary>True when this content event replays prior conversation history (session/load or <c>_meta.isReplay</c>).</summary>
     public bool IsReplay { get; init; }
+    /// <summary>ACP session id attached to the notification envelope, when present.</summary>
+    public string? SessionId { get; init; }
 }
 
 /// <summary>A user prompt chunk; only emitted for replayed history (live prompts are rendered by the client itself).</summary>
 public sealed record AcpUserMessageEvent(string Text, string? MessageId) : AcpRuntimeEvent;
+public sealed record AcpUserImageEvent(AcpImageContent Image, string? MessageId) : AcpRuntimeEvent;
 public sealed record AcpTextDeltaEvent(string Channel, string Text, string? MessageId) : AcpRuntimeEvent;
+public sealed record AcpImageEvent(AcpImageContent Image, string? MessageId) : AcpRuntimeEvent;
+public sealed record AcpAudioEvent(AcpAudioContent Audio, string? MessageId) : AcpRuntimeEvent;
 public sealed record AcpToolCallEvent(AcpToolCallUpdate Update) : AcpRuntimeEvent;
 public sealed record AcpPlanEvent(IReadOnlyList<AcpPlanEntry> Entries, string? Markdown = null) : AcpRuntimeEvent;
+public sealed record AcpPlanRemovedEvent() : AcpRuntimeEvent;
 public sealed record AcpUsageEvent(AcpContextUsage Usage) : AcpRuntimeEvent;
 public sealed record AcpCommandsUpdatedEvent(IReadOnlyList<AcpAvailableCommand> Commands) : AcpRuntimeEvent;
 public sealed record AcpModesUpdatedEvent(AcpSessionModeState Modes) : AcpRuntimeEvent;
 public sealed record AcpConfigOptionsUpdatedEvent(IReadOnlyList<AcpSessionConfigOption> Options) : AcpRuntimeEvent;
 public sealed record AcpModelsUpdatedEvent(AcpSessionModelState Models) : AcpRuntimeEvent;
 public sealed record AcpTitleUpdatedEvent(string Title) : AcpRuntimeEvent;
+public sealed record AcpSessionInfoUpdatedEvent(AcpSessionInfoUpdate Info) : AcpRuntimeEvent;
+public sealed record AcpElicitationCompletedEvent(string ElicitationId) : AcpRuntimeEvent;
+public sealed record AcpCompactionEvent(AcpCompactionUpdate Update) : AcpRuntimeEvent;
+public sealed record AcpCursorUpdatedEvent(AcpCursorUpdate Cursor) : AcpRuntimeEvent;
 public sealed record AcpDiagnosticEvent(string Message) : AcpRuntimeEvent;
 public sealed record AcpClosedEvent(Exception Reason) : AcpRuntimeEvent;
 
@@ -33,19 +43,30 @@ public sealed class AcpSessionRuntimeOptions
 {
     public IAcpDialect Dialect { get; init; } = GenericAcpDialect.Instance;
     public AcpPermissionStrategy PermissionStrategy { get; init; } = AcpPermissionStrategy.ClientApproval;
+    public int PreferredProtocolVersion { get; init; } = AcpProtocolConstants.ProtocolVersion;
     public bool EnableFormElicitation { get; init; } = true;
+    public bool EnableUrlElicitation { get; init; } = true;
+    public bool EnableClientFileSystem { get; init; }
+    public bool EnableClientTerminal { get; init; }
+    public bool EnableTerminalAuth { get; init; } = true;
     public string? AgentVersion { get; init; }
     public TimeSpan InitializeTimeout { get; init; } = TimeSpan.FromSeconds(60);
     public IReadOnlyDictionary<string, string> Environment { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyList<AcpMcpServerConfig> McpServers { get; init; } = [];
+    public IAcpFileSystemHandler? FileSystemHandler { get; init; }
+    public IAcpTerminalHandler? TerminalHandler { get; init; }
     public Func<string>? GetActivePermissionMode { get; init; }
     public Func<AcpPermissionRequest, CancellationToken, Task<string?>>? OnPermissionRequest { get; init; }
     public Func<AcpQuestionRequest, CancellationToken, Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?>>? OnQuestionRequest { get; init; }
+    public Func<AcpQuestionRequest, CancellationToken, Task<AcpFormElicitationResponse>>? OnFormElicitationRequest { get; init; }
+    public Func<AcpUrlElicitationRequest, CancellationToken, Task<AcpElicitationAction>>? OnUrlElicitationRequest { get; init; }
 }
 
 /// <summary>
-/// Full ACP v1 session runtime over a bidirectional <see cref="AcpJsonRpcPeer"/>.
-/// Handles initialize, session/new|load|resume with automatic authentication retry, prompt streaming,
-/// live mode/model/config changes, and safe permission + elicitation callbacks.
+/// Full ACP v1/v2-preview session runtime over a bidirectional <see cref="AcpJsonRpcPeer"/>.
+/// Handles initialize, authenticate/logout, session/new|load|resume|list|fork|close|delete|archive,
+/// prompt streaming, live mode/model/config changes, client fs/* and terminal/* callbacks,
+/// and safe permission + form/URL elicitation callbacks.
 /// </summary>
 public sealed class AcpSessionRuntime : IAsyncDisposable
 {
@@ -60,9 +81,14 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
     private volatile bool _isLoadingHistory;
 
     public AcpSessionRuntime(Stream input, Stream output, AcpSessionRuntimeOptions? options = null)
+        : this(new AcpStreamTransport(input, output), options)
+    {
+    }
+
+    public AcpSessionRuntime(IAcpTransport transport, AcpSessionRuntimeOptions? options = null)
     {
         _options = options ?? new AcpSessionRuntimeOptions();
-        _peer = new AcpJsonRpcPeer(input, output, new AcpPeerHandlers
+        _peer = new AcpJsonRpcPeer(transport, new AcpPeerHandlers
         {
             OnRequest = HandleIncomingRequestAsync,
             OnNotification = HandleNotification,
@@ -89,14 +115,31 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
     {
         if (_initialized is not null) return _initialized;
 
+        var fsEnabled = _options.EnableClientFileSystem && _options.FileSystemHandler is not null;
+        var termEnabled = _options.EnableClientTerminal && _options.TerminalHandler is not null;
+
         var clientCaps = new JsonObject
         {
-            ["fs"] = new JsonObject { ["readTextFile"] = false, ["writeTextFile"] = false },
-            ["terminal"] = false,
+            ["fs"] = new JsonObject { ["readTextFile"] = fsEnabled, ["writeTextFile"] = fsEnabled },
+            ["terminal"] = termEnabled,
         };
+
+        var elicitCaps = new JsonObject();
         if (_options.EnableFormElicitation && _options.Dialect.AdvertiseFormElicitation)
         {
-            clientCaps["elicitation"] = new JsonObject { ["form"] = new JsonObject() };
+            elicitCaps["form"] = new JsonObject();
+        }
+        if (_options.EnableUrlElicitation)
+        {
+            elicitCaps["url"] = new JsonObject();
+        }
+        if (elicitCaps.Count > 0)
+        {
+            clientCaps["elicitation"] = elicitCaps;
+        }
+        if (_options.EnableTerminalAuth)
+        {
+            clientCaps["auth"] = new JsonObject { ["terminal"] = true };
         }
         if (_options.Dialect.ExtraClientCapabilitiesMeta is { Count: > 0 } extraMeta)
         {
@@ -111,9 +154,14 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
         var clientInfo = _options.Dialect.OverrideClientInfo(_options.AgentVersion)
             ?? new AcpImplementation { Name = "octopus", Title = "Octopus", Version = "1.0.0" };
 
+        var requestedVersion = Math.Clamp(
+            _options.PreferredProtocolVersion,
+            AcpProtocolConstants.MinSupportedVersion,
+            AcpProtocolConstants.MaxSupportedVersion);
+
         var req = new JsonObject
         {
-            ["protocolVersion"] = AcpProtocolConstants.ProtocolVersion,
+            ["protocolVersion"] = requestedVersion,
             ["clientCapabilities"] = clientCaps,
             ["clientInfo"] = new JsonObject
             {
@@ -125,7 +173,8 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
 
         var raw = await _peer.RequestAsync("initialize", req, _options.InitializeTimeout, cancellationToken).ConfigureAwait(false);
         var parsed = AcpProtocolParser.ParseInitialize(raw);
-        if (parsed.ProtocolVersion != AcpProtocolConstants.ProtocolVersion)
+        if (parsed.ProtocolVersion < AcpProtocolConstants.MinSupportedVersion
+            || parsed.ProtocolVersion > AcpProtocolConstants.MaxSupportedVersion)
         {
             var err = new AcpRpcException(-32602, $"Unsupported ACP protocol version: {parsed.ProtocolVersion}");
             _peer.Close(err);
@@ -142,13 +191,14 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         var init = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var mcpServers = AcpProtocolParser.SerializeMcpServers(_options.McpServers, init.AgentCapabilities.McpCapabilities);
 
         async Task<AcpSessionStartResult> OpenAsync()
         {
             var baseParams = new JsonObject
             {
                 ["cwd"] = workingDirectory,
-                ["mcpServers"] = new JsonArray(),
+                ["mcpServers"] = mcpServers.DeepClone(),
             };
             if (additionalDirectories is { Count: > 0 } && init.AgentCapabilities.SessionCapabilities.SupportsAdditionalDirectories)
             {
@@ -211,27 +261,128 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
             {
                 throw new AcpAuthRequiredException(ex.Message, init.AuthMethods, ex.ErrorData);
             }
-            await _peer.RequestAsync("authenticate", new JsonObject { ["methodId"] = authId }, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+            await AuthenticateAsync(authId, meta: null, cancellationToken).ConfigureAwait(false);
             started = await OpenAsync().ConfigureAwait(false);
         }
 
-        _started = started;
-        if (started.Modes is not null)
-        {
-            _modes = started.Modes;
-            Emit(new AcpModesUpdatedEvent(started.Modes));
-        }
-        if (started.ConfigOptions.Count > 0)
-        {
-            _configOptions = started.ConfigOptions;
-            Emit(new AcpConfigOptionsUpdatedEvent(_configOptions));
-        }
-        if (started.Models is not null)
-        {
-            _models = started.Models;
-            Emit(new AcpModelsUpdatedEvent(started.Models));
-        }
+        ApplyStartedState(started);
         return started;
+    }
+
+    public async Task AuthenticateAsync(
+        string methodId,
+        IReadOnlyDictionary<string, string>? meta = null,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        var req = new JsonObject { ["methodId"] = methodId };
+        if (meta is { Count: > 0 })
+        {
+            var metaObj = new JsonObject();
+            foreach (var (k, v) in meta) metaObj[k] = v;
+            req["_meta"] = metaObj;
+        }
+        await _peer.RequestAsync("authenticate", req, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task LogoutAsync(CancellationToken cancellationToken = default)
+    {
+        var init = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (!init.AgentCapabilities.AuthCapabilities.Logout)
+        {
+            throw new AcpRpcException(-32601, "ACP agent does not advertise auth.logout capability.");
+        }
+        await _peer.RequestAsync("auth/logout", new JsonObject(), TimeSpan.FromSeconds(20), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<AcpSessionListResult> ListSessionsAsync(
+        string? workingDirectory = null,
+        string? cursor = null,
+        CancellationToken cancellationToken = default)
+    {
+        var init = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (!init.AgentCapabilities.SessionCapabilities.SupportsList)
+        {
+            throw new AcpRpcException(-32601, "ACP agent does not advertise sessionCapabilities.list.");
+        }
+        var req = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(workingDirectory)) req["cwd"] = workingDirectory;
+        if (!string.IsNullOrWhiteSpace(cursor)) req["cursor"] = cursor;
+        var raw = await _peer.RequestAsync("session/list", req, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+        return AcpProtocolParser.ParseSessionListResult(raw);
+    }
+
+    public async Task<AcpSessionStartResult> ForkSessionAsync(
+        string? sessionId = null,
+        string? workingDirectory = null,
+        string? cursorId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var init = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (!init.AgentCapabilities.SessionCapabilities.SupportsFork)
+        {
+            throw new AcpRpcException(-32601, "ACP agent does not advertise sessionCapabilities.fork.");
+        }
+        var sourceId = string.IsNullOrWhiteSpace(sessionId) ? RequireSessionId() : sessionId;
+        var req = new JsonObject
+        {
+            ["sessionId"] = sourceId,
+            ["mcpServers"] = AcpProtocolParser.SerializeMcpServers(_options.McpServers, init.AgentCapabilities.McpCapabilities),
+        };
+        if (!string.IsNullOrWhiteSpace(workingDirectory)) req["cwd"] = workingDirectory;
+        if (!string.IsNullOrWhiteSpace(cursorId)) req["cursorId"] = cursorId;
+
+        var raw = await _peer.RequestAsync("session/fork", req, TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false);
+        return AcpProtocolParser.ParseSessionStart("fork", null, raw);
+    }
+
+    public async Task CloseSessionAsync(string? sessionId = null, CancellationToken cancellationToken = default)
+    {
+        var id = string.IsNullOrWhiteSpace(sessionId) ? _started?.SessionId : sessionId;
+        if (string.IsNullOrWhiteSpace(id)) return;
+        if (_initialized?.AgentCapabilities.SessionCapabilities.SupportsClose != true) return;
+
+        await _peer.RequestAsync(
+            "session/close",
+            new JsonObject { ["sessionId"] = id },
+            TimeSpan.FromSeconds(5),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        var init = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (!init.AgentCapabilities.SessionCapabilities.SupportsDelete)
+        {
+            throw new AcpRpcException(-32601, "ACP agent does not advertise sessionCapabilities.delete.");
+        }
+        try
+        {
+            await _peer.RequestAsync(
+                "session/delete",
+                new JsonObject { ["sessionId"] = sessionId },
+                TimeSpan.FromSeconds(20),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (AcpRpcException ex) when (ex.Code == -32002)
+        {
+            // Per ACP spec, -32002 (resource not found) on session/delete is idempotent success.
+        }
+    }
+
+    public async Task ArchiveSessionAsync(string? sessionId = null, CancellationToken cancellationToken = default)
+    {
+        var init = await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        if (!init.AgentCapabilities.SessionCapabilities.SupportsArchive)
+        {
+            throw new AcpRpcException(-32601, "ACP agent does not advertise sessionCapabilities.archive.");
+        }
+        var id = string.IsNullOrWhiteSpace(sessionId) ? RequireSessionId() : sessionId;
+        await _peer.RequestAsync(
+            "session/archive",
+            new JsonObject { ["sessionId"] = id },
+            TimeSpan.FromSeconds(20),
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AcpPromptResult> PromptAsync(
@@ -241,8 +392,17 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
     {
         var sessionId = RequireSessionId();
         var effectiveText = RewritePromptCommand(text);
-        var imageSupported = _initialized?.AgentCapabilities.PromptCapabilities.Image == true;
-        var blocks = AcpProtocolParser.BuildPromptBlocks(effectiveText, attachments, _options.Dialect, imageSupported);
+        var promptCaps = _initialized?.AgentCapabilities.PromptCapabilities;
+        var imageSupported = promptCaps?.Image == true;
+        var audioSupported = promptCaps?.Audio == true;
+        var embeddedSupported = promptCaps?.EmbeddedContext == true;
+        var blocks = AcpProtocolParser.BuildPromptBlocks(
+            effectiveText,
+            attachments,
+            _options.Dialect,
+            imageSupported,
+            audioSupported,
+            embeddedSupported);
 
         var req = new JsonObject
         {
@@ -250,8 +410,28 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
             ["prompt"] = blocks,
         };
 
-        var raw = await _peer.RequestAsync("session/prompt", req, timeout: null, cancellationToken).ConfigureAwait(false);
-        return AcpProtocolParser.ParsePromptResult(raw);
+        try
+        {
+            var raw = await _peer.RequestAsync("session/prompt", req, timeout: null, cancellationToken).ConfigureAwait(false);
+            return AcpProtocolParser.ParsePromptResult(raw);
+        }
+        catch (AcpAuthRequiredException)
+        {
+            throw;
+        }
+        catch (AcpRpcException ex) when (_options.Dialect.IsAuthenticationRequired(ex))
+        {
+            throw new AcpAuthRequiredException(ex.Message, _initialized?.AuthMethods, ex.ErrorData);
+        }
+        catch (AcpRpcException ex)
+        {
+            if (_options.Dialect.FormatPromptError(ex) is { Length: > 0 } formatted
+                && !string.Equals(formatted, ex.Message, StringComparison.Ordinal))
+            {
+                throw new AcpRpcException(ex.Code, formatted, ex.ErrorData);
+            }
+            throw;
+        }
     }
 
     public Task CancelAsync()
@@ -260,6 +440,9 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
         _peer.CancelIncomingRequests();
         return _peer.NotifyAsync("session/cancel", new JsonObject { ["sessionId"] = _started.SessionId });
     }
+
+    /// <summary>Rejects pending outgoing calls while still allowing trailing stdout notifications to drain before closing.</summary>
+    public void DrainNotifications(Exception? error = null) => _peer.DrainNotifications(error);
 
     public async Task SetModeAsync(string modeId, CancellationToken cancellationToken = default)
     {
@@ -340,6 +523,26 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
 
     public ValueTask DisposeAsync() => _peer.DisposeAsync();
 
+    private void ApplyStartedState(AcpSessionStartResult started)
+    {
+        _started = started;
+        if (started.Modes is not null)
+        {
+            _modes = started.Modes;
+            Emit(new AcpModesUpdatedEvent(started.Modes) { SessionId = started.SessionId });
+        }
+        if (started.ConfigOptions.Count > 0)
+        {
+            _configOptions = started.ConfigOptions;
+            Emit(new AcpConfigOptionsUpdatedEvent(_configOptions) { SessionId = started.SessionId });
+        }
+        if (started.Models is not null)
+        {
+            _models = started.Models;
+            Emit(new AcpModelsUpdatedEvent(started.Models) { SessionId = started.SessionId });
+        }
+    }
+
     private string RequireSessionId() =>
         _started?.SessionId is { Length: > 0 } id ? id : throw new AcpException("ACP session has not started.");
 
@@ -365,26 +568,52 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
             {
                 if (!string.IsNullOrWhiteSpace(dialectHandled.PlanMarkdown))
                 {
-                    Emit(new AcpPlanEvent([], dialectHandled.PlanMarkdown));
+                    Emit(new AcpPlanEvent([], dialectHandled.PlanMarkdown) { SessionId = _started?.SessionId });
+                }
+                if (dialectHandled.ToolCallUpdate is not null)
+                {
+                    Emit(new AcpToolCallEvent(dialectHandled.ToolCallUpdate) { SessionId = _started?.SessionId });
                 }
                 return dialectHandled.ImmediateReply;
             }
             if (dialectHandled.Question is not null && dialectHandled.BuildQuestionReply is not null)
             {
-                var answers = _options.OnQuestionRequest is not null
-                    ? await _options.OnQuestionRequest(dialectHandled.Question, context.CancellationToken).ConfigureAwait(false)
-                    : null;
+                IReadOnlyDictionary<string, IReadOnlyList<string>>? answers = null;
+                if (_options.OnFormElicitationRequest is not null)
+                {
+                    var resp = await _options.OnFormElicitationRequest(dialectHandled.Question, context.CancellationToken).ConfigureAwait(false);
+                    answers = resp.Action == AcpElicitationAction.Accept ? resp.Answers : null;
+                }
+                else if (_options.OnQuestionRequest is not null)
+                {
+                    answers = await _options.OnQuestionRequest(dialectHandled.Question, context.CancellationToken).ConfigureAwait(false);
+                }
                 return dialectHandled.BuildQuestionReply(answers);
             }
         }
 
-        // 2. Standard ACP form elicitation (never auto-approved).
+        // 2. Standard ACP elicitation (form & url modes, never auto-approved).
         if (method == "elicitation/create")
         {
+            if (AcpProtocolParser.ParseUrlElicitation(parameters, context.RawId) is { } urlReq)
+            {
+                if (!_options.EnableUrlElicitation || _options.OnUrlElicitationRequest is null)
+                {
+                    return AcpProtocolParser.BuildUrlElicitationReply(AcpElicitationAction.Decline);
+                }
+                var action = await _options.OnUrlElicitationRequest(urlReq, context.CancellationToken).ConfigureAwait(false);
+                return AcpProtocolParser.BuildUrlElicitationReply(action);
+            }
+
             var question = AcpProtocolParser.ParseFormElicitation(parameters, context.RawId);
             if (question is null)
             {
                 return new JsonObject { ["action"] = "decline" };
+            }
+            if (_options.OnFormElicitationRequest is not null)
+            {
+                var resp = await _options.OnFormElicitationRequest(question, context.CancellationToken).ConfigureAwait(false);
+                return AcpProtocolParser.BuildFormElicitationReply(question, resp);
             }
             var answers = _options.OnQuestionRequest is not null
                 ? await _options.OnQuestionRequest(question, context.CancellationToken).ConfigureAwait(false)
@@ -395,11 +624,8 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
         // 3. Standard ACP permission request.
         if (method == "session/request_permission")
         {
-            var req = AcpProtocolParser.ParsePermissionRequest(parameters, context.RawId, _options.Dialect);
-            if (req is null)
-            {
-                throw new AcpRpcException(-32602, "Invalid ACP permission request.");
-            }
+            var req = AcpProtocolParser.ParsePermissionRequest(parameters, context.RawId, _options.Dialect)
+                ?? throw new AcpRpcException(-32602, "Invalid ACP permission request.");
             if (_started is not null && !string.IsNullOrEmpty(req.SessionId) && req.SessionId != _started.SessionId)
             {
                 return AcpPermissionCoordinator.BuildCancelledReply();
@@ -437,18 +663,159 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
                 : AcpPermissionCoordinator.BuildSelectedReply(chosen);
         }
 
+        // 4. Client-hosted filesystem callbacks (fs/read_text_file, fs/write_text_file) when explicitly enabled.
+        if (_options.EnableClientFileSystem && _options.FileSystemHandler is { } fsHandler)
+        {
+            if (method == "fs/read_text_file")
+            {
+                if (parameters is not { ValueKind: JsonValueKind.Object } obj)
+                    throw new AcpRpcException(-32602, "Invalid fs/read_text_file params.");
+                var sid = AcpProtocolParser.TryStr(obj, "sessionId") ?? "";
+                var path = AcpProtocolParser.TryStr(obj, "path") ?? "";
+                var line = AcpProtocolParser.TryInt(obj, "line");
+                var limit = AcpProtocolParser.TryInt(obj, "limit");
+                var content = await fsHandler.ReadTextFileAsync(sid, path, line, limit, context.CancellationToken).ConfigureAwait(false);
+                return new JsonObject { ["content"] = content };
+            }
+            if (method == "fs/write_text_file")
+            {
+                if (parameters is not { ValueKind: JsonValueKind.Object } obj)
+                    throw new AcpRpcException(-32602, "Invalid fs/write_text_file params.");
+                var sid = AcpProtocolParser.TryStr(obj, "sessionId") ?? "";
+                var path = AcpProtocolParser.TryStr(obj, "path") ?? "";
+                var content = AcpProtocolParser.TryStr(obj, "content")
+                    ?? throw new AcpRpcException(-32602, "fs/write_text_file requires string content.");
+                await fsHandler.WriteTextFileAsync(sid, path, content, context.CancellationToken).ConfigureAwait(false);
+                return new JsonObject();
+            }
+        }
+
+        // 5. Client-hosted terminal callbacks (terminal/*) when explicitly enabled.
+        if (_options.EnableClientTerminal && _options.TerminalHandler is { } termHandler)
+        {
+            if (method == "terminal/create")
+            {
+                if (parameters is not { ValueKind: JsonValueKind.Object } obj)
+                    throw new AcpRpcException(-32602, "Invalid terminal/create params.");
+                var sid = AcpProtocolParser.TryStr(obj, "sessionId") ?? "";
+                var command = AcpProtocolParser.TryStr(obj, "command") ?? "";
+                List<string>? args = null;
+                if (AcpProtocolParser.TryArr(obj, "args") is { } argsEl)
+                {
+                    args = argsEl.EnumerateArray()
+                        .Where(e => e.ValueKind == JsonValueKind.String)
+                        .Select(e => e.GetString()!)
+                        .ToList();
+                }
+                Dictionary<string, string>? env = null;
+                if (AcpProtocolParser.TryArr(obj, "env") is { } envArr)
+                {
+                    env = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var entry in envArr.EnumerateArray())
+                    {
+                        var name = AcpProtocolParser.TryStr(entry, "name");
+                        var val = AcpProtocolParser.TryStr(entry, "value");
+                        if (!string.IsNullOrWhiteSpace(name) && val is not null) env[name] = val;
+                    }
+                }
+                else if (AcpProtocolParser.TryObj(obj, "env") is { } envObj)
+                {
+                    env = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var prop in envObj.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String) env[prop.Name] = prop.Value.GetString()!;
+                    }
+                }
+                var cwd = AcpProtocolParser.TryStr(obj, "cwd");
+                var byteLimit = AcpProtocolParser.TryInt(obj, "outputByteLimit");
+                var termId = await termHandler.CreateAsync(sid, command, args, env, cwd, byteLimit, context.CancellationToken).ConfigureAwait(false);
+                return new JsonObject { ["terminalId"] = termId };
+            }
+            if (method == "terminal/output")
+            {
+                if (parameters is not { ValueKind: JsonValueKind.Object } obj)
+                    throw new AcpRpcException(-32602, "Invalid terminal/output params.");
+                var sid = AcpProtocolParser.TryStr(obj, "sessionId") ?? "";
+                var termId = AcpProtocolParser.TryStr(obj, "terminalId") ?? "";
+                var res = await termHandler.GetOutputAsync(sid, termId, context.CancellationToken).ConfigureAwait(false);
+                var reply = new JsonObject
+                {
+                    ["output"] = res.Output,
+                    ["truncated"] = res.Truncated,
+                };
+                if (res.ExitStatus is { } exit)
+                {
+                    reply["exitStatus"] = SerializeExitStatus(exit);
+                }
+                return reply;
+            }
+            if (method == "terminal/wait_for_exit")
+            {
+                if (parameters is not { ValueKind: JsonValueKind.Object } obj)
+                    throw new AcpRpcException(-32602, "Invalid terminal/wait_for_exit params.");
+                var sid = AcpProtocolParser.TryStr(obj, "sessionId") ?? "";
+                var termId = AcpProtocolParser.TryStr(obj, "terminalId") ?? "";
+                var exit = await termHandler.WaitForExitAsync(sid, termId, context.CancellationToken).ConfigureAwait(false);
+                return SerializeExitStatus(exit);
+            }
+            if (method == "terminal/kill")
+            {
+                if (parameters is not { ValueKind: JsonValueKind.Object } obj)
+                    throw new AcpRpcException(-32602, "Invalid terminal/kill params.");
+                var sid = AcpProtocolParser.TryStr(obj, "sessionId") ?? "";
+                var termId = AcpProtocolParser.TryStr(obj, "terminalId") ?? "";
+                await termHandler.KillAsync(sid, termId, context.CancellationToken).ConfigureAwait(false);
+                return new JsonObject();
+            }
+            if (method == "terminal/release")
+            {
+                if (parameters is not { ValueKind: JsonValueKind.Object } obj)
+                    throw new AcpRpcException(-32602, "Invalid terminal/release params.");
+                var sid = AcpProtocolParser.TryStr(obj, "sessionId") ?? "";
+                var termId = AcpProtocolParser.TryStr(obj, "terminalId") ?? "";
+                await termHandler.ReleaseAsync(sid, termId, context.CancellationToken).ConfigureAwait(false);
+                return new JsonObject();
+            }
+        }
+
         throw new AcpRpcException(-32601, $"Unsupported ACP client method: {method}");
+    }
+
+    private static JsonObject SerializeExitStatus(AcpTerminalExitStatus exit)
+    {
+        var obj = new JsonObject();
+        if (exit.ExitCode.HasValue) obj["exitCode"] = exit.ExitCode.Value;
+        if (!string.IsNullOrEmpty(exit.Signal)) obj["signal"] = exit.Signal;
+        return obj;
     }
 
     private void HandleNotification(string method, JsonElement? parameters)
     {
-        if (method != "session/update" || parameters is not { ValueKind: JsonValueKind.Object } env)
+        if (method == "elicitation/complete")
         {
+            if (parameters is { ValueKind: JsonValueKind.Object } elObj
+                && AcpProtocolParser.TryStr(elObj, "elicitationId") is { Length: > 0 } elicitId)
+            {
+                Emit(new AcpElicitationCompletedEvent(elicitId) { SessionId = _started?.SessionId });
+            }
             return;
         }
+
+        if (method != "session/update")
+        {
+            if (_options.Dialect.TryTranslateNotification(method, parameters) is { } translated)
+            {
+                Emit(translated);
+            }
+            return;
+        }
+
+        if (parameters is not { ValueKind: JsonValueKind.Object } env) return;
         if (AcpProtocolParser.TryObj(env, "update") is not { } upd) return;
         var kind = AcpProtocolParser.TryStr(upd, "sessionUpdate");
         if (string.IsNullOrEmpty(kind)) return;
+
+        var sessionId = AcpProtocolParser.TryStr(env, "sessionId") ?? _started?.SessionId;
 
         // During session/load the agent replays the prior conversation; forward it tagged as replay so the
         // client can rebuild an empty timeline (and skip it when the history is already on screen).
@@ -459,12 +826,21 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
         {
             case "user_message_chunk" when isReplay:
             {
-                var text = AcpProtocolParser.TryObj(upd, "content") is { } block
-                    ? AcpProtocolParser.ExtractContentBlockText(block)
-                    : null;
-                if (!string.IsNullOrEmpty(text))
+                var msgId = AcpProtocolParser.TryStr(upd, "messageId");
+                if (AcpProtocolParser.TryObj(upd, "content") is { } block)
                 {
-                    Emit(new AcpUserMessageEvent(text, AcpProtocolParser.TryStr(upd, "messageId")) { IsReplay = true });
+                    if (AcpProtocolParser.ExtractImageContent(block) is { } img)
+                    {
+                        Emit(new AcpUserImageEvent(img, msgId) { IsReplay = true, SessionId = sessionId });
+                    }
+                    else
+                    {
+                        var text = AcpProtocolParser.ExtractContentBlockText(block);
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            Emit(new AcpUserMessageEvent(text, msgId) { IsReplay = true, SessionId = sessionId });
+                        }
+                    }
                 }
                 break;
             }
@@ -472,12 +848,25 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
             case "agent_thought_chunk":
             {
                 var channel = kind == "agent_thought_chunk" ? "reasoning" : "assistant";
-                var text = AcpProtocolParser.TryObj(upd, "content") is { } block
-                    ? AcpProtocolParser.ExtractContentBlockText(block)
-                    : null;
-                if (!string.IsNullOrEmpty(text))
+                var messageId = AcpProtocolParser.TryStr(upd, "messageId");
+                if (AcpProtocolParser.TryObj(upd, "content") is { } block)
                 {
-                    Emit(new AcpTextDeltaEvent(channel, text, AcpProtocolParser.TryStr(upd, "messageId")) { IsReplay = isReplay });
+                    if (kind == "agent_message_chunk" && AcpProtocolParser.ExtractImageContent(block) is { } img)
+                    {
+                        Emit(new AcpImageEvent(img, messageId) { IsReplay = isReplay, SessionId = sessionId });
+                    }
+                    else if (kind == "agent_message_chunk" && AcpProtocolParser.ExtractAudioContent(block) is { } audio)
+                    {
+                        Emit(new AcpAudioEvent(audio, messageId) { IsReplay = isReplay, SessionId = sessionId });
+                    }
+                    else
+                    {
+                        var text = AcpProtocolParser.ExtractContentBlockText(block);
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            Emit(new AcpTextDeltaEvent(channel, text, messageId) { IsReplay = isReplay, SessionId = sessionId });
+                        }
+                    }
                 }
                 break;
             }
@@ -485,14 +874,23 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
             case "tool_call_update":
             {
                 var tc = AcpProtocolParser.ParseToolCallUpdate(upd, _options.Dialect);
-                Emit(new AcpToolCallEvent(tc) { IsReplay = isReplay });
+                Emit(new AcpToolCallEvent(tc) { IsReplay = isReplay, SessionId = sessionId });
+                break;
+            }
+            case "image_generation_begin":
+            case "image_generation_partial":
+            case "image_generation_update":
+            case "image_generation_end":
+            {
+                var tc = AcpProtocolParser.ParseImageGenerationNotification(kind, upd, _options.Dialect);
+                Emit(new AcpToolCallEvent(tc) { IsReplay = isReplay, SessionId = sessionId });
                 break;
             }
             case "plan":
             {
                 if (AcpProtocolParser.TryArr(upd, "entries") is { } entries)
                 {
-                    Emit(new AcpPlanEvent(AcpProtocolParser.ParsePlanEntries(entries)) { IsReplay = isReplay });
+                    Emit(new AcpPlanEvent(AcpProtocolParser.ParsePlanEntries(entries)) { IsReplay = isReplay, SessionId = sessionId });
                 }
                 break;
             }
@@ -503,18 +901,23 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
                     var pType = AcpProtocolParser.TryStr(plan, "type");
                     if (pType == "items" && AcpProtocolParser.TryArr(plan, "entries") is { } entries)
                     {
-                        Emit(new AcpPlanEvent(AcpProtocolParser.ParsePlanEntries(entries)) { IsReplay = isReplay });
+                        Emit(new AcpPlanEvent(AcpProtocolParser.ParsePlanEntries(entries)) { IsReplay = isReplay, SessionId = sessionId });
                     }
                     else if (pType == "markdown" && AcpProtocolParser.TryStr(plan, "content") is { Length: > 0 } md)
                     {
-                        Emit(new AcpPlanEvent([], md) { IsReplay = isReplay });
+                        Emit(new AcpPlanEvent([], md) { IsReplay = isReplay, SessionId = sessionId });
                     }
                 }
                 break;
             }
+            case "plan_removed":
+            {
+                Emit(new AcpPlanRemovedEvent { IsReplay = isReplay, SessionId = sessionId });
+                break;
+            }
             case "usage_update":
             {
-                Emit(new AcpUsageEvent(AcpProtocolParser.ParseUsageUpdate(upd)));
+                Emit(new AcpUsageEvent(AcpProtocolParser.ParseUsageUpdate(upd)) { SessionId = sessionId });
                 break;
             }
             case "available_commands_update":
@@ -522,7 +925,7 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
                 if (AcpProtocolParser.TryArr(upd, "availableCommands") is { } cmds)
                 {
                     _commands = AcpProtocolParser.ParseAvailableCommands(cmds, _options.Dialect);
-                    Emit(new AcpCommandsUpdatedEvent(_commands));
+                    Emit(new AcpCommandsUpdatedEvent(_commands) { SessionId = sessionId });
                 }
                 break;
             }
@@ -533,7 +936,18 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
                 {
                     _modes ??= new AcpSessionModeState();
                     _modes.CurrentModeId = modeId;
-                    Emit(new AcpModesUpdatedEvent(_modes));
+                    Emit(new AcpModesUpdatedEvent(_modes) { SessionId = sessionId });
+                }
+                break;
+            }
+            case "current_model_update":
+            {
+                var modelId = AcpProtocolParser.TryStr(upd, "currentModelId") ?? AcpProtocolParser.TryStr(upd, "modelId");
+                if (!string.IsNullOrEmpty(modelId))
+                {
+                    _models ??= new AcpSessionModelState();
+                    _models.CurrentModelId = modelId;
+                    Emit(new AcpModelsUpdatedEvent(_models) { SessionId = sessionId });
                 }
                 break;
             }
@@ -542,16 +956,32 @@ public sealed class AcpSessionRuntime : IAsyncDisposable
                 if (AcpProtocolParser.TryArr(upd, "configOptions") is { } opts)
                 {
                     _configOptions = AcpProtocolParser.ParseConfigOptions(opts);
-                    Emit(new AcpConfigOptionsUpdatedEvent(_configOptions));
+                    Emit(new AcpConfigOptionsUpdatedEvent(_configOptions) { SessionId = sessionId });
                 }
                 break;
             }
             case "session_info_update":
             {
-                var title = AcpProtocolParser.TryStr(upd, "title");
-                if (!string.IsNullOrWhiteSpace(title))
+                var info = AcpProtocolParser.ParseSessionInfoUpdate(upd);
+                Emit(new AcpSessionInfoUpdatedEvent(info) { SessionId = sessionId });
+                if (!string.IsNullOrWhiteSpace(info.Title))
                 {
-                    Emit(new AcpTitleUpdatedEvent(title.Trim()));
+                    Emit(new AcpTitleUpdatedEvent(info.Title.Trim()) { SessionId = sessionId });
+                }
+                break;
+            }
+            case "compaction_update":
+            case "compaction_summary_chunk":
+            {
+                var comp = AcpProtocolParser.ParseCompactionUpdate(kind, upd);
+                Emit(new AcpCompactionEvent(comp) { IsReplay = isReplay, SessionId = sessionId });
+                break;
+            }
+            case "cursor_update":
+            {
+                if (AcpProtocolParser.ParseCursorUpdate(upd) is { } cursor)
+                {
+                    Emit(new AcpCursorUpdatedEvent(cursor) { IsReplay = isReplay, SessionId = sessionId });
                 }
                 break;
             }

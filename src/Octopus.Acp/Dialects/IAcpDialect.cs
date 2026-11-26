@@ -12,6 +12,8 @@ public sealed class AcpDialectRequestHandling
     public JsonNode? ImmediateReply { get; init; }
     /// <summary>Optional markdown plan emitted alongside an immediate settlement.</summary>
     public string? PlanMarkdown { get; init; }
+    /// <summary>Optional normalized tool call update emitted alongside an immediate settlement (e.g. <c>cursor/generate_image</c>).</summary>
+    public AcpToolCallUpdate? ToolCallUpdate { get; init; }
     /// <summary>Interactive question card shown to the user (never auto-approved even in full-access mode).</summary>
     public AcpQuestionRequest? Question { get; init; }
     /// <summary>Builds the JSON-RPC response payload from the user's selected answers (null means cancelled).</summary>
@@ -82,6 +84,9 @@ public interface IAcpDialect
 
     /// <summary>Intercepts agent-specific custom requests or special <c>session/request_permission</c> questions/warnings.</summary>
     AcpDialectRequestHandling? TryHandleRequest(string method, JsonElement? parameters, string requestId) => null;
+
+    /// <summary>Translates a non-standard / extension notification outside <c>session/update</c> into a runtime event.</summary>
+    AcpRuntimeEvent? TryTranslateNotification(string method, JsonElement? parameters) => null;
 
     /// <summary>Detects whether an RPC error means authentication is required.</summary>
     bool IsAuthenticationRequired(AcpRpcException error) => error.Code == -32000;

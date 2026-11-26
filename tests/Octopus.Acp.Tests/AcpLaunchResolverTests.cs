@@ -311,6 +311,83 @@ public class AcpLaunchResolverTests
         Assert.Contains("\"model_reasoning_effort\":\"high\"", plan.Environment["CODEX_CONFIG"]);
     }
 
+    [Fact]
+    public async Task Native_acp_enforces_min_version_and_allows_profile_command_override()
+    {
+        var locator = new FakeLocator(new()
+        {
+            ["my-agent"] = "/usr/local/bin/my-agent",
+            ["custom-agent"] = "/opt/bin/custom-agent",
+        });
+        var resolver = new AcpLaunchResolver(locator, new FakeLoginEnv());
+        var def = new AgentDefinition
+        {
+            Id = "my-agent",
+            Name = "MyAgent",
+            Detect = new() { Executables = ["my-agent"] },
+            Acp = new()
+            {
+                Mode = "native",
+                MinVersion = "1.5.0",
+                Args = ["acp"],
+            },
+        };
+
+        var oldInstall = new AgentInstallation { AgentId = "my-agent", Path = "/usr/local/bin/my-agent", Version = "1.4.9" };
+        Assert.False(resolver.CanLaunchAcp(def, oldInstall, new AgentSettings()));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            resolver.ResolveAsync(def, oldInstall, new AgentSettings(), "/tmp/repo", PermissionModes.Default));
+        Assert.Contains("1.5.0", ex.Message);
+
+        var okInstall = new AgentInstallation { AgentId = "my-agent", Path = "/usr/local/bin/my-agent", Version = "1.5.0" };
+        Assert.True(resolver.CanLaunchAcp(def, okInstall, new AgentSettings()));
+        var okPlan = await resolver.ResolveAsync(def, okInstall, new AgentSettings(), "/tmp/repo", PermissionModes.Default);
+        Assert.Equal("/usr/local/bin/my-agent", okPlan.Executable);
+
+        // Explicit profile.Command override bypasses detected version gate.
+        var overrideSettings = new AgentSettings();
+        overrideSettings.Profiles["my-agent"] = new AgentProfile { Command = "custom-agent" };
+        Assert.True(resolver.CanLaunchAcp(def, oldInstall, overrideSettings));
+        var overridePlan = await resolver.ResolveAsync(def, oldInstall, overrideSettings, "/tmp/repo", PermissionModes.Default);
+        Assert.Equal("/opt/bin/custom-agent", overridePlan.Executable);
+    }
+
+    [Fact]
+    public async Task Resolves_remote_websocket_and_streamable_http_launch_plans()
+    {
+        var resolver = new AcpLaunchResolver(new FakeLocator(new()), new FakeLoginEnv());
+        var wsDef = new AgentDefinition
+        {
+            Id = "remote-ws",
+            Name = "Remote WS",
+            Acp = new()
+            {
+                Mode = "native",
+                Transport = "websocket",
+                Endpoint = "wss://acp.example.com:8443/v1",
+                Headers = new() { ["Authorization"] = "Bearer tok-1" },
+                Dialect = "generic",
+            },
+        };
+
+        Assert.True(resolver.CanLaunchAcp(wsDef, null, new AgentSettings()));
+        var plan = await resolver.ResolveAsync(wsDef, null, new AgentSettings(), "/tmp/repo", PermissionModes.Default);
+        Assert.Equal("websocket", plan.Transport);
+        Assert.Equal("wss://acp.example.com:8443/v1", plan.Endpoint);
+        Assert.Equal("Bearer tok-1", plan.Headers!["Authorization"]);
+        Assert.Equal("websocket acp.example.com:8443", plan.SourceLabel);
+
+        var badHttpDef = new AgentDefinition
+        {
+            Id = "remote-bad",
+            Name = "Remote Bad",
+            Acp = new() { Mode = "native", Transport = "http", Endpoint = "" },
+        };
+        Assert.False(resolver.CanLaunchAcp(badHttpDef, null, new AgentSettings()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            resolver.ResolveAsync(badHttpDef, null, new AgentSettings(), "/tmp/repo", PermissionModes.Default));
+    }
+
     private sealed class FakeLoginEnvWithVar(string key, string value) : ILoginEnvironment
     {
         public Task<IReadOnlyDictionary<string, string>> GetAsync(CancellationToken cancellationToken = default) =>

@@ -367,4 +367,124 @@ public class AcpDialectsTests
         Assert.Equal("deepseek-v4-pro", doc.RootElement.GetProperty("model").GetString());
         Assert.Equal("xhigh", doc.RootElement.GetProperty("model_reasoning_effort").GetString());
     }
+
+    [Fact]
+    public void Codex_dialect_normalizes_image_generation_tool_calls_and_partial_progress()
+    {
+        var codex = _registry.Resolve("codex-acp");
+
+        // 1. Initial Codex image_generation call with ig_* id and prompt + size -> aspect ratio
+        using var beginDoc = JsonDocument.Parse("""
+            {
+              "toolCallId": "ig_001",
+              "title": "Generating image",
+              "status": "generating",
+              "_meta": { "codex": { "toolName": "image_generation" } },
+              "rawInput": {
+                "prompt": "Isometric cozy studio desk at sunset",
+                "size": "1536x1024"
+              },
+              "rawOutput": {
+                "progress": 0.4,
+                "partial_image_b64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+              }
+            }
+            """);
+        var partial = AcpProtocolParser.ParseToolCallUpdate(beginDoc.RootElement, codex);
+        Assert.True(partial.IsImageGeneration);
+        Assert.Equal("image", partial.Kind);
+        Assert.Equal("in_progress", partial.Status);
+        Assert.Equal("Isometric cozy studio desk at sunset", partial.ImagePrompt);
+        Assert.Equal(0.4, partial.ImageProgress!.Value, precision: 3);
+        Assert.Equal(1.5, partial.ImageAspectRatio!.Value, precision: 3);
+        var partialImg = Assert.Single(partial.Images);
+        Assert.False(string.IsNullOrEmpty(partialImg.Base64Data));
+        Assert.Equal("image/png", partialImg.MimeType);
+
+        // 2. Final Codex image_generation_call output with revised_prompt, result base64, and saved_path
+        using var doneDoc = JsonDocument.Parse("""
+            {
+              "toolCallId": "ig_001",
+              "status": "completed",
+              "rawOutput": {
+                "type": "image_generation_call",
+                "revised_prompt": "Detailed isometric studio desk bathed in golden sunset light",
+                "result": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+                "saved_path": "/tmp/studio.png"
+              }
+            }
+            """);
+        var done = AcpProtocolParser.ParseToolCallUpdate(doneDoc.RootElement, codex);
+        Assert.True(done.IsImageGeneration);
+        Assert.Equal("image", done.Kind);
+        Assert.Equal("completed", done.Status);
+        Assert.Equal("Detailed isometric studio desk bathed in golden sunset light", done.ImagePrompt);
+        Assert.NotEmpty(done.Images);
+        Assert.Contains(done.Images, img => img.FilePath == "/tmp/studio.png");
+        Assert.Contains(done.Images, img => !string.IsNullOrEmpty(img.Base64Data));
+    }
+
+    [Fact]
+    public void Cursor_dialect_handles_generate_image_request_as_image_tool_call()
+    {
+        var cursor = _registry.Resolve("cursor");
+        using var doc = JsonDocument.Parse("""
+            {
+              "id": "cur_img_1",
+              "prompt": "Minimalist monochrome octopus emblem",
+              "status": "completed",
+              "aspectRatio": "16:9",
+              "path": "/tmp/octopus.png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+              "mimeType": "image/png"
+            }
+            """);
+
+        var handling = cursor.TryHandleRequest("cursor/generate_image", doc.RootElement, "42");
+        Assert.NotNull(handling);
+        Assert.NotNull(handling!.ImmediateReply);
+        Assert.NotNull(handling.ToolCallUpdate);
+        var update = handling.ToolCallUpdate!;
+        Assert.True(update.IsImageGeneration);
+        Assert.Equal("image", update.Kind);
+        Assert.Equal("cur_img_1", update.ToolCallId);
+        Assert.Equal("completed", update.Status);
+        Assert.Equal("Minimalist monochrome octopus emblem", update.ImagePrompt);
+        Assert.Equal(16d / 9d, update.ImageAspectRatio!.Value, precision: 3);
+        Assert.Contains(update.Images, img => img.FilePath == "/tmp/octopus.png" || !string.IsNullOrEmpty(img.Base64Data));
+    }
+
+    [Fact]
+    public void Parser_extracts_standard_acp_image_content_blocks_and_mcp_image_generation_tools()
+    {
+        var generic = _registry.Resolve("generic");
+        using var doc = JsonDocument.Parse("""
+            {
+              "toolCallId": "mcp_img_1",
+              "name": "mcp__media__generate_image",
+              "title": "Generate banner",
+              "status": "completed",
+              "rawInput": { "prompt": "Futuristic terminal banner", "aspect_ratio": "4:3" },
+              "content": [
+                {
+                  "type": "content",
+                  "content": {
+                    "type": "image",
+                    "data": "data:image/webp;base64,UklGRh4AAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=",
+                    "uri": "file:///tmp/banner.webp"
+                  }
+                }
+              ]
+            }
+            """);
+        var update = AcpProtocolParser.ParseToolCallUpdate(doc.RootElement, generic);
+        Assert.True(update.IsImageGeneration);
+        Assert.Equal("image", update.Kind);
+        Assert.Equal("Futuristic terminal banner", update.ImagePrompt);
+        Assert.Equal(4d / 3d, update.ImageAspectRatio!.Value, precision: 3);
+        var image = Assert.Single(update.Images);
+        Assert.Equal("image/webp", image.MimeType);
+        Assert.Equal("UklGRh4AAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=", image.Base64Data);
+        Assert.Equal("/tmp/banner.webp", image.FilePath);
+    }
 }

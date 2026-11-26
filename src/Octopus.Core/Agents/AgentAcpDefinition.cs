@@ -37,8 +37,14 @@ public enum AcpPermissionStrategy
 /// </summary>
 public sealed class AgentAcpDefinition
 {
-    /// <summary>Transport kind; currently <c>stdio</c>.</summary>
+    /// <summary>Transport kind: <c>stdio</c> (local subprocess), <c>ws</c>/<c>websocket</c>, or <c>http</c>/<c>streamable-http</c>.</summary>
     public string Transport { get; set; } = "stdio";
+
+    /// <summary>Remote ACP endpoint URL when <see cref="Transport"/> is <c>ws</c>/<c>websocket</c> or <c>http</c>/<c>streamable-http</c>.</summary>
+    public string? Endpoint { get; set; }
+
+    /// <summary>Optional HTTP/WebSocket headers sent when connecting to a remote ACP <see cref="Endpoint"/> (e.g. Authorization).</summary>
+    public Dictionary<string, string> Headers { get; set; } = [];
 
     /// <summary><c>native</c> (the agent's own CLI executable) or <c>adapter</c> (a companion ACP bridge/package).</summary>
     public string Mode { get; set; } = "native";
@@ -107,6 +113,34 @@ public sealed class AgentAcpAdapterSpec
 
     /// <summary>Extra arguments passed after <see cref="UvxPackage"/>.</summary>
     public List<string> UvxArgs { get; set; } = [];
+}
+
+/// <summary>Model Context Protocol (MCP) server definition forwarded via ACP <c>session/new|load|resume|fork</c> (<c>mcpServers</c>).</summary>
+public sealed class AcpMcpServerConfig
+{
+    /// <summary>Unique display name of the MCP server.</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>Transport type: <c>stdio</c>, <c>http</c>, or <c>sse</c>.</summary>
+    public string Transport { get; set; } = "stdio";
+
+    /// <summary>Executable command (for <c>stdio</c> transport).</summary>
+    public string? Command { get; set; }
+
+    /// <summary>Command arguments (for <c>stdio</c> transport).</summary>
+    public List<string> Args { get; set; } = [];
+
+    /// <summary>Environment variables (for <c>stdio</c> transport).</summary>
+    public Dictionary<string, string> Env { get; set; } = [];
+
+    /// <summary>Endpoint URL (for <c>http</c> or <c>sse</c> transport).</summary>
+    public string? Url { get; set; }
+
+    /// <summary>HTTP headers (for <c>http</c> or <c>sse</c> transport).</summary>
+    public Dictionary<string, string> Headers { get; set; } = [];
+
+    /// <summary>Whether this MCP server is forwarded to ACP sessions.</summary>
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>

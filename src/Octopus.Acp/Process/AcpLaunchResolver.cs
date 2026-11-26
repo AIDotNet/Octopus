@@ -2,13 +2,14 @@ using System.Security.Cryptography;
 using System.Text;
 using Octopus.Acp.Dialects;
 using Octopus.Agents;
+using Octopus.Agents.Signals;
 using Octopus.Core.Agents;
 using Octopus.Core.Settings;
 using Octopus.Platform;
 
 namespace Octopus.Acp.Process;
 
-/// <summary>Resolved executable, arguments, environment and dialect for starting an ACP child process.</summary>
+/// <summary>Resolved executable (or remote transport endpoint), arguments, environment and dialect for starting an ACP session.</summary>
 public sealed record AcpLaunchPlan(
     string Executable,
     IReadOnlyList<string> Arguments,
@@ -19,9 +20,12 @@ public sealed record AcpLaunchPlan(
     AcpPermissionStrategy PermissionStrategy,
     string SourceLabel,
     string? AgentVersion = null,
-    TimeSpan? InitializeTimeout = null);
+    TimeSpan? InitializeTimeout = null,
+    string Transport = "stdio",
+    string? Endpoint = null,
+    IReadOnlyDictionary<string, string>? Headers = null);
 
-/// <summary>Resolves how to launch an agent in ACP mode (native CLI, local/cached adapter binary, or managed install / runner).</summary>
+/// <summary>Resolves how to launch an agent in ACP mode (native CLI, local/cached adapter binary, managed install / runner, or remote WS/HTTP endpoint).</summary>
 public sealed class AcpLaunchResolver(
     IExecutableLocator locator,
     ILoginEnvironment loginEnvironment,
@@ -32,12 +36,32 @@ public sealed class AcpLaunchResolver(
 {
     private readonly IShellCommandBuilder _shell = shellCommandBuilder ?? new ShellCommandBuilder();
     private readonly AcpDialectRegistry _dialects = dialects ?? new AcpDialectRegistry();
+
+    public static bool IsRemoteTransport(string? transport) =>
+        string.Equals(transport, "ws", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(transport, "websocket", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(transport, "streamable-http", StringComparison.OrdinalIgnoreCase);
+
     public bool CanLaunchAcp(AgentDefinition? definition, AgentInstallation? installation, AgentSettings settings)
     {
         if (definition?.Acp is not { } acp) return false;
+        if (IsRemoteTransport(acp.Transport))
+        {
+            return !string.IsNullOrWhiteSpace(acp.Endpoint) && Uri.TryCreate(acp.Endpoint.Trim(), UriKind.Absolute, out _);
+        }
         if (string.Equals(acp.Mode, "native", StringComparison.OrdinalIgnoreCase))
         {
-            return installation is not null || !string.IsNullOrWhiteSpace(settings.ProfileOf(definition.Id).Command);
+            var hasCommandOverride = !string.IsNullOrWhiteSpace(settings.ProfileOf(definition.Id).Command);
+            if (!hasCommandOverride && installation is null) return false;
+            if (!hasCommandOverride
+                && !string.IsNullOrWhiteSpace(acp.MinVersion)
+                && !string.IsNullOrWhiteSpace(installation?.Version)
+                && !AgentVersions.IsAtLeast(installation.Version, acp.MinVersion))
+            {
+                return false;
+            }
+            return true;
         }
         // Adapter mode: available if a local or cached adapter exists, or a runner / registry download is allowed.
         if (acp.Adapter is not { } adapter) return false;
@@ -48,7 +72,11 @@ public sealed class AcpLaunchResolver(
         {
             if (settings.AcpAdapterPolicy == AcpAdapterPolicy.ManagedRegistry && !string.IsNullOrWhiteSpace(adapter.RegistryId)) return true;
             if (!string.IsNullOrWhiteSpace(adapter.NpxPackage)
-                && (FindAnyExecutable(["npm", "npx"], searchPath) is not null)) return true;
+                && (FindAnyExecutable(["npm", "npx"], searchPath) is not null))
+            {
+                return true;
+            }
+
             if (!string.IsNullOrWhiteSpace(adapter.UvxPackage) && FindAnyExecutable(["uvx"], searchPath) is not null) return true;
         }
         return false;
@@ -143,6 +171,29 @@ public sealed class AcpLaunchResolver(
 
         _dialects.Resolve(acp.Dialect).ApplyLaunchPreferences(env, initialModelId, initialEffortId);
 
+        if (IsRemoteTransport(acp.Transport))
+        {
+            if (string.IsNullOrWhiteSpace(acp.Endpoint) || !Uri.TryCreate(acp.Endpoint.Trim(), UriKind.Absolute, out var remoteUri))
+            {
+                throw new InvalidOperationException($"ACP remote agent '{definition.Name}' requires a valid endpoint URL.");
+            }
+            var headers = new Dictionary<string, string>(acp.Headers, StringComparer.OrdinalIgnoreCase);
+            return new AcpLaunchPlan(
+                Executable: "",
+                Arguments: [],
+                Environment: env,
+                UnsetEnvironment: effectiveUnsets,
+                WorkingDirectory: workingDirectory,
+                DialectId: acp.Dialect,
+                PermissionStrategy: acp.PermissionStrategy,
+                SourceLabel: $"{acp.Transport} {remoteUri.Host}{(remoteUri.IsDefaultPort ? "" : $":{remoteUri.Port}")}",
+                AgentVersion: installation?.Version,
+                InitializeTimeout: TimeSpan.FromSeconds(60),
+                Transport: acp.Transport.Trim().ToLowerInvariant(),
+                Endpoint: remoteUri.ToString(),
+                Headers: headers);
+        }
+
         string executable;
         var args = new List<string>();
         string sourceLabel;
@@ -150,6 +201,14 @@ public sealed class AcpLaunchResolver(
 
         if (string.Equals(acp.Mode, "native", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.IsNullOrWhiteSpace(profile.Command)
+                && !string.IsNullOrWhiteSpace(acp.MinVersion)
+                && !string.IsNullOrWhiteSpace(installation?.Version)
+                && !AgentVersions.IsAtLeast(installation.Version, acp.MinVersion))
+            {
+                throw new InvalidOperationException(
+                    $"{definition.Name} {installation.Version} is below the minimum ACP version ({acp.MinVersion}). Please upgrade {definition.Name} or use Terminal mode.");
+            }
             var (cmdExe, cmdPrefix) = SplitOverrideOrDefault(profile.Command, installation?.Path ?? definition.Detect.Executables.FirstOrDefault() ?? definition.Id);
             executable = ResolveExecutablePath(cmdExe, searchPath);
             args.AddRange(cmdPrefix);
