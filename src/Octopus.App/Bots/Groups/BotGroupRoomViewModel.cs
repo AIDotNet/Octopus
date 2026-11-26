@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Octopus.Acp.Protocol;
 using Octopus.Agents;
 using Octopus.App.Common;
 using Octopus.App.Localization;

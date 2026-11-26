@@ -89,26 +89,23 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
                 ReadProject();
             }
         };
-        if (_bots is not null)
+        _bots?.Changed += (_, e) =>
         {
-            _bots.Changed += (_, e) =>
+            if (e.Kind is BotChangeKind.Mode or BotChangeKind.CurrentBot or BotChangeKind.Bots)
             {
-                if (e.Kind is BotChangeKind.Mode or BotChangeKind.CurrentBot or BotChangeKind.Bots)
-                {
-                    UiContext.Run(RefreshBotModeState);
-                }
-            };
-        }
-        if (_botGroups is not null)
+                UiContext.Run(RefreshBotModeState);
+            }
+        };
+        _botGroups?.Changed += (_, e) =>
         {
-            _botGroups.Changed += (_, e) =>
+            if (e.Kind is BotGroupChangeKind.Selection or BotGroupChangeKind.Groups)
             {
-                if (e.Kind is BotGroupChangeKind.Selection or BotGroupChangeKind.Groups)
-                {
-                    UiContext.Run(RefreshBotModeState);
-                }
-            };
-        }
+                UiContext.Run(RefreshBotModeState);
+            }
+        };
+        BotPanel = botPanel;
+        BotRightPanel = botRightPanel;
+        BotGroupRightPanel = botGroupRightPanel;
         RefreshBotModeState();
         ReadProject();
         IsRightPanelOpen = settings.Current.RightPanel.IsOpen;
@@ -123,9 +120,6 @@ public sealed partial class ShellViewModel : ObservableObject, IRecipient<OpenSu
         Account = account;
         Rail = rail;
         Panel = panel;
-        BotPanel = botPanel;
-        BotRightPanel = botRightPanel;
-        BotGroupRightPanel = botGroupRightPanel;
         Workspace = workspace;
         Launcher = launcher;
         UpdateCard = updateCard;

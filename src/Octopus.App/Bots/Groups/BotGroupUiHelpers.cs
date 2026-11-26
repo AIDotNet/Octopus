@@ -122,10 +122,9 @@ public static class BotGroupMentionText
 
     private static void OnSegmentsChanged(TextBlock target, AvaloniaPropertyChangedEventArgs args)
     {
-        var segments = args.NewValue as IReadOnlyList<BotGroupMentionSegment>;
         target.Inlines ??= new InlineCollection();
         target.Inlines.Clear();
-        if (segments is null || segments.Count == 0)
+        if (args.NewValue is not IReadOnlyList<BotGroupMentionSegment> segments || segments.Count == 0)
         {
             return;
         }

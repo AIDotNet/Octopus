@@ -10,7 +10,9 @@
     <Grid Background="{arc:ArcDesignTokenResource Background}">
         <ContentControl Content="{Binding CurrentLayout}" IsVisible="{Binding ShowDockLayout}"
                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
-        <grp:BotGroupRoomView DataContext="{Binding GroupRoom}" IsVisible="{Binding IsGroupRoomActive}" />
+        <Panel IsVisible="{Binding IsGroupRoomActive}">
+            <grp:BotGroupRoomView DataContext="{Binding GroupRoom}" />
+        </Panel>
         <Panel IsVisible="{Binding ShowNoProjectEmpty}">
             <vm:NoProjectView DataContext="{Binding EmptyState}" />
         </Panel>
