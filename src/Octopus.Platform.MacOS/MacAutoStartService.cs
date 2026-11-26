@@ -154,11 +154,13 @@ public sealed class MacAutoStartService : IAutoStartService
         {
             return false;
         }
-        if (bundlePath.Contains("/AppTranslocation/", StringComparison.Ordinal))
+        var normalized = bundlePath.Replace('\\', '/');
+        if (normalized.Contains("/AppTranslocation/", StringComparison.Ordinal))
         {
             return false;
         }
-        if (bundlePath.StartsWith("/Volumes/", StringComparison.Ordinal))
+        if (normalized.StartsWith("/Volumes/", StringComparison.Ordinal)
+            || (normalized.Length >= 10 && normalized[1] == ':' && normalized.AsSpan(2).StartsWith("/Volumes/", StringComparison.Ordinal)))
         {
             return false;
         }

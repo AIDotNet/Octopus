@@ -28,14 +28,26 @@ public sealed class CollabTests
         public bool IsBusy { get; set; }
         public bool IsConnected { get; set; } = true;
         public string? CurrentStatusDetail { get; set; }
+        private readonly object _promptGate = new();
         public List<string> DeliveredPrompts { get; } = [];
         public List<(string? ThreadId, string? TaskId)> CancelledLookups { get; } = [];
         public string Summary { get; set; } = "Recent summary from fake GUI bridge.";
 
         public Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId = null, string? taskId = null, CancellationToken cancellationToken = default)
         {
-            DeliveredPrompts.Add(promptText);
+            lock (_promptGate)
+            {
+                DeliveredPrompts.Add(promptText);
+            }
             return Task.FromResult(true);
+        }
+
+        public bool HasPromptContaining(string value)
+        {
+            lock (_promptGate)
+            {
+                return DeliveredPrompts.Any(p => p.Contains(value, StringComparison.Ordinal));
+            }
         }
 
         public int CancelQueuedCollabPrompts(string? threadId = null, string? taskId = null)
@@ -892,11 +904,8 @@ public sealed class CollabTests
         // Re-register our spy bridge after UI pump (or inspect the real tab's queue) so wakeup delivery is deterministic.
         coordinator.RegisterGuiSession(parentBridge);
         coordinator.NotifyTurnCompleted(codexChildId, "All 14 JWT unit tests passed.");
-        for (var i = 0; i < 20 && parentBridge.DeliveredPrompts.Count == 0; i++)
-        {
-            await Task.Delay(25, ct);
-        }
-        Assert.Contains(parentBridge.DeliveredPrompts, p => p.Contains("All 14 JWT unit tests passed.", StringComparison.Ordinal));
+        await WaitUntilAsync(() => parentBridge.HasPromptContaining("All 14 JWT unit tests passed."), ct);
+        Assert.True(parentBridge.HasPromptContaining("All 14 JWT unit tests passed."));
     }
 
     [AvaloniaFact, FreshApp]

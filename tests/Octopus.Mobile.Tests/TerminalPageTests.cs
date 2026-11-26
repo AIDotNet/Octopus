@@ -33,6 +33,7 @@ public class TerminalPageTests
         // An agent gets the composer; the size is now this phone's grid.
         Assert.Equal(TerminalInputMode.Composing, terminal.Mode);
         Assert.Null(session.SizeOwner);
+        Assert.True(Phone.Until(() => phone.Top<TerminalPage>().GridSize is { } g && (session.Columns, session.Rows) == g));
         var grid = phone.Top<TerminalPage>().GridSize!.Value;
         Assert.Equal((session.Columns, session.Rows), grid);
         Assert.True(grid.Columns is > 20 and < 100);
