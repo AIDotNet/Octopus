@@ -11,8 +11,8 @@
         <AssemblyName>Octopus.Mobile.iOS</AssemblyName>
         <ApplicationId>com.aidotnet.octopus.mobile</ApplicationId>
         <ApplicationTitle>Octopus</ApplicationTitle>
-        <ApplicationVersion>5</ApplicationVersion>
-        <ApplicationDisplayVersion>1.0.1</ApplicationDisplayVersion>
+        <ApplicationVersion>6</ApplicationVersion>
+        <ApplicationDisplayVersion>1.0.2</ApplicationDisplayVersion>
         <AppleAppManifest>Info.plist</AppleAppManifest>
         <IsPackable>false</IsPackable>
     </PropertyGroup>
