@@ -2,17 +2,18 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:terminal="using:Octopus.App.Settings.Terminal"
              x:Class="Octopus.App.Settings.Terminal.TerminalPageView"
              x:DataType="terminal:TerminalSettingsViewModel">
     <StackPanel Spacing="16">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource SettingsTerminalTitle}" />
-            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsTerminalSubtitle}" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsTerminalTitle}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource SettingsTerminalSubtitle}" />
         </StackPanel>
         <arc:SettingsGroup Appearance="Plain" LabelWidth="260" ContentAlignment="Stretch">
             <arc:SettingsRow Header="{l:AppLangResource SettingsShell}"
-                             Description="{l:AppLangResource SettingsShellHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsShellHint}">
                 <StackPanel Spacing="8">
                     <arc:Select x:Name="ShellSelect" AutoScrollToSelectedItem="False" Size="Small"
                                 HorizontalAlignment="Stretch"
@@ -33,7 +34,7 @@
                 </StackPanel>
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsFont}"
-                             Description="{l:AppLangResource SettingsFontHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsFontHint}">
                 <arc:Input Text="{Binding FontFamily, Mode=TwoWay}"
                            Size="Small"
                            Label="{l:AppLangResource SettingsFont}"
@@ -41,7 +42,7 @@
                            Placeholder="{l:AppLangResource SettingsFontPlaceholder}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsFontSize}"
-                             Description="{l:AppLangResource SettingsFontSizeHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsFontSizeHint}">
                 <arc:NumberField Value="{Binding FontSize, Mode=TwoWay}"
                                  Minimum="10"
                                  Maximum="24"
@@ -53,7 +54,7 @@
                                  IsLabelVisible="False" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsScrollback}"
-                             Description="{l:AppLangResource SettingsScrollbackHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsScrollbackHint}">
                 <arc:NumberField Value="{Binding ScrollbackLines, Mode=TwoWay}"
                                  Minimum="100"
                                  Maximum="100000"
@@ -66,7 +67,7 @@
                                  IsLabelVisible="False" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsPasteConfirm}"
-                             Description="{l:AppLangResource SettingsPasteConfirmHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsPasteConfirmHint}">
                 <arc:Switch IsChecked="{Binding ConfirmMultilinePaste, Mode=TwoWay}"
                             HorizontalAlignment="Right"
                             AutomationProperties.Name="{l:AppLangResource SettingsPasteConfirm}" />

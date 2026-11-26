@@ -29,6 +29,8 @@ public sealed class AgentLaunchOptions
     public string? Model { get; set; }
     public string? Effort { get; set; }
     public bool? Fast { get; set; }
+    /// <summary>Optional per-launch permission mode override (e.g. <c>plan</c> for read-only delegated agents).</summary>
+    public string? Permission { get; set; }
     /// <summary>Account chosen for this tab in the "+" launcher; overrides project and profile defaults when set.</summary>
     public string? AccountId { get; set; }
     /// <summary>Surface explicitly chosen for this launch (GUI or Terminal); null follows the profile and global default.</summary>

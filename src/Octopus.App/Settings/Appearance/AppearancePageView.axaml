@@ -2,13 +2,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:appearance="using:Octopus.App.Settings.Appearance"
              x:Class="Octopus.App.Settings.Appearance.AppearancePageView"
              x:DataType="appearance:AppearanceSettingsViewModel">
     <StackPanel Spacing="{DynamicResource OctopusSettingsPageSpacing}">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource SettingsNavAppearance}" />
-            <TextBlock Classes="subtitle" Text="{l:AppLangResource AppearanceDescription}" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsNavAppearance}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource AppearanceDescription}" />
         </StackPanel>
         <arc:SettingsGroup Appearance="Plain">
             <arc:SettingsRow Header="{l:AppLangResource SettingsTheme}">
@@ -19,7 +20,7 @@
                 </arc:SegmentedControl>
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsDensity}"
-                             Description="{l:AppLangResource SettingsDensityHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsDensityHint}">
                 <arc:SegmentedControl x:Name="DensityControl" AutoScrollToSelectedItem="False" SelectedValue="{Binding Density, Mode=TwoWay}">
                     <arc:SegmentedOption Value="compact" Label="{l:AppLangResource DensityCompact}" />
                     <arc:SegmentedOption Value="comfortable" Label="{l:AppLangResource DensityComfortable}" />

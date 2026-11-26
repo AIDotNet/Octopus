@@ -838,6 +838,23 @@ public static class AcpProtocolParser
         {
             if (srv is null || !srv.Enabled || string.IsNullOrWhiteSpace(srv.Name)) continue;
             var transport = string.IsNullOrWhiteSpace(srv.Transport) ? "stdio" : srv.Transport.Trim().ToLowerInvariant();
+            if (transport == "auto")
+            {
+                // Prefer direct HTTP when the agent advertises HTTP MCP support (zero extra subprocess);
+                // otherwise fall back to the bundled stdio bridge command if configured.
+                if (agentCaps.Http && !string.IsNullOrWhiteSpace(srv.Url))
+                {
+                    transport = "http";
+                }
+                else if (!string.IsNullOrWhiteSpace(srv.Command))
+                {
+                    transport = "stdio";
+                }
+                else
+                {
+                    continue;
+                }
+            }
             if (transport == "stdio")
             {
                 if (string.IsNullOrWhiteSpace(srv.Command)) continue;
@@ -876,6 +893,26 @@ public static class AcpProtocolParser
                     ["name"] = srv.Name,
                     ["url"] = srv.Url,
                     ["headers"] = hdrArr,
+                });
+            }
+            else if (transport == "http" && !agentCaps.Http && !string.IsNullOrWhiteSpace(srv.Command))
+            {
+                var argsArr = new JsonArray();
+                foreach (var a in srv.Args) argsArr.Add((JsonNode)JsonValue.Create(a));
+                var envArr = new JsonArray();
+                foreach (var (k, v) in srv.Env)
+                {
+                    if (!string.IsNullOrWhiteSpace(k))
+                    {
+                        envArr.Add((JsonNode)new JsonObject { ["name"] = k, ["value"] = v });
+                    }
+                }
+                arr.Add((JsonNode)new JsonObject
+                {
+                    ["name"] = srv.Name,
+                    ["command"] = srv.Command,
+                    ["args"] = argsArr,
+                    ["env"] = envArr,
                 });
             }
         }

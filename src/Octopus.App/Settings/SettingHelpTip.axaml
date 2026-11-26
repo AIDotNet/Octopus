@@ -1,0 +1,42 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:settings="using:Octopus.App.Settings"
+             x:Class="Octopus.App.Settings.SettingHelpTip"
+             VerticalAlignment="Center">
+    <UserControl.Styles>
+        <Style Selector="settings|SettingHelpTip:empty">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Border.settingHelpTrigger">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="TextElement.Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="MinWidth" Value="18" />
+            <Setter Property="MinHeight" Value="18" />
+            <Setter Property="Cursor" Value="Help" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.settingHelpTrigger:pointerover">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            <Setter Property="TextElement.Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        </Style>
+        <Style Selector="Border.settingHelpTrigger:focus-visible">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+            <Setter Property="TextElement.Foreground" Value="{arc:ArcDesignTokenResource Foreground}" />
+        </Style>
+    </UserControl.Styles>
+    <Border x:Name="HitTarget"
+            Classes="settingHelpTrigger"
+            Focusable="True"
+            arc:Tooltip.Side="Top"
+            arc:Tooltip.ShowDelay="0:0:0.12">
+        <lucide:LucideIcon Kind="CircleHelp"
+                           Size="13"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+    </Border>
+</UserControl>

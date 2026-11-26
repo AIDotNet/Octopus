@@ -2,15 +2,16 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:s="using:Octopus.App.Plugins.Settings"
              x:Class="Octopus.App.Plugins.Settings.PluginsPageView"
              x:DataType="s:PluginsSettingsViewModel">
     <!-- Settings -> Plugins: Installed, Built-in Marketplace, and Multi-Agent Authoring Skill Installer -->
     <StackPanel Spacing="16">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-            <StackPanel Spacing="4">
-                <TextBlock Classes="title" Text="{x:Static s:PluginStrings.Title}" />
-                <TextBlock Classes="subtitle" Text="{x:Static s:PluginStrings.Subtitle}" />
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Classes="title" Text="{x:Static s:PluginStrings.Title}" VerticalAlignment="Center" />
+                <settings:SettingHelpTip Tip="{x:Static s:PluginStrings.Subtitle}" />
             </StackPanel>
             <arc:SegmentedControl Grid.Column="1"
                                   VerticalAlignment="Center"
@@ -35,7 +36,10 @@
                     CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
                     Padding="14,10">
                 <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
-                    <TextBlock Classes="hint" VerticalAlignment="Center" Text="{x:Static s:PluginStrings.InstallHint}" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{x:Static s:PluginStrings.Install}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{x:Static s:PluginStrings.InstallHint}" />
+                    </StackPanel>
                     <arc:Button Grid.Column="1"
                                 Variant="Ghost"
                                 Size="Small"
@@ -100,8 +104,11 @@
 
             <!-- Color themes from plugins (design/plugins/07-主题.md §5): one per appearance. -->
             <StackPanel Spacing="6">
-                <TextBlock Classes="group" Margin="2,12,0,0" Text="{x:Static s:PluginStrings.Themes}" />
-                <arc:SettingsGroup Appearance="Card" Description="{x:Static s:PluginStrings.ThemesHint}" IsEnabled="{Binding HasThemes}">
+                <StackPanel Orientation="Horizontal" Spacing="5" Margin="2,12,0,0">
+                    <TextBlock Classes="group" Text="{x:Static s:PluginStrings.Themes}" VerticalAlignment="Center" />
+                    <settings:SettingHelpTip Tip="{x:Static s:PluginStrings.ThemesHint}" />
+                </StackPanel>
+                <arc:SettingsGroup Appearance="Card" IsEnabled="{Binding HasThemes}">
                     <arc:SettingsRow Header="{x:Static s:PluginStrings.LightTheme}">
                         <arc:Select AutoScrollToSelectedItem="False" Size="Small" Width="220"
                                     AutomationProperties.Name="{x:Static s:PluginStrings.LightTheme}"
@@ -206,9 +213,9 @@
 
         <!-- ==================== TAB 3: MULTI-AGENT AUTHORING SKILL INSTALLER ==================== -->
         <StackPanel Spacing="14" IsVisible="{Binding IsSkillsTab}">
-            <StackPanel Spacing="4">
-                <TextBlock Classes="group" Text="{x:Static s:PluginStrings.SkillHeading}" />
-                <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.SkillSubtitle}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="5">
+                <TextBlock Classes="group" Text="{x:Static s:PluginStrings.SkillHeading}" VerticalAlignment="Center" />
+                <settings:SettingHelpTip Tip="{x:Static s:PluginStrings.SkillSubtitle}" />
             </StackPanel>
 
             <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"

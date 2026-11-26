@@ -225,4 +225,23 @@ public class CodeViewTests
             window.Close();
         }
     }
+
+    [AvaloniaFact]
+    public void Text_set_while_hidden_shows_again_without_invalidating_the_frame_it_renders_in()
+    {
+        // The diff tab sets the fallback view's text and hides it in one go; Avalonia shows it again unmeasured, so the
+        // rows are laid out while rendering, and telling the scroll area then used to throw and stop all repainting.
+        var (window, scroller, view) = Host("", null);
+        view.Text = Lines(300);
+        scroller.IsVisible = false;
+        Frames.Pump();
+
+        scroller.IsVisible = true;
+        Frames.Pump();
+        Frames.Pump();
+
+        Assert.Equal(300, view.TotalRows);
+        Assert.True(scroller.Extent.Height >= 300 * view.RowHeight);
+        window.Close();
+    }
 }

@@ -11,13 +11,12 @@ import { HistoryView } from './history.js';
 
 const AGENTS = ['claude', 'codex', 'agy', 'copilot', 'grok', 'cursor', 'opencode'];
 const CODEX_INTERVAL = 5 * 60_000;
-const AGY_INTERVAL = 5 * 60_000;
 const COPILOT_INTERVAL = 5 * 60_000;
 const CURSOR_INTERVAL = 24 * 60 * 60_000;
-// A cached reading younger than this is used as it is: opening the app does not ask again. Slightly under the
-// refresh interval, so a scheduled run (which may come a little early) still finds the reading stale.
+// A cached reading younger than this is used as it is: opening the app or tab does not ask again. Slightly under the
+// refresh interval for polled agents, so a scheduled run (which may come a little early) still finds the reading stale.
 const CODEX_FRESH = 3 * 60_000;
-const AGY_FRESH = 3 * 60_000;
+const AGY_FRESH = 5 * 60_000;
 const COPILOT_FRESH = 3 * 60_000;
 const CURSOR_FRESH = 20 * 60 * 60_000;
 // API providers: every 10 minutes while the window is visible; a reading younger than 8 minutes is not asked again.
@@ -75,7 +74,9 @@ export async function activate(ctx) {
       // A state made during render belongs to this popover: setting it re-renders the popover while it is open.
       const tick = ui.state(0);
       invalidatePopover = () => tick.set(tick.get() + 1);
-      return renderPopover(popoverModel());
+      const model = popoverModel();
+      if (model.selected === 'agy') refreshAgy();
+      return renderPopover(model);
     },
   };
   ctx.subscriptions.push(indicator);
@@ -120,11 +121,8 @@ export async function activate(ctx) {
     ctx.subscriptions.push(scheduler.every(CODEX_INTERVAL, () => refreshCodex(), { whenVisible: true, runOnWake: true, jitter: 0.2, backoff: true }));
   }
 
-  // Antigravity CLI: `agy --print /usage --output-format json`, soon after start, then every 5 minutes while visible.
-  if (state.get('agy')?.installed) {
-    setTimeout(() => refreshAgy(), 3_500);
-    ctx.subscriptions.push(scheduler.every(AGY_INTERVAL, () => refreshAgy(), { whenVisible: true, runOnWake: true, jitter: 0.2, backoff: true }));
-  }
+  // Antigravity CLI: `agy --print /usage --output-format json` runs on demand when its tab is opened or refreshed
+  // (no background polling timer). Cached readings still appear immediately via restoreCache().
 
   // GitHub Copilot CLI: `account.getQuota` over headless stdio, soon after start, then every 5 minutes while visible.
   if (state.get('copilot')?.installed) {
@@ -224,16 +222,29 @@ async function refreshCodex({ force = false } = {}) {
   }
 }
 
+let agyInFlight = false;
+let agyLastAttemptAt = 0;
+
 async function refreshAgy({ force = false } = {}) {
-  if (!state.get('agy')?.installed || !permissions.has('agents.probes.agy.usage')) return;
-  if (!force && isFresh('agy', '', AGY_FRESH)) return;
-  const result = await agents.runProbe('agy', 'usage');
   const entry = state.get('agy');
-  if (result.ok) {
-    entry.error = undefined;
-    publish('agy', '', adapters.agyFromUsage(result.data), result.completedAt);
-  } else {
-    entry.error = result.message ?? result.error;
+  if (!entry?.installed || !permissions.has('agents.probes.agy.usage')) return;
+  if (agyInFlight) return;
+  if (!force && (isFresh('agy', '', AGY_FRESH) || Date.now() - agyLastAttemptAt < AGY_FRESH)) return;
+  agyInFlight = true;
+  agyLastAttemptAt = Date.now();
+  entry.busy = true;
+  refreshViews();
+  try {
+    const result = await agents.runProbe('agy', 'usage');
+    if (result.ok) {
+      entry.error = undefined;
+      publish('agy', '', adapters.agyFromUsage(result.data), result.completedAt);
+    } else {
+      entry.error = result.message ?? result.error;
+    }
+  } finally {
+    agyInFlight = false;
+    entry.busy = false;
     refreshViews();
   }
 }
@@ -735,7 +746,7 @@ function agentRows() {
     const waiting = id === 'claude' && claudeSource() !== 'command'
       ? accounts.filter(a => !entry.snapshots.has(a.key) && !signedOut.has(a.key)).map(a => ({ account: a.key, label: a.label })).sort(byName)
       : [];
-    rows.push({ id, name: entry.name, snapshots, waiting, error: entry.error });
+    rows.push({ id, name: entry.name, snapshots, waiting, error: entry.error, busy: !!entry.busy });
   }
   return rows;
 }
@@ -787,6 +798,7 @@ function popoverModel() {
     tabs, selected, api, t,
     agent: id => rows.find(r => r.id === id),
     select: id => {
+      if (id === 'agy') refreshAgy();
       if (id === picked.tab && picked.active === active) return;
       picked = { tab: id, active };
       invalidatePopover();

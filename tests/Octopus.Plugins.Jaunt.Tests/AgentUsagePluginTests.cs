@@ -319,7 +319,7 @@ public sealed class AgentUsagePluginTests
         await Harness.WaitUntil(() => agents.Indicator?["text"]?.GetValue<string>() == "77%");
         Assert.Empty(agents.Probes);
 
-        // The start-up queries (Codex at 3 s, Agy at 3.5 s, Claude's plan at 4 s, Copilot at 4.5 s, Cursor at 5 s) find fresh readings and stay quiet.
+        // The start-up queries (Codex at 3 s, Claude's plan at 4 s, Copilot at 4.5 s, Cursor at 5 s) find fresh readings and stay quiet; Agy is on demand.
         await Task.Delay(6_000, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Empty(agents.Probes);
 
@@ -386,16 +386,29 @@ public sealed class AgentUsagePluginTests
     [Fact]
     public async Task Agy_And_Copilot_ProbeResults_BecomeQuotaSnapshots()
     {
-        var (harness, _, _) = await StartAsync((_, a) =>
+        var (harness, manager, agents) = await StartAsync((_, a) =>
         {
             a.Accounts["copilot"] = [("c0p110700001", "work/copilot"), ("c0p110700002", "unlimited/copilot")];
         });
         await using var __ = harness;
 
         await Harness.WaitUntil(() =>
-            harness.Usage.Get("agy") is not null
-            && harness.Usage.Get("copilot", "c0p110700001") is not null
+            harness.Usage.Get("copilot", "c0p110700001") is not null
             && harness.Usage.Get("copilot", "c0p110700002") is not null, 10_000);
+
+        // Antigravity CLI is queried on demand rather than polled on startup.
+        Assert.Null(harness.Usage.Get("agy"));
+        Assert.DoesNotContain("agy:", agents.Probes);
+
+        // Selecting the Antigravity tab in the popover triggers the probe on demand.
+        var plugin = manager.Find(Id)!;
+        var clicked = JsonNode.Parse(await plugin.InvokeAsync("indicator.click:octopus.agent-usage.indicator", [], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken))!;
+        var instance = clicked["instanceId"]!.GetValue<string>();
+        var onSelect = Find(clicked["tree"], "Tabs")!["p"]!["onSelect"]!["$h"]!.GetValue<string>();
+        await plugin.InvokeAsync("view.event", [instance, onSelect, new JsonArray("agy")], TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
+
+        await Harness.WaitUntil(() => harness.Usage.Get("agy") is not null, 10_000);
+        Assert.Contains("agy:", agents.Probes);
 
         // Antigravity CLI: four buckets across two groups, 5h sorted before weekly within each group.
         var agy = harness.Usage.Get("agy")!.Snapshot;

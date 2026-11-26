@@ -3,13 +3,14 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:ssh="using:Octopus.App.Settings.Ssh"
              x:Class="Octopus.App.Settings.Ssh.SshPageView"
              x:DataType="ssh:SshSettingsViewModel">
     <StackPanel Spacing="16">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource SettingsSshTitle}" />
-            <TextBlock Classes="subtitle" Text="{Binding Subtitle}" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsSshTitle}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{Binding Subtitle}" />
         </StackPanel>
 
         <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
@@ -18,9 +19,11 @@
                 Padding="14,10">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
                 <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsSshConfigFile}" />
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsSshConfigFile}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsSshHint}" />
+                    </StackPanel>
                     <TextBlock Classes="mono" Text="{Binding ConfigPath}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsSshHint}" />
                 </StackPanel>
                 <TextBlock Grid.Column="1"
                            Classes="hint"

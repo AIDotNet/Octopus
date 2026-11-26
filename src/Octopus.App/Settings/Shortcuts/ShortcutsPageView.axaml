@@ -2,13 +2,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:shortcuts="using:Octopus.App.Settings.Shortcuts"
              x:Class="Octopus.App.Settings.Shortcuts.ShortcutsPageView"
              x:DataType="shortcuts:ShortcutsViewModel">
     <StackPanel Spacing="16">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource SettingsShortcutsTitle}" />
-            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsShortcutsSubtitle}" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsShortcutsTitle}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource SettingsShortcutsSubtitle}" />
         </StackPanel>
         <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                 BorderThickness="1"

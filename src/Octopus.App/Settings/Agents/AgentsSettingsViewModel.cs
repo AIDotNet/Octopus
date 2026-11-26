@@ -22,6 +22,13 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     private readonly AgentServices _services;
     private readonly IAgentDefinitionStore? _store;
     private readonly Services.IDialogService? _dialogs;
+    private readonly IAgentInstaller? _installer;
+    /// <summary>Install state by agent id, kept here because <see cref="Rebuild"/> replaces the rows.</summary>
+    private readonly HashSet<string> _installing = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _installErrors = new(StringComparer.Ordinal);
+    /// <summary>Agents whose install failed for lack of rights: their button now installs as administrator.</summary>
+    private readonly HashSet<string> _needsAdmin = new(StringComparer.Ordinal);
+    private int _planGeneration;
     private string _installationSignature = "";
     private bool _disposed;
 
@@ -37,6 +44,12 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
     [ObservableProperty]
     private IReadOnlyList<SelectOption> _acpAdapterPolicyOptions = [];
 
+    [ObservableProperty]
+    private IReadOnlyList<SelectOption> _collabIsolationOptions = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<SelectOption> _collabMaxHopsOptions = [];
+
     public AgentsSettingsViewModel(
         ISettingsStore settings,
         IAgentCatalog catalog,
@@ -50,8 +63,10 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         Octopus.Agents.Accounts.IAgentAccountService? accounts = null,
         Octopus.Terminal.ITerminalLaunchPlanner? launchPlanner = null,
         Services.IProjectService? projects = null,
-        Octopus.Terminal.Avalonia.TerminalSessionRegistry? sessions = null)
+        Octopus.Terminal.Avalonia.TerminalSessionRegistry? sessions = null,
+        IAgentInstaller? installer = null)
     {
+        _installer = installer;
         _settings = settings;
         _catalog = catalog;
         _scanner = scanner;
@@ -62,6 +77,7 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         _isScanning = scanner.IsScanning;
         BuildPermissionOptions();
         BuildAcpAdapterPolicyOptions();
+        BuildCollabOptions();
         Rebuild(expandFirst: true);
         scanner.Changed += OnScannerChanged;
         catalog.Changed += OnCatalogChanged;
@@ -219,6 +235,57 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         }
     }
 
+    public bool CollabEnabled
+    {
+        get => _settings.Current.Agents.Collab.Enabled;
+        set
+        {
+            if (value == CollabEnabled) return;
+            _settings.Update(s => s.Agents.Collab.Enabled = value);
+            OnPropertyChanged();
+        }
+    }
+
+    public string CollabDefaultIsolationKey
+    {
+        get => _settings.Current.Agents.Collab.DefaultIsolation.ToString();
+        set
+        {
+            if (string.IsNullOrEmpty(value)
+                || !Enum.TryParse<CollabIsolationMode>(value, ignoreCase: true, out var parsed)
+                || parsed == _settings.Current.Agents.Collab.DefaultIsolation)
+            {
+                return;
+            }
+            _settings.Update(s => s.Agents.Collab.DefaultIsolation = parsed);
+            OnPropertyChanged();
+        }
+    }
+
+    public bool CollabEnableTerminalBridge
+    {
+        get => _settings.Current.Agents.Collab.EnableTerminalBridge;
+        set
+        {
+            if (value == CollabEnableTerminalBridge) return;
+            _settings.Update(s => s.Agents.Collab.EnableTerminalBridge = value);
+            OnPropertyChanged();
+        }
+    }
+
+    public string CollabMaxHopsKey
+    {
+        get => _settings.Current.Agents.Collab.MaxNegotiationHops.ToString();
+        set
+        {
+            if (!int.TryParse(value, out var parsed)) return;
+            parsed = Math.Clamp(parsed, CollabSettings.MinNegotiationHops, CollabSettings.MaxAllowedNegotiationHops);
+            if (parsed == _settings.Current.Agents.Collab.MaxNegotiationHops) return;
+            _settings.Update(s => s.Agents.Collab.MaxNegotiationHops = parsed);
+            OnPropertyChanged();
+        }
+    }
+
     public bool ShowFullWarning => GlobalPermission == PermissionModes.Full;
 
     public string RescanText => AppLangResources.Get(IsScanning ? AppLangResourceKind.SettingsScanning : AppLangResourceKind.SettingsRescan);
@@ -348,6 +415,10 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
                     CanRemove = canRemove,
                     RemoveText = removeText,
                     CanEdit = CanEditAgents,
+                    Installer = _installer is null ? null : InstallAgentAsync,
+                    IsInstalling = _installing.Contains(definition.Id),
+                    InstallError = _installErrors.GetValueOrDefault(definition.Id),
+                    NeedsAdmin = _needsAdmin.Contains(definition.Id),
                 });
                 continue;
             }
@@ -366,11 +437,88 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
             preferred.IsExpanded = true;
         }
         _installationSignature = Signature();
+        _ = LoadInstallPlansAsync([.. NotInstalled]);
         OnPropertyChanged(nameof(HasInstalled));
         OnPropertyChanged(nameof(HasNotInstalled));
         OnPropertyChanged(nameof(NotInstalledTitle));
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(LastScanText));
+    }
+
+    /// <summary>Finds, off the UI thread, which uninstalled agents Octopus can install here (npm, uv, brew, … on PATH).</summary>
+    private async Task LoadInstallPlansAsync(IReadOnlyList<UninstalledAgentViewModel> rows)
+    {
+        if (_installer is null || rows.Count == 0) return;
+        var generation = ++_planGeneration;
+        foreach (var row in rows)
+        {
+            AgentInstallPlan? plan;
+            try
+            {
+                plan = await Task.Run(() => _installer.PlanAsync(row.Definition));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                plan = null;
+            }
+            if (_disposed || generation != _planGeneration) return;
+            UiContext.Run(() => row.InstallPlan = plan);
+        }
+    }
+
+    /// <summary>
+    /// Asks, runs the agent's install command (elevated when it needs administrator rights, see <see cref="InstallFlow"/>),
+    /// then rescans so the agent moves to the installed group.
+    /// </summary>
+    internal async Task InstallAgentAsync(UninstalledAgentViewModel row)
+    {
+        if (_installer is null || row.InstallPlan is not { } plan || _installing.Contains(row.Id)) return;
+        var flow = new InstallFlow(_installer, _dialogs, _services.LaunchPlanner, _settings);
+
+        _installing.Add(row.Id);
+        _installErrors.Remove(row.Id);
+        row.InstallError = null;
+        row.IsInstalling = true;
+        string? error = null;
+        var needsAdmin = false;
+        try
+        {
+            var outcome = await flow.RunAsync(row.Name, plan, asAdmin: row.NeedsAdmin);
+            if (_disposed || outcome.Cancelled) return;
+            if (!outcome.Succeeded)
+            {
+                error = outcome.Error;
+                needsAdmin = outcome.NeedsAdmin;
+                return;
+            }
+            await _scanner.ScanAsync();
+            if (_disposed) return;
+            if (_scanner.Find(row.Id) is null) error = AppLangResources.Get(AppLangResourceKind.SettingsInstallAgentNotFound);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            error = AppLangResources.Format(AppLangResourceKind.SettingsInstallAgentFailed, ex.Message);
+        }
+        finally
+        {
+            _installing.Remove(row.Id);
+            if (error is not null) _installErrors[row.Id] = error;
+            if (needsAdmin) _needsAdmin.Add(row.Id);
+            if (!_disposed)
+            {
+                UiContext.Run(() =>
+                {
+                    // The scan may have rebuilt the rows: update whichever row shows this agent now.
+                    foreach (var current in NotInstalled.Where(r => r.Id == row.Id).Append(row).Distinct())
+                    {
+                        current.IsInstalling = false;
+                        current.InstallError = error ?? current.InstallError;
+                        current.NeedsAdmin = _needsAdmin.Contains(row.Id);
+                    }
+                    if (_scanner.Find(row.Id) is not null && NotInstalled.Any(r => r.Id == row.Id)) Rebuild();
+                });
+            }
+        }
     }
 
     private string Signature() =>
@@ -386,6 +534,23 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
             new SelectOption(nameof(AcpAdapterPolicy.NativeOnly), AppLangResources.Get(AppLangResourceKind.SettingsAcpPolicyNativeOnly)),
             new SelectOption(nameof(AcpAdapterPolicy.ManagedRegistry), AppLangResources.Get(AppLangResourceKind.SettingsAcpPolicyManagedRegistry)),
         ];
+
+    private void BuildCollabOptions()
+    {
+        CollabIsolationOptions =
+        [
+            new SelectOption(nameof(CollabIsolationMode.Shared), AppLangResources.Get(AppLangResourceKind.SettingsCollabIsolationShared)),
+            new SelectOption(nameof(CollabIsolationMode.Worktree), AppLangResources.Get(AppLangResourceKind.SettingsCollabIsolationWorktree)),
+            new SelectOption(nameof(CollabIsolationMode.ReadOnly), AppLangResources.Get(AppLangResourceKind.SettingsCollabIsolationReadOnly)),
+        ];
+        CollabMaxHopsOptions =
+        [
+            new SelectOption("4", "4"),
+            new SelectOption("6", "6"),
+            new SelectOption("10", "10"),
+            new SelectOption("16", "16"),
+        ];
+    }
 
     private void OnScannerChanged(object? sender, EventArgs e) => UiContext.PostToUi(() =>
     {
@@ -412,15 +577,22 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         OnPropertyChanged(nameof(AcpEnableUrlElicitation));
         OnPropertyChanged(nameof(AcpEnableClientFileSystem));
         OnPropertyChanged(nameof(AcpEnableClientTerminal));
+        OnPropertyChanged(nameof(CollabEnabled));
+        OnPropertyChanged(nameof(CollabDefaultIsolationKey));
+        OnPropertyChanged(nameof(CollabEnableTerminalBridge));
+        OnPropertyChanged(nameof(CollabMaxHopsKey));
     });
 
     private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.PostToUi(() =>
     {
         BuildPermissionOptions();
         BuildAcpAdapterPolicyOptions();
+        BuildCollabOptions();
         Rebuild();
         OnPropertyChanged(nameof(GlobalPermission));
         OnPropertyChanged(nameof(AcpAdapterPolicyKey));
+        OnPropertyChanged(nameof(CollabDefaultIsolationKey));
+        OnPropertyChanged(nameof(CollabMaxHopsKey));
         OnPropertyChanged(nameof(RescanText));
     });
 

@@ -23,6 +23,7 @@ public static class AgentsServiceCollectionExtensions
         services.AddSingleton<IAgentCatalog, AgentCatalog>();
         services.AddSingleton<IAgentDefinitionStore, AgentDefinitionStore>();
         services.AddSingleton<IAgentScanner, AgentScanner>();
+        services.AddSingleton<IAgentInstaller, AgentInstaller>();
         services.AddSingleton<IAgentCommandCompiler, AgentCommandCompiler>();
         services.AddSingleton<IModelDiscovery, ModelDiscovery>();
         services.AddSingleton<ISystemProxy, SystemProxy>();

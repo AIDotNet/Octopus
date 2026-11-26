@@ -1,9 +1,12 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Octopus.App.Composition;
 using Octopus.App.Settings.Agents;
 using Octopus.Core.Agents;
 using Octopus.Storage;
+using TKCode.Arc.Icons.Lucide;
 using TKCode.Arc.Localization;
 using Xunit;
 
@@ -365,6 +368,43 @@ public class AgentFieldTests
         row.FlushPending();
         Assert.False(row.IsCommandOverridden);
         Assert.DoesNotContain("CLAUDE_CODE_EXECUTABLE=", row.AcpCommandPreview);
+    }
+
+    [AvaloniaFact]
+    public void Toggling_default_swaps_the_star_icon_between_outline_and_filled()
+    {
+        using var row = SettingsTestSupport.Row("claude");
+        var view = new AgentRowView { DataContext = row };
+        var window = new Window { Content = view };
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var outline = view.FindControl<LucideIcon>("DefaultStarOutline");
+            var filled = view.FindControl<Viewbox>("DefaultStarFilled");
+            Assert.NotNull(outline);
+            Assert.NotNull(filled);
+            var path = filled.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>().Single();
+            Assert.NotNull(path.Data);
+            Assert.True(path.Data.Bounds.Width > 0 && path.Data.Bounds.Height > 0);
+
+            Assert.True(outline.IsVisible);
+            Assert.False(filled.IsVisible);
+
+            row.ToggleDefaultCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(outline.IsVisible);
+            Assert.True(filled.IsVisible);
+
+            row.ToggleDefaultCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(outline.IsVisible);
+            Assert.False(filled.IsVisible);
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     private static string AppLabel(string id) => Octopus.App.Settings.PermissionNames.Of(id);

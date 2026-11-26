@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Input;
@@ -19,12 +20,15 @@ namespace Octopus.App.Settings;
 /// </summary>
 public partial class SettingsView : UserControl
 {
+    private Window? _hostWindow;
+
     public SettingsView()
     {
         // Own model from the start: this view's bindings are typed to SettingsViewModel, and until it has a DataContext of
         // its own it would inherit the shell's, which they cannot read (an InvalidCastException in every binding).
         DataContext = ActivatorUtilities.CreateInstance<SettingsViewModel>(AppHost.Services);
         InitializeComponent();
+        UpdateMacTitleBarSpacer();
     }
 
     /// <summary>Key of the section to show first: <c>agents</c>, <c>general</c>, <c>terminal</c>, <c>appearance</c>, <c>shortcuts</c>.</summary>
@@ -38,6 +42,7 @@ public partial class SettingsView : UserControl
     protected override void OnLoaded(RoutedEventArgs e)
     {
         base.OnLoaded(e);
+        AttachHostWindow(TopLevel.GetTopLevel(this) as Window);
         // Normally the model from the constructor; a view that was unloaded (its model let go) and is shown again needs a new one.
         if (DataContext is not SettingsViewModel)
         {
@@ -55,6 +60,7 @@ public partial class SettingsView : UserControl
     protected override void OnUnloaded(RoutedEventArgs e)
     {
         base.OnUnloaded(e);
+        AttachHostWindow(null);
         // Writes what is still being typed, then lets go of the pages.
         ArcLanguage.Changed -= OnLanguageChanged;
         if (DataContext is SettingsViewModel viewModel)
@@ -63,6 +69,36 @@ public partial class SettingsView : UserControl
             DataContext = null;
             viewModel.Dispose();
         }
+    }
+
+    private void AttachHostWindow(Window? window)
+    {
+        if (ReferenceEquals(_hostWindow, window))
+        {
+            UpdateMacTitleBarSpacer();
+            return;
+        }
+        _hostWindow?.PropertyChanged -= OnHostWindowPropertyChanged;
+        _hostWindow = window;
+        _hostWindow?.PropertyChanged += OnHostWindowPropertyChanged;
+        UpdateMacTitleBarSpacer();
+    }
+
+    private void OnHostWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == Window.WindowStateProperty)
+        {
+            UpdateMacTitleBarSpacer();
+        }
+    }
+
+    private void UpdateMacTitleBarSpacer()
+    {
+        if (MacTitleBarSpacer is null)
+        {
+            return;
+        }
+        MacTitleBarSpacer.IsVisible = OperatingSystem.IsMacOS() && _hostWindow?.WindowState != WindowState.FullScreen;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

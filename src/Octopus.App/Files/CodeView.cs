@@ -90,6 +90,8 @@ public sealed class CodeView : Control, ILogicalScrollable
     private Vector _offset;
     private bool _metricsDirty = true;
     private bool _layoutDirty = true;
+    private bool _rendering;
+    private bool _scrollNoticePosted;
 
     // Caches of what is in view.
     private readonly Dictionary<int, RowLayout> _rows = [];
@@ -566,6 +568,20 @@ public sealed class CodeView : Control, ILogicalScrollable
     {
         var state = (_extent, _viewport, _offset);
         if (state == _notified) return;
+        if (_rendering)
+        {
+            // The scroll viewer answers a notice by changing its scrollbars, and nothing may be invalidated while a frame
+            // renders (Avalonia throws, and the window stops repainting): it hears of the new extent after this frame.
+            if (_scrollNoticePosted) return;
+            _scrollNoticePosted = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                _scrollNoticePosted = false;
+                InvalidateMeasure();
+                NotifyScroll();
+            });
+            return;
+        }
         _notified = state;
         RaiseScrollInvalidated(EventArgs.Empty);
     }
@@ -804,7 +820,17 @@ public sealed class CodeView : Control, ILogicalScrollable
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        RebuildLayout();
+        // Normally measure has laid the rows out already. Not when the text changed while a hidden ancestor kept this
+        // view from being measured: Avalonia shows it again without measuring it, so the rows are laid out here.
+        _rendering = true;
+        try
+        {
+            RebuildLayout();
+        }
+        finally
+        {
+            _rendering = false;
+        }
         _renderedRows = 0;
         var bounds = new Rect(Bounds.Size);
         if (Background is { } page) context.FillRectangle(page, bounds);

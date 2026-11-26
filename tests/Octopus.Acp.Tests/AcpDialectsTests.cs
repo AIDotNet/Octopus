@@ -26,10 +26,11 @@ public class AcpDialectsTests
     }
 
     [Fact]
-    public void Antigravity_spoofs_zed_for_older_versions_and_blocks_interaction_auto_approve()
+    public void Antigravity_keeps_real_client_info_and_blocks_interaction_auto_approve()
     {
         var agy = _registry.Resolve("antigravity");
-        Assert.Equal("zed", agy.OverrideClientInfo("1.5.0")?.Name);
+        Assert.Null(agy.OverrideClientInfo(null));
+        Assert.Null(agy.OverrideClientInfo("1.5.0"));
         Assert.Null(agy.OverrideClientInfo("1.5.1"));
 
         using var doc = JsonDocument.Parse("""

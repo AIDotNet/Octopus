@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -194,5 +195,61 @@ public class RemoteAccessSettingsTests
         await Assert.ThrowsAsync<HandshakeException>(() => Wait(connecting));
         Assert.Empty(page.Requests);
         Assert.Empty(page.Devices);
+    }
+
+    [AvaloniaFact]
+    public async Task Pairing_generates_a_qr_code_and_refreshes_after_the_one_time_token_is_used()
+    {
+        var runtime = AppHost.Get<RemoteHostRuntime>();
+        using var page = Page();
+        page.LanEnabled = true;
+        await Wait(page.Applied);
+
+        Assert.False(page.HasPairingQrCode);
+        Assert.False(page.IsPairingLinkUsed);
+
+        await Wait(page.StartPairingCommand.ExecuteAsync(null));
+        Assert.True(page.HasPairingQrCode);
+        Assert.NotNull(page.PairingQrCode);
+        Assert.False(page.IsPairingLinkUsed);
+        var firstLink = page.PairingLink!;
+        var parsed = PairingLink.TryParse(firstLink)!;
+
+        // A phone scans the QR code and connects using the one-time token: no 6-digit approval needed.
+        using var phone = DeviceIdentity.Create();
+        await using var client = await Wait(RemoteHostClient.ConnectAsync(
+            await Dial(runtime),
+            phone,
+            new DeviceDescription("Phone", DeviceKind.Phone),
+            PeerExpectation.WithFingerprint(parsed.Fingerprint),
+            RemoteHostRuntime.Hello,
+            new ConnectOptions { RequestPairing = true, Token = parsed.Token }));
+
+        await Until(() => page.IsPairingLinkUsed, "the used QR code flips to the refresh state");
+        Assert.False(page.HasPairingQrCode);
+        Assert.Null(page.PairingQrCode);
+
+        // Generating a new QR code inside the same window produces a brand-new token and QR matrix.
+        page.RefreshPairingLinkCommand.Execute(null);
+        Assert.True(page.HasPairingQrCode);
+        Assert.NotNull(page.PairingQrCode);
+        Assert.False(page.IsPairingLinkUsed);
+        Assert.NotEqual(firstLink, page.PairingLink);
+    }
+
+    [Fact]
+    public void Lan_address_selection_filters_virtual_adapters_and_prefers_default_gateway()
+    {
+        var candidates = new RemoteHostRuntime.LanCandidate[]
+        {
+            new(IPAddress.Parse("172.17.0.1"), "docker0", "Docker Bridge", NetworkInterfaceType.Ethernet, false),
+            new(IPAddress.Parse("192.168.56.1"), "vboxnet0", "VirtualBox Host-Only", NetworkInterfaceType.Ethernet, false),
+            new(IPAddress.Parse("169.254.10.2"), "en5", "Link Local", NetworkInterfaceType.Ethernet, false),
+            new(IPAddress.Parse("192.168.1.50"), "en0", "Wi-Fi", NetworkInterfaceType.Wireless80211, true),
+            new(IPAddress.Parse("10.0.0.8"), "en1", "Ethernet", NetworkInterfaceType.Ethernet, false),
+        };
+
+        var selected = RemoteHostRuntime.SelectLanAddresses(candidates, 47600);
+        Assert.Equal(["ws://192.168.1.50:47600", "ws://10.0.0.8:47600"], selected);
     }
 }

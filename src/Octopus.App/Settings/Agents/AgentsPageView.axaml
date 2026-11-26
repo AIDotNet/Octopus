@@ -4,6 +4,7 @@
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:common="using:Octopus.App.Common"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:agents="using:Octopus.App.Settings.Agents"
              x:Class="Octopus.App.Settings.Agents.AgentsPageView"
              x:DataType="agents:AgentsSettingsViewModel">
@@ -231,9 +232,9 @@
 
     <StackPanel Spacing="16">
         <Grid ColumnDefinitions="*,Auto">
-            <StackPanel Spacing="4">
-                <TextBlock Classes="title" Text="{l:AppLangResource SettingsAgentsTitle}" />
-                <TextBlock Classes="subtitle" Text="{Binding Subtitle}" />
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Classes="title" Text="{l:AppLangResource SettingsAgentsTitle}" VerticalAlignment="Center" />
+                <settings:SettingHelpTip Tip="{Binding Subtitle}" />
             </StackPanel>
             <arc:Button Grid.Column="1" Variant="Secondary" Size="Small" VerticalAlignment="Center"
                         IsVisible="{Binding CanEditAgents}" Command="{Binding AddAgentCommand}">
@@ -246,9 +247,9 @@
 
         <!-- Default open mode: two compact preview cards (GUI via ACP vs Terminal CLI) directly at top of Agents settings -->
         <StackPanel Spacing="6">
-            <StackPanel Spacing="1">
-                <TextBlock Classes="group" Margin="2,0,0,0" Text="{l:AppLangResource SettingsSurfaceSectionTitle}" />
-                <TextBlock Classes="hint" Margin="2,0,0,0" Text="{l:AppLangResource SettingsSurfaceSectionHint}" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="5" Margin="2,0,0,0">
+                <TextBlock Classes="group" Text="{l:AppLangResource SettingsSurfaceSectionTitle}" VerticalAlignment="Center" />
+                <settings:SettingHelpTip Tip="{l:AppLangResource SettingsSurfaceSectionHint}" />
             </StackPanel>
             <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
                 <!-- Card 1: GUI (ACP) -->
@@ -304,20 +305,18 @@
                             </Grid>
                         </Border>
                         <!-- Card Footer -->
-                        <StackPanel Spacing="2">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-                                <lucide:LucideIcon Kind="MessageSquareCode" Size="14" VerticalAlignment="Center" Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsSurfaceGuiTitle}" VerticalAlignment="Center" />
-                                    <arc:Badge Size="Small" Tone="Info" Content="{l:AppLangResource SettingsSurfaceGuiBadge}" VerticalAlignment="Center" />
-                                </StackPanel>
-                                <arc:Badge Grid.Column="2" Size="Small" Tone="Success"
-                                           Content="{l:AppLangResource SettingsSurfaceSelectedBadge}"
-                                           IsVisible="{Binding IsGuiDefault}"
-                                           VerticalAlignment="Center" />
-                            </Grid>
-                            <TextBlock Classes="hint" Text="{l:AppLangResource SettingsSurfaceGuiDesc}" TextWrapping="Wrap" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                            <lucide:LucideIcon Kind="MessageSquareCode" Size="14" VerticalAlignment="Center" Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                <TextBlock Classes="name" Text="{l:AppLangResource SettingsSurfaceGuiTitle}" VerticalAlignment="Center" />
+                                <arc:Badge Size="Small" Tone="Info" Content="{l:AppLangResource SettingsSurfaceGuiBadge}" VerticalAlignment="Center" />
+                                <settings:SettingHelpTip Tip="{l:AppLangResource SettingsSurfaceGuiDesc}" />
+                            </StackPanel>
+                            <arc:Badge Grid.Column="2" Size="Small" Tone="Success"
+                                       Content="{l:AppLangResource SettingsSurfaceSelectedBadge}"
+                                       IsVisible="{Binding IsGuiDefault}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
                     </StackPanel>
                 </Button>
 
@@ -353,20 +352,18 @@
                             </StackPanel>
                         </Border>
                         <!-- Card Footer -->
-                        <StackPanel Spacing="2">
-                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-                                <lucide:LucideIcon Kind="SquareTerminal" Size="14" VerticalAlignment="Center" Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsSurfaceTerminalTitle}" VerticalAlignment="Center" />
-                                    <arc:Badge Size="Small" Tone="Neutral" Content="{l:AppLangResource SettingsSurfaceTerminalBadge}" VerticalAlignment="Center" />
-                                </StackPanel>
-                                <arc:Badge Grid.Column="2" Size="Small" Tone="Success"
-                                           Content="{l:AppLangResource SettingsSurfaceSelectedBadge}"
-                                           IsVisible="{Binding IsTerminalDefault}"
-                                           VerticalAlignment="Center" />
-                            </Grid>
-                            <TextBlock Classes="hint" Text="{l:AppLangResource SettingsSurfaceTerminalDesc}" TextWrapping="Wrap" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                            <lucide:LucideIcon Kind="SquareTerminal" Size="14" VerticalAlignment="Center" Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                <TextBlock Classes="name" Text="{l:AppLangResource SettingsSurfaceTerminalTitle}" VerticalAlignment="Center" />
+                                <arc:Badge Size="Small" Tone="Neutral" Content="{l:AppLangResource SettingsSurfaceTerminalBadge}" VerticalAlignment="Center" />
+                                <settings:SettingHelpTip Tip="{l:AppLangResource SettingsSurfaceTerminalDesc}" />
+                            </StackPanel>
+                            <arc:Badge Grid.Column="2" Size="Small" Tone="Success"
+                                       Content="{l:AppLangResource SettingsSurfaceSelectedBadge}"
+                                       IsVisible="{Binding IsTerminalDefault}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
                     </StackPanel>
                 </Button>
             </Grid>
@@ -377,9 +374,9 @@
                 CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
                 Padding="14,10">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="12">
-                <StackPanel VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsDefaultPermission}" />
-                    <TextBlock Classes="hint" Text="{l:AppLangResource SettingsDefaultPermissionHint}" />
+                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                    <TextBlock Classes="name" Text="{l:AppLangResource SettingsDefaultPermission}" VerticalAlignment="Center" />
+                    <settings:SettingHelpTip Tip="{l:AppLangResource SettingsDefaultPermissionHint}" />
                 </StackPanel>
                 <arc:Select AutoScrollToSelectedItem="False" Grid.Column="1"
                             Size="Small"
@@ -408,9 +405,9 @@
                 Padding="14,10">
             <StackPanel Spacing="10">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpAdapterPolicy}" />
-                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpAdapterPolicyHint}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpAdapterPolicy}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsAcpAdapterPolicyHint}" />
                     </StackPanel>
                     <arc:Select AutoScrollToSelectedItem="False" Grid.Column="1"
                                 Size="Small"
@@ -422,9 +419,9 @@
                 </Grid>
                 <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpFormElicitation}" />
-                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpFormElicitationHint}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpFormElicitation}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsAcpFormElicitationHint}" />
                     </StackPanel>
                     <arc:Switch Grid.Column="1"
                                 VerticalAlignment="Center"
@@ -433,9 +430,9 @@
                 </Grid>
                 <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpUrlElicitation}" />
-                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpUrlElicitationHint}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpUrlElicitation}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsAcpUrlElicitationHint}" />
                     </StackPanel>
                     <arc:Switch Grid.Column="1"
                                 VerticalAlignment="Center"
@@ -444,9 +441,9 @@
                 </Grid>
                 <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpClientFileSystem}" />
-                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpClientFileSystemHint}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpClientFileSystem}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsAcpClientFileSystemHint}" />
                     </StackPanel>
                     <arc:Switch Grid.Column="1"
                                 VerticalAlignment="Center"
@@ -455,9 +452,9 @@
                 </Grid>
                 <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpClientTerminal}" />
-                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsAcpClientTerminalHint}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsAcpClientTerminal}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsAcpClientTerminalHint}" />
                     </StackPanel>
                     <arc:Switch Grid.Column="1"
                                 VerticalAlignment="Center"
@@ -466,9 +463,59 @@
                 </Grid>
                 <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
-                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsUseSystemProxy}" />
-                        <TextBlock Classes="hint" Text="{l:AppLangResource SettingsUseSystemProxyHint}" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsCollabEnabled}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsCollabEnabledHint}" />
+                    </StackPanel>
+                    <arc:Switch Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsCollabEnabled}"
+                                IsChecked="{Binding CollabEnabled, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" IsVisible="{Binding CollabEnabled}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsVisible="{Binding CollabEnabled}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsCollabDefaultIsolation}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsCollabDefaultIsolationHint}" />
+                    </StackPanel>
+                    <arc:Select AutoScrollToSelectedItem="False" Grid.Column="1"
+                                Size="Small"
+                                MinWidth="240"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsCollabDefaultIsolation}"
+                                ItemsSource="{Binding CollabIsolationOptions}"
+                                SelectedValue="{Binding CollabDefaultIsolationKey, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" IsVisible="{Binding CollabEnabled}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsVisible="{Binding CollabEnabled}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsCollabTerminalBridge}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsCollabTerminalBridgeHint}" />
+                    </StackPanel>
+                    <arc:Switch Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsCollabTerminalBridge}"
+                                IsChecked="{Binding CollabEnableTerminalBridge, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" IsVisible="{Binding CollabEnabled}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsVisible="{Binding CollabEnabled}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsCollabMaxHops}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsCollabMaxHopsHint}" />
+                    </StackPanel>
+                    <arc:Select AutoScrollToSelectedItem="False" Grid.Column="1"
+                                Size="Small"
+                                MinWidth="120"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsCollabMaxHops}"
+                                ItemsSource="{Binding CollabMaxHopsOptions}"
+                                SelectedValue="{Binding CollabMaxHopsKey, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsUseSystemProxy}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsUseSystemProxyHint}" />
                     </StackPanel>
                     <arc:Switch Grid.Column="1"
                                 VerticalAlignment="Center"
@@ -531,7 +578,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="agents:UninstalledAgentViewModel">
                             <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="14,8">
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
                                     <common:AgentIcon AgentId="{Binding Id}" AgentName="{Binding Name}" Size="28" VerticalAlignment="Center" Opacity="0.6" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -547,7 +594,27 @@
                                                    Text="{Binding InstallCommand}"
                                                    TextTrimming="CharacterEllipsis"
                                                    IsVisible="{Binding HasInstallCommand}" />
+                                        <TextBlock Foreground="{arc:ArcDesignTokenResource Danger}"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   Text="{Binding InstallError}"
+                                                   IsVisible="{Binding HasInstallError}" />
                                     </StackPanel>
+                                    <arc:Button Grid.Column="6"
+                                                Variant="Secondary"
+                                                Size="Small"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding ShowInstallButton}"
+                                                Command="{Binding RunInstallCommand}"
+                                                arc:Tooltip.Tip="{Binding InstallPlan.CommandLine}"
+                                                Content="{Binding InstallButtonText}" />
+                                    <arc:Button Grid.Column="6"
+                                                Variant="Secondary"
+                                                Size="Small"
+                                                VerticalAlignment="Center"
+                                                IsEnabled="False"
+                                                IsVisible="{Binding IsInstalling}"
+                                                Content="{l:AppLangResource SettingsInstallAgentInstalling}" />
                                     <arc:CopyButton Grid.Column="2"
                                                     IsIconOnly="True"
                                                     Value="{Binding InstallCommand}"

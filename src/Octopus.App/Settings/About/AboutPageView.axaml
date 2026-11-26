@@ -3,6 +3,7 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:about="using:Octopus.App.Settings.About"
              xmlns:updates="using:Octopus.App.Updates"
              x:Class="Octopus.App.Settings.About.AboutPageView"
@@ -225,7 +226,7 @@
         <TextBlock Classes="group" Text="{l:AppLangResource SettingsUpdates}" Margin="0,6,0,0" />
         <arc:SettingsGroup Appearance="Plain" DataContext="{Binding Updates}" x:DataType="updates:UpdateSettingsViewModel">
             <arc:SettingsRow Header="{l:AppLangResource SettingsUpdateMode}"
-                             Description="{l:AppLangResource SettingsUpdateModeHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsUpdateModeHint}">
                 <arc:Select x:Name="UpdateModeSelect" AutoScrollToSelectedItem="False" Size="Small" Width="240"
                             AutomationProperties.Name="{l:AppLangResource SettingsUpdateMode}"
                             IsEnabled="{Binding IsEnabled}"
@@ -233,7 +234,7 @@
                             SelectedValue="{Binding Mode, Mode=TwoWay}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsUpdateChannel}"
-                             Description="{l:AppLangResource SettingsUpdateChannelHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsUpdateChannelHint}">
                 <arc:Select x:Name="UpdateChannelSelect" AutoScrollToSelectedItem="False" Size="Small" Width="240"
                             AutomationProperties.Name="{l:AppLangResource SettingsUpdateChannel}"
                             IsEnabled="{Binding IsEnabled}"

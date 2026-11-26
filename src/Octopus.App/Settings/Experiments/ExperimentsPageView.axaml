@@ -3,28 +3,29 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:exp="using:Octopus.App.Settings.Experiments"
              x:Class="Octopus.App.Settings.Experiments.ExperimentsPageView"
              x:DataType="exp:ExperimentsSettingsViewModel">
     <StackPanel Spacing="{DynamicResource OctopusSettingsPageSpacing}">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource SettingsExperimentsTitle}" />
-            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsExperimentsSubtitle}" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsExperimentsTitle}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource SettingsExperimentsSubtitle}" />
         </StackPanel>
 
         <arc:Alert Tone="Info" Content="{l:AppLangResource SettingsExperimentsNotice}" />
 
         <arc:SettingsGroup Appearance="Plain">
             <arc:SettingsRow Header="{l:AppLangResource SettingsExpCodeEditor}"
-                             Description="{l:AppLangResource SettingsExpCodeEditorHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsExpCodeEditorHint}">
                 <arc:Switch x:Name="CodeEditorSwitch" IsChecked="{Binding CodeEditor, Mode=TwoWay}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsExpDiffEditor}"
-                             Description="{l:AppLangResource SettingsExpDiffEditorHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsExpDiffEditorHint}">
                 <arc:Switch x:Name="DiffEditorSwitch" IsChecked="{Binding DiffEditor, Mode=TwoWay}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsExpLsp}"
-                             Description="{l:AppLangResource SettingsExpLspHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsExpLspHint}">
                 <arc:Switch x:Name="LspSwitch"
                             IsChecked="{Binding LanguageServer, Mode=TwoWay}"
                             IsEnabled="{Binding CanConfigureLanguageServer}" />
@@ -57,10 +58,22 @@
                                 <StackPanel Spacing="1">
                                     <TextBlock Classes="name" Text="{Binding Name}" />
                                     <TextBlock Classes="mono" Text="{Binding DetailText}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Classes="mono" Opacity="0.7" Text="{Binding ManualHint}"
+                                               TextTrimming="CharacterEllipsis" IsVisible="{Binding ShowManualHint}" />
+                                    <TextBlock Foreground="{arc:ArcDesignTokenResource Danger}" FontSize="12"
+                                               Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding HasError}" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="12,0,0,0">
                                     <arc:Badge Tone="Success" Size="Small" Content="{Binding StatusText}" IsVisible="{Binding IsInstalled}" />
                                     <arc:Badge Tone="Neutral" Size="Small" Content="{Binding StatusText}" IsVisible="{Binding !IsInstalled}" />
+                                    <arc:Button Variant="Secondary" Size="Small"
+                                                Command="{Binding InstallCommand}"
+                                                IsVisible="{Binding ShowInstallButton}"
+                                                arc:Tooltip.Tip="{Binding InstallTooltip}"
+                                                Content="{Binding InstallButtonText}" />
+                                    <arc:Button Variant="Secondary" Size="Small" IsEnabled="False"
+                                                IsVisible="{Binding IsInstalling}"
+                                                Content="{l:AppLangResource SettingsExpLspInstalling}" />
                                 </StackPanel>
                             </Grid>
                         </DataTemplate>

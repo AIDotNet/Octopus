@@ -100,6 +100,10 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
         }
 
         var permission = ResolvePermission(def, profile, request.GlobalPermission);
+        if (!string.IsNullOrEmpty(launch?.Permission) && caps.Permission?.Modes.ContainsKey(launch.Permission) == true)
+        {
+            permission = launch.Permission;
+        }
         if (permission is not null && caps.Permission?.Modes.TryGetValue(permission, out var spec) == true)
         {
             args.AddRange(spec.Args);

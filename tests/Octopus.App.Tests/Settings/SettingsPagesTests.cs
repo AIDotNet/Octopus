@@ -1,8 +1,11 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Octopus.App.Composition;
+using Octopus.App.Localization;
 using Octopus.App.Settings;
 using Octopus.App.Settings.About;
 using Octopus.App.Settings.Agents;
@@ -27,8 +30,13 @@ public class SettingsPagesTests
     [InlineData("general")]
     [InlineData("workspace-cleanup")]
     [InlineData("terminal")]
+    [InlineData("ssh")]
+    [InlineData("account-devices")]
+    [InlineData("remote")]
+    [InlineData("remote-hosts")]
     [InlineData("appearance")]
     [InlineData("shortcuts")]
+    [InlineData("plugins")]
     [InlineData("experiments")]
     [InlineData("about")]
     public void The_view_opens_on_the_requested_section(string section)
@@ -42,6 +50,104 @@ public class SettingsPagesTests
         Assert.Equal(section, viewModel.Selected.Key);
         Assert.NotNull(viewModel.Page);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Setting_descriptions_stay_hidden_inline_and_show_on_help_tip_hover()
+    {
+        var previous = ArcLanguage.Current;
+        var view = new SettingsView { InitialSection = "general" };
+        var window = new Window { Width = 1280, Height = 800, Content = view };
+        try
+        {
+            ArcLanguage.Set(LanguageTags.ZhCN);
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var rows = view.GetVisualDescendants().OfType<SettingsRow>().ToList();
+            Assert.NotEmpty(rows);
+            foreach (var row in rows)
+            {
+                Assert.True(string.IsNullOrEmpty(row.Description));
+                var tip = row.GetVisualDescendants().OfType<SettingHelpTip>().Single();
+                Assert.True(tip.IsVisible);
+                Assert.False(string.IsNullOrWhiteSpace(tip.Tip));
+                var trigger = tip.FindControl<Border>("HitTarget");
+                Assert.NotNull(trigger);
+                Assert.Equal(tip.Tip, TKCode.Arc.Tooltip.GetTip(trigger));
+                Assert.True(TKCode.Arc.Tooltip.GetShowDelay(trigger) <= TimeSpan.FromMilliseconds(250));
+            }
+
+            // Hovering the first ? icon opens its tooltip popup shortly after pointer enter.
+            var hoverTrigger = rows[0].GetVisualDescendants().OfType<SettingHelpTip>().Single().FindControl<Border>("HitTarget")!;
+            var center = hoverTrigger.TranslatePoint(new Point(hoverTrigger.Bounds.Width / 2, hoverTrigger.Bounds.Height / 2), window);
+            Assert.NotNull(center);
+            var getPopup = typeof(TKCode.Arc.Tooltip).GetMethod("GetPopup", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)!;
+            TKCode.Arc.Primitives.ArcPopup? PopupOf(Control c) => (TKCode.Arc.Primitives.ArcPopup?)getPopup.Invoke(null, [c]);
+
+            window.MouseMove(center.Value);
+            Dispatcher.UIThread.RunJobs();
+            var opened = Frames.Until(() => PopupOf(hoverTrigger)?.IsOpen == true, milliseconds: 1500);
+            var popup = PopupOf(hoverTrigger);
+            Assert.True(opened, $"Tooltip did not open. isPointerOver={hoverTrigger.IsPointerOver}, popup={popup is not null}, popupOpen={popup?.IsOpen}, delay={TKCode.Arc.Tooltip.GetShowDelay(hoverTrigger)}");
+
+            // Switching language updates the tooltip text live.
+            var expectedEn = AppLangResources.Get(AppLangResourceKind.SettingsLanguageHint);
+            ArcLanguage.Set(LanguageTags.EnUS);
+            Dispatcher.UIThread.RunJobs();
+            var firstTip = rows[0].GetVisualDescendants().OfType<SettingHelpTip>().Single();
+            Assert.Equal(AppLangResources.Get(AppLangResourceKind.SettingsLanguageHint), firstTip.Tip);
+            Assert.NotEqual(expectedEn, firstTip.Tip);
+
+            // An empty SettingHelpTip collapses itself automatically once styled in the visual tree.
+            var emptyTip = new SettingHelpTip { Tip = "" };
+            window.Content = emptyTip;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(emptyTip.IsVisible);
+            emptyTip.Tip = "Detailed help";
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(emptyTip.IsVisible);
+        }
+        finally
+        {
+            window.Close();
+            ArcLanguage.Set(previous);
+        }
+    }
+
+    [AvaloniaFact]
+    public void Settings_back_button_reserves_room_below_macOS_traffic_lights()
+    {
+        var view = new SettingsView();
+        var window = new Window { Width = 1280, Height = 800, Content = view };
+        window.Show();
+        try
+        {
+            Dispatcher.UIThread.RunJobs();
+            var spacer = view.FindControl<Border>("MacTitleBarSpacer");
+            var backButton = view.FindControl<TKCode.Arc.Button>("BackButton");
+            Assert.NotNull(spacer);
+            Assert.NotNull(backButton);
+            Assert.Equal(OperatingSystem.IsMacOS(), spacer.IsVisible);
+            if (OperatingSystem.IsMacOS())
+            {
+                var topLeft = backButton.TranslatePoint(default, view);
+                Assert.NotNull(topLeft);
+                Assert.True(topLeft.Value.Y >= 34, $"Expected BackButton below macOS traffic lights, got Y={topLeft.Value.Y}");
+
+                window.WindowState = WindowState.FullScreen;
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(spacer.IsVisible);
+
+                window.WindowState = WindowState.Normal;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(spacer.IsVisible);
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
@@ -84,6 +190,108 @@ public class SettingsPagesTests
         // The first installed agent is open, and its details are there.
         Assert.True(agents.Installed[0].IsExpanded);
         Assert.False(agents.Installed[1].IsExpanded);
+        agents.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task Install_button_confirms_runs_the_hint_and_moves_the_agent_to_installed()
+    {
+        var scanner = new SettingsTestSupport.FakeScanner("claude");
+        var installer = new FakeAgentInstaller
+        {
+            OnInstalled = plan => scanner.Current.Installations.Add(new Octopus.Core.Agents.AgentInstallation { AgentId = plan.AgentId, Path = "/usr/local/bin/" + plan.AgentId }),
+        };
+        var dialogs = new FakeDialogService { Answer = true };
+        var agents = NewAgentsPage(scanner, installer, dialogs);
+        await Files.FileTabHarness.WaitUntil(() => agents.NotInstalled.FirstOrDefault(a => a.Id == "codex")?.ShowInstallButton == true);
+
+        var codex = agents.NotInstalled.Single(a => a.Id == "codex");
+        await codex.RunInstallCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(1, dialogs.Asked);
+        Assert.Contains(codex.InstallCommand, dialogs.LastDescription);
+        Assert.Equal("codex", Assert.Single(installer.Installed).AgentId);
+        Assert.Contains(agents.Installed, a => a.Id == "codex");
+        Assert.DoesNotContain(agents.NotInstalled, a => a.Id == "codex");
+        agents.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task Declined_or_failed_installs_keep_the_agent_and_show_the_error()
+    {
+        var installer = new FakeAgentInstaller { Result = new Octopus.Agents.AgentInstallResult(false, "npm ERR! code EACCES") };
+        var dialogs = new FakeDialogService { Answer = false };
+        var agents = NewAgentsPage(new SettingsTestSupport.FakeScanner(), installer, dialogs);
+        await Files.FileTabHarness.WaitUntil(() => agents.NotInstalled.FirstOrDefault(a => a.Id == "codex")?.ShowInstallButton == true);
+        var codex = agents.NotInstalled.Single(a => a.Id == "codex");
+
+        await codex.RunInstallCommand.ExecuteAsync(null);
+        Assert.Empty(installer.Installed);
+
+        dialogs.Answer = true;
+        await codex.RunInstallCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(installer.Installed);
+        Assert.True(codex.HasInstallError);
+        Assert.Contains("EACCES", codex.InstallError);
+        Assert.True(codex.ShowInstallButton);
+        agents.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task An_install_that_needs_admin_runs_sudo_in_a_terminal_instead_of_in_the_background()
+    {
+        var scanner = new SettingsTestSupport.FakeScanner();
+        var installer = new FakeAgentInstaller { Elevation = Octopus.Agents.InstallElevation.Required };
+        var dialogs = new FakeDialogService
+        {
+            OnRunAccountLogin = _ =>
+            {
+                scanner.Current.Installations.Add(new Octopus.Core.Agents.AgentInstallation { AgentId = "codex", Path = "/usr/local/bin/codex" });
+                return Task.FromResult(true);
+            },
+        };
+        var agents = NewAgentsPage(scanner, installer, dialogs);
+        await Files.FileTabHarness.WaitUntil(() => agents.NotInstalled.FirstOrDefault(a => a.Id == "codex")?.ShowInstallButton == true);
+        var codex = agents.NotInstalled.Single(a => a.Id == "codex");
+        Assert.Equal(AppLangResources.Get(AppLangResourceKind.SettingsInstallAsAdmin), codex.InstallButtonText);
+
+        await codex.RunInstallCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(installer.Installed);
+        Assert.Equal(1, dialogs.LoginsRun);
+        Assert.Contains(dialogs.LastLoginSpec!.Arguments, a => a.Contains("sudo " + codex.InstallCommand, StringComparison.Ordinal));
+        Assert.Contains("sudo", dialogs.LastDescription);
+        Assert.Contains(agents.Installed, a => a.Id == "codex");
+        agents.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task A_permission_failure_turns_the_button_into_install_as_administrator()
+    {
+        var installer = new FakeAgentInstaller
+        {
+            Result = new Octopus.Agents.AgentInstallResult(false, "npm ERR! code EACCES", NeedsAdmin: true),
+            CanElevateInBackground = true, // Windows: UAC instead of a terminal
+        };
+        var dialogs = new FakeDialogService();
+        var agents = NewAgentsPage(new SettingsTestSupport.FakeScanner(), installer, dialogs);
+        await Files.FileTabHarness.WaitUntil(() => agents.NotInstalled.FirstOrDefault(a => a.Id == "codex")?.ShowInstallButton == true);
+        var codex = agents.NotInstalled.Single(a => a.Id == "codex");
+
+        await codex.RunInstallCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(codex.NeedsAdmin);
+        Assert.Equal(AppLangResources.Get(AppLangResourceKind.SettingsInstallNeedsAdmin), codex.InstallError);
+        Assert.Equal(AppLangResources.Get(AppLangResourceKind.SettingsInstallAsAdmin), codex.InstallButtonText);
+
+        await codex.RunInstallCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(installer.Installed);
+        Assert.Single(installer.InstalledElevated);
+        Assert.Equal(0, dialogs.LoginsRun);
         agents.Dispose();
     }
 
@@ -306,4 +514,19 @@ public class SettingsPagesTests
         AppHost.Get<Octopus.Agents.IModelDiscovery>(),
         AppHost.Get<IFileOpener>(),
         new StoragePathPicker());
+
+    private static AgentsSettingsViewModel NewAgentsPage(
+        Octopus.Agents.IAgentScanner scanner,
+        Octopus.Agents.IAgentInstaller installer,
+        Octopus.App.Services.IDialogService dialogs) => new(
+        AppHost.Get<ISettingsStore>(),
+        AppHost.Get<Octopus.Agents.IAgentCatalog>(),
+        scanner,
+        AppHost.Get<Octopus.Agents.IAgentCommandCompiler>(),
+        AppHost.Get<Octopus.Agents.IModelDiscovery>(),
+        AppHost.Get<IFileOpener>(),
+        new StoragePathPicker(),
+        dialogs: dialogs,
+        launchPlanner: AppHost.Get<Octopus.Terminal.ITerminalLaunchPlanner>(),
+        installer: installer);
 }

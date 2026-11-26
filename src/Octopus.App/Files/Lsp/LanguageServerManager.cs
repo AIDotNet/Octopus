@@ -12,6 +12,10 @@ namespace Octopus.App.Files.Lsp;
 public sealed record DetectedLanguageServer(LanguageServerSpec Spec, string? ExecutablePath)
 {
     public bool IsInstalled => ExecutablePath is not null;
+
+    /// <summary>Applicable install recipes for this platform, in order of preference.</summary>
+    public IReadOnlyList<LanguageServerInstallRecipe> ApplicableRecipes =>
+        Spec.Install.Where(r => r.AppliesToCurrentPlatform).ToList();
 }
 
 /// <summary>
@@ -217,6 +221,7 @@ public sealed class LanguageServerManager : ILanguageServerManager
             };
             foreach (var arg in spec.Arguments) start.ArgumentList.Add(arg);
             foreach (var (k, v) in env) start.Environment[k] = v;
+            if (await GetSearchPathAsync().ConfigureAwait(false) is { } searchPath) start.Environment["PATH"] = searchPath;
 
             process = Process.Start(start);
             if (process is null) return null;
@@ -262,10 +267,42 @@ public sealed class LanguageServerManager : ILanguageServerManager
         server.Dispose();
     }
 
-    private async Task<string?> GetSearchPathAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// The login PATH plus the per-user bin folders that tool installers write to but shell profiles often do not
+    /// add (dotnet global tools, go install, cargo/rustup, pipx), so a freshly installed server is found at once.
+    /// </summary>
+    private async Task<string?> GetSearchPathAsync(CancellationToken cancellationToken = default)
     {
         var env = await _loginEnvironment.GetAsync(cancellationToken).ConfigureAwait(false);
-        return env.TryGetValue("PATH", out var path) && path.Length > 0 ? path : Environment.GetEnvironmentVariable("PATH");
+        var path = env.TryGetValue("PATH", out var login) && login.Length > 0 ? login : Environment.GetEnvironmentVariable("PATH");
+        var entries = (path ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).ToList();
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        foreach (var extra in ExtraBinDirectories(env))
+        {
+            if (!entries.Contains(extra, comparer)) entries.Add(extra);
+        }
+        return entries.Count == 0 ? null : string.Join(Path.PathSeparator, entries);
+    }
+
+    private static IEnumerable<string> ExtraBinDirectories(IReadOnlyDictionary<string, string> env)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrEmpty(home)) yield break;
+        yield return Path.Combine(home, ".dotnet", "tools");
+        var goPath = env.TryGetValue("GOPATH", out var gp)
+            ? gp.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? Path.Combine(home, "go")
+            : Path.Combine(home, "go");
+        yield return env.TryGetValue("GOBIN", out var goBin) && goBin.Length > 0 ? goBin : Path.Combine(goPath, "bin");
+        yield return Path.Combine(home, ".cargo", "bin");
+        if (OperatingSystem.IsWindows())
+        {
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            if (programFiles.Length > 0) yield return Path.Combine(programFiles, "LLVM", "bin");
+        }
+        else
+        {
+            yield return Path.Combine(home, ".local", "bin");
+        }
     }
 
     private void OnSettingsChanged(object? sender, EventArgs e)

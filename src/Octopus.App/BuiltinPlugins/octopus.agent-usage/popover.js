@@ -84,7 +84,7 @@ function agentTab(row, s, t) {
     { variant: 'caption', color: 'muted', tooltip: names.join('\n') }));
   }
   if (withData.length === 0 && row.waiting.length === 0) {
-    children.push(ui.text(t('等待数据…', 'Waiting for data…'), { variant: 'caption', color: 'muted' }));
+    children.push(ui.text(row.busy ? t('正在查询…', 'Checking…') : t('等待数据…', 'Waiting for data…'), { variant: 'caption', color: 'muted' }));
   }
   if (row.error) children.push(ui.text(t(`查询失败：${row.error}`, `Query failed: ${row.error}`), { variant: 'caption', color: 'danger' }));
   return children;
@@ -97,6 +97,7 @@ function accountBlock(entry, several, row, s, t) {
     plan: snapshot?.plan ? capitalize(snapshot.plan) : undefined,
     tag: snapshot?.source === 'custom' ? t('自定义', 'Custom') : undefined,
     updatedAt,
+    busy: row.busy,
   }, s)];
   for (const w of snapshot?.windows ?? []) children.push(...windowRows(w, s, t));
   if (snapshot?.credits) {

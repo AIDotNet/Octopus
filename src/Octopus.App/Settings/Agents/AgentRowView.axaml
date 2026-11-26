@@ -4,6 +4,7 @@
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
              xmlns:common="using:Octopus.App.Common"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:agents="using:Octopus.App.Settings.Agents"
              x:Class="Octopus.App.Settings.Agents.AgentRowView"
              x:DataType="agents:AgentRowViewModel">
@@ -11,23 +12,28 @@
         <Style Selector="agents|FieldRow">
             <Setter Property="Template">
                 <ControlTemplate>
-                    <Grid ColumnDefinitions="132,*" ColumnSpacing="10">
-                        <TextBlock x:Name="PART_Label"
-                                   Classes="label"
-                                   Text="{TemplateBinding Label}"
-                                   VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <ContentPresenter Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}" />
-                            <TextBlock Classes="hint"
-                                       Text="{TemplateBinding Description}"
-                                       IsVisible="{TemplateBinding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                        </StackPanel>
+                    <Grid ColumnDefinitions="144,*" ColumnSpacing="10">
+                        <Grid x:Name="PART_LabelHost"
+                              ColumnDefinitions="*,Auto"
+                              ColumnSpacing="4"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center">
+                            <TextBlock x:Name="PART_Label"
+                                       Classes="label"
+                                       Text="{TemplateBinding Label}"
+                                       VerticalAlignment="Center" />
+                            <settings:SettingHelpTip Grid.Column="1"
+                                                     Tip="{TemplateBinding Description}"
+                                                     VerticalAlignment="Center" />
+                        </Grid>
+                        <ContentPresenter Grid.Column="1"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
                     </Grid>
                 </ControlTemplate>
             </Setter>
         </Style>
-        <Style Selector="agents|FieldRow:top /template/ TextBlock#PART_Label">
+        <Style Selector="agents|FieldRow:top /template/ Grid#PART_LabelHost">
             <Setter Property="VerticalAlignment" Value="Top" />
             <Setter Property="Margin" Value="0,9,0,0" />
         </Style>
@@ -58,7 +64,11 @@
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
         </Style>
         <Style Selector="arc|Button.defaultStar.active">
-            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource Warning}" />
+        </Style>
+        <Style Selector="Path.defaultStarFilled">
+            <Setter Property="Fill" Value="{arc:ArcDesignTokenResource Warning}" />
+            <Setter Property="Stroke" Value="{arc:ArcDesignTokenResource Warning}" />
         </Style>
     </UserControl.Styles>
 
@@ -177,7 +187,24 @@
                                     Command="{Binding ToggleDefaultCommand}"
                                     AutomationProperties.Name="{Binding DefaultButtonText}"
                                     arc:Tooltip.Tip="{Binding DefaultButtonText}">
-                            <lucide:LucideIcon Kind="Star" Size="14" />
+                            <Panel Width="14" Height="14">
+                                <lucide:LucideIcon x:Name="DefaultStarOutline"
+                                                   Kind="Star"
+                                                   Size="14"
+                                                   IsVisible="{Binding !IsDefault}" />
+                                <Viewbox x:Name="DefaultStarFilled"
+                                         Width="14"
+                                         Height="14"
+                                         IsVisible="{Binding IsDefault}">
+                                    <Canvas Width="24" Height="24">
+                                        <Path Classes="defaultStarFilled"
+                                              Data="{lucide:LucideGeometry Kind=Star}"
+                                              StrokeThickness="1.75"
+                                              StrokeJoin="Round"
+                                              StrokeLineCap="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                            </Panel>
                         </arc:Button>
                         <arc:Button Classes="icon"
                                     Variant="Ghost"
@@ -228,6 +255,7 @@
                     </agents:FieldRow>
 
                     <agents:FieldRow Label="{l:AppLangResource AccountSectionLabel}"
+                                     Description="{Binding AccountsSection.SectionHint}"
                                      TopAligned="True"
                                      IsVisible="{Binding HasAccountsSection}">
                         <StackPanel DataContext="{Binding AccountsSection}"
@@ -237,10 +265,6 @@
                                        IsVisible="{Binding IsGlobalKeyring}"
                                        Title="{Binding GlobalWarningTitle}"
                                        Content="{Binding GlobalWarningBody}" />
-                            <TextBlock Classes="hint"
-                                       IsVisible="{Binding IsEnvDir}"
-                                       Text="{Binding SectionHint}"
-                                       TextWrapping="Wrap" />
 
                             <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                                     BorderThickness="1"

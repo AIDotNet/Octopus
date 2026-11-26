@@ -5,6 +5,7 @@ using Octopus.App.Composition;
 using Octopus.App.Files;
 using Octopus.App.Files.Documents;
 using Octopus.App.Files.Lsp;
+using Octopus.App.Localization;
 using Octopus.App.Settings;
 using Octopus.App.Settings.Experiments;
 using Octopus.App.Tests.Explorer;
@@ -89,6 +90,88 @@ public class ExperimentsSettingsTests
         page.DiffEditor = false;
         Assert.False(AppHost.Get<ISettingsStore>().Current.Experiments.DiffEditor);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Install_button_runs_the_recipe_and_rescans_into_installed()
+    {
+        var lsp = AppHost.Get<FakeLanguageServerManager>();
+        lsp.Installed.Clear();
+        var spec = LanguageServerCatalog.All.First(s => s.Id == "pyright");
+        lsp.Installed.Add(new DetectedLanguageServer(spec, null));
+        var installer = new FakeAgentInstaller
+        {
+            OnInstalled = _ => lsp.Installed[0] = new DetectedLanguageServer(spec, "/fake/bin/pyright-langserver"),
+        };
+        var dialogs = new FakeDialogService();
+
+        using var page = new ExperimentsSettingsViewModel(AppHost.Get<ISettingsStore>(), lsp, installer, dialogs);
+        await FileTabHarness.WaitUntil(() => page.Servers.Count == 1 && page.Servers[0].ShowInstallButton);
+        var row = page.Servers[0];
+        Assert.Equal(spec.Install.First(r => r.AppliesToCurrentPlatform).CommandLine, row.InstallCommandLine);
+
+        await row.InstallCommand.ExecuteAsync(null);
+        await FileTabHarness.WaitUntil(() => page.Servers.Count == 1 && page.Servers[0].IsInstalled);
+        Assert.Equal(1, dialogs.Asked);
+        Assert.Single(installer.Installed);
+        Assert.False(page.Servers[0].ShowInstallButton);
+    }
+
+    [AvaloniaFact]
+    public async Task Failed_install_shows_the_error_and_a_permission_failure_offers_admin()
+    {
+        var lsp = AppHost.Get<FakeLanguageServerManager>();
+        lsp.Installed.Clear();
+        var spec = LanguageServerCatalog.All.First(s => s.Id == "gopls");
+        lsp.Installed.Add(new DetectedLanguageServer(spec, null));
+        var installer = new FakeAgentInstaller { Result = new Octopus.Agents.AgentInstallResult(false, "downloading\nnetwork unreachable") };
+
+        using var page = new ExperimentsSettingsViewModel(AppHost.Get<ISettingsStore>(), lsp, installer, new FakeDialogService());
+        await FileTabHarness.WaitUntil(() => page.Servers.Count == 1 && page.Servers[0].ShowInstallButton);
+        var row = page.Servers[0];
+        await row.InstallCommand.ExecuteAsync(null);
+        await FileTabHarness.WaitUntil(() => !row.IsInstalling);
+
+        Assert.True(row.HasError);
+        Assert.Contains("network unreachable", row.Error);
+        Assert.False(row.NeedsAdmin);
+        Assert.True(row.ShowInstallButton);
+
+        installer.Result = new Octopus.Agents.AgentInstallResult(false, "permission denied", NeedsAdmin: true);
+        await row.InstallCommand.ExecuteAsync(null);
+        await FileTabHarness.WaitUntil(() => !row.IsInstalling);
+        Assert.True(row.NeedsAdmin);
+        Assert.Equal(AppLangResources.Get(AppLangResourceKind.SettingsInstallAsAdmin), row.InstallButtonText);
+    }
+
+    [AvaloniaFact]
+    public async Task Without_a_tool_to_install_with_the_row_shows_what_to_install_by_hand()
+    {
+        var lsp = AppHost.Get<FakeLanguageServerManager>();
+        lsp.Installed.Clear();
+        var spec = LanguageServerCatalog.All.First(s => s.Id == "gopls");
+        lsp.Installed.Add(new DetectedLanguageServer(spec, null));
+
+        using var page = new ExperimentsSettingsViewModel(AppHost.Get<ISettingsStore>(), lsp, new NoPlanInstaller());
+        await FileTabHarness.WaitUntil(() => page.Servers.Count == 1 && page.Servers[0].IsPlanResolved);
+        Assert.False(page.Servers[0].ShowInstallButton);
+        Assert.True(page.Servers[0].ShowManualHint);
+        Assert.Contains("go install", page.Servers[0].ManualHint);
+    }
+
+    private sealed class NoPlanInstaller : Octopus.Agents.IAgentInstaller
+    {
+        public bool CanElevateInBackground => false;
+        public Task<Octopus.Agents.AgentInstallPlan?> PlanAsync(Octopus.Core.Agents.AgentDefinition definition, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Octopus.Agents.AgentInstallPlan?>(null);
+        public Task<Octopus.Agents.AgentInstallPlan?> PlanAsync(string id, IReadOnlyList<Octopus.Core.Agents.AgentInstallHint> hints, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Octopus.Agents.AgentInstallPlan?>(null);
+        public Task<Octopus.Agents.AgentInstallResult> InstallAsync(Octopus.Agents.AgentInstallPlan plan, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException();
+        public Task<Octopus.Agents.AgentInstallResult> InstallElevatedAsync(Octopus.Agents.AgentInstallPlan plan, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException();
+        public Octopus.Core.Agents.AgentCommand BuildTerminalCommand(Octopus.Agents.AgentInstallPlan plan, bool elevated) =>
+            throw new InvalidOperationException();
     }
 
     [AvaloniaFact]

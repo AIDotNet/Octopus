@@ -3,6 +3,7 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:s="using:Octopus.App.Plugins.Settings"
              x:Class="Octopus.App.Plugins.Settings.PluginRowView"
              x:DataType="s:PluginRowViewModel">
@@ -17,7 +18,10 @@
         <DataTemplate DataType="s:ClaudeConnectionsViewModel">
             <StackPanel Spacing="6">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                    <TextBlock Classes="group" VerticalAlignment="Center" Text="{x:Static s:PluginStrings.ClaudeConnect}" />
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="group" VerticalAlignment="Center" Text="{x:Static s:PluginStrings.ClaudeConnect}" />
+                        <settings:SettingHelpTip Tip="{x:Static s:PluginStrings.ClaudeConnectHint}" />
+                    </StackPanel>
                     <arc:Button Grid.Column="1" Variant="Ghost" Size="Small"
                                 IsLoading="{Binding IsScanning}"
                                 Command="{Binding RefreshCommand}"
@@ -30,7 +34,6 @@
                                 IsVisible="{Binding CanInstallAll}"
                                 Command="{Binding InstallAllCommand}" />
                 </Grid>
-                <TextBlock Classes="hint" TextWrapping="Wrap" Text="{x:Static s:PluginStrings.ClaudeConnectHint}" />
                 <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.ClaudeNone}" IsVisible="{Binding HasNone}" />
                 <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                         BorderThickness="1"
@@ -70,18 +73,18 @@
         </DataTemplate>
         <!-- The plugin's own settings, one Arc control per declared type. -->
         <DataTemplate DataType="s:BoolConfigField">
-            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}">
+            <arc:SettingsRow Header="{Binding Label}" settings:SettingHelp.Tip="{Binding Description}">
                 <arc:Switch IsChecked="{Binding Value, Mode=TwoWay}" AutomationProperties.Name="{Binding Label}" />
             </arc:SettingsRow>
         </DataTemplate>
         <DataTemplate DataType="s:NumberConfigField">
-            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}">
+            <arc:SettingsRow Header="{Binding Label}" settings:SettingHelp.Tip="{Binding Description}">
                 <arc:NumberField Value="{Binding Value, Mode=TwoWay}" Size="Small" Width="160"
                                  Label="{Binding Label}" IsLabelVisible="False" />
             </arc:SettingsRow>
         </DataTemplate>
         <DataTemplate DataType="s:ChoiceConfigField">
-            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}">
+            <arc:SettingsRow Header="{Binding Label}" settings:SettingHelp.Tip="{Binding Description}">
                 <arc:Select AutoScrollToSelectedItem="False" Size="Small" Width="220"
                             AutomationProperties.Name="{Binding Label}"
                             ItemsSource="{Binding Options}"
@@ -89,7 +92,7 @@
             </arc:SettingsRow>
         </DataTemplate>
         <DataTemplate DataType="s:TextConfigField">
-            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}">
+            <arc:SettingsRow Header="{Binding Label}" settings:SettingHelp.Tip="{Binding Description}">
                 <Panel>
                     <arc:Input Text="{Binding Value, Mode=TwoWay}" Size="Small" Width="260"
                                Label="{Binding Label}" IsLabelVisible="False"
@@ -103,7 +106,7 @@
         </DataTemplate>
         <DataTemplate DataType="s:CommandConfigField">
             <!-- A command only the user writes: full width, a test run, and what it printed. -->
-            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}" StackWidth="100000">
+            <arc:SettingsRow Header="{Binding Label}" settings:SettingHelp.Tip="{Binding Description}" StackWidth="100000">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <arc:Input Text="{Binding Value, Mode=TwoWay}" Size="Small"
@@ -118,13 +121,12 @@
                     <SelectableTextBlock Classes="hint" Text="{Binding TestResult}" TextWrapping="Wrap"
                                          IsVisible="{Binding HasTestResult}"
                                          Classes.failed="{Binding TestFailed}" />
-                    <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.CommandNote}" TextWrapping="Wrap" />
                 </StackPanel>
             </arc:SettingsRow>
         </DataTemplate>
         <DataTemplate DataType="s:ListConfigField">
             <!-- A tag list needs the full width: always stacked under its label. -->
-            <arc:SettingsRow Header="{Binding Label}" Description="{Binding Description}" StackWidth="100000">
+            <arc:SettingsRow Header="{Binding Label}" settings:SettingHelp.Tip="{Binding Description}" StackWidth="100000">
                 <arc:TagInput Value="{Binding Value, Mode=TwoWay}" Label="{Binding Label}" IsLabelVisible="False"
                               Placeholder="{x:Static s:PluginStrings.AddTag}" />
             </arc:SettingsRow>
@@ -234,7 +236,10 @@
 
                 <!-- Permissions: one compact line each, switched off on its own. -->
                 <StackPanel Spacing="6">
-                    <TextBlock Classes="group" Text="{x:Static s:PluginStrings.Permissions}" />
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Classes="group" Text="{x:Static s:PluginStrings.Permissions}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{x:Static s:PluginStrings.PermissionsHint}" IsVisible="{Binding HasPermissions}" />
+                    </StackPanel>
                     <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.NoPermissions}" IsVisible="{Binding HasNoPermissions}" />
                     <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                             BorderThickness="1"
@@ -262,16 +267,15 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </Border>
-                    <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.PermissionsHint}" IsVisible="{Binding HasPermissions}" />
                 </StackPanel>
 
                 <!-- What the plugin can reach beyond its permissions. -->
                 <arc:SettingsGroup Appearance="Card" IsVisible="{Binding ReadsFiles}">
-                    <arc:SettingsRow Header="{x:Static s:PluginStrings.Sensitive}" Description="{x:Static s:PluginStrings.SensitiveHint}">
+                    <arc:SettingsRow Header="{x:Static s:PluginStrings.Sensitive}" settings:SettingHelp.Tip="{x:Static s:PluginStrings.SensitiveHint}">
                         <arc:Switch IsChecked="{Binding IncludeSensitiveFiles, Mode=TwoWay}"
                                     AutomationProperties.Name="{x:Static s:PluginStrings.Sensitive}" />
                     </arc:SettingsRow>
-                    <arc:SettingsRow Header="{x:Static s:PluginStrings.Picked}" Description="{x:Static s:PluginStrings.PickedHint}">
+                    <arc:SettingsRow Header="{x:Static s:PluginStrings.Picked}" settings:SettingHelp.Tip="{x:Static s:PluginStrings.PickedHint}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Classes="hint" Text="{Binding PickedText}" VerticalAlignment="Center" />
                             <arc:Button Variant="Secondary" Size="Small"

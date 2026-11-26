@@ -40,7 +40,7 @@ public interface IAcpDialect
     /// <summary>Extra <c>clientCapabilities._meta</c> keys to send during <c>initialize</c>.</summary>
     IReadOnlyDictionary<string, JsonNode>? ExtraClientCapabilitiesMeta => null;
 
-    /// <summary>Optional clientInfo override (e.g. older <c>agy</c> requiring <c>zed</c> to unlock full models).</summary>
+    /// <summary>Optional clientInfo override when a dialect requires a custom ACP client descriptor.</summary>
     AcpImplementation? OverrideClientInfo(string? agentVersion) => null;
 
     /// <summary>Whether <c>@file</c> mentions must be emitted as <c>resource_link</c> prompt blocks.</summary>

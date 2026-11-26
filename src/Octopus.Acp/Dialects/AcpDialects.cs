@@ -187,18 +187,6 @@ public sealed partial class AntigravityAcpDialect : IAcpDialect
     public bool ReactiveWakeups => true;
     public IReadOnlyCollection<string> WithheldCommands { get; } = ["logout"];
 
-    public AcpImplementation? OverrideClientInfo(string? agentVersion)
-    {
-        // agy < 1.5.1 / managed server only advertises non-Gemini models to allowlisted editors such as zed.
-        if (!string.IsNullOrWhiteSpace(agentVersion)
-            && Version.TryParse(agentVersion.Split('-', '+')[0], out var parsed)
-            && parsed >= new Version(1, 5, 1))
-        {
-            return null;
-        }
-        return new AcpImplementation { Name = "zed", Version = "0.0.0" };
-    }
-
     public void NormalizeToolUpdate(AcpToolCallUpdate update)
     {
         if (update.Kind == "execute" && string.IsNullOrEmpty(update.Name))

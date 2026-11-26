@@ -2,17 +2,18 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:settings="using:Octopus.App.Settings"
              xmlns:general="using:Octopus.App.Settings.General"
              x:Class="Octopus.App.Settings.General.GeneralPageView"
              x:DataType="general:GeneralSettingsViewModel">
     <StackPanel Spacing="{DynamicResource OctopusSettingsPageSpacing}">
-        <StackPanel Spacing="4">
-            <TextBlock Classes="title" Text="{l:AppLangResource SettingsGeneralTitle}" />
-            <TextBlock Classes="subtitle" Text="{l:AppLangResource SettingsGeneralSubtitle}" />
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="title" Text="{l:AppLangResource SettingsGeneralTitle}" VerticalAlignment="Center" />
+            <settings:SettingHelpTip Tip="{l:AppLangResource SettingsGeneralSubtitle}" />
         </StackPanel>
         <arc:SettingsGroup Appearance="Plain">
             <arc:SettingsRow Header="{l:AppLangResource Language}"
-                             Description="{l:AppLangResource SettingsLanguageHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsLanguageHint}">
                 <arc:Select AutoScrollToSelectedItem="False" Size="Small"
                             Width="200"
                             AutomationProperties.Name="{l:AppLangResource Language}"
@@ -20,19 +21,19 @@
                             SelectedValue="{Binding Language, Mode=TwoWay}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsRestoreAgents}"
-                             Description="{l:AppLangResource SettingsRestoreAgentsHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsRestoreAgentsHint}">
                 <arc:Switch x:Name="RestoreAgentsSwitch" IsChecked="{Binding RestoreItemsOnStartup, Mode=TwoWay}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsResumeAgents}"
-                             Description="{l:AppLangResource SettingsResumeAgentsHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsResumeAgentsHint}">
                 <arc:Switch x:Name="ResumeAgentsSwitch" IsChecked="{Binding ResumeAgentsOnRestart, Mode=TwoWay}" IsEnabled="{Binding RestoreItemsOnStartup}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsTrayShow}"
-                             Description="{l:AppLangResource SettingsTrayShowHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsTrayShowHint}">
                 <arc:Switch x:Name="TrayEnabledSwitch" IsChecked="{Binding TrayEnabled, Mode=TwoWay}" />
             </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsTrayClose}"
-                             Description="{l:AppLangResource SettingsTrayCloseHint}">
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsTrayCloseHint}">
                 <arc:Switch x:Name="CloseToTraySwitch" IsChecked="{Binding CloseToTray, Mode=TwoWay}" IsEnabled="{Binding TrayEnabled}" />
             </arc:SettingsRow>
         </arc:SettingsGroup>

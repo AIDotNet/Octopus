@@ -63,38 +63,39 @@
         </Setter>
     </Style>
 
-    <!-- The Bot entry button right below the device badge on the rail: rounded-square surface that turns solid Accent in Bot mode. -->
+    <!-- The Bot entry avatar frame below the device badge on the rail: placeholder at 0 bots, full avatar at 1, 2x2 grid at 2-4. -->
     <Style Selector="Button.bot-rail-chip">
         <Setter Property="Padding" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
-        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
-        <Setter Property="BorderThickness" Value="1.5" />
-        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextSecondary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource TextMuted}" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Border Name="PART_BotChip"
                         Background="{TemplateBinding Background}"
-                        BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="11"
+                        CornerRadius="{arc:ArcDesignTokenResource RadiusPanel}"
                         ClipToBounds="True">
                     <ContentPresenter Content="{TemplateBinding Content}"
-                                      HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+                                      HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
                 </Border>
             </ControlTemplate>
         </Setter>
         <Style Selector="^:pointerover">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
             <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
-            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
         </Style>
         <Style Selector="^.active">
-            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Accent}" />
-            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
-            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentForeground}" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentStrong}" />
         </Style>
-        <Style Selector="^.active:pointerover">
-            <Setter Property="Foreground" Value="{arc:ArcDesignTokenResource AccentForeground}" />
+        <Style Selector="^.has-bots">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="^.has-bots:pointerover">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="^.has-bots.active">
+            <Setter Property="Background" Value="Transparent" />
         </Style>
     </Style>
 
