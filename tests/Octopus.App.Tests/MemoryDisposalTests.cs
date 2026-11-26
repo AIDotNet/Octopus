@@ -359,6 +359,7 @@ public class MemoryDisposalTests
         Assert.True(runtime.Themes.Defines(typeof(SettingsRow)));
         Assert.True(runtime.Themes.Defines(typeof(TKCode.Arc.Sidebar)));
         Assert.True(runtime.Themes.Defines(typeof(ImageReveal)));
+        Assert.True(runtime.Themes.Defines(typeof(BranchGraph)));
 
         Assert.False(runtime.Themes.Defines(typeof(CommandPalette)));
         Assert.False(runtime.Themes.Defines(typeof(EmojiPicker)));
