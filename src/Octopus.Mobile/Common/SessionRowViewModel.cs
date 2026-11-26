@@ -58,6 +58,25 @@ public sealed partial class SessionRowViewModel : ObservableObject, IDisposable
     /// <summary>Runs as a GUI conversation on the host: tagged, and opens its details.</summary>
     public bool IsGui => Session.IsGui;
 
+    /// <summary>Where its work came from when an agent delegated it ("来自 MacBook · Claude Code · Lead"); null when a person started it.</summary>
+    public string? OriginText => OriginOf(Session);
+    public bool HasOrigin => OriginText is not null;
+
+    public static string? OriginOf(RemoteSession session)
+    {
+        if (session.OriginDevice is { Length: > 0 } device)
+        {
+            return session.OriginSession is { Length: > 0 } by
+                ? MobileLangResources.Format(MobileLangResourceKind.SessionOriginFromDeviceBy, device, by)
+                : MobileLangResources.Format(MobileLangResourceKind.SessionOriginFromDevice, device);
+        }
+        if (session.ParentItemId is { } parentId && session.Project.Sessions.FirstOrDefault(s => s.Id == parentId) is { } parent)
+        {
+            return MobileLangResources.Format(MobileLangResourceKind.SessionDelegatedBy, parent.Title);
+        }
+        return null;
+    }
+
     /// <summary>The row was held and its menu opened: the tap that ends the press does not open the session too.</summary>
     public void Held() => _heldAt = DateTime.UtcNow;
 

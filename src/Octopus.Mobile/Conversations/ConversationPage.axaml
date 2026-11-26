@@ -588,12 +588,35 @@
                         <!-- User message bubble (right-aligned) + optional attachment chips. -->
                         <DataTemplate DataType="ws:ConversationUserEntry">
                             <StackPanel HorizontalAlignment="Right" MaxWidth="310" Spacing="5">
-                                <Border Classes="userBubble" IsVisible="{Binding Text, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <Border Classes="userBubble" IsVisible="{Binding IsPersonMessage}">
                                     <TextBlock Text="{Binding Text}"
                                                Foreground="{arc:ArcDesignTokenResource AccentForeground}"
                                                FontSize="14"
                                                LineHeight="20"
                                                TextWrapping="Wrap" />
+                                </Border>
+                                <!-- Injected by the collaboration bus (a delegated task, a peer's reply): a card naming the sender and its computer. -->
+                                <Border IsVisible="{Binding IsCollabMessage}"
+                                        Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                        BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        Padding="10,8">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="{Binding CollabHeader}"
+                                                   Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                   FontSize="11.5"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding CollabFromDeviceText}"
+                                                   IsVisible="{Binding HasCollabFromDevice}"
+                                                   Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                   FontSize="11" />
+                                        <TextBlock Text="{Binding DisplayText}"
+                                                   FontSize="14"
+                                                   LineHeight="20"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
                                 </Border>
                                 <ItemsControl ItemsSource="{Binding Attachments}"
                                               HorizontalAlignment="Right"

@@ -93,6 +93,7 @@ public sealed partial class SessionWorkspaceViewModel : ObservableObject, IDispo
             var parts = new List<string>(3) { Session.Project.Name };
             if (ActiveBranchName is { Length: > 0 } branch) parts.Add(branch);
             else parts.Add(Session.Project.Host.Name);
+            if (SessionRowViewModel.OriginOf(Session) is { } origin) parts.Add(origin);
             if (!string.IsNullOrWhiteSpace(StatusOverride)) parts.Add(StatusOverride);
             return string.Join(" · ", parts);
         }

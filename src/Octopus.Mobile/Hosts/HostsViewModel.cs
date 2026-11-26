@@ -427,9 +427,10 @@ public sealed partial class ActivitySessionRowViewModel : ObservableObject, IDis
     public string Initial { get; }
     public IBrush? Tint { get; }
     public string Title => Session.Title;
-    public string ContextLine => Session.WorkspaceBranch is { Length: > 0 } branch
+    public string ContextLine => (Session.WorkspaceBranch is { Length: > 0 } branch
         ? $"{Session.Project.Name} ({branch}) · {Session.Project.Host.Name}"
-        : $"{Session.Project.Name} · {Session.Project.Host.Name}";
+        : $"{Session.Project.Name} · {Session.Project.Host.Name}")
+        + (SessionRowViewModel.OriginOf(Session) is { } origin ? $" · {origin}" : "");
     public string? Preview => Session.Preview;
     public bool HasPreview => !string.IsNullOrEmpty(Session.Preview);
     public string? WorkspaceTaskKey => Session.WorkspaceTaskKey;

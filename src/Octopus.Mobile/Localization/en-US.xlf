@@ -179,6 +179,9 @@
     <unit id="DetailStatus"><segment><source>Status</source></segment></unit>
     <unit id="SurfaceGui"><segment><source>GUI conversation</source></segment></unit>
     <unit id="GuiBadge"><segment><source>GUI</source></segment></unit>
+    <unit id="SessionOriginFromDevice"><segment><source>From {0}</source></segment></unit>
+    <unit id="SessionOriginFromDeviceBy"><segment><source>From {0} · {1}</source></segment></unit>
+    <unit id="SessionDelegatedBy"><segment><source>Delegated by {0}</source></segment></unit>
     <unit id="GuiNotice"><segment><source>This agent runs as a GUI conversation on the computer. The Octopus there is too old to show it on the phone: update it there. You can still rename or close it here.</source></segment></unit>
     <unit id="NewProject"><segment><source>New project</source></segment></unit>
     <unit id="NewSessionAction"><segment><source>New session</source></segment></unit>

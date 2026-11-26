@@ -179,6 +179,9 @@
     <unit id="DetailStatus"><segment><source>Status</source><target state="translated">状态</target></segment></unit>
     <unit id="SurfaceGui"><segment><source>GUI conversation</source><target state="translated">GUI 对话</target></segment></unit>
     <unit id="GuiBadge"><segment><source>GUI</source><target state="translated">GUI</target></segment></unit>
+    <unit id="SessionOriginFromDevice"><segment><source>From {0}</source><target state="translated">来自 {0}</target></segment></unit>
+    <unit id="SessionOriginFromDeviceBy"><segment><source>From {0} · {1}</source><target state="translated">来自 {0} · {1}</target></segment></unit>
+    <unit id="SessionDelegatedBy"><segment><source>Delegated by {0}</source><target state="translated">由 {0} 委托</target></segment></unit>
     <unit id="GuiNotice"><segment><source>This agent runs as a GUI conversation on the computer. The Octopus there is too old to show it on the phone: update it there. You can still rename or close it here.</source><target state="translated">这个智能体在电脑上以 GUI 对话方式运行。电脑上的 Octopus 版本太旧，手机上打不开这个对话，请先在电脑上更新。仍然可以在这里重命名或关闭它。</target></segment></unit>
     <unit id="NewProject"><segment><source>New project</source><target state="translated">新建项目</target></segment></unit>
     <unit id="NewSessionAction"><segment><source>New session</source><target state="translated">新建会话</target></segment></unit>

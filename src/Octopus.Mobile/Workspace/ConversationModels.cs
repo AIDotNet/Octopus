@@ -47,7 +47,27 @@ public abstract partial class ConversationEntry(string id) : ObservableObject
 /// <summary>What the person sent.</summary>
 public sealed partial class ConversationUserEntry(string id) : ConversationEntry(id)
 {
-    [ObservableProperty] public partial string Text { get; set; } = "";
+    private Octopus.Remote.Protocol.CollabEnvelope? _collab;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCollabMessage), nameof(IsPersonMessage), nameof(CollabHeader), nameof(CollabFromDevice), nameof(HasCollabFromDevice), nameof(CollabFromDeviceText), nameof(DisplayText))]
+    public partial string Text { get; set; } = "";
+
+    partial void OnTextChanged(string value) => _collab = Octopus.Remote.Protocol.CollabEnvelope.TryParse(value);
+
+    /// <summary>Injected by the multi-agent collaboration bus (a delegated task, a peer's reply), not typed by the person.</summary>
+    public bool IsCollabMessage => _collab is not null;
+    public bool IsPersonMessage => _collab is null && !string.IsNullOrEmpty(Text);
+    /// <summary>The envelope's kind and sender without ids (<c>Collab Task · Delegated by @Claude Code · Lead</c>).</summary>
+    public string CollabHeader => _collab?.Header ?? "";
+    /// <summary>The computer the delegated work came from, when another computer's agent sent it.</summary>
+    public string? CollabFromDevice => _collab?.FromDevice;
+    public bool HasCollabFromDevice => !string.IsNullOrEmpty(_collab?.FromDevice);
+    public string? CollabFromDeviceText => _collab?.FromDevice is { Length: > 0 } device
+        ? Octopus.Mobile.Localization.MobileLangResources.Format(Octopus.Mobile.Localization.MobileLangResourceKind.SessionOriginFromDevice, device)
+        : null;
+    /// <summary>What to show: the message without the bus's envelope and instructions to the agent.</summary>
+    public string DisplayText => _collab?.Body ?? Text;
     /// <summary>The names of the attached files and images.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAttachments), nameof(AttachmentsText))]

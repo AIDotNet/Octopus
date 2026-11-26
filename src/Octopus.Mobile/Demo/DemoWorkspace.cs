@@ -58,6 +58,9 @@ public sealed partial class DemoWorkspace : IRemoteWorkspace
         var station = new RemoteHost("station", "工作站", HostLink.Relay, isPaired: true) { Agents = [Codex] };
         var console = Add(station, "web-console", "~/srv/web-console", "#3B82D6");
         var migrate = Add(console, "升级数据库迁移", Codex, "GPT-6 · 中", SessionActivity.Idle, null);
+        // Delegated here by an agent on another computer (multi-agent collaboration across devices).
+        migrate.OriginDevice = "MacBook Pro";
+        migrate.OriginSession = "Claude Code · 登录重构";
         // Runs as a GUI conversation on the computer: the phone shows its details, not a terminal.
         Add(console, "接口文档整理", Codex, "GPT-6 · 高", SessionActivity.Idle, "上一轮写好了 docs/api.md", gui: true);
         _screens[migrate.Id] = () => new DemoTerminalConnection(

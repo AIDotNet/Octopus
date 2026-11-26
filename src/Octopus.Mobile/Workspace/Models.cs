@@ -200,6 +200,12 @@ public sealed partial class RemoteSession : ObservableObject
     [ObservableProperty] public partial int Rows { get; set; }
     /// <summary>The name of the device whose view decides the size; null when it is this phone.</summary>
     [ObservableProperty] public partial string? SizeOwner { get; set; }
+    /// <summary>Multi-agent collaboration: the session of the same host whose agent started this one; null when a person did.</summary>
+    [ObservableProperty] public partial string? ParentItemId { get; set; }
+    /// <summary>Set when another computer's agent delegated this session here: that device's name.</summary>
+    [ObservableProperty] public partial string? OriginDevice { get; set; }
+    /// <summary>The delegating session on <see cref="OriginDevice"/> (<c>Claude Code · Lead</c>).</summary>
+    [ObservableProperty] public partial string? OriginSession { get; set; }
 }
 
 /// <summary>What to start in a project.</summary>
