@@ -18,6 +18,8 @@ internal static class SettingsTestSupport
         s.Agents = new AgentSettings();
         s.Terminal = new TerminalSettings();
         s.Appearance = new AppearanceSettings();
+        s.Tray = new TraySettings();
+        s.Startup = new StartupSettings();
         s.WorkspaceCleanup = new WorkspaceCleanupSettings();
     });
 

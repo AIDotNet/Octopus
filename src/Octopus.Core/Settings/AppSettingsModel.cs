@@ -14,6 +14,7 @@ public sealed class AppSettingsModel
     public AgentSettings Agents { get; set; } = new();
     public UpdateSettings Updates { get; set; } = new();
     public TraySettings Tray { get; set; } = new();
+    public StartupSettings Startup { get; set; } = new();
     public RemoteSettings Remote { get; set; } = new();
     public WorkspaceSettings Workspaces { get; set; } = new();
     public WorkspaceCleanupSettings WorkspaceCleanup { get; set; } = new();
@@ -139,6 +140,13 @@ public sealed class TraySettings
     public bool Enabled { get; set; } = true;
     /// <summary>The window's close button hides the window to the tray instead of quitting; Quit in the tray menu (or the app menu) quits.</summary>
     public bool CloseToTray { get; set; }
+}
+
+/// <summary>Desktop startup preferences (launch automatically when the user signs in).</summary>
+public sealed class StartupSettings
+{
+    /// <summary>Register Octopus with the operating system to start automatically at login. Enabled by default.</summary>
+    public bool LaunchAtLogin { get; set; } = true;
 }
 
 /// <summary>Automatic updates (design/10-自动更新.md §9).</summary>

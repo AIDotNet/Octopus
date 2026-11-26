@@ -20,6 +20,10 @@
                             ItemsSource="{Binding Languages}"
                             SelectedValue="{Binding Language, Mode=TwoWay}" />
             </arc:SettingsRow>
+            <arc:SettingsRow Header="{l:AppLangResource SettingsLaunchAtLogin}"
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsLaunchAtLoginHint}">
+                <arc:Switch x:Name="LaunchAtLoginSwitch" IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}" />
+            </arc:SettingsRow>
             <arc:SettingsRow Header="{l:AppLangResource SettingsRestoreAgents}"
                              settings:SettingHelp.Tip="{l:AppLangResource SettingsRestoreAgentsHint}">
                 <arc:Switch x:Name="RestoreAgentsSwitch" IsChecked="{Binding RestoreItemsOnStartup, Mode=TwoWay}" />

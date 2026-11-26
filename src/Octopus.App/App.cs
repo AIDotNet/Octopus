@@ -130,6 +130,23 @@ public class App : Application
                 AppHost.Get<StarPrompt.StarPromptViewModel>().Start();
                 StartupTrace.Log("app:background:star-prompt:end");
             }, Avalonia.Threading.DispatcherPriority.Background);
+            // Synchronize the OS login item with the user's LaunchAtLogin preference (enabled by default).
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    var autoStart = AppHost.Get<Octopus.Platform.IAutoStartService>();
+                    if (autoStart.IsSupported)
+                    {
+                        var enabled = AppHost.Get<Octopus.Storage.ISettingsStore>().Current.Startup.LaunchAtLogin;
+                        autoStart.SetEnabled(enabled);
+                    }
+                }
+                catch (Exception e)
+                {
+                    StartupTrace.LogException("app:background:autostart", e);
+                }
+            });
             StartupTrace.Log("app:initialize:scheduled-background-work");
             // SIGTERM (kill, logout, an installer) quits like the Quit menu item, so Exit below still runs and saves.
             StartupTrace.SetShutdownHandler(() => Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown()));

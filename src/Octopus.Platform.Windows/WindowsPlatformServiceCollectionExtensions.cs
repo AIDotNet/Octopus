@@ -16,6 +16,7 @@ public static class WindowsPlatformServiceCollectionExtensions
         services.AddSingleton<ITerminalEnvironment>(_ => new WindowsTerminalEnvironment());
         services.AddSingleton<IFileOpener, WindowsFileOpener>();
         services.AddSingleton<IAppIcon, NoAppIcon>();
+        services.AddSingleton<IAutoStartService>(_ => new WindowsAutoStartService());
         services.AddSingleton<ISecretStore>(_ => new WindowsSecretStore());
         services.AddSingleton<ITrashService, WindowsTrashService>();
         services.AddSingleton<Updates.IUpdateInstaller>(_ => new WindowsUpdateInstaller());

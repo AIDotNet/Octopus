@@ -115,6 +115,29 @@ public sealed class SettingsPersistenceTests
         }
     }
 
+    [Fact]
+    public void Launch_at_login_defaults_to_enabled_for_missing_or_legacy_settings_and_persists_when_disabled()
+    {
+        using var paths = new SettingsPaths();
+        // Simulate an older settings.json without a "startup" block.
+        Directory.CreateDirectory(paths.DataDirectory);
+        File.WriteAllText(Path.Combine(paths.DataDirectory, "settings.json"), """{"version":1,"tray":{"enabled":true}}""");
+
+        using (var settings = new JsonSettingsStore(paths))
+        {
+            settings.Load();
+            Assert.True(settings.Current.Startup.LaunchAtLogin);
+            settings.Update(s => s.Startup.LaunchAtLogin = false);
+            settings.Flush();
+        }
+
+        using (var reloaded = new JsonSettingsStore(paths))
+        {
+            reloaded.Load();
+            Assert.False(reloaded.Current.Startup.LaunchAtLogin);
+        }
+    }
+
     private static Task WatchShellOptions(TerminalSettingsViewModel model)
     {
         var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

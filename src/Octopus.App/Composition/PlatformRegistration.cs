@@ -26,7 +26,16 @@ internal static class PlatformRegistration
         if (FixedAppPaths.FromEnvironment() is { } paths)
         {
             services.Replace(ServiceDescriptor.Singleton<IAppPaths>(paths));
+            // An isolated instance must not overwrite the primary install's OS login item.
+            services.Replace(ServiceDescriptor.Singleton<IAutoStartService, NoAutoStartService>());
         }
+#if DEBUG
+        // Development runs (`dotnet run`) must not register bin/Debug apphosts into OS login items unless opted in.
+        if (!string.Equals(Environment.GetEnvironmentVariable("OCTOPUS_ALLOW_DEBUG_AUTOSTART"), "1", StringComparison.Ordinal))
+        {
+            services.Replace(ServiceDescriptor.Singleton<IAutoStartService, NoAutoStartService>());
+        }
+#endif
         return services;
     }
 }

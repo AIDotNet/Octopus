@@ -17,6 +17,7 @@ public static class MacOSPlatformServiceCollectionExtensions
         services.AddSingleton<ITerminalEnvironment>(sp => new MacTerminalEnvironment(sp.GetRequiredService<IProcessRunner>()));
         services.AddSingleton<IFileOpener, MacFileOpener>();
         services.AddSingleton<IAppIcon, MacAppIcon>();
+        services.AddSingleton<IAutoStartService>(_ => new MacAutoStartService());
         services.AddSingleton<ISecretStore>(_ => new MacSecretStore());
         services.AddSingleton<ITrashService>(_ => new MacTrashService());
         services.AddSingleton<Updates.IUpdateInstaller>(sp => new MacUpdateInstaller(sp.GetRequiredService<IProcessRunner>()));

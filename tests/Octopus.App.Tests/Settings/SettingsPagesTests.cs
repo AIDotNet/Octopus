@@ -355,6 +355,30 @@ public class SettingsPagesTests
     }
 
     [AvaloniaFact]
+    public void Launch_at_login_is_enabled_by_default_and_toggling_syncs_auto_start()
+    {
+        var autoStart = AppHost.Get<FakeAutoStartService>();
+        autoStart.Calls.Clear();
+        var general = AppHost.Get<GeneralSettingsViewModel>();
+        var settings = AppHost.Get<ISettingsStore>();
+
+        Assert.True(general.LaunchAtLogin);
+        Assert.True(settings.Current.Startup.LaunchAtLogin);
+
+        general.LaunchAtLogin = false;
+        Assert.False(general.LaunchAtLogin);
+        Assert.False(settings.Current.Startup.LaunchAtLogin);
+        Assert.False(autoStart.Enabled);
+        Assert.Equal([false], autoStart.Calls);
+
+        general.LaunchAtLogin = true;
+        Assert.True(general.LaunchAtLogin);
+        Assert.True(settings.Current.Startup.LaunchAtLogin);
+        Assert.True(autoStart.Enabled);
+        Assert.Equal([false, true], autoStart.Calls);
+    }
+
+    [AvaloniaFact]
     public void Tray_settings_are_saved()
     {
         var general = AppHost.Get<GeneralSettingsViewModel>();

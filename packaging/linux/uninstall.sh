@@ -12,6 +12,14 @@ else
   "$DIR/Octopus" --cleanup-hooks >/dev/null 2>&1 || true
 fi
 
+# Remove per-user XDG autostart entry created by the app, if present.
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+  sudo_home="$(eval printf '%s' "~$SUDO_USER" 2>/dev/null || true)"
+  [ -z "$sudo_home" ] || rm -f "$sudo_home/.config/autostart/octopus.desktop"
+else
+  rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/autostart/octopus.desktop"
+fi
+
 link="$(sed -n 's/^link=//p' "$MANIFEST")"
 entry="$(sed -n 's/^entry=//p' "$MANIFEST")"
 # Only remove the link if it still points at this install.

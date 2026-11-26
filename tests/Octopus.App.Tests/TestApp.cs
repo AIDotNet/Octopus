@@ -76,6 +76,8 @@ public static class TestApp
             services.Replace(ServiceDescriptor.Singleton<IDialogService, FakeDialogService>());
             services.AddSingleton(p => (FakeDialogService)p.GetRequiredService<IDialogService>());
             services.Replace(ServiceDescriptor.Singleton<IAppIcon, NoAppIcon>()); // never touch the real Dock
+            services.Replace(ServiceDescriptor.Singleton<IAutoStartService, FakeAutoStartService>()); // never touch real OS login items
+            services.AddSingleton(p => (FakeAutoStartService)p.GetRequiredService<IAutoStartService>());
             services.Replace(ServiceDescriptor.Singleton<IPickerService, FakePickerService>());
             // Model prices never come from the network in tests: an empty catalog, so the built-in table answers.
             services.Replace(ServiceDescriptor.Singleton(p => new Octopus.Plugins.Usage.ModelPriceCatalog(

@@ -205,7 +205,7 @@
     <unit id="SettingsEnvSecretNote"><segment><source>Saved as plain text in settings.json</source></segment></unit>
     <unit id="SettingsBrowse"><segment><source>Browse…</source></segment></unit>
     <unit id="SettingsGeneralTitle"><segment><source>General</source></segment></unit>
-    <unit id="SettingsGeneralSubtitle"><segment><source>Language and system tray.</source></segment></unit>
+    <unit id="SettingsGeneralSubtitle"><segment><source>Language, startup behavior, and system tray.</source></segment></unit>
     <unit id="SettingsLanguageHint"><segment><source>The language of the whole app</source></segment></unit>
     <unit id="SettingsTerminalTitle"><segment><source>Terminal</source></segment></unit>
     <unit id="SettingsTerminalSubtitle"><segment><source>The shell, the font and how much history a terminal keeps. Changes apply to open terminals at once.</source></segment></unit>
@@ -510,6 +510,8 @@
     <unit id="TrayWaiting"><segment><source>Octopus · {0} waiting for you</source></segment></unit>
     <unit id="TrayShow"><segment><source>Show Octopus</source></segment></unit>
     <unit id="TrayQuit"><segment><source>Quit Octopus</source></segment></unit>
+    <unit id="SettingsLaunchAtLogin"><segment><source>Launch at login</source></segment></unit>
+    <unit id="SettingsLaunchAtLoginHint"><segment><source>Automatically start Octopus when you sign in to your computer.</source></segment></unit>
     <unit id="SettingsRestoreAgents"><segment><source>Restore agents on startup</source></segment></unit>
     <unit id="SettingsRestoreAgentsHint"><segment><source>Keep open agent tabs in the sidebar across restarts. Background tabs start when you switch to them.</source></segment></unit>
     <unit id="SettingsResumeAgents"><segment><source>Continue agent sessions on restart</source></segment></unit>

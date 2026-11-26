@@ -4,6 +4,7 @@ using Octopus.App.Services;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Core.Terminals;
+using Octopus.Platform;
 using Octopus.Storage;
 using Octopus.Terminal;
 
@@ -404,5 +405,26 @@ public sealed class FakeModelDiscovery : IModelDiscovery
         Calls.Add((definition.Id, executable, environmentOverrides));
         return Task.FromResult<IReadOnlyList<AgentOption>>(
             ModelsByAgent.TryGetValue(definition.Id, out var list) ? list : []);
+    }
+}
+
+/// <summary>In-memory auto-start service: tests never register real OS login items.</summary>
+public sealed class FakeAutoStartService : IAutoStartService
+{
+    public bool IsSupported { get; set; } = true;
+    public bool Enabled { get; set; }
+    public List<bool> Calls { get; } = [];
+
+    public bool IsEnabled() => IsSupported && Enabled;
+
+    public bool SetEnabled(bool enabled)
+    {
+        if (!IsSupported)
+        {
+            return false;
+        }
+        Enabled = enabled;
+        Calls.Add(enabled);
+        return true;
     }
 }

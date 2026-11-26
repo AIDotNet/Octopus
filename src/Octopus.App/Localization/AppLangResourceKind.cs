@@ -540,6 +540,8 @@ public enum AppLangResourceKind
     TrayWaiting,
     TrayShow,
     TrayQuit,
+    SettingsLaunchAtLogin,
+    SettingsLaunchAtLoginHint,
     SettingsRestoreAgents,
     SettingsRestoreAgentsHint,
     SettingsResumeAgents,

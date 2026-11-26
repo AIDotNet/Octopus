@@ -7,5 +7,6 @@
         <ProjectReference Include="../Octopus.Platform/Octopus.Platform.csproj" />
     </ItemGroup>
     <ItemGroup>
+        <InternalsVisibleTo Include="Octopus.Platform.Tests" />
     </ItemGroup>
 </Project>

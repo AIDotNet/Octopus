@@ -13,6 +13,7 @@ internal static class SettingsNormalizer
         settings.Agents ??= new();
         settings.Updates ??= new();
         settings.Tray ??= new();
+        settings.Startup ??= new();
         settings.Remote ??= new();
         settings.Workspaces ??= new();
         settings.Workspaces.RootDirectory = string.IsNullOrWhiteSpace(settings.Workspaces.RootDirectory)

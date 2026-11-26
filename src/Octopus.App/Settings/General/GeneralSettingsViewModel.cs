@@ -1,19 +1,22 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Octopus.App.Localization;
+using Octopus.Platform;
 using Octopus.Storage;
 using TKCode.Arc;
 using TKCode.Arc.Localization;
 
 namespace Octopus.App.Settings.General;
 
-/// <summary>The general page: language, startup agent restore, and system tray.</summary>
+/// <summary>The general page: language, launch at login, startup agent restore, and system tray.</summary>
 public sealed partial class GeneralSettingsViewModel : ObservableObject
 {
     private readonly ISettingsStore _settings;
+    private readonly IAutoStartService _autoStart;
 
-    public GeneralSettingsViewModel(ISettingsStore settings)
+    public GeneralSettingsViewModel(ISettingsStore settings, IAutoStartService autoStart)
     {
         _settings = settings;
+        _autoStart = autoStart;
         Languages = [.. AppLanguages.All.Select(l => new SelectOption(l.Tag.ToString(), l.Name))];
     }
 
@@ -35,6 +38,24 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject
             }
             ArcLanguage.Set(tag);
             _settings.Update(s => s.Appearance.Language = tag.ToString());
+            OnPropertyChanged();
+        }
+    }
+
+    public bool LaunchAtLogin
+    {
+        get => _settings.Current.Startup.LaunchAtLogin;
+        set
+        {
+            if (value == LaunchAtLogin)
+            {
+                return;
+            }
+            _settings.Update(s => s.Startup.LaunchAtLogin = value);
+            if (_autoStart.IsSupported)
+            {
+                _autoStart.SetEnabled(value);
+            }
             OnPropertyChanged();
         }
     }

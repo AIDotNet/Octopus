@@ -33,7 +33,9 @@ SetupIconFile={#SourcePath}\..\..\src\Octopus.App\Assets\Icon\octopus.ico
 UninstallDisplayIcon={app}\Octopus.exe
 OutputDir={#OutputDir}
 OutputBaseFilename=Octopus-{#AppVersion}-win-x64-setup
-Compression=lzma2
+Compression=lzma2/ultra64
+LZMADictionarySize=65536
+LZMAUseSeparateProcess=yes
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
@@ -54,6 +56,8 @@ Root: HKA; Subkey: "Software\Classes\octopus"; ValueType: string; ValueName: "";
 Root: HKA; Subkey: "Software\Classes\octopus"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\octopus\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\Octopus.exe"",0"
 Root: HKA; Subkey: "Software\Classes\octopus\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Octopus.exe"" ""%1"""
+; Remove the per-user launch-at-login entry created by the app when uninstalling.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Octopus"; Flags: uninsdeletevalue dontcreatekey
 
 [Run]
 Filename: "{app}\Octopus.exe"; Description: "{cm:LaunchProgram,Octopus}"; Flags: nowait postinstall skipifsilent
