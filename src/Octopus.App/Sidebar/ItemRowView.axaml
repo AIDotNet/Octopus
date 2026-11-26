@@ -64,6 +64,34 @@
                         <TextBlock Text="{Binding IsolationBadge}" FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
                                    FontSize="9.5" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
                     </Border>
+                    <!-- A delegate running on another computer, nested under the session here that started it. -->
+                    <Border IsVisible="{Binding HasHostBadge}" VerticalAlignment="Center"
+                            Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                            CornerRadius="4"
+                            Padding="3,0"
+                            arc:Tooltip.Tip="{Binding HostBadgeTip}">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <lucide:LucideIcon Kind="Monitor" Size="9" VerticalAlignment="Center"
+                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                            <TextBlock Text="{Binding HostBadge}" MaxWidth="90" TextTrimming="CharacterEllipsis"
+                                       FontSize="9.5" Foreground="{arc:ArcDesignTokenResource AccentStrong}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                    <!-- Work another session delegated here, often from another computer. -->
+                    <Border IsVisible="{Binding HasOrigin}" VerticalAlignment="Center"
+                            Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="3,0"
+                            arc:Tooltip.Tip="{Binding OriginTip}">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <lucide:LucideIcon Kind="ArrowDownLeft" Size="9" VerticalAlignment="Center"
+                                               Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                            <TextBlock Text="{Binding OriginText}" MaxWidth="110" TextTrimming="CharacterEllipsis"
+                                       FontSize="9.5" Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
                     <!-- Subagents: collapsed by default as one bot icon per subagent (up to 4, then ...); click to expand/collapse cards below. -->
                     <Button Classes="row" Height="18" VerticalAlignment="Center"
                             IsVisible="{Binding Subagents.HasAny, FallbackValue=False}"

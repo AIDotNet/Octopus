@@ -30,6 +30,11 @@ public sealed class CollabTaskRecord
     public string? ResultSummary { get; set; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CompletedAt { get; set; }
+
+    /// <summary>Coordinator event sequence of the last change; lets <c>await_events</c> report each change exactly once.</summary>
+    public long UpdatedSeq { get; set; }
+
+    public bool IsFinished => Status is CollabTaskStatus.Completed or CollabTaskStatus.Failed or CollabTaskStatus.Cancelled;
 }
 
 public sealed class CollabMessageRecord
@@ -59,6 +64,12 @@ public sealed class CollabThreadRecord
     public string Status { get; set; } = "active";
     public List<CollabMessageRecord> Messages { get; init; } = [];
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Coordinator event sequence of the last change; lets <c>await_events</c> report each change exactly once.</summary>
+    public long UpdatedSeq { get; set; }
+
+    /// <summary>True once the thread can no longer progress without a new message (agreed, blocked, cancelled, interrupted, out of budget).</summary>
+    public bool IsClosed => Status is "agreed" or "blocked" or "cancelled" or "interrupted" or "paused_budget";
 }
 
 public sealed class CollabBubbledApproval
@@ -123,6 +134,9 @@ public interface ICollabSessionBridge
     /// <summary>Removes any still-queued (not yet dispatched) collaboration prompts matching the given thread or task.</summary>
     int CancelQueuedCollabPrompts(string? threadId = null, string? taskId = null) => 0;
 
+    /// <summary>Stops the session's running turn, as if the user pressed Stop. Used when a delegated task is cancelled.</summary>
+    Task CancelActiveTurnAsync() => Task.CompletedTask;
+
     /// <summary>Produces a concise summary of recent conversation turns for peer inspection without waking the model.</summary>
     string ReadRecentSummary(int maxTurns = 5);
 }
@@ -145,7 +159,8 @@ public sealed record CollabPeerInfo(
     string? Branch,
     string? ParentItemId,
     string? Isolation,
-    string? Summary);
+    string? Summary,
+    string? Host = null);
 
 /// <summary>Read-only descriptor for one installed agent definition that can be spawned for delegation.</summary>
 public sealed record CollabAvailableAgentInfo(

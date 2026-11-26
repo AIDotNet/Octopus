@@ -273,6 +273,17 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         }
     }
 
+    public bool CollabAllowRemoteHosts
+    {
+        get => _settings.Current.Agents.Collab.AllowRemoteHosts;
+        set
+        {
+            if (value == CollabAllowRemoteHosts) return;
+            _settings.Update(s => s.Agents.Collab.AllowRemoteHosts = value);
+            OnPropertyChanged();
+        }
+    }
+
     public string CollabMaxHopsKey
     {
         get => _settings.Current.Agents.Collab.MaxNegotiationHops.ToString();
@@ -580,6 +591,7 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         OnPropertyChanged(nameof(CollabEnabled));
         OnPropertyChanged(nameof(CollabDefaultIsolationKey));
         OnPropertyChanged(nameof(CollabEnableTerminalBridge));
+        OnPropertyChanged(nameof(CollabAllowRemoteHosts));
         OnPropertyChanged(nameof(CollabMaxHopsKey));
     });
 

@@ -231,6 +231,7 @@ public sealed partial class UserTurnItem : AgentTimelineItem
             "(The other session marked this thread as agreed/completed;",
             "(Reply via `reply_thread(",
             "(Please follow the user's guidance and continue or conclude the thread",
+            "(This message comes from another computer:",
         ];
 
         foreach (var prefix in footerPrefixes)

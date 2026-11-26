@@ -16,6 +16,10 @@ internal static class CollabModule
     {
         services.AddSingleton<CollabMcpServer>();
         services.AddSingleton<CollabCliMcpInjector>();
+        services.AddSingleton<CollabStateStore>();
+        services.AddSingleton<ICollabRemoteHosts>(sp => new RuntimeCollabRemoteHosts(
+            sp.GetRequiredService<Octopus.App.Remote.RemoteClientRuntime>(),
+            sp.GetService<Octopus.App.Remote.RemoteProjects>()));
         services.AddSingleton<CollabCoordinator>(sp => new CollabCoordinator(
             sp.GetRequiredService<IProjectService>(),
             sp.GetRequiredService<IAgentCatalog>(),
@@ -27,7 +31,9 @@ internal static class CollabModule
             sp.GetService<ISignalHub>(),
             sp.GetService<TerminalSessionRegistry>(),
             () => sp.GetService<ITabContentRegistry>(),
-            () => sp.GetService<IWorkspaceManager>()));
+            () => sp.GetService<IWorkspaceManager>(),
+            sp.GetService<CollabStateStore>(),
+            () => sp.GetService<ICollabRemoteHosts>()));
         services.AddSingleton<ICollabCoordinator>(sp => sp.GetRequiredService<CollabCoordinator>());
     }
 }

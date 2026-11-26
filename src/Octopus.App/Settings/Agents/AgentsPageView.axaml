@@ -500,6 +500,17 @@
                 <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" IsVisible="{Binding CollabEnabled}" />
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsVisible="{Binding CollabEnabled}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                        <TextBlock Classes="name" Text="{l:AppLangResource SettingsCollabAllowRemoteHosts}" VerticalAlignment="Center" />
+                        <settings:SettingHelpTip Tip="{l:AppLangResource SettingsCollabAllowRemoteHostsHint}" />
+                    </StackPanel>
+                    <arc:Switch Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{l:AppLangResource SettingsCollabAllowRemoteHosts}"
+                                IsChecked="{Binding CollabAllowRemoteHosts, Mode=TwoWay}" />
+                </Grid>
+                <Border Height="1" Background="{arc:ArcDesignTokenResource BorderSubtle}" IsVisible="{Binding CollabEnabled}" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" IsVisible="{Binding CollabEnabled}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                         <TextBlock Classes="name" Text="{l:AppLangResource SettingsCollabMaxHops}" VerticalAlignment="Center" />
                         <settings:SettingHelpTip Tip="{l:AppLangResource SettingsCollabMaxHopsHint}" />
                     </StackPanel>

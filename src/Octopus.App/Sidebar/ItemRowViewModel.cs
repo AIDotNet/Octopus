@@ -74,7 +74,17 @@ public sealed partial class ItemRowViewModel : ObservableObject
         "read_only" => "ro",
         _ => null,
     };
-    public bool HasIsolationBadge => !string.IsNullOrEmpty(IsolationBadge);
+    public bool HasIsolationBadge => !string.IsNullOrEmpty(IsolationBadge) && !HasHostBadge;
+
+    /// <summary>The other computer this session runs on, for a delegate nested under a session of this computer (<c>@Build Server</c>).</summary>
+    public string? HostBadge { get; set; }
+    public bool HasHostBadge => !string.IsNullOrEmpty(HostBadge);
+    public string? HostBadgeTip { get; set; }
+
+    /// <summary>Where the work came from when another session (often on another computer) delegated it (<c>来自 MacBook</c>).</summary>
+    public string? OriginText { get; set; }
+    public string? OriginTip { get; set; }
+    public bool HasOrigin => !string.IsNullOrEmpty(OriginText);
     public bool HasWaitingChild => SpawnedChildren.Any(c => c.IsWaiting || c.HasWaitingChild);
     public bool ShowSpawnedChildren => HasSpawnedChildren && IsChildrenExpanded;
 

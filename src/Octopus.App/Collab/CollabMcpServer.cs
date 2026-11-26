@@ -31,6 +31,21 @@ public sealed class CollabMcpServer : IDisposable
     private Task? _acceptLoop;
     private ICollabToolHandler? _handler;
     private bool _disposed;
+    private readonly string _serverName = ServerName;
+    private readonly string? _instructions;
+    private readonly Func<JsonArray>? _tools;
+
+    public CollabMcpServer()
+    {
+    }
+
+    /// <summary>A second loopback MCP server with its own name, instructions and tools (e.g. the bot-only <c>octopus-bot</c>).</summary>
+    internal CollabMcpServer(string serverName, string instructions, Func<JsonArray> tools)
+    {
+        _serverName = serverName;
+        _instructions = instructions;
+        _tools = tools;
+    }
 
     public string? EndpointUrl { get; private set; }
     public bool IsRunning => _listener is not null && !_disposed;
@@ -98,7 +113,7 @@ public sealed class CollabMcpServer : IDisposable
         var hasForwarder = !string.IsNullOrWhiteSpace(forwarderExecutable) && File.Exists(forwarderExecutable);
         return new AcpMcpServerConfig
         {
-            Name = ServerName,
+            Name = _serverName,
             Transport = hasForwarder ? "auto" : "http",
             Url = EndpointUrl,
             Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -206,7 +221,24 @@ public sealed class CollabMcpServer : IDisposable
                     return;
                 }
 
-                var responseJson = await HandleRpcPayloadAsync(callerItemId, req.Body, ct).ConfigureAwait(false);
+                // Long polls (await_events) end as soon as the client hangs up, e.g. when the user stops the agent's turn;
+                // otherwise the coordinator would keep a waiter alive for up to 45 s for nobody.
+                using var requestCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var hangupWatch = WatchForHangupAsync(stream, requestCts);
+                string? responseJson;
+                try
+                {
+                    responseJson = await HandleRpcPayloadAsync(callerItemId, req.Body, ct, requestCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (requestCts.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    return; // client is gone; nobody to answer
+                }
+                finally
+                {
+                    await requestCts.CancelAsync().ConfigureAwait(false);
+                    try { await hangupWatch.ConfigureAwait(false); } catch { }
+                }
                 if (responseJson is null)
                 {
                     await WriteHttpResponseAsync(stream, 202, "Accepted", "", ct).ConfigureAwait(false);
@@ -229,7 +261,31 @@ public sealed class CollabMcpServer : IDisposable
         }
     }
 
-    internal async Task<string?> HandleRpcPayloadAsync(string callerItemId, string body, CancellationToken ct)
+    /// <summary>
+    /// Completes when the client closes its side (a read returns 0 bytes or fails) and then cancels <paramref name="requestCts"/>.
+    /// Clients send one request per connection (we answer with Connection: close), so any read result means the request is over.
+    /// </summary>
+    private static async Task WatchForHangupAsync(NetworkStream stream, CancellationTokenSource requestCts)
+    {
+        var probe = new byte[1];
+        try
+        {
+            _ = await stream.ReadAsync(probe, requestCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // request finished normally
+        }
+        catch (Exception e) when (e is IOException or ObjectDisposedException or SocketException)
+        {
+        }
+        try { await requestCts.CancelAsync().ConfigureAwait(false); } catch (ObjectDisposedException) { }
+    }
+
+    /// <param name="ct">Server lifetime.</param>
+    /// <param name="requestCt">Cancelled when the client hangs up; only long-polling tools observe it, so a delegation
+    /// is never left half-done because the client stopped listening.</param>
+    internal async Task<string?> HandleRpcPayloadAsync(string callerItemId, string body, CancellationToken ct, CancellationToken requestCt = default)
     {
         JsonNode? parsed;
         try
@@ -269,10 +325,10 @@ public sealed class CollabMcpServer : IDisposable
                     },
                     ["serverInfo"] = new JsonObject
                     {
-                        ["name"] = ServerName,
+                        ["name"] = _serverName,
                         ["version"] = "1.0.0",
                     },
-                    ["instructions"] = "Octopus local multi-agent collaboration bus. Use list_peers to inspect active sessions and available agents (e.g. codex, agy, claude), read_session to inspect context, delegate_task to assign work asynchronously to another agent (nested under you in Octopus), send_message to negotiate with an existing session, reply_thread to answer a thread, and await_events to wait for parallel updates.",
+                    ["instructions"] = _instructions ?? "Octopus local multi-agent collaboration bus. Use list_peers to inspect active sessions and available agents (e.g. codex, agy, claude), read_session to inspect context, delegate_task to assign work asynchronously to another agent (nested under you in Octopus), send_message to negotiate with an existing session, reply_thread to answer a thread, await_events to wait for parallel updates (each change is reported once), and cancel_task to stop a delegated task you no longer need.",
                 });
 
             case "ping":
@@ -281,7 +337,7 @@ public sealed class CollabMcpServer : IDisposable
             case "tools/list":
                 return SerializeResult(idClone, new JsonObject
                 {
-                    ["tools"] = BuildToolSchemas(),
+                    ["tools"] = _tools?.Invoke() ?? BuildToolSchemas(),
                 });
 
             case "tools/call":
@@ -298,8 +354,13 @@ public sealed class CollabMcpServer : IDisposable
                 }
                 try
                 {
-                    var result = await _handler.CallToolAsync(callerItemId, toolName, arguments, ct).ConfigureAwait(false);
+                    var toolCt = toolName == "await_events" && requestCt.CanBeCanceled ? requestCt : ct;
+                    var result = await _handler.CallToolAsync(callerItemId, toolName, arguments, toolCt).ConfigureAwait(false);
                     return SerializeResult(idClone, result);
+                }
+                catch (OperationCanceledException) when (requestCt.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -323,7 +384,7 @@ public sealed class CollabMcpServer : IDisposable
     new JsonArray(
         ToolSchema(
             "list_peers",
-            "List active agent/terminal sessions in the current Octopus project (or merged project group) plus installed coding agents (e.g. codex, agy, claude) available for delegation.",
+            "List active agent/terminal sessions in the current Octopus project (or merged project group), sessions in projects on other paired computers (with their host), remote projects you can delegate into, plus installed coding agents (e.g. codex, agy, claude) available for delegation.",
             new JsonObject
             {
                 ["type"] = "object",
@@ -376,6 +437,7 @@ public sealed class CollabMcpServer : IDisposable
                     },
                     ["model"] = new JsonObject { ["type"] = "string", ["description"] = "Optional model id override for the target agent." },
                     ["effort"] = new JsonObject { ["type"] = "string", ["description"] = "Optional reasoning effort override." },
+                    ["project_id"] = new JsonObject { ["type"] = "string", ["description"] = "Optional remote project id from list_peers.remote_projects: starts the agent on that other computer (isolation 'shared' only)." },
                     ["context_files"] = new JsonObject
                     {
                         ["type"] = "array",
@@ -422,7 +484,7 @@ public sealed class CollabMcpServer : IDisposable
             }),
         ToolSchema(
             "await_events",
-            "Wait briefly (up to 45s) for one or more delegated tasks or negotiation threads to report updates or finish. Returns immediately when an update is available, or returns live progress on timeout.",
+            "Wait briefly (up to 45s) for delegated tasks or negotiation threads to report updates or finish. Each change is reported once: finished items you have already seen are omitted unless you name them in ids. Returns immediately when there is news or when nothing is pending, otherwise returns live progress on timeout.",
             new JsonObject
             {
                 ["type"] = "object",
@@ -436,6 +498,19 @@ public sealed class CollabMcpServer : IDisposable
                     },
                     ["timeout_seconds"] = new JsonObject { ["type"] = "integer", ["description"] = "Seconds to wait before returning current progress (1-45, default 25)." },
                 },
+            }),
+        ToolSchema(
+            "cancel_task",
+            "Cancel a task you delegated: stops the delegate's running turn and also cancels anything that delegate delegated further. Use it when the user changes their mind or the result is no longer needed.",
+            new JsonObject
+            {
+                ["type"] = "object",
+                ["required"] = new JsonArray("task_id"),
+                ["properties"] = new JsonObject
+                {
+                    ["task_id"] = new JsonObject { ["type"] = "string", ["description"] = "The task_id returned by delegate_task." },
+                    ["reason"] = new JsonObject { ["type"] = "string", ["description"] = "Optional short reason, recorded as the task result." },
+                },
             })
     );
 
@@ -446,13 +521,18 @@ public sealed class CollabMcpServer : IDisposable
         ["inputSchema"] = inputSchema,
     };
 
+    private static readonly System.Text.Json.JsonSerializerOptions WireJsonOptions = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     private static string SerializeResult(JsonNode id, JsonObject result) =>
         new JsonObject
         {
             ["jsonrpc"] = "2.0",
             ["id"] = id,
             ["result"] = result,
-        }.ToJsonString();
+        }.ToJsonString(WireJsonOptions);
 
     private static string SerializeError(JsonNode? id, int code, string message) =>
         new JsonObject

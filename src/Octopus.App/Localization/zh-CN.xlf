@@ -1647,6 +1647,12 @@
     <unit id="SettingsCollabTerminalBridgeHint"><segment><source>Inject the local collaboration MCP server into native terminal agent tabs and bridge cross-session messages through signals.</source><target state="translated">为原生终端标签页中的智能体 CLI 自动注入本地协作 MCP，并通过信号通道桥接跨会话消息。</target></segment></unit>
     <unit id="SettingsCollabMaxHops"><segment><source>Max negotiation rounds</source><target state="translated">跨会话交涉最大轮次</target></segment></unit>
     <unit id="SettingsCollabMaxHopsHint"><segment><source>Automatic loop guard per cross-session negotiation thread before pausing for user review.</source><target state="translated">防死循环护栏：单条跨会话交涉达到上限轮次后自动暂停，等待你确认或放行。</target></segment></unit>
+    <unit id="SettingsCollabAllowRemoteHosts"><segment><source>Delegate to other computers</source><target state="translated">允许委托到其他电脑</target></segment></unit>
+    <unit id="SettingsCollabAllowRemoteHostsHint"><segment><source>Agents can see sessions in projects you added from paired computers and start agents there. That work runs on the other computer; its permission requests show up here.</source><target state="translated">Agent 可以看到你从已配对电脑添加的项目里的会话，并在那里启动 Agent。工作在对方电脑上运行，对方的权限请求会出现在这里。</target></segment></unit>
+    <unit id="SidebarCollabDelegatedByLocal"><segment><source>Delegated by {0} on this computer</source><target state="translated">由本机的 {0} 委托</target></segment></unit>
+    <unit id="SidebarCollabDelegatedFromDevice"><segment><source>From {0}</source><target state="translated">来自 {0}</target></segment></unit>
+    <unit id="SidebarCollabDelegatedFromDeviceTip"><segment><source>Delegated by {1} on {0}</source><target state="translated">由 {0} 上的 {1} 委托</target></segment></unit>
+    <unit id="SidebarCollabRunsOnHostTip"><segment><source>Runs on {0}</source><target state="translated">运行在 {0}</target></segment></unit>
     <unit id="CollabRibbonTitle"><segment><source>Collab</source><target state="translated">协作</target></segment></unit>
     <unit id="CollabBubbleAllow"><segment><source>Allow once</source><target state="translated">允许本次</target></segment></unit>
     <unit id="CollabBubbleDeny"><segment><source>Deny</source><target state="translated">拒绝</target></segment></unit>

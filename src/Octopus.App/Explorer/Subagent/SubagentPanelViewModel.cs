@@ -255,9 +255,22 @@ public sealed partial class SubagentPanelViewModel : ObservableObject, IDisposab
         return true;
     }
 
+    /// <summary>The target on show as a request that reopens it, or null when there is none.</summary>
+    public OpenSubagentPanelRequested? CurrentTarget =>
+        HasTarget && _parentItemId is { } parentItemId && _subagentId is { } subagentId
+            ? new OpenSubagentPanelRequested(parentItemId, subagentId, _workingDirectory, _liveRun, _liveSiblings)
+            : null;
+
     /// <summary>Clears the active target and releases all timeline data and timers.</summary>
     [RelayCommand]
     public void Close()
+    {
+        Clear();
+        CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Drops the active target like <see cref="Close"/>, without telling anyone the user closed it (a project switch).</summary>
+    public void Clear()
     {
         DetachLiveSubscriptions();
         _parentItemId = null;
@@ -281,8 +294,10 @@ public sealed partial class SubagentPanelViewModel : ObservableObject, IDisposab
         CopyableConclusion = null;
         ReleaseTimeline();
         NotifyMetadataDerived();
+        OnPropertyChanged(nameof(ParentItemId));
+        OnPropertyChanged(nameof(SubagentId));
+        OnPropertyChanged(nameof(WorkingDirectory));
         OnPropertyChanged(nameof(IsMounted));
-        CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 
     [RelayCommand]

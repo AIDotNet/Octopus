@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Octopus.App.Common;
 using Octopus.App.Explorer.Files;
 using Octopus.App.Explorer.Git;
@@ -11,6 +12,7 @@ using Octopus.App.Files;
 using Octopus.App.Localization;
 using Octopus.App.Plugins;
 using Octopus.App.Services;
+using Octopus.App.Sidebar;
 using Octopus.Core.Projects;
 using Octopus.FileSystem;
 using Octopus.Git;
@@ -48,6 +50,10 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
     private readonly HashSet<string> _pendingDirs = new(StringComparer.Ordinal);
     private bool _pendingDirsScheduled;
     private ExplorerTab _lastNonSubagentTab = ExplorerTab.Files;
+    /// <summary>The project the subagent tab belongs to (see <see cref="SubagentProjectKey"/>); "" before any project.</summary>
+    private string _subagentProjectKey = "";
+    /// <summary>Per project: the subagent the tab showed when the user left it, and whether the tab was the one on show.</summary>
+    private readonly Dictionary<string, (OpenSubagentPanelRequested Target, bool Showing)> _subagentByProject = new(StringComparer.Ordinal);
 
     public ExplorerPanelViewModel(
         FileTreeViewModel files,
@@ -325,6 +331,7 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
             Tab = _lastNonSubagentTab;
         }
         NotifyTabs();
+        WeakReferenceMessenger.Default.Send(new SubagentPanelClosed());
     }
 
     /// <summary>Opens the requested subagent in the singleton right-panel tab (Scheme A).</summary>
@@ -349,6 +356,57 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         if (Tab == ExplorerTab.Subagent && ActivePluginPanelId is null) return;
         ActivePluginPanelId = null;
         Tab = ExplorerTab.Subagent;
+        NotifyTabs();
+    }
+
+    /// <summary>
+    /// Which project a subagent belongs to: the device plus the project's main root, so moving between a project's
+    /// worktrees keeps the subagent while moving to another project does not.
+    /// </summary>
+    private static string SubagentProjectKey(string? path, string? sshHost, string? remoteHost, string? rootPath)
+    {
+        var folder = rootPath ?? path;
+        if (folder is null) return "";
+        var device = remoteHost is { Length: > 0 } ? DeviceKeys.Remote(remoteHost)
+            : sshHost is { Length: > 0 } ? DeviceKeys.Ssh(sshHost)
+            : "local";
+        return device + "|" + folder.TrimEnd('/', '\\');
+    }
+
+    /// <summary>
+    /// The subagent tab follows the project: the one shown in the project being left is put aside, and the one last shown
+    /// in the project being entered (if its agent still exists) comes back, on show again if it was on show then.
+    /// </summary>
+    private void FollowProjectWithSubagent(string key, bool checkItemExists)
+    {
+        if (string.Equals(key, _subagentProjectKey, StringComparison.Ordinal)) return;
+
+        var showing = Tab == ExplorerTab.Subagent && ActivePluginPanelId is null;
+        if (Subagent.CurrentTarget is { } current)
+        {
+            _subagentByProject[_subagentProjectKey] = (current, showing);
+        }
+        else
+        {
+            _subagentByProject.Remove(_subagentProjectKey);
+        }
+        _subagentProjectKey = key;
+        Subagent.Clear();
+
+        if (_subagentByProject.Remove(key, out var saved)
+            && (!checkItemExists || _projectService is null || _projectService.FindItem(saved.Target.ParentItemId) is not null))
+        {
+            Subagent.Open(saved.Target);
+        }
+
+        if (Subagent.HasTarget && saved.Showing && ActivePluginPanelId is null)
+        {
+            Tab = ExplorerTab.Subagent;
+        }
+        else if (Tab == ExplorerTab.Subagent && !Subagent.HasTarget)
+        {
+            Tab = _lastNonSubagentTab;
+        }
         NotifyTabs();
     }
 
@@ -505,6 +563,8 @@ public sealed partial class ExplorerPanelViewModel : ObservableObject, IDisposab
         var version = ++_version;
         StopWatching();
         _paused = false;
+        // Done even while the panel is closed: on opening, it should not still show the last project's subagent.
+        FollowProjectWithSubagent(SubagentProjectKey(path, sshHost, remoteHost, rootPath), checkItemExists: remoteHost is null);
         if (!_isActive)
         {
             _pendingProject = (path, name, sshHost, remoteHost, rootPath, workspaceBranch);

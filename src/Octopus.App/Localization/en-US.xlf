@@ -1646,6 +1646,12 @@
     <unit id="SettingsCollabTerminalBridgeHint"><segment><source>Inject the local collaboration MCP server into native terminal agent tabs and bridge cross-session messages through signals.</source></segment></unit>
     <unit id="SettingsCollabMaxHops"><segment><source>Max negotiation rounds</source></segment></unit>
     <unit id="SettingsCollabMaxHopsHint"><segment><source>Automatic loop guard per cross-session negotiation thread before pausing for user review.</source></segment></unit>
+    <unit id="SettingsCollabAllowRemoteHosts"><segment><source>Delegate to other computers</source></segment></unit>
+    <unit id="SettingsCollabAllowRemoteHostsHint"><segment><source>Agents can see sessions in projects you added from paired computers and start agents there. That work runs on the other computer; its permission requests show up here.</source></segment></unit>
+    <unit id="SidebarCollabDelegatedByLocal"><segment><source>Delegated by {0} on this computer</source></segment></unit>
+    <unit id="SidebarCollabDelegatedFromDevice"><segment><source>From {0}</source></segment></unit>
+    <unit id="SidebarCollabDelegatedFromDeviceTip"><segment><source>Delegated by {1} on {0}</source></segment></unit>
+    <unit id="SidebarCollabRunsOnHostTip"><segment><source>Runs on {0}</source></segment></unit>
     <unit id="CollabRibbonTitle"><segment><source>Collab</source></segment></unit>
     <unit id="CollabBubbleAllow"><segment><source>Allow once</source></segment></unit>
     <unit id="CollabBubbleDeny"><segment><source>Deny</source></segment></unit>

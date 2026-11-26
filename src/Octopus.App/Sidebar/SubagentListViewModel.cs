@@ -9,6 +9,9 @@ namespace Octopus.App.Sidebar;
 /// <summary>Broadcast when a user clicks a specific subagent card in the sidebar so an open ACP GUI tab can focus it.</summary>
 public sealed record FocusSubagentRequested(string ItemId, string SubagentId);
 
+/// <summary>Broadcast when the right-panel subagent view is closed, so the sidebar's expanded subagent lists fold back up.</summary>
+public sealed record SubagentPanelClosed;
+
 /// <summary>
 /// The subagents under an agent's row: collapsed by default as a compact icon pill on the parent row
 /// (one bot icon per subagent, up to <see cref="MaxPillIcons"/> plus an ellipsis when more exist),
@@ -67,6 +70,13 @@ public sealed partial class SubagentListViewModel : ObservableObject
     }
 
     [RelayCommand] private void ToggleFold() => IsFoldOpen = !IsFoldOpen;
+
+    /// <summary>Folds the list back to the compact icon pill (and closes the finished group).</summary>
+    public void Collapse()
+    {
+        IsExpanded = false;
+        IsFoldOpen = false;
+    }
 
     /// <summary>Brings the cards in line with <paramref name="runs"/>, keeping the cards (and their views) that stay.</summary>
     public void Sync(IReadOnlyList<SubagentRun> runs, DateTimeOffset now)

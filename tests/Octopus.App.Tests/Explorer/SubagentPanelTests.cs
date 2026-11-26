@@ -164,6 +164,65 @@ public class SubagentPanelTests
     }
 
     [AvaloniaFact]
+    public async Task Subagent_tab_follows_the_project_switch_and_comes_back_with_its_project()
+    {
+        using var first = new ExplorerFixture();
+        using var second = new ExplorerFixture();
+        first.Write("README.md", "# first");
+        second.Write("README.md", "# second");
+
+        var projects = Octopus.App.Composition.AppHost.Get<Octopus.App.Services.IProjectService>();
+        var project = projects.AddProject(first.Root, activate: false);
+        var lead = new Octopus.Core.Projects.ProjectItem { Kind = Octopus.Core.Projects.ProjectItemKind.Agent, AgentId = "claude", Title = "Lead" };
+        projects.AddItem(project, lead, activate: false);
+
+        var view = new ExplorerPanelView();
+        var window = new Window { Width = 440, Height = 560, Content = view };
+        window.Show();
+        Frames.Pump();
+        try
+        {
+            view.ProjectPath = first.Root;
+            await WaitUntil(() => view.Model.HasProject);
+
+            var sub = new SubagentRunViewModel("sub-follow", "research", "Follow Me", DateTimeOffset.Now);
+            view.Model.ShowSubagent(new OpenSubagentPanelRequested(lead.Id, sub.Id, first.Root, sub, [sub]));
+            Frames.Pump();
+            Assert.True(view.Model.IsSubagentTab);
+
+            // Another project: its subagent tab is gone, and the panel is back on a regular tab.
+            view.ProjectPath = second.Root;
+            await WaitUntil(() => view.Model.ProjectPath == Path.TrimEndingDirectorySeparator(Path.GetFullPath(second.Root)));
+            Frames.Pump();
+            Assert.False(view.Model.HasSubagentTab);
+            Assert.False(view.Model.IsSubagentTab);
+            Assert.Null(view.Model.Subagent.ParentItemId);
+
+            // Back to the first project: its subagent comes back, on show as it was when the user left.
+            view.ProjectPath = first.Root;
+            await WaitUntil(() => view.Model.ProjectPath == Path.TrimEndingDirectorySeparator(Path.GetFullPath(first.Root)));
+            Frames.Pump();
+            Assert.True(view.Model.HasSubagentTab);
+            Assert.True(view.Model.IsSubagentTab);
+            Assert.Equal(lead.Id, view.Model.Subagent.ParentItemId);
+            Assert.Equal("sub-follow", view.Model.Subagent.SubagentId);
+
+            // A subagent whose agent was removed meanwhile does not come back.
+            view.ProjectPath = second.Root;
+            await WaitUntil(() => !view.Model.HasSubagentTab);
+            projects.RemoveItem(lead.Id);
+            view.ProjectPath = first.Root;
+            await WaitUntil(() => view.Model.ProjectPath == Path.TrimEndingDirectorySeparator(Path.GetFullPath(first.Root)));
+            Assert.False(view.Model.HasSubagentTab);
+        }
+        finally
+        {
+            window.Close();
+            projects.RemoveProject(project.Id);
+        }
+    }
+
+    [AvaloniaFact]
     public void Clicking_subagent_in_shell_expands_right_panel_to_readable_width_and_opens_tab()
     {
         var shell = Octopus.App.Composition.AppHost.Get<Octopus.App.Shell.ShellViewModel>();

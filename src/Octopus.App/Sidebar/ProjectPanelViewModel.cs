@@ -22,7 +22,7 @@ using TKCode.Arc.Localization;
 namespace Octopus.App.Sidebar;
 
 /// <summary>The 230 px panel: project name and path, a filter, and the agents and terminals grouped by workspace when worktrees exist.</summary>
-public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient<RenameProjectRequested>
+public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient<RenameProjectRequested>, IRecipient<SubagentPanelClosed>
 {
     private readonly IProjectService _projects;
     private readonly IItemOpener _opener;
@@ -97,7 +97,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         _projects.Changed += OnProjectsChanged;
         // The panel lives as long as the shell, so the static language event needs no unsubscribe.
         ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
-        WeakReferenceMessenger.Default.Register(this);
+        WeakReferenceMessenger.Default.RegisterAll(this);
         Rebuild();
     }
 
@@ -199,6 +199,15 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
             : string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     public void Receive(RenameProjectRequested message) => RenameRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Closing the right-panel subagent view folds every expanded sidebar subagent list back to its pill.</summary>
+    public void Receive(SubagentPanelClosed message)
+    {
+        foreach (var list in _subagentLists.Values)
+        {
+            list.Collapse();
+        }
+    }
 
     private void OnProjectsChanged(object? sender, ProjectChangedEventArgs e)
     {
@@ -320,8 +329,34 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
                 row.IsChildrenExpanded = !_childrenCollapsed.GetValueOrDefault(item.Id, false);
                 row.Show(_activity.Of(item.Id));
                 row.Subagents = _subagentLists.GetValueOrDefault(item.Id);
+                DescribeOrigin(project, item, row);
                 rowsById[item.Id] = row;
                 orderedRows.Add(row);
+            }
+
+            // Delegates this project's sessions started in other projects (on another computer, usually) are nested
+            // under their parent here too, with the computer's name; clicking one switches to it.
+            foreach (var other in _projects.Projects)
+            {
+                if (ReferenceEquals(other, project)) continue;
+                foreach (var child in other.Items)
+                {
+                    if (child.Kind != ProjectItemKind.Agent || child.ParentItemId is not { } parentId || !rowsById.ContainsKey(parentId)) continue;
+                    var ghost = new ItemRowViewModel(
+                        child,
+                        SubtitleOf(other, child),
+                        false,
+                        r => _projects.ActivateItem(r.Id),
+                        (r, title) => _projects.RenameItem(r.Id, title),
+                        r => _workspace.RestartItemAsync(r.Id),
+                        r => _workspace.MoveToNewGroup(r.Id),
+                        r => _workspace.CloseItemAsync(r.Id));
+                    var host = _collab?.HostNameOf(child.Id) ?? other.Name;
+                    ghost.HostBadge = host;
+                    ghost.HostBadgeTip = AppLangResources.Format(AppLangResourceKind.SidebarCollabRunsOnHostTip, host);
+                    ghost.Show(_activity.Of(child.Id));
+                    rowsById[parentId].AddSpawnedChild(ghost);
+                }
             }
 
             // Nest spawned child agents directly underneath the parent agent that created them (Scheme C).
@@ -526,6 +561,31 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     }
 
     /// <summary>Combines the non-default / multi-account label (if any) with the model's short name.</summary>
+    /// <summary>
+    /// Says where a delegated session's work came from: a session of this computer (when the delegate runs in a project of
+    /// another one) or another computer's session (when that computer's agent delegated it here).
+    /// </summary>
+    private void DescribeOrigin(Project project, ProjectItem item, ItemRowViewModel row)
+    {
+        if (item.ParentItemId is { } parentId && project.Items.All(i => i.Id != parentId)
+            && _projects.FindItem(parentId) is { } parent && _projects.FindProjectOf(parentId) is { } parentProject)
+        {
+            var parentHost = _collab?.HostNameOf(parentId);
+            row.OriginText = parentHost is null && ProjectLocation.IsOnThisComputer(parentProject)
+                ? AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedByLocal, parent.DisplayTitle)
+                : AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDevice, parentHost ?? parentProject.Name);
+            row.OriginTip = parentHost is null && ProjectLocation.IsOnThisComputer(parentProject)
+                ? row.OriginText
+                : AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDeviceTip, parentHost ?? parentProject.Name, parent.DisplayTitle);
+            return;
+        }
+        if (item.CollabOriginDevice is { Length: > 0 } device)
+        {
+            row.OriginText = AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDevice, device);
+            row.OriginTip = AppLangResources.Format(AppLangResourceKind.SidebarCollabDelegatedFromDeviceTip, device, item.CollabOriginSession ?? "?");
+        }
+    }
+
     private string? SubtitleOf(Project project, ProjectItem item)
     {
         var model = ModelNameOf(item);

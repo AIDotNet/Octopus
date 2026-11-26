@@ -209,6 +209,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private readonly IModelDiscovery? _modelDiscovery;
     private readonly IFileOpener? _fileOpener;
     private readonly IBotService? _bots;
+    private readonly BotScheduleMcpServer? _botScheduleMcp;
     private readonly ICollabCoordinator? _collab;
     private readonly Dictionary<string, UrlElicitationCardItem> _urlElicitations = new(StringComparer.Ordinal);
 
@@ -284,7 +285,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         IModelDiscovery? modelDiscovery = null,
         IFileOpener? fileOpener = null,
         IBotService? bots = null,
-        ICollabCoordinator? collab = null)
+        ICollabCoordinator? collab = null,
+        BotScheduleMcpServer? botScheduleMcp = null)
     {
         _project = project;
         _item = item;
@@ -306,6 +308,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _fileOpener = fileOpener;
         _bots = bots;
         _collab = collab;
+        _botScheduleMcp = botScheduleMcp;
 
         var profile = settings.Current.Agents.ProfileOf(definition.Id);
         var effectivePerm = !string.IsNullOrWhiteSpace(item.Launch?.Permission)
@@ -551,12 +554,15 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             foreach (var child in children)
             {
                 var childId = child.Id;
-                var childMeta = child.CollabIsolation switch
-                {
-                    "worktree" => "wt",
-                    "read_only" => "ro",
-                    _ => null,
-                };
+                // A delegate on another computer shows which one; isolation there is always shared.
+                var childMeta = _collab.HostNameOf(childId) is { } childHost
+                    ? "@" + childHost
+                    : child.CollabIsolation switch
+                    {
+                        "worktree" => "wt",
+                        "read_only" => "ro",
+                        _ => null,
+                    };
                 CollabRibbonNodes.Add(new CollabRibbonNodeViewModel(
                     childId,
                     "child",
@@ -583,7 +589,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     other.AgentId ?? "terminal",
                     other.DisplayTitle,
                     thread.Status == "paused_budget" ? "waiting_approval" : DescribeRibbonStatus(otherId),
-                    $"{thread.Hops}/{thread.MaxHops}",
+                    _collab.HostNameOf(otherId) is { } peerHost ? $"@{peerHost} · {thread.Hops}/{thread.MaxHops}" : $"{thread.Hops}/{thread.MaxHops}",
                     isCurrent: ActiveCollabThread?.ThreadId == threadId,
                     activate: () => ToggleCollabThread(threadId)));
             }
@@ -1073,6 +1079,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             {
                 var botMcpServers = await _bots.BuildAcpMcpServersAsync(ownerBot.Id, ct).ConfigureAwait(false);
                 mcpServers = BotConnectorRuntime.MergeMcpServers(agentSettings.AcpMcpServers, botMcpServers);
+                // Bot chats only: the octopus-bot tools (schedules Octopus keeps and fires for any agent).
+                if (_botScheduleMcp?.BuildAcpServerConfig(_item.Id) is { } scheduleMcp)
+                {
+                    mcpServers = BotConnectorRuntime.MergeMcpServers(mcpServers, [scheduleMcp]);
+                }
             }
             if (_collab?.BuildAcpMcpServer(_item.Id) is { } collabMcp)
             {
@@ -1554,6 +1565,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     private async Task ExecutePromptAsync(IAcpSession session, string text, IReadOnlyList<AcpPromptAttachment> attached)
     {
+        var turnStartedAt = DateTimeOffset.UtcNow;
         var turnSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _activeTurnSettled = turnSettled;
         _isTurnActive = true;
@@ -1616,7 +1628,14 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     PollAgySubagents(finalizeMissingTranscript: true);
                 }
             });
-            _collab?.NotifyTurnCompleted(_item.Id, finalMarkdown);
+            if (promptResult.StopReason == "cancelled")
+            {
+                NotifyCollabTurnStopped(turnStartedAt, finalMarkdown);
+            }
+            else
+            {
+                _collab?.NotifyTurnCompleted(_item.Id, finalMarkdown);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1627,6 +1646,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 InterruptRunningAsyncSubagents();
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
+            NotifyCollabTurnStopped(turnStartedAt, partialText: null);
         }
         catch (AcpRpcException ex) when (ex.Code == -32800)
         {
@@ -1637,6 +1657,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 InterruptRunningAsyncSubagents();
                 if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
+            NotifyCollabTurnStopped(turnStartedAt, partialText: null);
         }
         catch (AcpAuthRequiredException authEx)
         {
@@ -1649,6 +1670,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 State = AgentGuiState.Disconnected;
                 RefreshDiagnostics();
             });
+            _collab?.NotifyTurnAborted(_item.Id, $"{AgentName} needs to be signed in again before it can continue.", failed: true);
         }
         catch (Exception ex)
         {
@@ -1659,6 +1681,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 State = AgentGuiState.Ready;
                 RefreshDiagnostics();
             });
+            _collab?.NotifyTurnAborted(_item.Id, $"{AgentName} stopped with an error: {ex.Message}", failed: true);
         }
         finally
         {
@@ -1780,6 +1803,29 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     [RelayCommand(CanExecute = nameof(IsTurnActive), AllowConcurrentExecutions = true)]
     public Task CancelTurnAsync() => RequestCancelActiveTurnAsync(isManualStop: true);
+
+    Task ICollabSessionBridge.CancelActiveTurnAsync()
+    {
+        if (_disposed) return Task.CompletedTask;
+        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+        {
+            return RequestCancelActiveTurnAsync(isManualStop: true);
+        }
+        return Dispatcher.UIThread.InvokeAsync(() => RequestCancelActiveTurnAsync(isManualStop: true));
+    }
+
+    /// <summary>
+    /// A cancelled turn means different things for collaboration. After Stop it ends the task this session owed (and
+    /// cancels what it delegated during the turn). After a "Send now" interrupt the session keeps working, so nothing is settled.
+    /// </summary>
+    private void NotifyCollabTurnStopped(DateTimeOffset turnStartedAt, string? partialText)
+    {
+        if (_collab is null || !_manualStopRequested) return;
+        var reason = string.IsNullOrWhiteSpace(partialText)
+            ? "The user stopped this session before it finished."
+            : "The user stopped this session before it finished. Partial output:\n" + (partialText.Length > 1500 ? partialText[..1500] + "…" : partialText);
+        _collab.NotifyTurnAborted(_item.Id, reason, failed: false, cancelDelegationsSince: turnStartedAt);
+    }
 
     private async Task RequestCancelActiveTurnAsync(bool isManualStop)
     {
@@ -2393,9 +2439,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     || peer.AgentName.Contains(q, StringComparison.OrdinalIgnoreCase)
                     || (!string.IsNullOrEmpty(peer.Branch) && peer.Branch.Contains(q, StringComparison.OrdinalIgnoreCase));
                 if (!matches) continue;
-                var sub = peer.ParentItemId == _item.Id
-                    ? $"↳ {peer.Status}"
-                    : string.IsNullOrEmpty(peer.Branch) ? $"{peer.Surface} · {peer.Status}" : $"{peer.Branch} · {peer.Status}";
+                var sub = peer.Host is { } peerHost
+                    ? (peer.ParentItemId == _item.Id ? $"↳ @{peerHost} · {peer.Status}" : $"@{peerHost} · {peer.Status}")
+                    : peer.ParentItemId == _item.Id
+                        ? $"↳ {peer.Status}"
+                        : string.IsNullOrEmpty(peer.Branch) ? $"{peer.Surface} · {peer.Status}" : $"{peer.Branch} · {peer.Status}";
                 result.Add(new FileMentionSuggestion("session", peer.ItemId, peer.Title, peer.AgentId, sub, peer.Status));
                 if (result.Count >= 6) break;
             }
