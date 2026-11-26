@@ -97,7 +97,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         _projects.Changed += OnProjectsChanged;
         // The panel lives as long as the shell, so the static language event needs no unsubscribe.
         ArcLanguage.Changed += (_, _) => UiContext.Run(Rebuild);
-        WeakReferenceMessenger.Default.RegisterAll(this);
+        WeakReferenceMessenger.Default.Register<RenameProjectRequested>(this);
+        WeakReferenceMessenger.Default.Register<SubagentPanelClosed>(this);
         Rebuild();
     }
 

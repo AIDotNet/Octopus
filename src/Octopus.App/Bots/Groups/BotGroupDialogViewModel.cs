@@ -60,7 +60,7 @@ public sealed partial class BotGroupMemberOptionViewModel : ObservableObject
 
     [ObservableProperty] public partial bool IsSelected { get; set; }
 
-    partial void OnIsSelectedChanged(bool value) => _onChanged();
+    partial void OnIsSelectedChanged(bool value) => _onChanged?.Invoke();
 
     [RelayCommand]
     private void Toggle() => IsSelected = !IsSelected;

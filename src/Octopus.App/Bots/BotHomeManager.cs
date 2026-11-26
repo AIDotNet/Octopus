@@ -195,7 +195,7 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
         if (missing.Count == 0) return;
         foreach (var tool in missing)
         {
-            deny.Add(tool);
+            deny.Add((JsonNode?)JsonValue.Create(tool));
         }
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, root.ToJsonString(IndentedJson) + "\n", Encoding.UTF8);
