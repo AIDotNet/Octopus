@@ -35,11 +35,13 @@ public sealed class BotConnectorRuntime
 
     private readonly ISecretStore? _secrets;
     private readonly HttpClient _http;
+    private readonly BotMcpOAuthClient _oauth;
 
-    public BotConnectorRuntime(ISecretStore? secrets = null, HttpClient? httpClient = null)
+    public BotConnectorRuntime(ISecretStore? secrets = null, IFileOpener? opener = null, HttpClient? httpClient = null)
     {
         _secrets = secrets;
         _http = httpClient ?? SharedHttpClient;
+        _oauth = new BotMcpOAuthClient(_http, url => opener?.OpenUrl(url) ?? false);
     }
 
     public static string SecretName(string botId, string connectorId) => $"{botId}:{connectorId}";
@@ -60,17 +62,60 @@ public sealed class BotConnectorRuntime
         }
     }
 
+    public async Task SetOAuthCredentialAsync(string botId, string connectorId, BotOAuthCredential credential, CancellationToken ct = default)
+    {
+        if (_secrets is not { IsAvailable: true }) return;
+        await _secrets.SetAsync(SecretService, SecretName(botId, connectorId), credential.Serialize(), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Runs interactive MCP OAuth 2.1 sign-in and stores the resulting tokens in <see cref="ISecretStore"/>.</summary>
+    public async Task<BotMcpOAuthResult> SignInOAuthAsync(string botId, string connectorId, string mcpUrl, CancellationToken ct = default)
+    {
+        var result = await _oauth.SignInAsync(mcpUrl, ct).ConfigureAwait(false);
+        if (result.Succeeded && result.Credential is not null)
+        {
+            await SetOAuthCredentialAsync(botId, connectorId, result.Credential, ct).ConfigureAwait(false);
+        }
+        return result;
+    }
+
+    /// <summary>Returns a usable Bearer access token (transparently unwrapping &amp; refreshing stored OAuth credentials).</summary>
     public async Task<string?> GetTokenAsync(string botId, string connectorId, CancellationToken ct = default)
     {
         if (_secrets is not { IsAvailable: true }) return null;
+        string? raw;
         try
         {
-            return await _secrets.GetAsync(SecretService, SecretName(botId, connectorId), ct).ConfigureAwait(false);
+            raw = await _secrets.GetAsync(SecretService, SecretName(botId, connectorId), ct).ConfigureAwait(false);
         }
         catch (Exception e) when (e is NotSupportedException or InvalidOperationException)
         {
             return null;
         }
+
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (!BotOAuthCredential.TryDeserialize(raw, out var oauth) || oauth is null)
+        {
+            return raw;
+        }
+
+        if (oauth.IsExpiringSoon() && oauth.CanRefresh)
+        {
+            try
+            {
+                var refreshed = await _oauth.RefreshAsync(oauth, ct).ConfigureAwait(false);
+                if (refreshed is not null)
+                {
+                    await SetOAuthCredentialAsync(botId, connectorId, refreshed, ct).ConfigureAwait(false);
+                    return refreshed.AccessToken;
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException or TaskCanceledException)
+            {
+            }
+        }
+
+        return oauth.AccessToken;
     }
 
     public async Task DeleteTokenAsync(string botId, string connectorId, CancellationToken ct = default)

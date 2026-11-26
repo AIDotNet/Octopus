@@ -43,19 +43,20 @@ public sealed partial class ConnectorAppRowViewModel : ObservableObject
         Action<ConnectorAppRowViewModel> toggle)
     {
         AppId = app.Id;
-        Name = app.Name;
-        CategoryId = app.CategoryId;
         var isZh = ArcLanguage.Current.ToString().StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+        Name = app.DisplayName(isZh);
+        CategoryId = app.CategoryId;
         Description = isZh ? app.DescriptionZh : app.DescriptionEn;
         BadgeBrush = SolidColorBrush.Parse(app.AccentColor);
         BadgeText = app.BadgeText;
         Icon = NewBotDialogViewModel.ParseIcon(app.IconName, LucideIconKind.Plug);
         EndpointUrl = BotCatalog.ResolveMcpUrl(app);
-        HasEndpoint = !string.IsNullOrWhiteSpace(EndpointUrl);
+        HasEndpoint = !string.IsNullOrWhiteSpace(app.McpUrl);
         AuthBadgeText = app.AuthMode switch
         {
             "none" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthNone),
             "bearer" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthTokenNeeded),
+            "apikey" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthApiKeyNeeded),
             _ => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthOAuth),
         };
         IsAdded = isAdded;
@@ -92,6 +93,15 @@ public sealed class ConnectorCatalogGroupViewModel(string header, LucideIconKind
     public IReadOnlyList<ConnectorAppRowViewModel> Apps { get; } = apps;
 }
 
+/// <summary>Group section header item inside the flattened virtualized catalog list.</summary>
+public sealed class ConnectorCatalogHeaderViewModel(string header, LucideIconKind icon, bool isFirst)
+{
+    public string Header { get; } = header;
+    public LucideIconKind Icon { get; } = icon;
+    public bool IsFirst { get; } = isFirst;
+    public Avalonia.Thickness Margin { get; } = isFirst ? new(2, 0, 2, 6) : new(2, 12, 2, 6);
+}
+
 /// <summary>ViewModel for the "Add to &lt;BotName&gt;" connector catalog dialog.</summary>
 public sealed partial class ConnectorCatalogViewModel : ObservableObject
 {
@@ -114,6 +124,8 @@ public sealed partial class ConnectorCatalogViewModel : ObservableObject
 
     public ObservableCollection<ConnectorCategoryItemViewModel> Categories { get; } = [];
     public ObservableCollection<ConnectorCatalogGroupViewModel> Groups { get; } = [];
+    /// <summary>Flattened stream of <see cref="ConnectorCatalogHeaderViewModel"/> and <see cref="ConnectorAppRowViewModel"/> for single-list virtualization.</summary>
+    public ObservableCollection<object> CatalogItems { get; } = [];
     public IReadOnlyList<SelectOption> TransportOptions { get; } =
     [
         new("http", "HTTP"),
@@ -206,6 +218,7 @@ public sealed partial class ConnectorCatalogViewModel : ObservableObject
     private void RebuildGroups()
     {
         Groups.Clear();
+        CatalogItems.Clear();
         var bot = _bots.Bots.FirstOrDefault(b => b.Id == _botId);
         var addedIds = bot is null
             ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -224,6 +237,7 @@ public sealed partial class ConnectorCatalogViewModel : ObservableObject
                 .Where(a => a.CategoryId == cat.Id)
                 .Where(a => query.Length == 0
                     || a.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || (a.NameZh?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
                     || a.DescriptionZh.Contains(query, StringComparison.OrdinalIgnoreCase)
                     || a.DescriptionEn.Contains(query, StringComparison.OrdinalIgnoreCase))
                 .Select(a => new ConnectorAppRowViewModel(a, addedIds.Contains(a.Id), ToggleApp))
@@ -231,10 +245,15 @@ public sealed partial class ConnectorCatalogViewModel : ObservableObject
 
             if (matched.Count == 0) continue;
 
-            Groups.Add(new ConnectorCatalogGroupViewModel(
-                isZh ? cat.NameZh : cat.NameEn,
-                NewBotDialogViewModel.ParseIcon(cat.IconName, LucideIconKind.Plug),
-                matched));
+            var header = isZh ? cat.NameZh : cat.NameEn;
+            var icon = NewBotDialogViewModel.ParseIcon(cat.IconName, LucideIconKind.Plug);
+            var isFirst = Groups.Count == 0;
+            Groups.Add(new ConnectorCatalogGroupViewModel(header, icon, matched));
+            CatalogItems.Add(new ConnectorCatalogHeaderViewModel(header, icon, isFirst));
+            foreach (var app in matched)
+            {
+                CatalogItems.Add(app);
+            }
         }
 
         HasNoResults = Groups.Count == 0;

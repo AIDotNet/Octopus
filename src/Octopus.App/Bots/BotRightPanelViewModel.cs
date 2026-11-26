@@ -27,12 +27,21 @@ public enum BotRightTab
     Files
 }
 
+public enum ConnectorStatusTone
+{
+    Neutral,
+    Success,
+    Warning,
+    Danger
+}
+
 public sealed partial class BotConnectorItemViewModel : ObservableObject
 {
     private readonly string _botId;
     private readonly IBotService _bots;
     private readonly Action<string, bool>? _setEnabled;
     private readonly Action<string> _remove;
+    private CancellationTokenSource? _oauthCts;
 
     public BotConnectorItemViewModel(
         string botId,
@@ -45,9 +54,9 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
         _bots = bots;
         Id = binding.Id;
         AppId = binding.AppId;
-        Name = binding.DisplayName;
         var app = BotCatalog.FindConnectorApp(binding.AppId);
         var isZh = ArcLanguage.Current.ToString().StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+        Name = app is not null ? app.DisplayName(isZh) : binding.DisplayName;
         Subtitle = !string.IsNullOrWhiteSpace(binding.Url)
             ? binding.Url!
             : (app is not null ? (isZh ? app.DescriptionZh : app.DescriptionEn) : binding.Description ?? "");
@@ -56,14 +65,29 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
         TransportBadge = string.Equals(binding.Transport, "sse", StringComparison.OrdinalIgnoreCase) ? "SSE" : "HTTP";
         HasEndpoint = !string.IsNullOrWhiteSpace(binding.Url);
         HasSecret = binding.HasSecret;
-        AuthBadge = binding.HasSecret
-            ? AppLangResources.Get(AppLangResourceKind.BotConnectorAuthTokenSet)
-            : binding.AuthMode switch
-            {
-                "none" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthNone),
-                "bearer" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthTokenNeeded),
-                _ => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthOAuth),
-            };
+        IsApiKeyMode = string.Equals(binding.AuthMode, "apikey", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(app?.AuthMode, "apikey", StringComparison.OrdinalIgnoreCase);
+        IsOAuthPreferred = !IsApiKeyMode && (string.Equals(binding.AuthMode, "oauth", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(app?.AuthMode, "oauth", StringComparison.OrdinalIgnoreCase));
+        IsOAuthSignedIn = binding.HasSecret && string.Equals(binding.AuthMode, "oauth", StringComparison.OrdinalIgnoreCase);
+        IsBearerSaved = binding.HasSecret && !IsOAuthSignedIn;
+        IsNoAuth = !IsApiKeyMode && !binding.HasSecret && string.Equals(binding.AuthMode, "none", StringComparison.OrdinalIgnoreCase);
+        IsAuthenticated = binding.HasSecret || (IsApiKeyMode && HasEndpoint);
+        NeedsAttention = (IsApiKeyMode && !HasEndpoint) || (HasEndpoint && !binding.HasSecret && !IsNoAuth && !IsApiKeyMode);
+
+        AuthBadge = IsApiKeyMode
+            ? AppLangResources.Get(HasEndpoint ? AppLangResourceKind.BotConnectorAuthApiKeySet : AppLangResourceKind.BotConnectorAuthApiKeyNeeded)
+            : IsOAuthSignedIn
+                ? AppLangResources.Get(AppLangResourceKind.BotConnectorAuthOAuthSignedIn)
+                : binding.HasSecret
+                    ? AppLangResources.Get(AppLangResourceKind.BotConnectorAuthTokenSet)
+                    : binding.AuthMode switch
+                    {
+                        "none" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthNone),
+                        "bearer" => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthTokenNeeded),
+                        _ => AppLangResources.Get(AppLangResourceKind.BotConnectorAuthOAuthNeeded),
+                    };
+
         HasUrlVariable = app?.UrlVariable is not null;
         UrlVariableLabel = app?.UrlVariable is { } v ? (isZh ? v.LabelZh : v.LabelEn) : "";
         UrlVariablePlaceholder = app?.UrlVariable?.Placeholder ?? "";
@@ -85,6 +109,14 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
     public string TransportBadge { get; }
     public bool HasEndpoint { get; }
     public bool HasSecret { get; }
+    public bool IsApiKeyMode { get; }
+    public bool IsOAuthPreferred { get; }
+    public bool IsOAuthSignedIn { get; }
+    public bool IsBearerSaved { get; }
+    public bool IsNoAuth { get; }
+    public bool IsAuthenticated { get; }
+    public bool NeedsAttention { get; }
+    public bool ShowBearerTokenInput => !IsApiKeyMode;
     public string AuthBadge { get; }
     public bool HasUrlVariable { get; }
     public string UrlVariableLabel { get; }
@@ -97,14 +129,77 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
     ];
 
     [ObservableProperty] public partial bool IsEnabled { get; set; }
-    [ObservableProperty] public partial bool IsEditing { get; set; }
-    [ObservableProperty] public partial string EditUrl { get; set; } = "";
-    [ObservableProperty] public partial string EditVariableValue { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowQuickOAuthBar), nameof(ShowCollapsedFeedback))]
+    public partial bool IsEditing { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanUseOAuth), nameof(TokenFieldLabel))]
+    public partial string EditUrl { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ResolvedUrlPreview), nameof(CanUseOAuth), nameof(TokenFieldLabel))]
+    public partial string EditVariableValue { get; set; } = "";
+
     [ObservableProperty] public partial string EditTransport { get; set; } = "http";
     [ObservableProperty] public partial string EditBearerToken { get; set; } = "";
     [ObservableProperty] public partial bool IsProbing { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOAuthSignOut))]
+    public partial bool IsSigningInOAuth { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanUseOAuth), nameof(TokenFieldLabel), nameof(ShowClearBearerButton))]
+    public partial bool DetectedOAuth { get; private set; }
+
     [ObservableProperty] public partial string ProbeStatusText { get; private set; } = "";
-    [ObservableProperty] public partial bool HasProbeStatus { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowCollapsedFeedback))]
+    public partial bool HasProbeStatus { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsProbeSuccess), nameof(IsProbeWarning), nameof(IsProbeError), nameof(IsProbeNeutral))]
+    public partial ConnectorStatusTone ProbeStatusTone { get; private set; } = ConnectorStatusTone.Neutral;
+
+    public string ResolvedUrlPreview
+    {
+        get
+        {
+            if (!HasUrlVariable) return EditUrl;
+            var app = BotCatalog.FindConnectorApp(AppId);
+            return app is not null ? BotCatalog.ResolveMcpUrl(app, EditVariableValue) ?? (app.McpUrl ?? EditUrl) : EditUrl;
+        }
+    }
+
+    public string EffectiveTargetUrl => HasUrlVariable
+        ? (BotCatalog.FindConnectorApp(AppId) is { } app ? BotCatalog.ResolveMcpUrl(app, EditVariableValue) ?? "" : EditUrl)
+        : (!string.IsNullOrWhiteSpace(EditUrl) ? EditUrl.Trim() : Subtitle);
+
+    public bool HasEffectiveUrl => BotConnectorRuntime.TryValidateHttpUrl(EffectiveTargetUrl, out _);
+
+    public bool CanUseOAuth =>
+        !IsApiKeyMode && HasEffectiveUrl && (IsOAuthPreferred || DetectedOAuth || string.Equals(AppId, "custom-url", StringComparison.OrdinalIgnoreCase));
+
+    public bool ShowQuickOAuthBar => !IsEditing && HasEndpoint && IsOAuthPreferred && !HasSecret;
+    public bool ShowCollapsedFeedback => !IsEditing && HasProbeStatus;
+    public bool ShowOAuthSignOut => IsOAuthSignedIn && !IsSigningInOAuth;
+    public bool ShowClearBearerButton => HasSecret && !(CanUseOAuth && IsOAuthSignedIn);
+
+    public string OAuthActionLabel => AppLangResources.Get(IsOAuthSignedIn
+        ? AppLangResourceKind.BotConnectorOAuthReconnect
+        : AppLangResourceKind.BotConnectorOAuthSignIn);
+
+    public string TokenFieldLabel => AppLangResources.Get(CanUseOAuth
+        ? AppLangResourceKind.BotConnectorManualTokenLabel
+        : AppLangResourceKind.BotConnectorTokenLabel);
+
+    public bool IsProbeSuccess => ProbeStatusTone == ConnectorStatusTone.Success;
+    public bool IsProbeWarning => ProbeStatusTone == ConnectorStatusTone.Warning;
+    public bool IsProbeError => ProbeStatusTone == ConnectorStatusTone.Danger;
+    public bool IsProbeNeutral => ProbeStatusTone == ConnectorStatusTone.Neutral;
 
     partial void OnIsEnabledChanged(bool value) => _setEnabled?.Invoke(Id, value);
 
@@ -112,25 +207,74 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
     private void ToggleEdit() => IsEditing = !IsEditing;
 
     [RelayCommand]
+    private async Task SignInOAuthAsync()
+    {
+        if (IsSigningInOAuth) return;
+        var targetUrl = EffectiveTargetUrl;
+        if (!BotConnectorRuntime.TryValidateHttpUrl(targetUrl, out _))
+        {
+            SetStatus(AppLangResources.Format(AppLangResourceKind.BotConnectorOAuthFailed, "Invalid MCP URL"), ConnectorStatusTone.Danger);
+            return;
+        }
+
+        _oauthCts?.Cancel();
+        _oauthCts?.Dispose();
+        _oauthCts = new CancellationTokenSource();
+        var ct = _oauthCts.Token;
+
+        IsSigningInOAuth = true;
+        SetStatus(AppLangResources.Get(AppLangResourceKind.BotConnectorOAuthSigningIn), ConnectorStatusTone.Neutral);
+        try
+        {
+            var result = await _bots.SignInConnectorOAuthAsync(_botId, Id, targetUrl, ct);
+            if (result.Succeeded)
+            {
+                SetStatus(AppLangResources.Get(AppLangResourceKind.BotConnectorOAuthSuccess), ConnectorStatusTone.Success);
+            }
+            else if (result.Cancelled)
+            {
+                SetStatus(AppLangResources.Get(AppLangResourceKind.BotConnectorOAuthCancelled), ConnectorStatusTone.Neutral);
+            }
+            else
+            {
+                SetStatus(AppLangResources.Format(AppLangResourceKind.BotConnectorOAuthFailed, result.Error ?? "Unknown error"), ConnectorStatusTone.Danger);
+            }
+        }
+        finally
+        {
+            IsSigningInOAuth = false;
+            _oauthCts?.Dispose();
+            _oauthCts = null;
+        }
+    }
+
+    [RelayCommand]
+    private void CancelOAuth() => _oauthCts?.Cancel();
+
+    [RelayCommand]
     private async Task TestAsync()
     {
         if (IsProbing) return;
-        var targetUrl = !string.IsNullOrWhiteSpace(EditUrl) ? EditUrl : Subtitle;
+        var targetUrl = EffectiveTargetUrl;
         IsProbing = true;
-        ProbeStatusText = AppLangResources.Get(AppLangResourceKind.BotConnectorTesting);
-        HasProbeStatus = true;
+        SetStatus(AppLangResources.Get(AppLangResourceKind.BotConnectorTesting), ConnectorStatusTone.Neutral);
         try
         {
             var token = !string.IsNullOrWhiteSpace(EditBearerToken)
                 ? EditBearerToken
                 : await _bots.ConnectorRuntime.GetTokenAsync(_botId, Id);
             var result = await _bots.ConnectorRuntime.ProbeAsync(targetUrl, EditTransport, token);
-            ProbeStatusText = result.Status switch
+            if (result.SupportsOAuth)
             {
-                ConnectorProbeStatus.Reachable => AppLangResources.Format(AppLangResourceKind.BotConnectorTestOk, result.Message),
-                ConnectorProbeStatus.AuthRequired => AppLangResources.Format(AppLangResourceKind.BotConnectorTestAuthRequired, result.Message),
-                _ => AppLangResources.Format(AppLangResourceKind.BotConnectorTestFailed, result.Message),
+                DetectedOAuth = true;
+            }
+            var (text, tone) = result.Status switch
+            {
+                ConnectorProbeStatus.Reachable => (AppLangResources.Format(AppLangResourceKind.BotConnectorTestOk, result.Message), ConnectorStatusTone.Success),
+                ConnectorProbeStatus.AuthRequired => (AppLangResources.Format(AppLangResourceKind.BotConnectorTestAuthRequired, result.Message), ConnectorStatusTone.Warning),
+                _ => (AppLangResources.Format(AppLangResourceKind.BotConnectorTestFailed, result.Message), ConnectorStatusTone.Danger),
             };
+            SetStatus(text, tone);
         }
         finally
         {
@@ -145,6 +289,7 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
         var urlToSave = HasUrlVariable && app is not null
             ? BotCatalog.ResolveMcpUrl(app, EditVariableValue)
             : EditUrl;
+        IsEditing = false;
         await _bots.ConfigureConnectorAsync(
             _botId,
             Id,
@@ -154,7 +299,6 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
             EditBearerToken,
             clearToken: false);
         EditBearerToken = "";
-        IsEditing = false;
     }
 
     [RelayCommand]
@@ -163,7 +307,7 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
         await _bots.ConfigureConnectorAsync(
             _botId,
             Id,
-            EditUrl,
+            EffectiveTargetUrl,
             EditTransport,
             HasUrlVariable ? EditVariableValue : null,
             bearerToken: null,
@@ -172,7 +316,18 @@ public sealed partial class BotConnectorItemViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Remove() => _remove(Id);
+    private void Remove()
+    {
+        _oauthCts?.Cancel();
+        _remove(Id);
+    }
+
+    private void SetStatus(string text, ConnectorStatusTone tone)
+    {
+        ProbeStatusText = text;
+        ProbeStatusTone = tone;
+        HasProbeStatus = !string.IsNullOrWhiteSpace(text);
+    }
 }
 
 public sealed partial class BotWorkItemOptionViewModel(string label, Action<string> choose)

@@ -783,9 +783,55 @@ public sealed class BotService : IBotService
         return updated.Connectors.FirstOrDefault(c => c.Id == connectorId);
     }
 
+    public async Task<BotMcpOAuthResult> SignInConnectorOAuthAsync(
+        string botId,
+        string connectorId,
+        string? urlOverride = null,
+        CancellationToken ct = default)
+    {
+        EnsureLoaded();
+        var existing = FindBot(botId)?.Connectors.FirstOrDefault(c => c.Id == connectorId);
+        if (existing is null)
+        {
+            return new BotMcpOAuthResult(false, Error: "Connector not found.");
+        }
+
+        var targetUrl = !string.IsNullOrWhiteSpace(urlOverride) ? urlOverride.Trim() : existing.Url;
+        if (!BotConnectorRuntime.TryValidateHttpUrl(targetUrl, out var uri))
+        {
+            return new BotMcpOAuthResult(false, Error: "Invalid MCP URL.");
+        }
+
+        var result = await ConnectorRuntime.SignInOAuthAsync(botId, connectorId, uri.AbsoluteUri, ct).ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            return result;
+        }
+
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId)?.Connectors.FirstOrDefault(c => c.Id == connectorId) is not { } target)
+            {
+                return;
+            }
+            target.Url = uri.AbsoluteUri;
+            target.HasSecret = true;
+            target.AuthMode = "oauth";
+            target.Enabled = true;
+            target.StatusText = AppLangResources.Get(AppLangResourceKind.BotConnectorAuthOAuthSignedIn);
+        });
+
+        var updated = FindBot(botId)!;
+        Home.SyncManagedFiles(updated);
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Connectors, updated));
+        return result;
+    }
+
     public void SetConnectorEnabled(string botId, string connectorId, bool enabled)
     {
         EnsureLoaded();
+        var existing = FindBot(botId)?.Connectors.FirstOrDefault(c => c.Id == connectorId);
+        if (existing is null || existing.Enabled == enabled) return;
         _store.Update(d =>
         {
             if (d.Bots.FirstOrDefault(b => b.Id == botId)?.Connectors.FirstOrDefault(c => c.Id == connectorId) is { } conn)
@@ -1154,6 +1200,66 @@ public sealed class BotService : IBotService
             }
         }
         return false;
+    }
+
+    public bool MutateSchedules(string botId, Func<List<BotSchedule>, bool> mutate)
+    {
+        EnsureLoaded();
+        if (FindBot(botId) is null) return false;
+        var changed = false;
+        _store.Update(d =>
+        {
+            if (d.Bots.FirstOrDefault(b => b.Id == botId) is { } target)
+            {
+                changed = mutate(target.Schedules);
+            }
+        });
+        if (changed)
+        {
+            Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Schedules, FindBot(botId)));
+        }
+        return changed;
+    }
+
+    public BotDefinition? FindBotByChatId(string chatId)
+    {
+        EnsureLoaded();
+        return _store.Current.Bots.FirstOrDefault(b => b.Chats.Any(c => c.Id == chatId));
+    }
+
+    public ProjectItem? EnsureChatOpenInBackground(string botId, string chatId)
+    {
+        EnsureLoaded();
+        var bot = FindBot(botId);
+        var chat = bot?.Chats.FirstOrDefault(c => c.Id == chatId);
+        if (bot is null || chat is null) return null;
+
+        var wasClosed = !chat.IsOpen || chat.Status == BotChatStatus.Closed;
+        if (wasClosed)
+        {
+            _store.Update(d =>
+            {
+                if (d.Bots.FirstOrDefault(b => b.Id == botId)?.Chats.FirstOrDefault(c => c.Id == chatId) is not { } target) return;
+                target.IsOpen = true;
+                if (target.Status == BotChatStatus.Closed) target.Status = BotChatStatus.Idle;
+                target.ClosedAt = null;
+            });
+        }
+
+        var updated = FindBot(botId)!;
+        var updatedChat = updated.Chats.First(c => c.Id == chatId);
+        var backing = EnsureBackingProject(updated);
+        var item = backing.Items.FirstOrDefault(i => i.Id == chatId);
+        if (item is null)
+        {
+            item = ToProjectItem(updated, updatedChat);
+            backing.Items.Add(item);
+        }
+        if (wasClosed)
+        {
+            Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Chats, updated, updatedChat, item));
+        }
+        return item;
     }
 
     private BotDefinition? FindBot(string botId) => _store.Current.Bots.FirstOrDefault(b => b.Id == botId);

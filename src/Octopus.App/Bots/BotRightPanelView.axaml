@@ -377,7 +377,7 @@
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                                 <lucide:LucideIcon Kind="Hourglass" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotSettingsStaleAfter}" VerticalAlignment="Center" />
-                                <arc:Select Grid.Column="2" Size="Small" Width="88" AutoScrollToSelectedItem="False"
+                                <arc:Select Grid.Column="2" Size="Small" MinWidth="0" Width="88" AutoScrollToSelectedItem="False"
                                             ItemsSource="{Binding StaleDayOptions}"
                                             SelectedValue="{Binding StaleAfterDaysKey, Mode=TwoWay}" />
                             </Grid>
@@ -530,7 +530,7 @@
                 </arc:Button>
             </StackPanel>
 
-            <Grid IsVisible="{Binding HasConnectors}" RowDefinitions="Auto,*">
+            <Grid IsVisible="{Binding HasConnectors}" RowDefinitions="Auto,*,Auto">
                 <Border Padding="10,8,10,6">
                     <arc:Button Variant="Secondary" Size="Small" HorizontalAlignment="Stretch"
                                 Command="{Binding OpenConnectorCatalogCommand}">
@@ -540,104 +540,248 @@
                         </StackPanel>
                     </arc:Button>
                 </Border>
-                <arc:ScrollArea Grid.Row="1" OverlayScrollbarMode="Auto" FadeLength="0">
-                    <StackPanel Margin="10,4,10,16" Spacing="10">
-                        <ItemsControl ItemsSource="{Binding Connectors}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Spacing="6" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:BotConnectorItemViewModel">
-                                    <Border Classes="bot-card" Padding="8,7">
-                                        <StackPanel Spacing="8">
-                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
+                <ItemsControl x:Name="ConnectorsList" Grid.Row="1" ItemsSource="{Binding Connectors}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.Template>
+                        <ControlTemplate>
+                            <arc:ScrollArea Name="PART_ScrollViewer" OverlayScrollbarMode="Auto" FadeLength="0"
+                                            HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="10,4,10,8" />
+                            </arc:ScrollArea>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BotConnectorItemViewModel">
+                            <Border Classes="bot-card" Padding="10,9" Margin="0,0,0,6" ClipToBounds="True">
+                                        <StackPanel Spacing="9">
+                                            <!-- Card header: icon + title/badges/url + actions -->
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="9">
                                                 <common:ConnectorIconView AppId="{Binding AppId}"
-                                                                          Size="28"
-                                                                          CornerRadius="7"
-                                                                          IconPadding="5"
+                                                                          Size="32"
+                                                                          CornerRadius="8"
+                                                                          IconPadding="6"
                                                                           TileBackground="{arc:ArcDesignTokenResource SurfaceMuted}"
                                                                           TileBorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                                                                           FallbackText="{Binding BadgeText}"
                                                                           FallbackBrush="{Binding BadgeBrush}"
-                                                                          VerticalAlignment="Center" />
-                                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                                          VerticalAlignment="Top"
+                                                                          Margin="0,1,0,0" />
+                                                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                                    <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding Name}"
+                                                               TextTrimming="CharacterEllipsis" />
                                                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                                                        <TextBlock Classes="body" FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                        <Border IsVisible="{Binding HasEndpoint}" Padding="4,0.5" CornerRadius="4"
+                                                        <!-- Auth status pill -->
+                                                        <Border Padding="5,1" CornerRadius="4"
                                                                 Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                                                                 BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
                                                                 VerticalAlignment="Center">
-                                                            <TextBlock Classes="hint" FontSize="9.5" Text="{Binding TransportBadge}" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                                <Ellipse Width="5.5" Height="5.5" IsVisible="{Binding IsAuthenticated}"
+                                                                         Fill="{arc:ArcDesignTokenResource Success}" VerticalAlignment="Center" />
+                                                                <Ellipse Width="5.5" Height="5.5" IsVisible="{Binding NeedsAttention}"
+                                                                         Fill="{arc:ArcDesignTokenResource Warning}" VerticalAlignment="Center" />
+                                                                <Ellipse Width="5.5" Height="5.5" IsVisible="{Binding IsNoAuth}"
+                                                                         Fill="{arc:ArcDesignTokenResource TextMuted}" Opacity="0.65" VerticalAlignment="Center" />
+                                                                <TextBlock Classes="hint" FontSize="10" Text="{Binding AuthBadge}" VerticalAlignment="Center" />
+                                                            </StackPanel>
                                                         </Border>
-                                                        <Border Padding="4,0.5" CornerRadius="4"
+                                                        <!-- Transport pill -->
+                                                        <Border IsVisible="{Binding HasEndpoint}" Padding="5,1" CornerRadius="4"
                                                                 Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                                                                 VerticalAlignment="Center">
-                                                            <TextBlock Classes="hint" FontSize="9.5" Text="{Binding AuthBadge}" />
+                                                            <TextBlock Classes="hint" FontSize="9.5"
+                                                                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                       Text="{Binding TransportBadge}" />
                                                         </Border>
                                                     </StackPanel>
-                                                    <TextBlock Classes="hint" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Classes="hint" FontSize="11"
+                                                               Text="{Binding Subtitle}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               arc:Tooltip.Tip="{Binding Subtitle}" />
                                                 </StackPanel>
-                                                <arc:Button Grid.Column="2" Classes="ex-icon" Variant="Ghost" VerticalAlignment="Center"
-                                                            Command="{Binding ToggleEditCommand}"
-                                                            arc:Tooltip.Tip="{l:AppLangResource BotConnectorConfigureTip}">
-                                                    <lucide:LucideIcon Kind="SlidersHorizontal" Size="13" />
-                                                </arc:Button>
-                                                <arc:Switch Grid.Column="3" IsChecked="{Binding IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" />
-                                                <arc:Button Grid.Column="4" Classes="ex-icon" Variant="Ghost" VerticalAlignment="Center"
-                                                            Command="{Binding RemoveCommand}"
-                                                            arc:Tooltip.Tip="{l:AppLangResource BotConnectorRemove}">
-                                                    <lucide:LucideIcon Kind="Trash2" Size="13" />
-                                                </arc:Button>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Top">
+                                                    <arc:Button Classes="ex-icon" Variant="Ghost" VerticalAlignment="Center"
+                                                                Command="{Binding ToggleEditCommand}"
+                                                                arc:Tooltip.Tip="{l:AppLangResource BotConnectorConfigureTip}">
+                                                        <lucide:LucideIcon Kind="SlidersHorizontal" Size="13" />
+                                                    </arc:Button>
+                                                    <arc:Switch IsChecked="{Binding IsEnabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="2,0" />
+                                                    <arc:Button Classes="ex-icon" Variant="Ghost" VerticalAlignment="Center"
+                                                                Command="{Binding RemoveCommand}"
+                                                                arc:Tooltip.Tip="{l:AppLangResource BotConnectorRemove}">
+                                                        <lucide:LucideIcon Kind="Trash2" Size="13" />
+                                                    </arc:Button>
+                                                </StackPanel>
                                             </Grid>
 
-                                            <!-- Inline endpoint & Bearer token configuration -->
-                                            <Border IsVisible="{Binding IsEditing}" Padding="8"
+                                            <!-- Quick 1-click OAuth sign-in bar for unauthorized OAuth connectors -->
+                                            <Grid IsVisible="{Binding ShowQuickOAuthBar}" ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                <arc:Button Variant="Primary" Size="Small" HorizontalAlignment="Stretch"
+                                                            IsLoading="{Binding IsSigningInOAuth}"
+                                                            Command="{Binding SignInOAuthCommand}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                        <lucide:LucideIcon Kind="LogIn" Size="13" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding OAuthActionLabel}" FontWeight="Medium" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                </arc:Button>
+                                                <arc:Button Grid.Column="1" Variant="Ghost" Size="Small"
+                                                            IsVisible="{Binding IsSigningInOAuth}"
+                                                            Content="{l:AppLangResource Cancel}"
+                                                            Command="{Binding CancelOAuthCommand}" />
+                                            </Grid>
+
+                                            <!-- Collapsed status feedback (e.g. OAuth progress/error from quick sign-in) -->
+                                            <Border IsVisible="{Binding ShowCollapsedFeedback}" Padding="8,6"
                                                     CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
                                                     Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                                                     BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
-                                                <StackPanel Spacing="7">
-                                                    <StackPanel IsVisible="{Binding HasUrlVariable}" Spacing="4">
-                                                        <TextBlock Classes="hint" Text="{Binding UrlVariableLabel}" />
+                                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                                                    <Panel VerticalAlignment="Top" Margin="0,1.5,0,0">
+                                                        <lucide:LucideIcon Kind="CheckCircle2" Size="13" IsVisible="{Binding IsProbeSuccess}" Foreground="{arc:ArcDesignTokenResource Success}" />
+                                                        <lucide:LucideIcon Kind="AlertCircle" Size="13" IsVisible="{Binding IsProbeWarning}" Foreground="{arc:ArcDesignTokenResource Warning}" />
+                                                        <lucide:LucideIcon Kind="XCircle" Size="13" IsVisible="{Binding IsProbeError}" Foreground="{arc:ArcDesignTokenResource Danger}" />
+                                                        <lucide:LucideIcon Kind="Info" Size="13" IsVisible="{Binding IsProbeNeutral}" Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                                    </Panel>
+                                                    <TextBlock Grid.Column="1" Classes="hint" Text="{Binding ProbeStatusText}" TextWrapping="Wrap" />
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Expanded inline configuration panel -->
+                                            <Border IsVisible="{Binding IsEditing}" Padding="10"
+                                                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1"
+                                                    ClipToBounds="True">
+                                                <StackPanel Spacing="10">
+                                                    <!-- OAuth 2.1 browser sign-in section -->
+                                                    <Border IsVisible="{Binding CanUseOAuth}" Padding="9,8"
+                                                            CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                                            Background="{arc:ArcDesignTokenResource Surface}"
+                                                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                                        <StackPanel Spacing="7">
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                                <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                                                    <lucide:LucideIcon Kind="ShieldCheck" Size="13" Foreground="{arc:ArcDesignTokenResource Accent}" VerticalAlignment="Center" />
+                                                                    <TextBlock Classes="caption" FontWeight="SemiBold" Text="OAuth 2.1" VerticalAlignment="Center" />
+                                                                </StackPanel>
+                                                                <TextBlock Grid.Column="1" Classes="hint" FontSize="11"
+                                                                           IsVisible="{Binding IsOAuthSignedIn}"
+                                                                           Foreground="{arc:ArcDesignTokenResource Success}"
+                                                                           Text="{l:AppLangResource BotConnectorAuthOAuthSignedIn}"
+                                                                           VerticalAlignment="Center" />
+                                                            </Grid>
+                                                            <TextBlock Classes="hint" FontSize="11" TextWrapping="Wrap"
+                                                                       Text="{l:AppLangResource BotConnectorOAuthHint}" />
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                                <arc:Button Variant="Primary" Size="Small" HorizontalAlignment="Stretch"
+                                                                            IsLoading="{Binding IsSigningInOAuth}"
+                                                                            Command="{Binding SignInOAuthCommand}">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                        <lucide:LucideIcon Kind="LogIn" Size="13" VerticalAlignment="Center" />
+                                                                        <TextBlock Text="{Binding OAuthActionLabel}" FontWeight="Medium" VerticalAlignment="Center" />
+                                                                    </StackPanel>
+                                                                </arc:Button>
+                                                                <arc:Button Grid.Column="1" Variant="Ghost" Size="Small"
+                                                                            IsVisible="{Binding IsSigningInOAuth}"
+                                                                            Content="{l:AppLangResource Cancel}"
+                                                                            Command="{Binding CancelOAuthCommand}" />
+                                                                <arc:Button Grid.Column="1" Variant="Ghost" Size="Small"
+                                                                            IsVisible="{Binding ShowOAuthSignOut}"
+                                                                            Content="{l:AppLangResource BotConnectorOAuthSignOut}"
+                                                                            Command="{Binding ClearTokenCommand}" />
+                                                            </Grid>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- Endpoint URL / Template Variable + Transport segmented switcher (zero overflow) -->
+                                                    <StackPanel IsVisible="{Binding HasUrlVariable}" Spacing="5">
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                            <TextBlock Classes="hint" Text="{Binding UrlVariableLabel}" VerticalAlignment="Center" />
+                                                            <arc:SegmentedControl Grid.Column="1" SelectedValue="{Binding EditTransport, Mode=TwoWay}"
+                                                                                  AutomationProperties.Name="{l:AppLangResource BotConnectorTransportLabel}">
+                                                                <arc:SegmentedOption Value="http" Label="HTTP" />
+                                                                <arc:SegmentedOption Value="sse" Label="SSE" />
+                                                            </arc:SegmentedControl>
+                                                        </Grid>
                                                         <arc:Input Size="Small" IsLabelVisible="False"
                                                                    Label="{Binding UrlVariableLabel}"
                                                                    Placeholder="{Binding UrlVariablePlaceholder}"
                                                                    Text="{Binding EditVariableValue, Mode=TwoWay}" />
+                                                        <TextBlock Classes="hint" FontSize="10.5"
+                                                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                   Text="{Binding ResolvedUrlPreview}"
+                                                                   TextTrimming="CharacterEllipsis" />
                                                     </StackPanel>
-                                                    <StackPanel IsVisible="{Binding !HasUrlVariable}" Spacing="4">
-                                                        <TextBlock Classes="hint" Text="MCP URL" />
-                                                        <Grid ColumnDefinitions="*,84" ColumnSpacing="6">
-                                                            <arc:Input Size="Small" IsLabelVisible="False"
-                                                                       Label="MCP URL"
-                                                                       Placeholder="{l:AppLangResource BotConnectorUrlPlaceholder}"
-                                                                       Text="{Binding EditUrl, Mode=TwoWay}" />
-                                                            <arc:Select Grid.Column="1" Size="Small" AutoScrollToSelectedItem="False"
-                                                                        ItemsSource="{Binding TransportOptions}"
-                                                                        SelectedValue="{Binding EditTransport, Mode=TwoWay}" />
+
+                                                    <StackPanel IsVisible="{Binding !HasUrlVariable}" Spacing="5">
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                            <TextBlock Classes="hint" Text="MCP URL" VerticalAlignment="Center" />
+                                                            <arc:SegmentedControl Grid.Column="1" SelectedValue="{Binding EditTransport, Mode=TwoWay}"
+                                                                                  AutomationProperties.Name="{l:AppLangResource BotConnectorTransportLabel}">
+                                                                <arc:SegmentedOption Value="http" Label="HTTP" />
+                                                                <arc:SegmentedOption Value="sse" Label="SSE" />
+                                                            </arc:SegmentedControl>
                                                         </Grid>
-                                                    </StackPanel>
-                                                    <StackPanel Spacing="4">
-                                                        <TextBlock Classes="hint" Text="{l:AppLangResource BotConnectorTokenLabel}" />
                                                         <arc:Input Size="Small" IsLabelVisible="False"
-                                                                   Label="{l:AppLangResource BotConnectorTokenLabel}"
+                                                                   Label="MCP URL"
+                                                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                                   Placeholder="{l:AppLangResource BotConnectorUrlPlaceholder}"
+                                                                   Text="{Binding EditUrl, Mode=TwoWay}" />
+                                                    </StackPanel>
+
+                                                    <!-- Manual Bearer Token input -->
+                                                    <StackPanel IsVisible="{Binding ShowBearerTokenInput}" Spacing="5">
+                                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                            <TextBlock Classes="hint" Text="{Binding TokenFieldLabel}" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1" Classes="hint" FontSize="10.5"
+                                                                       IsVisible="{Binding IsBearerSaved}"
+                                                                       Foreground="{arc:ArcDesignTokenResource Success}"
+                                                                       Text="{l:AppLangResource BotConnectorAuthTokenSet}"
+                                                                       VerticalAlignment="Center" />
+                                                        </Grid>
+                                                        <arc:Input Size="Small" IsLabelVisible="False"
+                                                                   PasswordChar="•"
+                                                                   Label="{Binding TokenFieldLabel}"
                                                                    Placeholder="{l:AppLangResource BotConnectorTokenPlaceholder}"
                                                                    Text="{Binding EditBearerToken, Mode=TwoWay}" />
                                                     </StackPanel>
-                                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
-                                                        <arc:Button Variant="Ghost" Size="Small" IsVisible="{Binding HasSecret}"
-                                                                    Content="{l:AppLangResource BotConnectorClearToken}"
+
+                                                    <!-- Action buttons -->
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                                        <arc:Button Variant="Ghost" Size="Small" HorizontalAlignment="Left"
+                                                                    IsVisible="{Binding ShowClearBearerButton}"
+                                                                    Content="{l:AppLangResource BotConnectorClearCredentials}"
                                                                     Command="{Binding ClearTokenCommand}" />
-                                                        <arc:Button Variant="Secondary" Size="Small"
-                                                                    IsLoading="{Binding IsProbing}"
-                                                                    Content="{l:AppLangResource BotConnectorTestButton}"
-                                                                    Command="{Binding TestCommand}" />
-                                                        <arc:Button Variant="Primary" Size="Small"
-                                                                    Content="{l:AppLangResource Save}"
-                                                                    Command="{Binding SaveConfigCommand}" />
-                                                    </StackPanel>
-                                                    <TextBlock Classes="hint" IsVisible="{Binding HasProbeStatus}"
-                                                               Text="{Binding ProbeStatusText}" TextWrapping="Wrap" />
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                            <arc:Button Variant="Secondary" Size="Small"
+                                                                        IsLoading="{Binding IsProbing}"
+                                                                        Content="{l:AppLangResource BotConnectorTestButton}"
+                                                                        Command="{Binding TestCommand}" />
+                                                            <arc:Button Variant="Primary" Size="Small"
+                                                                        Content="{l:AppLangResource Save}"
+                                                                        Command="{Binding SaveConfigCommand}" />
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                    <!-- Status feedback banner -->
+                                                    <Border IsVisible="{Binding HasProbeStatus}" Padding="8,6"
+                                                            CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                                                            Background="{arc:ArcDesignTokenResource Surface}"
+                                                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}" BorderThickness="1">
+                                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                                                            <Panel VerticalAlignment="Top" Margin="0,1.5,0,0">
+                                                                <lucide:LucideIcon Kind="CheckCircle2" Size="13" IsVisible="{Binding IsProbeSuccess}" Foreground="{arc:ArcDesignTokenResource Success}" />
+                                                                <lucide:LucideIcon Kind="AlertCircle" Size="13" IsVisible="{Binding IsProbeWarning}" Foreground="{arc:ArcDesignTokenResource Warning}" />
+                                                                <lucide:LucideIcon Kind="XCircle" Size="13" IsVisible="{Binding IsProbeError}" Foreground="{arc:ArcDesignTokenResource Danger}" />
+                                                                <lucide:LucideIcon Kind="Info" Size="13" IsVisible="{Binding IsProbeNeutral}" Foreground="{arc:ArcDesignTokenResource TextMuted}" />
+                                                            </Panel>
+                                                            <TextBlock Grid.Column="1" Classes="hint" Text="{Binding ProbeStatusText}" TextWrapping="Wrap" />
+                                                        </Grid>
+                                                    </Border>
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
@@ -646,10 +790,8 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <TextBlock Classes="hint" Margin="2,2" TextWrapping="Wrap"
-                                   Text="{l:AppLangResource BotConnectorMcpHint}" />
-                    </StackPanel>
-                </arc:ScrollArea>
+                <TextBlock Grid.Row="2" Classes="hint" Margin="12,4,12,10" TextWrapping="Wrap"
+                           Text="{l:AppLangResource BotConnectorMcpHint}" />
             </Grid>
         </Grid>
 
@@ -669,43 +811,49 @@
                 </arc:Button>
             </Grid>
 
-            <arc:ScrollArea Grid.Row="1" OverlayScrollbarMode="Auto" FadeLength="0">
-                <StackPanel Margin="6,2,6,12" Spacing="2">
-                    <ItemsControl ItemsSource="{Binding FilteredChats}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Spacing="2" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:BotChatRowViewModel">
-                                <Button Classes="row" Classes.selected="{Binding IsSelected}"
-                                        Padding="8,7"
-                                        Command="{Binding OpenCommand}"
-                                        DataContextChanged="OnChatRowDataContextChanged">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                        <lucide:LucideIcon Kind="{Binding Icon}" Size="15" VerticalAlignment="Top" Margin="0,2,0,0"
-                                                           Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
-                                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                            <TextBlock Classes="body" FontWeight="Medium" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Classes="hint" IsVisible="{Binding HasSubtitle}" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                        <Panel Grid.Column="2" VerticalAlignment="Top" Margin="4,2,0,0">
-                                            <arc:ArcSpinner Width="11" Height="11" IsVisible="{Binding IsWorking}" Foreground="{arc:ArcDesignTokenResource Accent}" />
-                                            <Ellipse Width="7" Height="7" IsVisible="{Binding NeedsYou}" Fill="{arc:ArcDesignTokenResource Warning}" />
-                                            <TextBlock Classes="hint" IsVisible="{Binding ShowTime}" Text="{Binding TimeText}" />
-                                        </Panel>
-                                    </Grid>
-                                </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+            <Grid Grid.Row="1">
+                <ItemsControl x:Name="ChatsList" ItemsSource="{Binding FilteredChats}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.Template>
+                        <ControlTemplate>
+                            <arc:ScrollArea Name="PART_ScrollViewer" OverlayScrollbarMode="Auto" FadeLength="0"
+                                            HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="6,2,6,12" />
+                            </arc:ScrollArea>
+                        </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BotChatRowViewModel">
+                            <Button Classes="row" Classes.selected="{Binding IsSelected}"
+                                    Padding="8,7" Margin="0,0,0,2"
+                                    Command="{Binding OpenCommand}"
+                                    DataContextChanged="OnChatRowDataContextChanged">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                    <lucide:LucideIcon Kind="{Binding Icon}" Size="15" VerticalAlignment="Top" Margin="0,2,0,0"
+                                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Classes="body" FontWeight="Medium" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Classes="hint" IsVisible="{Binding HasSubtitle}" Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <Panel Grid.Column="2" VerticalAlignment="Top" Margin="4,2,0,0">
+                                        <arc:ArcSpinner Width="11" Height="11" IsVisible="{Binding IsWorking}" Foreground="{arc:ArcDesignTokenResource Accent}" />
+                                        <Ellipse Width="7" Height="7" IsVisible="{Binding NeedsYou}" Fill="{arc:ArcDesignTokenResource Warning}" />
+                                        <TextBlock Classes="hint" IsVisible="{Binding ShowTime}" Text="{Binding TimeText}" />
+                                    </Panel>
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
-                    <TextBlock Classes="hint" HorizontalAlignment="Center" Margin="0,20"
-                               IsVisible="{Binding HasNoFilteredChats}"
-                               Text="{l:AppLangResource BotChatsEmpty}" />
-                </StackPanel>
-            </arc:ScrollArea>
+                <TextBlock Classes="hint" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20"
+                           IsVisible="{Binding HasNoFilteredChats}"
+                           Text="{l:AppLangResource BotChatsEmpty}" />
+            </Grid>
         </Grid>
 
         <!-- Tab 4: Files -->

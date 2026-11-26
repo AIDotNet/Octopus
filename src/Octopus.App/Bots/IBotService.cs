@@ -13,7 +13,8 @@ public enum BotChangeKind
     ActiveChat,
     Connectors,
     Items,
-    Files
+    Files,
+    Schedules
 }
 
 public sealed record BotChangedEventArgs(BotChangeKind Kind, BotDefinition? Bot = null, BotChat? Chat = null, ProjectItem? Item = null);
@@ -66,11 +67,24 @@ public interface IBotService
     BotConnectorBinding? AddCustomUrlConnector(string botId, string name, string url);
     Task<BotConnectorBinding?> AddCustomUrlConnectorAsync(string botId, string name, string url, string transport = "http", string? bearerToken = null, CancellationToken ct = default);
     Task<BotConnectorBinding?> ConfigureConnectorAsync(string botId, string connectorId, string? url, string transport, string? variableValue, string? bearerToken, bool clearToken = false, CancellationToken ct = default);
+    Task<BotMcpOAuthResult> SignInConnectorOAuthAsync(string botId, string connectorId, string? urlOverride = null, CancellationToken ct = default);
     void SetConnectorEnabled(string botId, string connectorId, bool enabled);
     void RemoveConnector(string botId, string connectorId);
     Task<IReadOnlyList<AcpMcpServerConfig>> BuildAcpMcpServersAsync(string botId, CancellationToken ct = default);
 
     BotDefinition ImportBot(BotSharePayload payload, string hostDeviceKey = "local");
+
+    /// <summary>
+    /// Changes the bot's schedules in one saved step. <paramref name="mutate"/> returns false when it changed nothing.
+    /// Raises <see cref="BotChangeKind.Schedules"/> without rewriting the bot's home files.
+    /// </summary>
+    bool MutateSchedules(string botId, Func<List<BotSchedule>, bool> mutate);
+    BotDefinition? FindBotByChatId(string chatId);
+    /// <summary>
+    /// Makes sure the chat is open as an item of the bot's backing project without switching to it, so a scheduled run
+    /// can be delivered while the owner works elsewhere. Returns the backing item, or null when the chat is unknown.
+    /// </summary>
+    ProjectItem? EnsureChatOpenInBackground(string botId, string chatId);
 
     BotWorkItem? AddWorkItem(string botId, string title, BotWorkItemStatus status = BotWorkItemStatus.Planned, string? question = null, IReadOnlyList<string>? options = null, string? chatId = null);
     void ResolveWorkItem(string botId, string itemId, string? chosenOption = null);

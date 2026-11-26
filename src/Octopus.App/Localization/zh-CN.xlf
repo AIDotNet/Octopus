@@ -1606,10 +1606,24 @@
     <unit id="BotConnectorTestFailed"><segment><source>Failed: {0}</source><target state="translated">连接失败：{0}</target></segment></unit>
     <unit id="BotConnectorAuthNone"><segment><source>No sign-in</source><target state="translated">免登录</target></segment></unit>
     <unit id="BotConnectorAuthOAuth"><segment><source>OAuth</source><target state="translated">OAuth</target></segment></unit>
+    <unit id="BotConnectorAuthOAuthSignedIn"><segment><source>OAuth signed in</source><target state="translated">OAuth 已登录</target></segment></unit>
+    <unit id="BotConnectorAuthOAuthNeeded"><segment><source>OAuth · Sign in</source><target state="translated">OAuth · 待登录</target></segment></unit>
     <unit id="BotConnectorAuthTokenSet"><segment><source>Token saved</source><target state="translated">已配置 Token</target></segment></unit>
     <unit id="BotConnectorAuthTokenNeeded"><segment><source>Bearer token</source><target state="translated">需 Token</target></segment></unit>
-    <unit id="BotConnectorConfigureTip"><segment><source>Configure endpoint &amp; token</source><target state="translated">配置端点与凭据</target></segment></unit>
+    <unit id="BotConnectorAuthApiKeySet"><segment><source>Key configured</source><target state="translated">已配置 Key</target></segment></unit>
+    <unit id="BotConnectorAuthApiKeyNeeded"><segment><source>API Key</source><target state="translated">需 Key</target></segment></unit>
+    <unit id="BotConnectorConfigureTip"><segment><source>Configure endpoint &amp; credentials</source><target state="translated">配置端点与凭据</target></segment></unit>
     <unit id="BotConnectorClearToken"><segment><source>Clear token</source><target state="translated">清除 Token</target></segment></unit>
+    <unit id="BotConnectorClearCredentials"><segment><source>Clear credentials</source><target state="translated">清除凭据</target></segment></unit>
+    <unit id="BotConnectorOAuthSignIn"><segment><source>Sign in with OAuth</source><target state="translated">使用 OAuth 登录</target></segment></unit>
+    <unit id="BotConnectorOAuthReconnect"><segment><source>Reconnect OAuth</source><target state="translated">重新授权</target></segment></unit>
+    <unit id="BotConnectorOAuthSigningIn"><segment><source>Waiting for browser...</source><target state="translated">等待浏览器授权...</target></segment></unit>
+    <unit id="BotConnectorOAuthSignOut"><segment><source>Sign out</source><target state="translated">退出登录</target></segment></unit>
+    <unit id="BotConnectorOAuthSuccess"><segment><source>Signed in via OAuth</source><target state="translated">OAuth 授权成功</target></segment></unit>
+    <unit id="BotConnectorOAuthFailed"><segment><source>OAuth failed: {0}</source><target state="translated">OAuth 登录失败：{0}</target></segment></unit>
+    <unit id="BotConnectorOAuthCancelled"><segment><source>OAuth sign-in cancelled</source><target state="translated">已取消 OAuth 登录</target></segment></unit>
+    <unit id="BotConnectorOAuthHint"><segment><source>One-click browser authorization with automatic token refresh</source><target state="translated">在浏览器中一键完成 OAuth 2.1 授权（支持自动续期）</target></segment></unit>
+    <unit id="BotConnectorManualTokenLabel"><segment><source>Or paste Bearer Token (optional)</source><target state="translated">或手动填写 Bearer Token（可选）</target></segment></unit>
     <unit id="BotConnectorMcpHint"><segment><source>Enabled Remote MCP servers sync to .mcp.json and are injected into ACP chats automatically.</source><target state="translated">已启用的远程 MCP 会自动同步到 .mcp.json，并注入到 ACP 聊天会话。</target></segment></unit>
     <unit id="BotShareCopyLink"><segment><source>Copy share link</source><target state="translated">复制分享链接</target></segment></unit>
     <unit id="BotShareCopyLinkCopied"><segment><source>Link copied!</source><target state="translated">链接已复制</target></segment></unit>

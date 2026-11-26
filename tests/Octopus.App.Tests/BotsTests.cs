@@ -146,12 +146,12 @@ public sealed class BotsTests
         Assert.NotEmpty(catalog.Categories);
         Assert.NotEmpty(catalog.Groups);
 
-        // Filter by coding category (8 apps matching reference design)
+        // Filter by coding category (8 global + 3 domestic apps: Gitee, Yunxiao, JihuLab)
         var coding = catalog.Categories.Single(c => c.Id == "coding");
-        Assert.Equal(8, coding.Count);
+        Assert.Equal(11, coding.Count);
         coding.SelectCommand.Execute(null);
         Assert.Single(catalog.Groups);
-        Assert.Equal(8, catalog.Groups[0].Apps.Count);
+        Assert.Equal(11, catalog.Groups[0].Apps.Count);
 
         // Add GitHub from catalog and add custom URL connector
         catalog.Groups[0].Apps.Single(a => a.AppId == "github").ToggleCommand.Execute(null);
@@ -161,6 +161,14 @@ public sealed class BotsTests
 
         Assert.True(right.HasConnectors);
         Assert.Equal(2, right.Connectors.Count);
+
+        // Search domestic apps by Chinese name (Feishu, AMap, Tencent Docs)
+        catalog.Categories.Single(c => c.Id == "all").SelectCommand.Execute(null);
+        catalog.SearchQuery = "飞书";
+        Assert.Contains(catalog.Groups.SelectMany(g => g.Apps), a => a.AppId == "feishu");
+        catalog.SearchQuery = "高德";
+        Assert.Contains(catalog.Groups.SelectMany(g => g.Apps), a => a.AppId == "amap");
+        catalog.SearchQuery = "";
 
         // Tab 3: Chats (search + close + reopen)
         right.TabKey = "chats";
@@ -589,9 +597,24 @@ public sealed class BotsTests
         var bots = AppHost.Get<IBotService>();
         var bot = bots.CreateBot(new NewBotRequest("Logo Bot", "claude", "#3b82d6", "pr", null));
         var catalogVm = new ConnectorCatalogViewModel(bot, bots);
-        var window = new Window { Width = 680, Height = 520, Content = new ConnectorCatalogView(catalogVm) };
+        Assert.Equal(BotCatalog.ConnectorApps.Count + catalogVm.Groups.Count, catalogVm.CatalogItems.Count);
+        var catalogView = new ConnectorCatalogView(catalogVm);
+        var window = new Window { Width = 680, Height = 520, Content = catalogView };
         window.Show();
-        window.Close();
+        try
+        {
+            window.UpdateLayout();
+            var catalogList = Assert.IsType<ItemsControl>(catalogView.FindControl<ItemsControl>("CatalogList"));
+            Assert.IsType<VirtualizingStackPanel>(catalogList.ItemsPanelRoot);
+            // Genuine virtualization: realized containers in a 460px viewport must be strictly fewer than all 33 catalog items.
+            var realized = catalogList.GetRealizedContainers().Count();
+            Assert.True(realized > 0 && realized < catalogVm.CatalogItems.Count,
+                $"Expected virtualized subset of containers, got {realized}/{catalogVm.CatalogItems.Count}");
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact, FreshApp]
@@ -655,5 +678,263 @@ public sealed class BotsTests
         extraRow.DeleteChatCommand.Execute(null);
         Assert.Single(panel.BotNodes[0].Chats);
         Assert.True(panel.BotNodes[0].Chats[0].IsHome);
+    }
+
+    [AvaloniaFact]
+    public async Task BotConnectorOAuth_DiscoversRegistersExchangesAndRefreshesTokens()
+    {
+        var secrets = new Octopus.Platform.MemorySecretStore();
+        var issuedCode = "auth-code-linear-42";
+        string? registeredRedirect = null;
+        string? expectedChallenge = null;
+        string? lastGrantType = null;
+
+        var handler = new StubHttpHandler(async (req, ct) =>
+        {
+            var url = req.RequestUri!.AbsoluteUri;
+            if (url == "https://mcp.demo.test/mcp")
+            {
+                var resp = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized);
+                resp.Headers.TryAddWithoutValidation(
+                    "WWW-Authenticate",
+                    """Bearer realm="OAuth", resource_metadata="https://mcp.demo.test/.well-known/oauth-protected-resource/mcp", scope="read write" """);
+                return resp;
+            }
+
+            if (url == "https://mcp.demo.test/.well-known/oauth-protected-resource/mcp")
+            {
+                return JsonResponse("""{"resource":"https://mcp.demo.test/mcp","authorization_servers":["https://auth.demo.test"],"scopes_supported":["read","write"]}""");
+            }
+
+            if (url == "https://auth.demo.test/.well-known/oauth-authorization-server")
+            {
+                return JsonResponse("""{"issuer":"https://auth.demo.test","authorization_endpoint":"https://auth.demo.test/authorize","token_endpoint":"https://auth.demo.test/token","registration_endpoint":"https://auth.demo.test/register","token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256"]}""");
+            }
+
+            if (url == "https://auth.demo.test/register" && req.Method == HttpMethod.Post)
+            {
+                var body = await req.Content!.ReadAsStringAsync(ct);
+                using var doc = System.Text.Json.JsonDocument.Parse(body);
+                registeredRedirect = doc.RootElement.GetProperty("redirect_uris")[0].GetString();
+                return JsonResponse("""{"client_id":"dyn-client-123","token_endpoint_auth_method":"none"}""", System.Net.HttpStatusCode.Created);
+            }
+
+            if (url == "https://auth.demo.test/token" && req.Method == HttpMethod.Post)
+            {
+                var form = BotMcpOAuthClient.ParseQueryString(await req.Content!.ReadAsStringAsync(ct));
+                lastGrantType = form["grant_type"];
+                if (lastGrantType == "authorization_code")
+                {
+                    Assert.Equal(issuedCode, form["code"]);
+                    Assert.Equal("dyn-client-123", form["client_id"]);
+                    Assert.Equal(registeredRedirect, form["redirect_uri"]);
+                    Assert.Equal(expectedChallenge, BotMcpOAuthClient.ComputeS256Challenge(form["code_verifier"]));
+                    Assert.Equal("https://mcp.demo.test/mcp", form["resource"]);
+                    return JsonResponse("""{"access_token":"oauth-access-v1","refresh_token":"oauth-refresh-v1","expires_in":3600}""");
+                }
+                if (lastGrantType == "refresh_token")
+                {
+                    Assert.Equal("oauth-refresh-v1", form["refresh_token"]);
+                    Assert.Equal("dyn-client-123", form["client_id"]);
+                    return JsonResponse("""{"access_token":"oauth-access-v2","refresh_token":"oauth-refresh-v2","expires_in":3600}""");
+                }
+            }
+
+            return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+        });
+
+        using var http = new HttpClient(handler);
+        using var callbackClient = new HttpClient();
+        var opener = new CallbackDrivingOpener(authUrl =>
+        {
+            var qIdx = authUrl.IndexOf('?');
+            var q = BotMcpOAuthClient.ParseQueryString(authUrl[(qIdx + 1)..]);
+            expectedChallenge = q["code_challenge"];
+            Assert.Equal("S256", q["code_challenge_method"]);
+            Assert.Equal("read write", q["scope"]);
+            var redirectUri = q["redirect_uri"];
+            var state = q["state"];
+            _ = Task.Run(async () =>
+            {
+                var callbackUrl = $"{redirectUri}?code={Uri.EscapeDataString(issuedCode)}&state={Uri.EscapeDataString(state)}";
+                using var cbResp = await callbackClient.GetAsync(callbackUrl);
+                Assert.True(cbResp.IsSuccessStatusCode);
+            });
+            return true;
+        });
+
+        var runtime = new BotConnectorRuntime(secrets, opener, http);
+        var signIn = await runtime.SignInOAuthAsync("bot-1", "conn-1", "https://mcp.demo.test/mcp");
+        Assert.True(signIn.Succeeded, signIn.Error);
+        Assert.NotNull(signIn.Credential);
+        Assert.Equal("oauth-access-v1", signIn.Credential!.AccessToken);
+        Assert.Equal("authorization_code", lastGrantType);
+
+        // Runtime returns the active access token and builds ACP Authorization header cleanly.
+        Assert.Equal("oauth-access-v1", await runtime.GetTokenAsync("bot-1", "conn-1"));
+        var bot = new BotDefinition
+        {
+            Id = "bot-1",
+            Connectors =
+            [
+                new BotConnectorBinding
+                {
+                    Id = "conn-1",
+                    AppId = "linear",
+                    DisplayName = "Linear",
+                    Url = "https://mcp.demo.test/mcp",
+                    Transport = "http",
+                    AuthMode = "oauth",
+                    HasSecret = true,
+                    Enabled = true,
+                }
+            ]
+        };
+        var servers = await runtime.BuildAcpMcpServersAsync(bot);
+        Assert.Equal("Bearer oauth-access-v1", Assert.Single(servers).Headers["Authorization"]);
+
+        // Simulate an expiring credential and verify transparent refresh_token rotation.
+        var expired = signIn.Credential with { ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-30) };
+        await runtime.SetOAuthCredentialAsync("bot-1", "conn-1", expired);
+
+        var refreshedToken = await runtime.GetTokenAsync("bot-1", "conn-1");
+        Assert.Equal("oauth-access-v2", refreshedToken);
+        Assert.Equal("refresh_token", lastGrantType);
+
+        // Refreshed credential is persisted back to ISecretStore.
+        var storedRaw = await secrets.GetAsync(BotConnectorRuntime.SecretService, BotConnectorRuntime.SecretName("bot-1", "conn-1"));
+        Assert.True(BotOAuthCredential.TryDeserialize(storedRaw, out var persisted));
+        Assert.Equal("oauth-access-v2", persisted!.AccessToken);
+        Assert.Equal("oauth-refresh-v2", persisted.RefreshToken);
+    }
+
+    [AvaloniaFact]
+    public void BotRightPanel_ConnectorsCard_RendersOAuthAndExpandedEditorWithoutOverflow()
+    {
+        var bots = AppHost.Get<IBotService>();
+        var right = AppHost.Get<BotRightPanelViewModel>();
+        var bot = bots.CreateBot(new NewBotRequest("OAuth Bot", "claude", "#5b5bd6", "blank", null));
+        bots.AddConnector(bot.Id, "linear");
+        bots.AddConnector(bot.Id, "datadog");
+
+        right.TabKey = "connectors";
+        right.Refresh();
+
+        Assert.Equal(2, right.Connectors.Count);
+        var linear = right.Connectors.Single(c => c.AppId == "linear");
+        Assert.True(linear.IsOAuthPreferred);
+        Assert.True(linear.ShowQuickOAuthBar);
+        Assert.True(linear.CanUseOAuth);
+
+        linear.ToggleEditCommand.Execute(null);
+        Assert.True(linear.IsEditing);
+        Assert.False(linear.ShowQuickOAuthBar);
+
+        var view = new BotRightPanelView { DataContext = right };
+        var win = new Window { Width = 310, Height = 640, Content = view };
+        win.Show();
+        try
+        {
+            win.UpdateLayout();
+            Assert.True(view.Bounds.Width <= 310.5);
+            var connectorsList = Assert.IsType<ItemsControl>(view.FindControl<ItemsControl>("ConnectorsList"));
+            Assert.IsType<VirtualizingStackPanel>(connectorsList.ItemsPanelRoot);
+        }
+        finally
+        {
+            win.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task DomesticConnectors_SupportFeishuPostOAuthDiscovery_AndApiKeyTemplateResolution()
+    {
+        // 1. Verify domestic catalog definitions & URL variable behavior
+        var feishu = BotCatalog.FindConnectorApp("feishu")!;
+        Assert.Equal("https://mcp.feishu.cn/mcp", BotCatalog.ResolveMcpUrl(feishu));
+        Assert.Equal("oauth", feishu.AuthMode);
+        Assert.Equal("飞书", feishu.DisplayName(isZh: true));
+        Assert.Equal("Feishu", feishu.DisplayName(isZh: false));
+
+        var tencentDocs = BotCatalog.FindConnectorApp("tencentdocs")!;
+        Assert.Equal("https://docs.qq.com/openapi/mcp", BotCatalog.ResolveMcpUrl(tencentDocs));
+        Assert.Equal("oauth", tencentDocs.AuthMode);
+
+        var gitee = BotCatalog.FindConnectorApp("gitee")!;
+        Assert.Equal("https://api.gitee.com/mcp", BotCatalog.ResolveMcpUrl(gitee));
+        Assert.Equal("bearer", gitee.AuthMode);
+
+        var yunxiao = BotCatalog.FindConnectorApp("yunxiao")!;
+        Assert.Equal("https://openapi-rdc.aliyuncs.com/ai/mcp", BotCatalog.ResolveMcpUrl(yunxiao));
+
+        var jihulab = BotCatalog.FindConnectorApp("jihulab")!;
+        Assert.Equal("https://jihulab.com/api/v4/mcp", BotCatalog.ResolveMcpUrl(jihulab));
+        Assert.Equal("oauth", jihulab.AuthMode);
+
+        // Map connectors require an API key before resolving to a valid URL (never write broken "?key=" to .mcp.json)
+        var amap = BotCatalog.FindConnectorApp("amap")!;
+        Assert.Null(BotCatalog.ResolveMcpUrl(amap));
+        Assert.Equal("https://mcp.amap.com/mcp?key=amap-key-123", BotCatalog.ResolveMcpUrl(amap, "amap-key-123"));
+
+        var baidu = BotCatalog.FindConnectorApp("baidumap")!;
+        Assert.Null(BotCatalog.ResolveMcpUrl(baidu));
+        Assert.Equal("https://mcp.map.baidu.com/mcp?ak=bd-ak-456", BotCatalog.ResolveMcpUrl(baidu, "bd-ak-456"));
+
+        var tencentMap = BotCatalog.FindConnectorApp("tencentmap")!;
+        Assert.Null(BotCatalog.ResolveMcpUrl(tencentMap));
+        Assert.Equal("https://mcp.map.qq.com/mcp?key=qq-key-789&format=0", BotCatalog.ResolveMcpUrl(tencentMap, "qq-key-789"));
+
+        // 2. Verify Feishu-style POST-only 401 WWW-Authenticate discovery + cross-origin path issuer metadata
+        var handler = new StubHttpHandler((req, _) =>
+        {
+            var url = req.RequestUri!.AbsoluteUri;
+            if (url == "https://mcp.feishu.cn/mcp" && req.Method == HttpMethod.Get)
+            {
+                return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            }
+            if (url == "https://mcp.feishu.cn/mcp" && req.Method == HttpMethod.Post)
+            {
+                var resp = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized);
+                resp.Headers.TryAddWithoutValidation(
+                    "WWW-Authenticate",
+                    """Bearer realm="mcp", resource_metadata="https://mcp.feishu.cn/.well-known/oauth-protected-resource/mcp", scope="mcp-tool:docs:search-doc offline_access" """);
+                return Task.FromResult(resp);
+            }
+            if (url == "https://mcp.feishu.cn/.well-known/oauth-protected-resource/mcp")
+            {
+                return Task.FromResult(JsonResponse("""{"resource":"https://mcp.feishu.cn/mcp","authorization_servers":["https://accounts.feishu.cn/mcp"]}"""));
+            }
+            if (url == "https://accounts.feishu.cn/.well-known/oauth-authorization-server/mcp")
+            {
+                return Task.FromResult(JsonResponse("""{"issuer":"https://accounts.feishu.cn/mcp","authorization_endpoint":"https://accounts.feishu.cn/oauth/v2/mcp/authorize","token_endpoint":"https://accounts.feishu.cn/oauth/v3/token","registration_endpoint":"https://open.feishu.cn/open-apis/app/v1/dcr","token_endpoint_auth_methods_supported":["none"]}"""));
+            }
+            return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+        });
+
+        using var http = new HttpClient(handler);
+        var oauth = new BotMcpOAuthClient(http, _ => true);
+        var meta = await oauth.DiscoverAsync(new Uri("https://mcp.feishu.cn/mcp"));
+        Assert.NotNull(meta);
+        Assert.Equal("https://accounts.feishu.cn/oauth/v2/mcp/authorize", meta!.AuthorizationEndpoint);
+        Assert.Equal("https://accounts.feishu.cn/oauth/v3/token", meta.TokenEndpoint);
+        Assert.Equal("https://open.feishu.cn/open-apis/app/v1/dcr", meta.RegistrationEndpoint);
+        Assert.Equal("https://mcp.feishu.cn/mcp", meta.Resource);
+        Assert.Equal("mcp-tool:docs:search-doc offline_access", meta.Scope);
+    }
+
+    private static System.Net.Http.HttpResponseMessage JsonResponse(string json, System.Net.HttpStatusCode status = System.Net.HttpStatusCode.OK) =>
+        new(status) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") };
+
+    private sealed class StubHttpHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            responder(request, cancellationToken);
+    }
+
+    private sealed class CallbackDrivingOpener(Func<string, bool> onOpenUrl) : IFileOpener
+    {
+        public void Reveal(string path) { }
+        public void Open(string path) { }
+        public bool OpenUrl(string url) => onOpenUrl(url);
     }
 }

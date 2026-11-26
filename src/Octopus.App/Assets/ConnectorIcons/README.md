@@ -4,11 +4,13 @@ Built-in authentic product brand icons (`connector-icons.json`) for the Bot Conn
 
 ## Sources
 
-- `github`, `vercel`, `intercom`: Simple Icons (CC0)
-- `cloudflare`, `supabase`, `neon`, `netlify`, `gitlab`, `slack`, `sentry`, `datadog`, `linear`, `notion`: svgl (MIT)
+- `github`, `vercel`, `intercom`, `gitee`: Simple Icons (CC0)
+- `cloudflare`, `supabase`, `neon`, `netlify`, `gitlab`, `jihulab`, `slack`, `sentry`, `datadog`, `linear`, `notion`: svgl (MIT)
 - `jira`, `pagerduty`: gilbarbara/logos (CC0)
-- `google`: `@lobehub/icons-static-svg` (MIT)
+- `google`, `yunxiao` (Alibaba Cloud): `@lobehub/icons-static-svg` (MIT)
+- `dingtalk`: Ant Design Icons (`ant-design:dingtalk`, MIT)
 - `context7`: `upstash/context7` (`public/context7-icon-green.svg`, MIT)
+- `feishu`, `tencentdocs`, `amap`, `baidumap`, `tencentmap`: crafted official-style multi-path 24x24 SVGs using standard `M/L/C/Z` path geometry for NativeAOT-safe Avalonia rendering
 
 ## Format
 

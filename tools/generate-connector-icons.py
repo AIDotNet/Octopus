@@ -45,8 +45,17 @@ CONNECTOR_SOURCES: dict[str, tuple[str, str | None, dict[str, str] | None]] = {
     "linear":     ("linear.svg",          None,           None),
     "notion":     ("notion.svg",          "#000000",      None),
     "jira":       ("jira-color.svg",      None,           None),
-    "google":     ("google-lobe.svg",     None,           None),
-    "intercom":   ("intercom.svg",        "#286efa",      None),
+    "google":      ("google-lobe.svg",     None,           None),
+    "intercom":    ("intercom.svg",        "#286efa",      None),
+    "feishu":      ("feishu.svg",          None,           None),
+    "dingtalk":    ("dingtalk.svg",        "#0089ff",      None),
+    "tencentdocs": ("tencentdocs.svg",     None,           None),
+    "gitee":       ("gitee.svg",           "#c71d23",      None),
+    "yunxiao":     ("yunxiao.svg",         None,           None),
+    "jihulab":     ("jihulab.svg",         None,           None),
+    "amap":        ("amap.svg",            None,           None),
+    "baidumap":    ("baidumap.svg",        None,           None),
+    "tencentmap":  ("tencentmap.svg",      None,           None),
 }
 
 
