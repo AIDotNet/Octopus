@@ -150,6 +150,23 @@
     <unit id="SettingsOpenHomepage"><segment><source>Open homepage</source><target state="translated">打开主页</target></segment></unit>
     <unit id="SettingsToggleDetails"><segment><source>Show or hide settings</source><target state="translated">展开或收起配置</target></segment></unit>
     <unit id="SettingsCopyInstallCommand"><segment><source>Copy install command</source><target state="translated">复制安装命令</target></segment></unit>
+    <unit id="SettingsInstallAgent"><segment><source>Install</source><target state="translated">安装</target></segment></unit>
+    <unit id="SettingsInstallAgentTitle"><segment><source>Install {0}?</source><target state="translated">安装 {0}？</target></segment></unit>
+    <unit id="SettingsInstallAgentDescription"><segment><source>Octopus will run this command in the background:&#10;{0}</source><target state="translated">Octopus 将在后台运行以下命令：&#10;{0}</target></segment></unit>
+    <unit id="SettingsInstallAgentScriptDescription"><segment><source>Octopus will download and run the official install script:&#10;{0}&#10;Only continue if you trust this source.</source><target state="translated">Octopus 将下载并运行官方安装脚本：&#10;{0}&#10;请确认你信任该来源后再继续。</target></segment></unit>
+    <unit id="SettingsInstallAgentInstalling"><segment><source>Installing…</source><target state="translated">安装中…</target></segment></unit>
+    <unit id="SettingsInstallAgentFailed"><segment><source>Install failed: {0}</source><target state="translated">安装失败：{0}</target></segment></unit>
+    <unit id="SettingsInstallAgentNotFound"><segment><source>The install finished, but the agent was not found on PATH. Restart Octopus or rescan.</source><target state="translated">安装已完成，但未在 PATH 中找到该智能体。请重启 Octopus 或重新扫描。</target></segment></unit>
+    <unit id="SettingsInstallAsAdmin"><segment><source>Install as administrator</source><target state="translated">以管理员身份安装</target></segment></unit>
+    <unit id="SettingsInstallNeedsAdmin"><segment><source>Needs administrator rights. Click &quot;Install as administrator&quot; to try again.</source><target state="translated">需要管理员权限，请点击「以管理员身份安装」重试。</target></segment></unit>
+    <unit id="SettingsInstallRunWithSudo"><segment><source>Needs administrator rights. Run this in a terminal: {0}</source><target state="translated">需要管理员权限，请在终端中运行：{0}</target></segment></unit>
+    <unit id="SettingsInstallSudoDescription"><segment><source>This install needs administrator rights. Octopus will open a terminal and run:&#10;{0}&#10;Type your password there when sudo asks for it. Octopus never sees it.</source><target state="translated">该安装需要管理员权限。Octopus 将打开一个终端并运行：&#10;{0}&#10;sudo 询问时请在终端中输入你的登录密码，Octopus 不会读取它。</target></segment></unit>
+    <unit id="SettingsInstallUacDescription"><segment><source>This install needs administrator rights. Windows will ask for permission, then run:&#10;{0}</source><target state="translated">该安装需要管理员权限。Windows 会先弹出授权确认，然后运行：&#10;{0}</target></segment></unit>
+    <unit id="SettingsInstallScriptTerminalDescription"><segment><source>Octopus will open a terminal and run the official install script:&#10;{0}&#10;It may ask for your password or other questions there. Only continue if you trust this source.</source><target state="translated">Octopus 将打开一个终端并运行官方安装脚本：&#10;{0}&#10;脚本可能会在终端中要求输入密码或回答问题。请确认你信任该来源后再继续。</target></segment></unit>
+    <unit id="SettingsInstallMayPromptDescription"><segment><source>Octopus will run this command in the background:&#10;{0}&#10;The system may ask for administrator permission.</source><target state="translated">Octopus 将在后台运行以下命令：&#10;{0}&#10;系统可能会弹出管理员授权确认。</target></segment></unit>
+    <unit id="SettingsInstallTerminalTitle"><segment><source>Installing {0}</source><target state="translated">正在安装 {0}</target></segment></unit>
+    <unit id="SettingsInstallTerminalHint"><segment><source>The installer runs below. Answer its questions here if it asks; the window closes when it succeeds.</source><target state="translated">安装程序在下方运行。如有提问请在此作答；安装成功后窗口会自动关闭。</target></segment></unit>
+    <unit id="SettingsInstallTerminalSudoHint"><segment><source>Type your password below when sudo asks for it (nothing is shown while typing). The window closes when the install succeeds.</source><target state="translated">sudo 询问时请在下方输入你的登录密码（输入时不会显示字符）。安装成功后窗口会自动关闭。</target></segment></unit>
     <unit id="SettingsUnverified"><segment><source>This agent's options come from its official documentation and have not been tested yet.</source><target state="translated">此智能体的参数来自官方文档，尚未实测</target></segment></unit>
     <unit id="SettingsFieldCommand"><segment><source>Command</source><target state="translated">命令</target></segment></unit>
     <unit id="SettingsFieldModel"><segment><source>Model</source><target state="translated">模型</target></segment></unit>
@@ -1275,6 +1292,11 @@
     <unit id="SettingsExpLspRescan"><segment><source>Rescan</source><target state="translated">重新扫描</target></segment></unit>
     <unit id="SettingsExpLspDetected"><segment><source>Installed</source><target state="translated">已安装</target></segment></unit>
     <unit id="SettingsExpLspNotInstalled"><segment><source>Not found</source><target state="translated">未安装</target></segment></unit>
+    <unit id="SettingsExpLspInstall"><segment><source>Install</source><target state="translated">安装</target></segment></unit>
+    <unit id="SettingsExpLspInstalling"><segment><source>Installing…</source><target state="translated">安装中…</target></segment></unit>
+    <unit id="SettingsExpLspInstallFailed"><segment><source>Install failed: {0}</source><target state="translated">安装失败：{0}</target></segment></unit>
+    <unit id="SettingsExpLspManualHint"><segment><source>Needs {0}: {1}</source><target state="translated">需要先安装 {0}：{1}</target></segment></unit>
+    <unit id="SettingsExpLspInstallNotFound"><segment><source>The install finished, but the server was not found on PATH. Restart Octopus or rescan.</source><target state="translated">安装已完成，但未在 PATH 中找到该语言服务器。请重启 Octopus 或重新扫描。</target></segment></unit>
     <unit id="SettingsAboutTitle"><segment><source>About</source><target state="translated">关于</target></segment></unit>
     <unit id="SettingsAboutSlogan"><segment><source>A cross-platform terminal and coding agent workspace organized by project.</source><target state="translated">按项目组织的跨平台终端与编码智能体工作台。</target></segment></unit>
     <unit id="SettingsAboutIntro"><segment><source>Organize local and remote repositories into project workspaces running native terminals and 40+ CLI coding agents side by side — with multi-account isolation, session resume, SSH tunnels, encrypted remote access, and plugins.</source><target state="translated">将本机与远端代码目录组织为项目工作区，在同一窗口中并排运行原生终端与 40+ 命令行编码智能体，内置多订阅账户隔离、历史会话恢复、SSH 隧道、跨设备加密远程访问与插件扩展。</target></segment></unit>
@@ -1469,8 +1491,9 @@
     <unit id="BotDialogDescription"><segment><source>A Bot is a long-lived agent with its own name, memory, and responsibilities.</source><target state="translated">Bot 是一个长期在线的智能体，有自己的名字、记忆和职责。</target></segment></unit>
     <unit id="BotDialogNameLabel"><segment><source>Name</source><target state="translated">名字</target></segment></unit>
     <unit id="BotDialogNamePlaceholder"><segment><source>e.g. Watermelon, PR Reviewer</source><target state="translated">例如：西瓜、PR 审查员</target></segment></unit>
-    <unit id="BotDialogAgentLabel"><segment><source>Agent</source><target state="translated">用哪个智能体</target></segment></unit>
-    <unit id="BotDialogTemplateLabel"><segment><source>Start from template</source><target state="translated">从模板开始</target></segment></unit>
+    <unit id="BotDialogAgentLabel"><segment><source>Agent</source><target state="translated">智能体</target></segment></unit>
+    <unit id="BotDialogHostLabel"><segment><source>Computer</source><target state="translated">电脑</target></segment></unit>
+    <unit id="BotDialogTemplateLabel"><segment><source>Start from template</source><target state="translated">模板</target></segment></unit>
     <unit id="BotDialogSoulLabel"><segment><source>Responsibilities (written to SOUL.md, optional)</source><target state="translated">它负责什么（写进 SOUL.md，可留空）</target></segment></unit>
     <unit id="BotDialogSoulPlaceholder"><segment><source>Describe what it watches, does, and how it reports back</source><target state="translated">一两句话说清楚它盯什么、做什么、怎么向你汇报</target></segment></unit>
     <unit id="BotDialogSafetyNote"><segment><source>Read-only by default: asks before making external changes</source><target state="translated">默认只读：没得到你同意前不改任何东西</target></segment></unit>
@@ -1489,8 +1512,8 @@
     <unit id="BotChatRenameTitle"><segment><source>Rename chat</source><target state="translated">重命名会话</target></segment></unit>
     <unit id="BotChatClose"><segment><source>Close chat</source><target state="translated">关闭会话</target></segment></unit>
     <unit id="BotChatReopen"><segment><source>Reopen chat</source><target state="translated">重新打开</target></segment></unit>
-    <unit id="BotChatDelete"><segment><source>Delete chat</source><target state="translated">删除会话</target></segment></unit>
-    <unit id="BotRightTabHome"><segment><source>Home</source><target state="translated">Home</target></segment></unit>
+    <unit id="BotChatDelete"><segment><source>Delete chat</source><target state="translated">删除聊天</target></segment></unit>
+    <unit id="BotRightTabHome"><segment><source>Home</source><target state="translated">主页</target></segment></unit>
     <unit id="BotRightTabConnectors"><segment><source>Connectors</source><target state="translated">连接器</target></segment></unit>
     <unit id="BotRightTabChats"><segment><source>Chats</source><target state="translated">聊天</target></segment></unit>
     <unit id="BotRightTabFiles"><segment><source>Files</source><target state="translated">文件</target></segment></unit>
@@ -1517,5 +1540,115 @@
     <unit id="BotChatsSearchPlaceholder"><segment><source>Search chats and workers</source><target state="translated">搜索聊天和工作者</target></segment></unit>
     <unit id="BotChatsEmpty"><segment><source>No matching chats</source><target state="translated">没有匹配的聊天</target></segment></unit>
     <unit id="BotWorkspaceEmptyHint"><segment><source>Create a Bot in the left panel to start chatting.</source><target state="translated">在左侧面板新建一个 Bot，它的会话会在这里打开。</target></segment></unit>
+    <unit id="BotHomeEmptyItemsTitle"><segment><source>No items yet</source><target state="translated">还没有事项</target></segment></unit>
+    <unit id="BotHomeEmptyItemsDescription"><segment><source>When {0} picks up tasks for you, what it is working on and what needs you will appear here.</source><target state="translated">当 {0} 为你接手任务时，会在这里显示它正在做什么，以及需要你做什么</target></segment></unit>
+    <unit id="BotHomeNextLookAround"><segment><source>Next {0} · Look around</source><target state="translated">下次 {0} · 巡视</target></segment></unit>
+    <unit id="BotHomeAutomationsHeading"><segment><source>Automations</source><target state="translated">自动化</target></segment></unit>
+    <unit id="BotHomeAutomationsHint"><segment><source>Ask {0} in chat to schedule recurring tasks or run when something happens.</source><target state="translated">在聊天中让 {0} 计划运行任务，或在某件事发生时运行</target></segment></unit>
+    <unit id="BotSettingsTitle"><segment><source>Settings</source><target state="translated">设置</target></segment></unit>
+    <unit id="BotSettingsSectionAgent"><segment><source>Agent</source><target state="translated">智能体</target></segment></unit>
+    <unit id="BotSettingsPermission"><segment><source>Permissions</source><target state="translated">权限</target></segment></unit>
+    <unit id="BotSettingsPermissionSameAsChat"><segment><source>Same as chat</source><target state="translated">与聊天相同</target></segment></unit>
+    <unit id="BotSettingsPermissionAsk"><segment><source>Ask every time</source><target state="translated">每次询问</target></segment></unit>
+    <unit id="BotSettingsPermissionReadOnly"><segment><source>Read-only</source><target state="translated">只读</target></segment></unit>
+    <unit id="BotSettingsPermissionAuto"><segment><source>Auto-approve</source><target state="translated">自动批准</target></segment></unit>
+    <unit id="BotSettingsEnabled"><segment><source>Enabled</source><target state="translated">已启用</target></segment></unit>
+    <unit id="BotSettingsSectionSchedule"><segment><source>Schedule</source><target state="translated">计划</target></segment></unit>
+    <unit id="BotSettingsLookAround"><segment><source>Look around</source><target state="translated">巡视</target></segment></unit>
+    <unit id="BotSettingsEveryHours"><segment><source>{0} hours</source><target state="translated">{0} 小时</target></segment></unit>
+    <unit id="BotSettingsMemoryMaintenance"><segment><source>Memory maintenance</source><target state="translated">记忆维护</target></segment></unit>
+    <unit id="BotSettingsNightly"><segment><source>Nightly</source><target state="translated">每晚</target></segment></unit>
+    <unit id="BotSettingsSectionItems"><segment><source>Items</source><target state="translated">事项</target></segment></unit>
+    <unit id="BotSettingsStaleAfter"><segment><source>Inactive after</source><target state="translated">多久算长期无活动</target></segment></unit>
+    <unit id="BotSettingsDays"><segment><source>{0} days</source><target state="translated">{0} 天</target></segment></unit>
+    <unit id="BotSettingsSectionSoulMemory"><segment><source>Soul &amp; Memory</source><target state="translated">灵魂与记忆</target></segment></unit>
+    <unit id="BotSettingsSoul"><segment><source>Soul</source><target state="translated">灵魂</target></segment></unit>
+    <unit id="BotSettingsMemory"><segment><source>Memory</source><target state="translated">记忆</target></segment></unit>
+    <unit id="BotSettingsFileCount"><segment><source>{0} files</source><target state="translated">{0} 个文件</target></segment></unit>
+    <unit id="BotSettingsSectionAccess"><segment><source>Access</source><target state="translated">访问权限</target></segment></unit>
+    <unit id="BotSettingsWhoCanAsk"><segment><source>Who can ask</source><target state="translated">谁可以提问</target></segment></unit>
+    <unit id="BotSettingsWhoOnlyYou"><segment><source>Only you</source><target state="translated">仅你</target></segment></unit>
+    <unit id="BotSettingsWhoMembers"><segment><source>Members</source><target state="translated">成员</target></segment></unit>
+    <unit id="BotSettingsWhoAnyone"><segment><source>Anyone</source><target state="translated">所有人</target></segment></unit>
+    <unit id="BotSettingsTools"><segment><source>Tools</source><target state="translated">工具</target></segment></unit>
+    <unit id="BotSettingsSkills"><segment><source>Skills</source><target state="translated">技能</target></segment></unit>
+    <unit id="BotSettingsNone"><segment><source>None</source><target state="translated">无</target></segment></unit>
+    <unit id="BotSettingsShare"><segment><source>Share</source><target state="translated">分享</target></segment></unit>
+    <unit id="BotSettingsSectionNotifications"><segment><source>Notifications</source><target state="translated">通知</target></segment></unit>
+    <unit id="BotSettingsNotifyPermission"><segment><source>Needs permission</source><target state="translated">需要权限</target></segment></unit>
+    <unit id="BotSettingsNotifyDone"><segment><source>Task completed</source><target state="translated">任务完成</target></segment></unit>
+    <unit id="BotSettingsNotifyFailed"><segment><source>Unable to complete</source><target state="translated">无法完成</target></segment></unit>
+    <unit id="BotSettingsDeleteEllipsis"><segment><source>Delete bot...</source><target state="translated">删除 bot...</target></segment></unit>
+    <unit id="BotShareLinesCount"><segment><source>{0} lines</source><target state="translated">{0} 行</target></segment></unit>
+    <unit id="BotShareAutomations"><segment><source>Automations</source><target state="translated">自动化</target></segment></unit>
+    <unit id="BotShareIncludeMemory"><segment><source>Include memory</source><target state="translated">包含记忆</target></segment></unit>
+    <unit id="BotShareSetupNotes"><segment><source>Setup notes</source><target state="translated">设置说明</target></segment></unit>
+    <unit id="BotShareSetupNotesAdd"><segment><source>Add</source><target state="translated">添加</target></segment></unit>
+    <unit id="BotShareSetupNotesPlaceholder"><segment><source>Optional instructions for anyone importing this Bot</source><target state="translated">给导入此 Bot 的人写一点配置提示（可选）</target></segment></unit>
+    <unit id="BotShareSecurityCheck"><segment><source>Security check</source><target state="translated">安全检查</target></segment></unit>
+    <unit id="BotShareSecurityClean"><segment><source>No issues found</source><target state="translated">未发现问题</target></segment></unit>
+    <unit id="BotShareSecurityWarning"><segment><source>{0} potential secret(s) detected</source><target state="translated">检测到 {0} 处疑似密钥</target></segment></unit>
+    <unit id="BotShareFooterHint"><segment><source>Anyone with this bundle can create a copy</source><target state="translated">任何拥有此配置的人都可以创建副本</target></segment></unit>
+    <unit id="BotShareCopyConfig"><segment><source>Copy bundle</source><target state="translated">复制配置</target></segment></unit>
+    <unit id="BotShareCopied"><segment><source>Copied!</source><target state="translated">已复制</target></segment></unit>
+    <unit id="BotAvatarPickerTitle"><segment><source>Bot avatar</source><target state="translated">Bot 头像</target></segment></unit>
+    <unit id="BotAvatarUploadHint"><segment><source>Or upload your own image</source><target state="translated">或上传你自己的图片</target></segment></unit>
+    <unit id="BotAvatarResetImage"><segment><source>Use icon instead</source><target state="translated">改用图标</target></segment></unit>
+    <unit id="BotDialogUploadAvatar"><segment><source>Upload image</source><target state="translated">上传图片</target></segment></unit>
+    <unit id="BotDialogRemoveAvatar"><segment><source>Remove image</source><target state="translated">移除图片</target></segment></unit>
+    <unit id="BotConnectorTransportLabel"><segment><source>Transport</source><target state="translated">传输协议</target></segment></unit>
+    <unit id="BotConnectorTokenLabel"><segment><source>Bearer Token (optional)</source><target state="translated">Bearer Token（可选）</target></segment></unit>
+    <unit id="BotConnectorTokenPlaceholder"><segment><source>Saved securely in OS keychain</source><target state="translated">安全存入系统钥匙串，不写入配置文件</target></segment></unit>
+    <unit id="BotConnectorTestButton"><segment><source>Test</source><target state="translated">测试</target></segment></unit>
+    <unit id="BotConnectorTesting"><segment><source>Testing...</source><target state="translated">测试中...</target></segment></unit>
+    <unit id="BotConnectorTestOk"><segment><source>Reachable ({0})</source><target state="translated">已连通 ({0})</target></segment></unit>
+    <unit id="BotConnectorTestAuthRequired"><segment><source>Reachable — sign-in or token required ({0})</source><target state="translated">端点可达，需要登录或配置 Token ({0})</target></segment></unit>
+    <unit id="BotConnectorTestFailed"><segment><source>Failed: {0}</source><target state="translated">连接失败：{0}</target></segment></unit>
+    <unit id="BotConnectorAuthNone"><segment><source>No sign-in</source><target state="translated">免登录</target></segment></unit>
+    <unit id="BotConnectorAuthOAuth"><segment><source>OAuth</source><target state="translated">OAuth</target></segment></unit>
+    <unit id="BotConnectorAuthTokenSet"><segment><source>Token saved</source><target state="translated">已配置 Token</target></segment></unit>
+    <unit id="BotConnectorAuthTokenNeeded"><segment><source>Bearer token</source><target state="translated">需 Token</target></segment></unit>
+    <unit id="BotConnectorConfigureTip"><segment><source>Configure endpoint &amp; token</source><target state="translated">配置端点与凭据</target></segment></unit>
+    <unit id="BotConnectorClearToken"><segment><source>Clear token</source><target state="translated">清除 Token</target></segment></unit>
+    <unit id="BotConnectorMcpHint"><segment><source>Enabled Remote MCP servers sync to .mcp.json and are injected into ACP chats automatically.</source><target state="translated">已启用的远程 MCP 会自动同步到 .mcp.json，并注入到 ACP 聊天会话。</target></segment></unit>
+    <unit id="BotShareCopyLink"><segment><source>Copy share link</source><target state="translated">复制分享链接</target></segment></unit>
+    <unit id="BotShareCopyLinkCopied"><segment><source>Link copied!</source><target state="translated">链接已复制</target></segment></unit>
+    <unit id="BotImportTitle"><segment><source>Import Bot</source><target state="translated">导入 Bot</target></segment></unit>
+    <unit id="BotImportConfirm"><segment><source>Import Bot</source><target state="translated">确认导入</target></segment></unit>
+    <unit id="BotImportConnectors"><segment><source>Connectors</source><target state="translated">连接器</target></segment></unit>
+    <unit id="BotImportFromLinkButton"><segment><source>Import from link</source><target state="translated">从链接导入</target></segment></unit>
+    <unit id="BotImportLinkPlaceholder"><segment><source>Paste octopus://bot/import?data=... link</source><target state="translated">粘贴 octopus://bot/import?data=... 分享链接</target></segment></unit>
+    <unit id="BotImportInvalidBody"><segment><source>The link is not a valid octopus://bot/import share link.</source><target state="translated">该链接不是有效的 octopus://bot/import 分享链接。</target></segment></unit>
+    <unit id="SettingsRemotePairingQrHint"><segment><source>Scan with Octopus on your phone (or the system camera) to pair immediately without comparing digits.</source><target state="translated">用手机 Octopus 扫一扫（或系统相机扫码打开）即可直接配对，免输地址、免核对数字。</target></segment></unit>
+    <unit id="SettingsRemotePairingQrUsed"><segment><source>This QR code was already used. Generate a new one to pair another device.</source><target state="translated">当前二维码已被使用（每个二维码仅可使用一次）。如需再配对一台设备，请重新生成。</target></segment></unit>
+    <unit id="SettingsRemotePairingQrRefresh"><segment><source>New QR code</source><target state="translated">生成新二维码</target></segment></unit>
+    <unit id="SettingsCollabEnabled"><segment><source>Multi-agent collaboration</source><target state="translated">多智能体协作与跨会话交涉</target></segment></unit>
+    <unit id="SettingsCollabEnabledHint"><segment><source>Expose the local Octopus collaboration MCP bus so agents can delegate tasks to Codex, Antigravity, or other sessions and negotiate via @-mentions.</source><target state="translated">启用本地 Octopus 协作 MCP 总线，允许 Claude Code、Codex、反重力 CLI 等智能体互相派活并通过 @ 提及与其他会话交涉。</target></segment></unit>
+    <unit id="SettingsCollabDefaultIsolation"><segment><source>Default delegation workspace</source><target state="translated">派活默认工作区策略</target></segment></unit>
+    <unit id="SettingsCollabDefaultIsolationHint"><segment><source>Default workspace policy when an agent delegates a task (can be overridden per delegation).</source><target state="translated">智能体派生子任务时的默认工作区策略（默认共享当前目录，可随时切换为独立 Git Worktree，并支持单次派活覆盖）。</target></segment></unit>
+    <unit id="SettingsCollabIsolationShared"><segment><source>Shared workspace (default)</source><target state="translated">共享当前工作目录（默认）</target></segment></unit>
+    <unit id="SettingsCollabIsolationWorktree"><segment><source>Isolated Git Worktree</source><target state="translated">独立 Git Worktree 分支工作区</target></segment></unit>
+    <unit id="SettingsCollabIsolationReadOnly"><segment><source>Read-only (Plan mode)</source><target state="translated">只读模式（Plan）</target></segment></unit>
+    <unit id="SettingsCollabTerminalBridge"><segment><source>Terminal CLI collaboration bridge</source><target state="translated">终端 CLI 协作桥接</target></segment></unit>
+    <unit id="SettingsCollabTerminalBridgeHint"><segment><source>Inject the local collaboration MCP server into native terminal agent tabs and bridge cross-session messages through signals.</source><target state="translated">为原生终端标签页中的智能体 CLI 自动注入本地协作 MCP，并通过信号通道桥接跨会话消息。</target></segment></unit>
+    <unit id="SettingsCollabMaxHops"><segment><source>Max negotiation rounds</source><target state="translated">跨会话交涉最大轮次</target></segment></unit>
+    <unit id="SettingsCollabMaxHopsHint"><segment><source>Automatic loop guard per cross-session negotiation thread before pausing for user review.</source><target state="translated">防死循环护栏：单条跨会话交涉达到上限轮次后自动暂停，等待你确认或放行。</target></segment></unit>
+    <unit id="CollabRibbonTitle"><segment><source>Collab</source><target state="translated">协作</target></segment></unit>
+    <unit id="CollabBubbleAllow"><segment><source>Allow once</source><target state="translated">允许本次</target></segment></unit>
+    <unit id="CollabBubbleDeny"><segment><source>Deny</source><target state="translated">拒绝</target></segment></unit>
+    <unit id="CollabBubbleInspect"><segment><source>Inspect</source><target state="translated">查看子会话</target></segment></unit>
+    <unit id="CollabThreadInterjectPlaceholder"><segment><source>Interject and broadcast guidance to both sessions…</source><target state="translated">输入插话指导（将广播给交涉双方）…</target></segment></unit>
+    <unit id="CollabThreadBroadcast"><segment><source>Broadcast</source><target state="translated">广播</target></segment></unit>
+    <unit id="CollabThreadExtendBudget"><segment><source>+4 rounds</source><target state="translated">+4 轮</target></segment></unit>
+    <unit id="CollabRouteOrchestrate"><segment><source>Orchestrate</source><target state="translated">编排协作</target></segment></unit>
+    <unit id="CollabRouteDirectRelay"><segment><source>Direct relay</source><target state="translated">直达目标</target></segment></unit>
+    <unit id="CollabRouteToggleTip"><segment><source>Switch between letting this agent orchestrate @-mentions or relaying directly to the mentioned session.</source><target state="translated">切换「编排协作（由当前智能体调度 @ 目标）」或「直达目标（直接投递给 @ 会话）」。</target></segment></unit>
+    <unit id="BotChatOpen"><segment><source>Open</source><target state="translated">打开</target></segment></unit>
+    <unit id="BotMenuSettings"><segment><source>Bot Settings...</source><target state="translated">Bot 设置...</target></segment></unit>
+    <unit id="BotMenuPauseBot"><segment><source>Pause bot</source><target state="translated">暂停 bot</target></segment></unit>
+    <unit id="BotMenuResumeBot"><segment><source>Resume bot</source><target state="translated">恢复 bot</target></segment></unit>
+    <unit id="BotMenuMarkUnread"><segment><source>Mark as unread</source><target state="translated">标记为未读</target></segment></unit>
+    <unit id="BotMenuMarkRead"><segment><source>Mark as read</source><target state="translated">标记为已读</target></segment></unit>
+    <unit id="BotMenuDeleteBot"><segment><source>Delete bot</source><target state="translated">删除 bot</target></segment></unit>
   </file>
 </xliff>
