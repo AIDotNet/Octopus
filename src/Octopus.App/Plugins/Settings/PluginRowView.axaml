@@ -136,13 +136,15 @@
         <StackPanel>
             <!-- Summary: icon, name, version, state; the enable switch and the details chevron. -->
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="6,6,10,6">
-                <arc:Button Grid.Column="0"
-                            Variant="Ghost"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            Command="{Binding ToggleExpandedCommand}"
-                            AutomationProperties.Name="{Binding Name}"
-                            arc:Tooltip.Tip="{l:AppLangResource SettingsToggleDetails}">
+                <Button Grid.Column="0"
+                        Classes="row"
+                        Padding="8,6"
+                        ClipToBounds="True"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Command="{Binding ToggleExpandedCommand}"
+                        AutomationProperties.Name="{Binding Name}"
+                        arc:Tooltip.Tip="{l:AppLangResource SettingsToggleDetails}">
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
                         <Border Width="28" Height="28"
                                 CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
@@ -165,7 +167,7 @@
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Classes="name" Text="{Binding Name}" VerticalAlignment="Center" />
+                                <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                 <TextBlock Classes="hint" Text="{Binding Version}" VerticalAlignment="Center" />
                                 <arc:Badge Size="Small"
                                            Tone="{Binding StateTone}"
@@ -180,7 +182,7 @@
                                        IsVisible="{Binding HasDescription}" />
                         </StackPanel>
                     </Grid>
-                </arc:Button>
+                </Button>
                 <arc:SegmentedControl AutoScrollToSelectedItem="False" Grid.Column="1"
                                       VerticalAlignment="Center"
                                       IsEnabled="{Binding CanToggle}"

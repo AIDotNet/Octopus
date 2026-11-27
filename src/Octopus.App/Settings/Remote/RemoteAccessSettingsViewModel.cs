@@ -299,6 +299,15 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
     {
         var service = await _runtime.GetAsync();
         Attach(service);
+        // Pairing links need at least one reachable address (LAN or online Relay). When the user clicks "Start pairing"
+        // while neither is active yet, enable LAN access automatically so the generated link/QR code includes LAN IPs.
+        if (service.LanPort is null && _runtime.RelayAddress is null && !_settings.Current.Remote.LanEnabled)
+        {
+            _settings.Update(s => s.Remote.LanEnabled = true);
+            OnPropertyChanged(nameof(LanEnabled));
+            OnPropertyChanged(nameof(ShowTrayHint));
+            await ApplyCoreAsync();
+        }
         service.OpenPairing(PairingDuration);
         Refresh();
     }

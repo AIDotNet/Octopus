@@ -11,6 +11,7 @@ namespace Octopus.App.Bots.Groups;
 public sealed partial class BotGroupRoomRowViewModel : ObservableObject
 {
     private readonly Action<BotGroupRoomRowViewModel> _open;
+    private readonly Func<BotGroupRoomRowViewModel, Task>? _delete;
 
     public BotGroupRoomRowViewModel(
         string groupId,
@@ -19,7 +20,8 @@ public sealed partial class BotGroupRoomRowViewModel : ObservableObject
         bool isMainRoom,
         bool isSelected,
         int pendingApprovalCount,
-        Action<BotGroupRoomRowViewModel> open)
+        Action<BotGroupRoomRowViewModel> open,
+        Func<BotGroupRoomRowViewModel, Task>? delete = null)
     {
         GroupId = groupId;
         ThreadId = threadId;
@@ -29,12 +31,14 @@ public sealed partial class BotGroupRoomRowViewModel : ObservableObject
         PendingApprovalCount = pendingApprovalCount;
         Icon = isMainRoom ? LucideIconKind.MessagesSquare : LucideIconKind.Hash;
         _open = open;
+        _delete = delete;
     }
 
     public string GroupId { get; }
     public string? ThreadId { get; }
     public string Title { get; }
     public bool IsMainRoom { get; }
+    public bool CanDelete => !IsMainRoom && !string.IsNullOrWhiteSpace(ThreadId) && _delete is not null;
     public LucideIconKind Icon { get; }
     public int PendingApprovalCount { get; }
     public bool HasPendingApproval => PendingApprovalCount > 0;
@@ -44,6 +48,9 @@ public sealed partial class BotGroupRoomRowViewModel : ObservableObject
 
     [RelayCommand]
     private void Open() => _open(this);
+
+    [RelayCommand]
+    private Task DeleteAsync() => CanDelete && _delete is not null ? _delete(this) : Task.CompletedTask;
 }
 
 /// <summary>One Bot Group parent node in the left Bot sidebar, with an avatar cluster, badges, and room/thread children.</summary>

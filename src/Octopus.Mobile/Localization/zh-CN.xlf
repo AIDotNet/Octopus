@@ -76,6 +76,7 @@
     <unit id="AddHostConnect"><segment><source>Connect</source><target state="translated">连接</target></segment></unit>
     <unit id="AddHostLinkHint"><segment><source>Paste the pairing link the computer shows (octopus://pair?…) to skip comparing the number.</source><target state="translated">粘贴电脑上显示的配对链接（octopus://pair?…）可以免去核对数字这一步。</target></segment></unit>
     <unit id="AddHostNotAnAddress"><segment><source>This is neither an address nor a pairing link.</source><target state="translated">这不是一个地址，也不是配对链接。</target></segment></unit>
+    <unit id="AddHostPairingLinkNoAddress"><segment><source>This pairing link has no host address. Turn on Local network access (or Relay) on the computer, then start pairing again.</source><target state="translated">该配对链接缺少电脑地址。请在电脑端开启「允许局域网访问」（或中转服务）后重新开始配对。</target></segment></unit>
     <unit id="NotSignedIn"><segment><source>Not signed in</source><target state="translated">未登录</target></segment></unit>
     <unit id="LeaveLocal"><segment><source>Leave local network mode</source><target state="translated">退出局域网模式</target></segment></unit>
     <unit id="HostsEmptyLocal"><segment><source>No computer added yet.</source><target state="translated">还没有添加电脑。</target></segment></unit>

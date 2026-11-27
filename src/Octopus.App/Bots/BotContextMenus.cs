@@ -33,6 +33,27 @@ internal static class BotContextMenus
         MenuFactory.Attach(target, entries);
     }
 
+    public static void AttachGroupRoomMenu(Control target, BotGroupRoomRowViewModel row)
+    {
+        var entries = new List<MenuFactory.Entry>
+        {
+            new(AppLangResources.Get(AppLangResourceKind.BotChatOpen), row.OpenCommand)
+            {
+                Icon = Icon(LucideIconKind.ArrowUpRight),
+            },
+        };
+        if (row.CanDelete)
+        {
+            entries.Add(new(
+                AppLangResources.Get(AppLangResourceKind.BotGroupMenuDeleteThread),
+                row.DeleteCommand,
+                IsDestructive: true,
+                SeparatorBefore: true,
+                Glyph: ArcIcons.Trash2));
+        }
+        MenuFactory.Attach(target, entries);
+    }
+
     public static void AttachBotMenu(Control target, BotTreeNodeViewModel node)
     {
         var entries = new List<MenuFactory.Entry>

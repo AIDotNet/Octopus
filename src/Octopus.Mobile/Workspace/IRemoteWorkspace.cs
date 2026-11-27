@@ -128,6 +128,8 @@ public enum PairingOutcome
     Cancelled,
     /// <summary>What was typed is neither an address nor a pairing link (<see cref="IRemoteWorkspace.AddHost"/> only).</summary>
     NotAnAddress,
+    /// <summary>A valid pairing link was provided, but it contains no reachable LAN or relay address.</summary>
+    PairingLinkNoAddress,
 }
 
 /// <summary>How getting into a computer with its access password ended (<see cref="IRemoteWorkspace.AccessWithPasswordAsync"/>).</summary>

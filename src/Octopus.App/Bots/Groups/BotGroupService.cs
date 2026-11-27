@@ -289,6 +289,59 @@ public sealed class BotGroupService : IBotGroupService, IDisposable
         }
     }
 
+    public async Task DeleteThreadAsync(string groupId, string threadId, CancellationToken cancellationToken = default)
+    {
+        EnsureLoaded();
+        if (string.IsNullOrWhiteSpace(groupId) || string.IsNullOrWhiteSpace(threadId)) return;
+
+        var gate = GateFor(groupId);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var group = FindGroup(groupId);
+            if (group is null) return;
+            var thread = group.Threads.FirstOrDefault(t => string.Equals(t.Id, threadId, StringComparison.Ordinal));
+            if (thread is null) return;
+
+            await StopRoomLockedAsync(group, threadId, null, cancellationToken).ConfigureAwait(false);
+            var clearedApprovals = ClearApprovalsForThread(groupId, threadId);
+
+            _store.UpdateRoom(groupId, doc =>
+            {
+                doc.Messages.RemoveAll(m => string.Equals(m.ThreadId, threadId, StringComparison.Ordinal));
+                doc.PendingDeliveries.RemoveAll(p => string.Equals(p.ThreadId, threadId, StringComparison.Ordinal));
+            });
+
+            _store.Update(d =>
+            {
+                if (d.Groups.FirstOrDefault(g => g.Id == groupId) is not { } target) return;
+                target.Threads.RemoveAll(t => string.Equals(t.Id, threadId, StringComparison.Ordinal));
+                target.Revision++;
+            });
+
+            var wasSelected = string.Equals(_bots.ActiveGroupId, groupId, StringComparison.Ordinal)
+                && string.Equals(_bots.ActiveGroupThreadId, threadId, StringComparison.Ordinal);
+            if (wasSelected)
+            {
+                _bots.SelectGroup(groupId, null);
+            }
+
+            if (clearedApprovals)
+            {
+                Changed?.Invoke(this, new BotGroupChangedEventArgs(BotGroupChangeKind.Approvals, groupId, threadId));
+            }
+            Changed?.Invoke(this, new BotGroupChangedEventArgs(BotGroupChangeKind.Groups, groupId, threadId));
+            if (wasSelected)
+            {
+                Changed?.Invoke(this, new BotGroupChangedEventArgs(BotGroupChangeKind.Selection, groupId, null));
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     public void SelectGroup(string groupId, string? threadId = null)
     {
         EnsureLoaded();
@@ -1399,6 +1452,18 @@ public sealed class BotGroupService : IBotGroupService, IDisposable
         {
             _approvals.TryRemove(kv.Key, out _);
         }
+    }
+
+    private bool ClearApprovalsForThread(string groupId, string threadId)
+    {
+        var removed = false;
+        foreach (var kv in _approvals.Where(k =>
+                     string.Equals(k.Value.GroupId, groupId, StringComparison.Ordinal)
+                     && string.Equals(k.Value.ThreadId, threadId, StringComparison.Ordinal)).ToList())
+        {
+            removed |= _approvals.TryRemove(kv.Key, out _);
+        }
+        return removed;
     }
 
     private static BotGroupReplyMode NormalizeReplyMode(BotGroupReplyMode? mode, IReadOnlyList<BotGroupMember> members)

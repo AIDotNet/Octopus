@@ -252,4 +252,21 @@ public class RemoteAccessSettingsTests
         var selected = RemoteHostRuntime.SelectLanAddresses(candidates, 47600);
         Assert.Equal(["ws://192.168.1.50:47600", "ws://10.0.0.8:47600"], selected);
     }
+
+    [AvaloniaFact]
+    public async Task Starting_pairing_while_lan_is_off_auto_enables_lan_so_pairing_link_has_addresses()
+    {
+        using var page = Page();
+        Assert.False(page.LanEnabled);
+        Assert.False(page.IsListening);
+
+        await Wait(page.StartPairingCommand.ExecuteAsync(null));
+
+        Assert.True(page.LanEnabled);
+        Assert.True(page.IsListening);
+        Assert.True(page.IsPairing);
+        var parsed = PairingLink.TryParse(page.PairingLink);
+        Assert.NotNull(parsed);
+        Assert.NotEmpty(parsed.Addresses);
+    }
 }

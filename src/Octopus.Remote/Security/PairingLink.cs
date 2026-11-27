@@ -32,16 +32,18 @@ public sealed record PairingLink(string DeviceId, byte[] Fingerprint, byte[] Tok
     /// <summary>The link from its text; null when it is not a pairing link of a version this device knows, or is incomplete.</summary>
     public static PairingLink? TryParse(string? text)
     {
-        if (text is null) return null;
-        var trimmed = text.Trim();
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        // Strip surrounding punctuation/whitespace and any embedded line breaks or spaces introduced when sharing
+        // the link through chat apps or SMS (values like the computer name are already percent-encoded).
+        var cleaned = StripWhitespace(text.Trim().Trim('<', '>', '"', '\''));
         int queryStart;
-        if (trimmed.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)) queryStart = Prefix.Length;
-        else if (trimmed.StartsWith(PrefixWithSlash, StringComparison.OrdinalIgnoreCase)) queryStart = PrefixWithSlash.Length;
+        if (cleaned.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)) queryStart = Prefix.Length;
+        else if (cleaned.StartsWith(PrefixWithSlash, StringComparison.OrdinalIgnoreCase)) queryStart = PrefixWithSlash.Length;
         else return null;
         string? version = null, id = null, name = null;
         byte[]? fingerprint = null, token = null;
         var addresses = new List<string>();
-        foreach (var pair in trimmed[queryStart..].Split('&', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var pair in cleaned[queryStart..].Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
             var cut = pair.IndexOf('=');
             if (cut <= 0) return null;
@@ -63,6 +65,26 @@ public sealed record PairingLink(string DeviceId, byte[] Fingerprint, byte[] Tok
             return null;
         }
         return new PairingLink(id, fingerprint, token, name ?? "", addresses);
+    }
+
+    private static string StripWhitespace(string value)
+    {
+        var hasWhitespace = false;
+        foreach (var ch in value)
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                hasWhitespace = true;
+                break;
+            }
+        }
+        if (!hasWhitespace) return value;
+        var sb = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            if (!char.IsWhiteSpace(ch)) sb.Append(ch);
+        }
+        return sb.ToString();
     }
 
     private static byte[]? Decode(string value)

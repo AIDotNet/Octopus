@@ -70,7 +70,7 @@ internal static class AndroidQrScanner
 /// </summary>
 [Activity(
     Label = "Scan QR Code",
-    Theme = "@style/Theme.AppCompat.NoActionBar",
+    Theme = "@android:style/Theme.Black.NoTitleBar.Fullscreen",
     ScreenOrientation = ScreenOrientation.Portrait,
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize)]
 public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureListener, ImageReader.IOnImageAvailableListener
@@ -78,6 +78,7 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
     private const int RequestCameraCode = 47601;
     private const long DecodeIntervalMs = 120;
 
+    private readonly object _cameraLock = new();
     private readonly QRCodeReader _reader = new();
     private readonly Dictionary<DecodeHintType, object> _hints = new()
     {
@@ -94,7 +95,13 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
     private CameraCaptureSession? _captureSession;
     private CaptureRequest.Builder? _previewBuilder;
     private ImageReader? _imageReader;
+    private Surface? _previewSurface;
+    private DeviceStateCallback? _deviceCallback;
+    private SessionStateCallback? _sessionCallback;
     private string? _cameraId;
+    private bool _cameraOpening;
+    private bool _permissionRequested;
+    private bool _supportsContinuousAf;
     private Size _previewSize = new(1280, 720);
     private bool _hasFlash;
     private bool _torchOn;
@@ -105,7 +112,7 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
     private int _finished;
 
     private static bool IsChinese =>
-        Java.Util.Locale.Default.Language.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+        Java.Util.Locale.Default?.Language?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -179,6 +186,7 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
     protected override void OnResume()
     {
         base.OnResume();
+        if (Volatile.Read(ref _finished) != 0) return;
         StartCameraThread();
         if (_textureView is { IsAvailable: true })
         {
@@ -206,9 +214,16 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
     {
         base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode != RequestCameraCode) return;
+        _permissionRequested = false;
         if (grantResults.Length > 0 && grantResults[0] == Permission.Granted)
         {
-            OpenCamera();
+            // OnPause() stopped the camera thread while the system permission dialog was visible.
+            // Restart the thread before opening the camera (and guard against double-open when OnResume runs next).
+            StartCameraThread();
+            if (_textureView is { IsAvailable: true })
+            {
+                OpenCamera();
+            }
         }
         else
         {
@@ -221,48 +236,71 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
     }
 
     public void OnSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) => EnsurePermissionAndOpenCamera();
-    public bool OnSurfaceTextureDestroyed(SurfaceTexture surface) => true;
+    public bool OnSurfaceTextureDestroyed(SurfaceTexture surface)
+    {
+        CloseCamera();
+        return true;
+    }
     public void OnSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) => ConfigureTransform(width, height);
     public void OnSurfaceTextureUpdated(SurfaceTexture surface) { }
 
     private void EnsurePermissionAndOpenCamera()
     {
+        if (Volatile.Read(ref _finished) != 0 || IsFinishing || IsDestroyed) return;
         if (CheckSelfPermission(Manifest.Permission.Camera) == Permission.Granted)
         {
+            StartCameraThread();
             OpenCamera();
         }
-        else
+        else if (!_permissionRequested)
         {
+            _permissionRequested = true;
             RequestPermissions([Manifest.Permission.Camera], RequestCameraCode);
         }
     }
 
     private void StartCameraThread()
     {
-        if (_cameraThread is not null) return;
-        _cameraThread = new HandlerThread("octopus-qr-camera");
-        _cameraThread.Start();
-        if (_cameraThread.Looper is { } looper) _cameraHandler = new Handler(looper);
+        lock (_cameraLock)
+        {
+            if (_cameraThread is { IsAlive: true } && _cameraHandler is not null) return;
+            _cameraThread = new HandlerThread("octopus-qr-camera");
+            _cameraThread.Start();
+            if (_cameraThread.Looper is { } looper) _cameraHandler = new Handler(looper);
+        }
     }
 
     private void StopCameraThread()
     {
-        if (_cameraThread is null) return;
+        HandlerThread? thread;
+        lock (_cameraLock)
+        {
+            thread = _cameraThread;
+            _cameraThread = null;
+            _cameraHandler = null;
+        }
+        if (thread is null) return;
         try
         {
-            _cameraThread.QuitSafely();
-            _cameraThread.Join(500);
+            thread.QuitSafely();
+            thread.Join(500);
         }
         catch { }
-        _cameraThread = null;
-        _cameraHandler = null;
     }
 
     private void OpenCamera()
     {
-        if (_cameraDevice is not null || Volatile.Read(ref _finished) != 0) return;
+        Handler? cameraHandler;
+        lock (_cameraLock)
+        {
+            if (_cameraDevice is not null || _cameraOpening || Volatile.Read(ref _finished) != 0 || IsFinishing || IsDestroyed) return;
+            cameraHandler = _cameraHandler;
+            if (cameraHandler is null) return;
+            _cameraOpening = true;
+        }
         if (GetSystemService(CameraService) is not CameraManager manager)
         {
+            lock (_cameraLock) _cameraOpening = false;
             FinishWithResult(null);
             return;
         }
@@ -290,12 +328,14 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
 
             if (selectedId is null || selectedChars is null)
             {
+                lock (_cameraLock) _cameraOpening = false;
                 FinishWithResult(null);
                 return;
             }
 
             _cameraId = selectedId;
             _hasFlash = ((Java.Lang.Boolean?)selectedChars.Get(CameraCharacteristics.FlashInfoAvailable))?.BooleanValue() == true;
+            _supportsContinuousAf = SupportsAfMode(selectedChars, (int)ControlAFMode.ContinuousPicture);
             if (_torchButton is not null)
             {
                 RunOnUiThread(() => _torchButton.Visibility = _hasFlash ? ViewStates.Visible : ViewStates.Gone);
@@ -303,32 +343,74 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
 
             if (selectedChars.Get(CameraCharacteristics.ScalerStreamConfigurationMap) is StreamConfigurationMap map)
             {
-                var sizes = map.GetOutputSizes((int)ImageFormatType.Yuv420888);
-                if (sizes is { Length: > 0 }) _previewSize = ChooseOptimalSize(sizes);
+                var yuvSizes = map.GetOutputSizes((int)ImageFormatType.Yuv420888);
+                Size[]? previewSizes = null;
+                try
+                {
+                    var surfaceTextureClass = Java.Lang.Class.FromType(typeof(SurfaceTexture));
+                    if (surfaceTextureClass is not null)
+                    {
+                        previewSizes = map.GetOutputSizes(surfaceTextureClass);
+                    }
+                }
+                catch { }
+                if (yuvSizes is { Length: > 0 }) _previewSize = ChooseOptimalSize(yuvSizes, previewSizes);
             }
 
-            _imageReader?.Close();
-            _imageReader = ImageReader.NewInstance(_previewSize.Width, _previewSize.Height, ImageFormatType.Yuv420888, maxImages: 2);
-            _imageReader.SetOnImageAvailableListener(this, _cameraHandler);
+            lock (_cameraLock)
+            {
+                if (Volatile.Read(ref _finished) != 0 || _cameraHandler is null)
+                {
+                    _cameraOpening = false;
+                    return;
+                }
+                try { _imageReader?.Close(); } catch { }
+                _imageReader = ImageReader.NewInstance(_previewSize.Width, _previewSize.Height, ImageFormatType.Yuv420888, maxImages: 3);
+                _imageReader.SetOnImageAvailableListener(this, cameraHandler);
+                _deviceCallback = new DeviceStateCallback(this);
+            }
 
             if (_textureView is not null)
             {
                 RunOnUiThread(() => ConfigureTransform(_textureView.Width, _textureView.Height));
             }
 
-            manager.OpenCamera(_cameraId, new DeviceStateCallback(this), _cameraHandler);
+            manager.OpenCamera(_cameraId, _deviceCallback, cameraHandler);
         }
         catch
         {
+            lock (_cameraLock) _cameraOpening = false;
             FinishWithResult(null);
         }
     }
 
-    private static Size ChooseOptimalSize(Size[] sizes)
+    private static bool SupportsAfMode(CameraCharacteristics chars, int desiredMode)
     {
+        try
+        {
+            if (chars.Get(CameraCharacteristics.ControlAfAvailableModes)?.ToArray<int>() is { } modes)
+            {
+                return Array.IndexOf(modes, desiredMode) >= 0;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    private static Size ChooseOptimalSize(Size[] yuvSizes, Size[]? previewSizes)
+    {
+        var candidates = yuvSizes;
+        if (previewSizes is { Length: > 0 })
+        {
+            var previewSet = new HashSet<(int W, int H)>();
+            foreach (var s in previewSizes) previewSet.Add((s.Width, s.Height));
+            var common = yuvSizes.Where(s => previewSet.Contains((s.Width, s.Height))).ToArray();
+            if (common.Length > 0) candidates = common;
+        }
+
         Size? best = null;
         var bestScore = int.MaxValue;
-        foreach (var size in sizes)
+        foreach (var size in candidates)
         {
             if (size.Width < 480 || size.Height < 360 || size.Width > 1920 || size.Height > 1440) continue;
             var score = Math.Abs(size.Width - 1280) + Math.Abs(size.Height - 720);
@@ -338,7 +420,19 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
                 best = size;
             }
         }
-        return best ?? sizes[0];
+        if (best is not null) return best;
+
+        // Avoid falling back to huge 12MP+ sensor sizes (often sizes[0] on modern phones) that can OOM or stall HAL.
+        Size? smallestUsable = null;
+        foreach (var size in candidates)
+        {
+            if (size.Width < 320 || size.Height < 240) continue;
+            if (smallestUsable is null || (long)size.Width * size.Height < (long)smallestUsable.Width * smallestUsable.Height)
+            {
+                smallestUsable = size;
+            }
+        }
+        return smallestUsable ?? candidates[0];
     }
 
     private void ConfigureTransform(int viewWidth, int viewHeight)
@@ -360,35 +454,67 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
 
     private void CreatePreviewSession()
     {
-        if (_cameraDevice is null || _textureView?.SurfaceTexture is not { } surfaceTexture || _imageReader?.Surface is not { } readerSurface) return;
+        CameraDevice? camera;
+        ImageReader? reader;
+        Handler? cameraHandler;
+        lock (_cameraLock)
+        {
+            camera = _cameraDevice;
+            reader = _imageReader;
+            cameraHandler = _cameraHandler;
+        }
+        if (camera is null || reader is null || Volatile.Read(ref _finished) != 0 || IsFinishing || IsDestroyed) return;
+        if (_textureView?.SurfaceTexture is not { } surfaceTexture || reader.Surface is not { IsValid: true } readerSurface) return;
         try
         {
             surfaceTexture.SetDefaultBufferSize(_previewSize.Width, _previewSize.Height);
             var previewSurface = new Surface(surfaceTexture);
+            if (!previewSurface.IsValid)
+            {
+                previewSurface.Release();
+                return;
+            }
 
-            var builder = _cameraDevice.CreateCaptureRequest(CameraTemplate.Preview);
+            var builder = camera.CreateCaptureRequest(CameraTemplate.Preview);
             builder.AddTarget(previewSurface);
             builder.AddTarget(readerSurface);
-            builder.Set(CaptureRequest.ControlAfMode!, (int)ControlAFMode.ContinuousPicture);
-            builder.Set(CaptureRequest.ControlAeMode!, (int)ControlAEMode.On);
-            _previewBuilder = builder;
+            if (_supportsContinuousAf && CaptureRequest.ControlAfMode is not null)
+            {
+                builder.Set(CaptureRequest.ControlAfMode, (int)ControlAFMode.ContinuousPicture);
+            }
+            if (CaptureRequest.ControlAeMode is not null)
+            {
+                builder.Set(CaptureRequest.ControlAeMode, (int)ControlAEMode.On);
+            }
 
             var sessionCallback = new SessionStateCallback(this);
-            if (OperatingSystem.IsAndroidVersionAtLeast(28))
+            lock (_cameraLock)
+            {
+                if (_cameraDevice != camera || Volatile.Read(ref _finished) != 0)
+                {
+                    previewSurface.Release();
+                    return;
+                }
+                try { _previewSurface?.Release(); } catch { }
+                _previewSurface = previewSurface;
+                _previewBuilder = builder;
+                _sessionCallback = sessionCallback;
+            }
+
+            if (OperatingSystem.IsAndroidVersionAtLeast(28) && MainExecutor is { } executor)
             {
                 var outputs = new List<OutputConfiguration>
                 {
                     new(previewSurface),
                     new(readerSurface),
                 };
-                var executor = MainExecutor ?? throw new InvalidOperationException("MainExecutor unavailable.");
                 var config = new SessionConfiguration((int)SessionType.Regular, outputs, executor, sessionCallback);
-                _cameraDevice.CreateCaptureSession(config);
+                camera.CreateCaptureSession(config);
             }
             else
             {
 #pragma warning disable CA1422 // Fallback for Android 7–8 (API 24–27); API 28+ uses SessionConfiguration above.
-                _cameraDevice.CreateCaptureSession([previewSurface, readerSurface], sessionCallback, _cameraHandler);
+                camera.CreateCaptureSession([previewSurface, readerSurface], sessionCallback, cameraHandler);
 #pragma warning restore CA1422
             }
         }
@@ -404,7 +530,10 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
         _torchOn = !_torchOn;
         try
         {
-            _previewBuilder.Set(CaptureRequest.FlashMode!, (int)(_torchOn ? FlashMode.Torch : FlashMode.Off));
+            if (CaptureRequest.FlashMode is not null)
+            {
+                _previewBuilder.Set(CaptureRequest.FlashMode, (int)(_torchOn ? FlashMode.Torch : FlashMode.Off));
+            }
             _captureSession.SetRepeatingRequest(_previewBuilder.Build(), null, _cameraHandler);
             _torchButton?.Text = _torchOn
                 ? (IsChinese ? "关闭照明" : "Torch On")
@@ -415,60 +544,94 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
 
     public void OnImageAvailable(ImageReader? reader)
     {
-        using var image = reader?.AcquireLatestImage();
-        if (image is null || Volatile.Read(ref _finished) != 0) return;
-
-        var now = SystemClock.ElapsedRealtime();
-        if (now - _lastDecodeMs < DecodeIntervalMs) return;
-        _lastDecodeMs = now;
-
-        var planes = image.GetPlanes();
-        if (planes is null || planes.Length == 0) return;
-        var yPlane = planes[0];
-        var buffer = yPlane.Buffer;
-        if (buffer is null) return;
-
-        var width = image.Width;
-        var height = image.Height;
-        var rowStride = yPlane.RowStride;
-        var total = width * height;
-        if (_yBuffer is null || _yBuffer.Length != total) _yBuffer = new byte[total];
-
-        if (rowStride == width)
+        // Runs on the camera HandlerThread: an uncaught exception here kills the entire Android process.
+        try
         {
-            buffer.Get(_yBuffer, 0, total);
-        }
-        else
-        {
-            for (var row = 0; row < height; row++)
+            if (reader is null || Volatile.Read(ref _finished) != 0) return;
+            using var image = reader.AcquireLatestImage();
+            if (image is null || Volatile.Read(ref _finished) != 0) return;
+
+            var now = SystemClock.ElapsedRealtime();
+            if (now - _lastDecodeMs < DecodeIntervalMs) return;
+            _lastDecodeMs = now;
+
+            var planes = image.GetPlanes();
+            if (planes is null || planes.Length == 0) return;
+            var yPlane = planes[0];
+            var buffer = yPlane.Buffer;
+            if (buffer is null) return;
+
+            var width = image.Width;
+            var height = image.Height;
+            var rowStride = yPlane.RowStride;
+            var pixelStride = Math.Max(1, yPlane.PixelStride);
+            if (width <= 0 || height <= 0 || rowStride < width) return;
+
+            var total = width * height;
+            if (_yBuffer is null || _yBuffer.Length != total) _yBuffer = new byte[total];
+
+            buffer.Rewind();
+            var limit = buffer.Limit();
+            if (pixelStride == 1 && rowStride == width)
             {
-                buffer.Position(row * rowStride);
-                buffer.Get(_yBuffer, row * width, width);
+                if (limit < total) return;
+                buffer.Get(_yBuffer, 0, total);
+            }
+            else if (pixelStride == 1)
+            {
+                for (var row = 0; row < height; row++)
+                {
+                    var offset = row * rowStride;
+                    if (offset >= limit) break;
+                    var count = Math.Min(width, limit - offset);
+                    buffer.Position(offset);
+                    buffer.Get(_yBuffer, row * width, count);
+                }
+            }
+            else
+            {
+                for (var row = 0; row < height; row++)
+                {
+                    var rowStart = row * rowStride;
+                    for (var col = 0; col < width; col++)
+                    {
+                        var idx = rowStart + col * pixelStride;
+                        _yBuffer[row * width + col] = idx < limit ? (byte)buffer.Get(idx) : (byte)0;
+                    }
+                }
+            }
+
+            // Alternate between native sensor orientation and 90°-rotated frame so portrait and landscape QR codes decode quickly.
+            var rotate = (_frameCounter++ & 1) == 1;
+            string? decoded;
+            if (!rotate)
+            {
+                decoded = TryDecode(_yBuffer, width, height);
+            }
+            else
+            {
+                if (_rotatedBuffer is null || _rotatedBuffer.Length != total) _rotatedBuffer = new byte[total];
+                Rotate90Clockwise(_yBuffer, _rotatedBuffer, width, height);
+                decoded = TryDecode(_rotatedBuffer, height, width);
+            }
+
+            if (!string.IsNullOrEmpty(decoded))
+            {
+                RunOnUiThread(() =>
+                {
+                    try
+                    {
+                        var haptic = OperatingSystem.IsAndroidVersionAtLeast(30) ? FeedbackConstants.Confirm : FeedbackConstants.VirtualKey;
+                        _textureView?.PerformHapticFeedback(haptic);
+                    }
+                    catch { }
+                    FinishWithResult(decoded);
+                });
             }
         }
-
-        // Alternate between native sensor orientation and 90°-rotated frame so portrait and landscape QR codes decode quickly.
-        var rotate = (_frameCounter++ & 1) == 1;
-        string? decoded;
-        if (!rotate)
+        catch
         {
-            decoded = TryDecode(_yBuffer, width, height);
-        }
-        else
-        {
-            if (_rotatedBuffer is null || _rotatedBuffer.Length != total) _rotatedBuffer = new byte[total];
-            Rotate90Clockwise(_yBuffer, _rotatedBuffer, width, height);
-            decoded = TryDecode(_rotatedBuffer, height, width);
-        }
-
-        if (!string.IsNullOrEmpty(decoded))
-        {
-            RunOnUiThread(() =>
-            {
-                var haptic = OperatingSystem.IsAndroidVersionAtLeast(30) ? FeedbackConstants.Confirm : FeedbackConstants.VirtualKey;
-                _textureView?.PerformHapticFeedback(haptic);
-                FinishWithResult(decoded);
-            });
+            // Ignore transient Camera2 / HAL / ImageReader / decode errors on individual frames.
         }
     }
 
@@ -481,13 +644,13 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
             var result = _reader.decode(bitmap, _hints);
             return result?.Text;
         }
-        catch (ReaderException)
+        catch
         {
             return null;
         }
         finally
         {
-            _reader.reset();
+            try { _reader.reset(); } catch { }
         }
     }
 
@@ -506,13 +669,29 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
 
     private void CloseCamera()
     {
-        try { _captureSession?.Close(); } catch { }
-        _captureSession = null;
-        try { _cameraDevice?.Close(); } catch { }
-        _cameraDevice = null;
-        try { _imageReader?.Close(); } catch { }
-        _imageReader = null;
-        _previewBuilder = null;
+        CameraCaptureSession? session;
+        CameraDevice? device;
+        ImageReader? reader;
+        Surface? previewSurface;
+        lock (_cameraLock)
+        {
+            _cameraOpening = false;
+            session = _captureSession;
+            _captureSession = null;
+            device = _cameraDevice;
+            _cameraDevice = null;
+            reader = _imageReader;
+            _imageReader = null;
+            previewSurface = _previewSurface;
+            _previewSurface = null;
+            _previewBuilder = null;
+            _deviceCallback = null;
+            _sessionCallback = null;
+        }
+        try { session?.Close(); } catch { }
+        try { device?.Close(); } catch { }
+        try { reader?.Close(); } catch { }
+        try { previewSurface?.Release(); } catch { }
     }
 
     private void FinishWithResult(string? value)
@@ -520,28 +699,48 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
         if (Interlocked.Exchange(ref _finished, 1) != 0) return;
         CloseCamera();
         AndroidQrScanner.Complete(value);
-        Finish();
+        RunOnUiThread(() =>
+        {
+            if (!IsFinishing && !IsDestroyed) Finish();
+        });
     }
 
     private sealed class DeviceStateCallback(QrScannerActivity owner) : CameraDevice.StateCallback
     {
         public override void OnOpened(CameraDevice camera)
         {
-            owner._cameraDevice = camera;
+            lock (owner._cameraLock)
+            {
+                owner._cameraOpening = false;
+                if (Volatile.Read(ref owner._finished) != 0 || owner.IsFinishing || owner.IsDestroyed)
+                {
+                    try { camera.Close(); } catch { }
+                    return;
+                }
+                owner._cameraDevice = camera;
+            }
             owner.CreatePreviewSession();
         }
 
         public override void OnDisconnected(CameraDevice camera)
         {
-            camera.Close();
-            owner._cameraDevice = null;
+            lock (owner._cameraLock)
+            {
+                owner._cameraOpening = false;
+                if (ReferenceEquals(owner._cameraDevice, camera)) owner._cameraDevice = null;
+            }
+            try { camera.Close(); } catch { }
             owner.FinishWithResult(null);
         }
 
         public override void OnError(CameraDevice camera, CameraError error)
         {
-            camera.Close();
-            owner._cameraDevice = null;
+            lock (owner._cameraLock)
+            {
+                owner._cameraOpening = false;
+                if (ReferenceEquals(owner._cameraDevice, camera)) owner._cameraDevice = null;
+            }
+            try { camera.Close(); } catch { }
             owner.FinishWithResult(null);
         }
     }
@@ -550,11 +749,22 @@ public sealed class QrScannerActivity : Activity, TextureView.ISurfaceTextureLis
     {
         public override void OnConfigured(CameraCaptureSession session)
         {
-            if (owner._cameraDevice is null || owner._previewBuilder is null) return;
-            owner._captureSession = session;
+            CaptureRequest.Builder? builder;
+            Handler? handler;
+            lock (owner._cameraLock)
+            {
+                if (owner._cameraDevice is null || owner._previewBuilder is null || Volatile.Read(ref owner._finished) != 0)
+                {
+                    try { session.Close(); } catch { }
+                    return;
+                }
+                owner._captureSession = session;
+                builder = owner._previewBuilder;
+                handler = owner._cameraHandler;
+            }
             try
             {
-                session.SetRepeatingRequest(owner._previewBuilder.Build(), null, owner._cameraHandler);
+                session.SetRepeatingRequest(builder.Build(), null, handler);
             }
             catch
             {

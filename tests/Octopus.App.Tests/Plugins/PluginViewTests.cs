@@ -475,6 +475,62 @@ public sealed class PluginViewTests
         vm.Dispose();
     }
 
+    [AvaloniaFact]
+    public async Task PluginRowView_ConstrainsLongDescriptionWithinSummaryColumn()
+    {
+        var paths = AppHost.Get<PluginPaths>();
+        var dir = paths.PackageDirectoryOf("test.longdesc");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "plugin.json"), """
+            {
+              "schema": 1,
+              "id": "test.longdesc",
+              "name": "主题集",
+              "description": "经典开发者主题（Catppuccin Mocha/Latte、Tokyo Night/Day、Dracula、Nord、Gruvbox Dark、Rosé Pine Dawn），完整覆盖界面、终端 ANSI 16 色、代码高亮与语义配色。",
+              "version": "1.0.0",
+              "engines": { "api": 0 },
+              "main": "main.js"
+            }
+            """);
+        File.WriteAllText(Path.Combine(dir, "main.js"), "export function activate() {}");
+        AppHost.Get<IPluginStateStore>().Update(d => d.Plugins["test.longdesc"] = new PluginRecord { Enabled = false, Source = PluginSource.File, Version = "1.0.0" });
+        AppHost.Get<Octopus.Plugins.Catalog.IPluginCatalog>().Refresh();
+
+        using var http = new System.Net.Http.HttpClient(new StubMarketHandler("""{"total":0,"page":1,"pageSize":24,"items":[]}"""));
+        var vm = new Octopus.App.Plugins.Settings.PluginsSettingsViewModel(
+            AppHost.Get<Octopus.Plugins.Catalog.IPluginCatalog>(),
+            AppHost.Get<IPluginStateStore>(),
+            AppHost.Get<PluginManager>(),
+            AppHost.Get<Octopus.Plugins.Packages.PluginInstaller>(),
+            paths,
+            AppHost.Get<IWindowAccessor>(),
+            AppHost.Get<PluginThemes>(),
+            AppHost.Get<Octopus.Plugins.Runtime.Modules.PluginConfigStore>(),
+            new Octopus.Plugins.Marketplace.PluginMarketplaceClient(http),
+            AppHost.Get<Octopus.Plugins.Skills.PluginSkillInstaller>(),
+            AppHost.Get<ISettingsStore>(),
+            AppHost.Get<IProjectService>());
+
+        var rowVm = Assert.Single(vm.Installed, r => r.Id == "test.longdesc");
+        var rowView = new Octopus.App.Plugins.Settings.PluginRowView { DataContext = rowVm };
+        var window = new Window { Width = 760, Height = 200, Content = rowView };
+        window.Show();
+        Frames.Pump();
+
+        var summaryButton = rowView.GetVisualDescendants().OfType<Avalonia.Controls.Button>().First(b => b.Classes.Contains("row"));
+        var toggle = rowView.GetVisualDescendants().OfType<SegmentedControl>().First();
+        var innerGrid = Assert.IsType<Grid>(summaryButton.Content);
+
+        Assert.True(summaryButton.Bounds.Width > 0);
+        Assert.True(innerGrid.Bounds.X >= 0, $"Inner summary grid shifted left off-bounds: X={innerGrid.Bounds.X}");
+        Assert.True(innerGrid.Bounds.Width <= summaryButton.Bounds.Width + 0.5, $"Inner summary grid overflowed summary button: {innerGrid.Bounds.Width} > {summaryButton.Bounds.Width}");
+        Assert.True(summaryButton.Bounds.Right <= toggle.Bounds.X + 0.5, $"Summary button overlapped enable toggle: {summaryButton.Bounds.Right} > {toggle.Bounds.X}");
+
+        window.Close();
+        vm.Dispose();
+        await Task.CompletedTask;
+    }
+
     private sealed class StubMarketHandler(string json) : System.Net.Http.HttpMessageHandler
     {
         protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken) =>

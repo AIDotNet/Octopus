@@ -93,6 +93,7 @@ public interface IBotGroupService
     Task<BotGroupDefinition> UpdateGroupAsync(UpdateBotGroupRequest request, CancellationToken cancellationToken = default);
     Task DeleteGroupAsync(string groupId, CancellationToken cancellationToken = default);
     Task<BotGroupThread> CreateThreadAsync(string groupId, CancellationToken cancellationToken = default);
+    Task DeleteThreadAsync(string groupId, string threadId, CancellationToken cancellationToken = default);
 
     void SelectGroup(string groupId, string? threadId = null);
     void SetGroupExpanded(string groupId, bool expanded);

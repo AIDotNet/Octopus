@@ -165,4 +165,38 @@ public class ShellExitTests
             tray.ForceIconAvailableForTesting = false;
         }
     }
+
+    [AvaloniaFact]
+    public async Task Custom_caption_close_button_triggers_tray_minimize_instead_of_quitting()
+    {
+        var (window, terminals) = OpenWithTerminal(foreground: null);
+        await PumpUntil(() => terminals.Connections.Count > 0);
+        var tray = AppHost.Get<TrayService>();
+        var settings = AppHost.Get<Octopus.Storage.ISettingsStore>();
+        settings.Update(s =>
+        {
+            s.Tray.Enabled = true;
+            s.Tray.CloseAction = Octopus.Core.Settings.TrayCloseActions.MinimizeToTray;
+            s.Tray.CloseToTray = true;
+        });
+        tray.ForceIconAvailableForTesting = true;
+        try
+        {
+            Assert.True(tray.HidesOnClose);
+
+            // Simulates clicking the custom Windows/Linux caption X button (CaptionButtonsView.OnClose).
+            window.RequestUserClose();
+            await PumpUntil(() => !window.IsVisible);
+
+            // Window is hidden to tray, NOT shut down: terminals remain running and the window can be shown again.
+            Assert.All(terminals.Connections, c => Assert.False(c.IsEnded));
+            window.Show();
+            Assert.True(window.IsVisible);
+        }
+        finally
+        {
+            tray.ForceIconAvailableForTesting = false;
+            window.Close();
+        }
+    }
 }

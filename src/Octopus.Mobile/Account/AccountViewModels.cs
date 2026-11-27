@@ -522,6 +522,7 @@ public sealed partial class AddHostViewModel : ObservableObject, IDisposable
                 var baseError = MobileLangResources.Get(outcome switch
                 {
                     PairingOutcome.NotAnAddress => MobileLangResourceKind.AddHostNotAnAddress,
+                    PairingOutcome.PairingLinkNoAddress => MobileLangResourceKind.AddHostPairingLinkNoAddress,
                     PairingOutcome.NotPairing => MobileLangResourceKind.PairingNotOpen,
                     PairingOutcome.Unreachable => MobileLangResourceKind.PairingUnreachable,
                     _ => MobileLangResourceKind.PairingFailed,

@@ -1720,9 +1720,12 @@
     <unit id="BotGroupMenuManageMembers"><segment><source>Manage members...</source><target state="translated">管理成员...</target></segment></unit>
     <unit id="BotGroupMenuRename"><segment><source>Rename group...</source><target state="translated">重命名群组...</target></segment></unit>
     <unit id="BotGroupMenuDelete"><segment><source>Delete group</source><target state="translated">删除群组</target></segment></unit>
+    <unit id="BotGroupMenuDeleteThread"><segment><source>Delete thread</source><target state="translated">删除话题</target></segment></unit>
     <unit id="BotGroupRenameTitle"><segment><source>Rename Bot Group</source><target state="translated">重命名 Bot 群组</target></segment></unit>
     <unit id="BotGroupDeleteConfirmTitle"><segment><source>Delete "{0}"?</source><target state="translated">删除「{0}」？</target></segment></unit>
     <unit id="BotGroupDeleteConfirmBody"><segment><source>The group transcript and member group sessions will be deleted. Individual bots stay intact.</source><target state="translated">群组聊天记录和群内成员会话将被删除，但各个 Bot 本身不会受到影响。</target></segment></unit>
+    <unit id="BotGroupThreadDeleteConfirmTitle"><segment><source>Delete "{0}"?</source><target state="translated">删除「{0}」？</target></segment></unit>
+    <unit id="BotGroupThreadDeleteConfirmBody"><segment><source>Messages in this thread will be permanently deleted.</source><target state="translated">该话题中的聊天记录将被永久删除。</target></segment></unit>
     <unit id="BotGroupDialogCreateTitle"><segment><source>New Bot Group</source><target state="translated">新建 Bot 群组</target></segment></unit>
     <unit id="BotGroupDialogCreateDescription"><segment><source>Bring multiple bots into one shared room to collaborate via @mentions.</source><target state="translated">将多个 Bot 拉入同一个房间，通过 @提及 协同工作。</target></segment></unit>
     <unit id="BotGroupDialogEditTitle"><segment><source>Manage Bot Group</source><target state="translated">管理 Bot 群组</target></segment></unit>

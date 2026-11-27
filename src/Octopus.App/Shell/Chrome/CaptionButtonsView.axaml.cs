@@ -25,5 +25,15 @@ public partial class CaptionButtonsView : UserControl
         }
     }
 
-    private void OnClose(object? sender, RoutedEventArgs e) => Host?.Close();
+    private void OnClose(object? sender, RoutedEventArgs e)
+    {
+        if (Host is MainWindow main)
+        {
+            main.RequestUserClose();
+        }
+        else
+        {
+            Host?.Close();
+        }
+    }
 }

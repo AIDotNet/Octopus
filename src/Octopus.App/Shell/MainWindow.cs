@@ -26,6 +26,7 @@ public class MainWindow : ArcWindow
     private readonly IAppKeymap _keymap;
     private bool _closing;
     private bool _shutDown;
+    private bool _userCloseRequested;
 
     public MainWindow()
     {
@@ -130,6 +131,23 @@ public class MainWindow : ArcWindow
         e.Handled = true;
     }
 
+    /// <summary>
+    /// Invoked by the custom titlebar close button (Windows/Linux). Calling <see cref="Window.Close()"/> directly sets
+    /// <see cref="WindowClosingEventArgs.IsProgrammatic"/> to true, which would otherwise bypass the close-to-tray flow.
+    /// </summary>
+    internal void RequestUserClose()
+    {
+        _userCloseRequested = true;
+        try
+        {
+            Close();
+        }
+        finally
+        {
+            _userCloseRequested = false;
+        }
+    }
+
     protected override async void OnClosing(WindowClosingEventArgs e)
     {
         base.OnClosing(e);
@@ -139,8 +157,9 @@ public class MainWindow : ArcWindow
         }
         // The close button with "close to tray" or "ask" on: hide directly, or prompt the user to minimize vs quit.
         // Quitting from the tray menu, the updater's restart, and the system ending the app close the window
-        // programmatically or for another reason, and bypass this prompt.
-        if (e is { IsProgrammatic: false, CloseReason: WindowCloseReason.WindowClosing })
+        // programmatically (without RequestUserClose) or for another reason, and bypass this prompt.
+        var isUserClose = _userCloseRequested || !e.IsProgrammatic;
+        if (isUserClose && e.CloseReason == WindowCloseReason.WindowClosing)
         {
             var tray = AppHost.Get<TrayService>();
             if (tray.HidesOnClose || tray.AsksOnClose)

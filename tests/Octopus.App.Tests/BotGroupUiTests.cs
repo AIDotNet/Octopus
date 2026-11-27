@@ -78,4 +78,43 @@ public sealed class BotGroupUiTests
 
         window.Close();
     }
+
+    [AvaloniaFact]
+    public async Task BotGroupThread_context_menu_allows_deleting_new_threads()
+    {
+        var bots = AppHost.Get<IBotService>();
+        var groups = AppHost.Get<IBotGroupService>();
+        var bot = bots.CreateBot(new NewBotRequest("测试助手", "claude", "#d97757", null, null));
+        var group = groups.CreateGroup(new CreateBotGroupRequest("测试群组", [bot.Id]));
+        var thread = await groups.CreateThreadAsync(group.Id);
+        Assert.Single(groups.FindGroup(group.Id)!.Threads);
+        Assert.Equal(thread.Id, groups.CurrentThreadId);
+
+        var panelVm = AppHost.Get<BotPanelViewModel>();
+        panelVm.Rebuild();
+
+        var groupNode = Assert.Single(panelVm.GroupNodes, n => n.GroupId == group.Id);
+        Assert.Equal(2, groupNode.Rooms.Count);
+        var mainRoomRow = groupNode.Rooms[0];
+        var threadRow = groupNode.Rooms[1];
+
+        Assert.False(mainRoomRow.CanDelete);
+        Assert.True(threadRow.CanDelete);
+
+        // Verify right-click context menu attaches cleanly to the thread row in BotPanelView.
+        var window = new Window { Width = 360, Height = 700, Content = new BotPanelView { DataContext = panelVm } };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        // Execute delete command (empty new thread deletes directly without blocking modal).
+        await threadRow.DeleteCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Empty(groups.FindGroup(group.Id)!.Threads);
+        Assert.Null(groups.CurrentThreadId);
+
+        window.Close();
+        await groups.DeleteGroupAsync(group.Id);
+        bots.DeleteBot(bot.Id);
+    }
 }

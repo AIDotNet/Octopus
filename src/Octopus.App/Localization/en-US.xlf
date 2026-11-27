@@ -1719,9 +1719,12 @@
     <unit id="BotGroupMenuManageMembers"><segment><source>Manage members...</source></segment></unit>
     <unit id="BotGroupMenuRename"><segment><source>Rename group...</source></segment></unit>
     <unit id="BotGroupMenuDelete"><segment><source>Delete group</source></segment></unit>
+    <unit id="BotGroupMenuDeleteThread"><segment><source>Delete thread</source></segment></unit>
     <unit id="BotGroupRenameTitle"><segment><source>Rename Bot Group</source></segment></unit>
     <unit id="BotGroupDeleteConfirmTitle"><segment><source>Delete "{0}"?</source></segment></unit>
     <unit id="BotGroupDeleteConfirmBody"><segment><source>The group transcript and member group sessions will be deleted. Individual bots stay intact.</source></segment></unit>
+    <unit id="BotGroupThreadDeleteConfirmTitle"><segment><source>Delete "{0}"?</source></segment></unit>
+    <unit id="BotGroupThreadDeleteConfirmBody"><segment><source>Messages in this thread will be permanently deleted.</source></segment></unit>
     <unit id="BotGroupDialogCreateTitle"><segment><source>New Bot Group</source></segment></unit>
     <unit id="BotGroupDialogCreateDescription"><segment><source>Bring multiple bots into one shared room to collaborate via @mentions.</source></segment></unit>
     <unit id="BotGroupDialogEditTitle"><segment><source>Manage Bot Group</source></segment></unit>

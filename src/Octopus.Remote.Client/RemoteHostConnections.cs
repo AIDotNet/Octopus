@@ -371,7 +371,7 @@ public class RemoteHostConnections : IDisposable
     {
         var trimmed = text?.Trim() ?? "";
         if (trimmed.Length == 0 || trimmed.Contains(' ')) return null;
-        if (trimmed.StartsWith(RelayScheme + "://", StringComparison.Ordinal))
+        if (trimmed.StartsWith(RelayScheme + "://", StringComparison.OrdinalIgnoreCase))
         {
             return Uri.TryCreate(trimmed, UriKind.Absolute, out var relay) && relay.Host.Length == 26 && relay.Host.All(char.IsAsciiLetterOrDigit) ? relay : null;
         }

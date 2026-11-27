@@ -156,4 +156,37 @@ public class QrPairingTests
         Assert.True(Phone.Until(() => hosts.Online.Count == 1));
         Assert.Equal("Den", hosts.Online[0].Name);
     }
+
+    [AvaloniaFact]
+    public async Task Pairing_link_with_line_breaks_parses_and_addressless_link_shows_clear_error()
+    {
+        await using var den = Computer.StartLocal();
+        den.Service.OpenPairing(Open);
+
+        // Wrapped link with embedded line breaks/spaces (e.g. shared via chat app) still connects cleanly.
+        var fullLink = den.Service.CreatePairingLink([$"ws://{den.Address}"])!.ToString();
+        var wrapped = fullLink.Insert(24, "\r\n  ");
+        using (var phone = new RealPhone(null))
+        {
+            phone.Model<WelcomeViewModel>().UseLocalCommand.Execute(null);
+            var add = phone.Model<AddHostViewModel>();
+            add.Target = wrapped;
+            add.ConnectCommand.Execute(null);
+            Assert.True(Phone.Until(() => phone.Shell.Top is HostsPage, 5_000), "wrapped link should pair: " + add.ErrorText);
+        }
+
+        // Valid pairing link missing &a= addresses must report missing-address guidance rather than "not a pairing link".
+        den.Service.RefreshPairingToken();
+        var emptyAddrLink = den.Service.CreatePairingLink([])!.ToString();
+        using (var phone = new RealPhone(null))
+        {
+            phone.Model<WelcomeViewModel>().UseLocalCommand.Execute(null);
+            var add = phone.Model<AddHostViewModel>();
+            add.Target = emptyAddrLink;
+            add.ConnectCommand.Execute(null);
+            Assert.True(Phone.Until(() => add.HasError, 5_000));
+            Assert.NotEqual(Octopus.Mobile.Localization.MobileLangResources.Get(Octopus.Mobile.Localization.MobileLangResourceKind.AddHostNotAnAddress), add.ErrorText);
+            Assert.Equal(Octopus.Mobile.Localization.MobileLangResources.Get(Octopus.Mobile.Localization.MobileLangResourceKind.AddHostPairingLinkNoAddress), add.ErrorText);
+        }
+    }
 }

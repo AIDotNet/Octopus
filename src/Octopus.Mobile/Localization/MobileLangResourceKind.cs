@@ -84,6 +84,7 @@ public enum MobileLangResourceKind
     AddHostConnect,
     AddHostLinkHint,
     AddHostNotAnAddress,
+    AddHostPairingLinkNoAddress,
     NotSignedIn,
     LeaveLocal,
     HostsEmptyLocal,

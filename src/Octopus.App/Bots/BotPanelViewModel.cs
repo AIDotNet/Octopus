@@ -468,7 +468,8 @@ public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
                         isMainRoom: false,
                         isSelected: isCurrentGroup && string.Equals(activeThreadId, thread.Id, StringComparison.Ordinal),
                         pendingApprovalCount: _botGroups.GetPendingApprovals(group.Id, thread.Id).Count,
-                        open: row => _botGroups.SelectGroup(row.GroupId, row.ThreadId)));
+                        open: row => _botGroups.SelectGroup(row.GroupId, row.ThreadId),
+                        delete: DeleteGroupThreadAsync));
                 }
 
                 var preview = FormatGroupPreview(group);
@@ -655,6 +656,36 @@ public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
         {
             await _botGroups.DeleteGroupAsync(node.GroupId);
         }
+    }
+
+    private async Task DeleteGroupThreadAsync(BotGroupRoomRowViewModel row)
+    {
+        if (_botGroups is null || string.IsNullOrWhiteSpace(row.ThreadId))
+        {
+            return;
+        }
+        var hasMessages = false;
+        try
+        {
+            hasMessages = _botGroups.ReadRoom(row.GroupId, row.ThreadId, limit: 1).Messages.Count > 0;
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+        if (hasMessages)
+        {
+            var ok = await _dialogs.ConfirmAsync(
+                AppLangResources.Format(AppLangResourceKind.BotGroupThreadDeleteConfirmTitle, row.Title),
+                AppLangResources.Get(AppLangResourceKind.BotGroupThreadDeleteConfirmBody),
+                AppLangResources.Get(AppLangResourceKind.BotGroupMenuDeleteThread),
+                isDanger: true);
+            if (!ok)
+            {
+                return;
+            }
+        }
+        await _botGroups.DeleteThreadAsync(row.GroupId, row.ThreadId);
     }
 
     private void OnToggleBot(BotTreeNodeViewModel node)

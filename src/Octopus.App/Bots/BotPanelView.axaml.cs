@@ -28,6 +28,14 @@ public partial class BotPanelView : UserControl
         }
     }
 
+    private void OnGroupRoomRowDataContextChanged(object? sender, EventArgs e)
+    {
+        if (sender is Control control && control.DataContext is Groups.BotGroupRoomRowViewModel row)
+        {
+            BotContextMenus.AttachGroupRoomMenu(control, row);
+        }
+    }
+
     private void OnBotRowDataContextChanged(object? sender, EventArgs e)
     {
         if (sender is Control control && control.DataContext is BotTreeNodeViewModel node)

@@ -482,7 +482,9 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         }
         catch (FormatException)
         {
-            return PairingOutcome.NotAnAddress;
+            return PairingLink.TryParse(target) is { Addresses.Count: 0 }
+                ? PairingOutcome.PairingLinkNoAddress
+                : PairingOutcome.NotAnAddress;
         }
         catch (HandshakeException e)
         {

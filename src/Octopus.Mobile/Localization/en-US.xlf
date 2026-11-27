@@ -76,6 +76,7 @@
     <unit id="AddHostConnect"><segment><source>Connect</source></segment></unit>
     <unit id="AddHostLinkHint"><segment><source>Paste the pairing link the computer shows (octopus://pair?…) to skip comparing the number.</source></segment></unit>
     <unit id="AddHostNotAnAddress"><segment><source>This is neither an address nor a pairing link.</source></segment></unit>
+    <unit id="AddHostPairingLinkNoAddress"><segment><source>This pairing link has no host address. Turn on Local network access (or Relay) on the computer, then start pairing again.</source></segment></unit>
     <unit id="NotSignedIn"><segment><source>Not signed in</source></segment></unit>
     <unit id="LeaveLocal"><segment><source>Leave local network mode</source></segment></unit>
     <unit id="HostsEmptyLocal"><segment><source>No computer added yet.</source></segment></unit>
