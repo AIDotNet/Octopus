@@ -180,7 +180,12 @@ public sealed class MainActivity : AvaloniaMainActivity
     protected override void OnStop()
     {
         base.OnStop();
-        MobileHost.NotifyBackgrounded();
+        // Launching our own full-screen QrScannerActivity covers MainActivity without leaving the app;
+        // suppress false background/foreground churn so returning doesn't trigger a full reconnect storm.
+        if (!AndroidQrScanner.IsActive)
+        {
+            MobileHost.NotifyBackgrounded();
+        }
     }
 
     public override void OnRequestPermissionsResult(int requestCode, string[] permissions, [GeneratedEnum] Permission[] grantResults)

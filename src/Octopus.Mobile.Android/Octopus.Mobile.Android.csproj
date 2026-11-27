@@ -17,6 +17,7 @@
         <AndroidPackageFormat>apk</AndroidPackageFormat>
         <UseNativeHttpHandler>true</UseNativeHttpHandler>
         <UseSystemResourceKeys>false</UseSystemResourceKeys>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <IsPackable>false</IsPackable>
     </PropertyGroup>
 
