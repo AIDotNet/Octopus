@@ -94,4 +94,75 @@ public class ShellExitTests
         Assert.All(terminals.Connections, c => Assert.True(c.IsEnded));
         window.Close();
     }
+
+    [AvaloniaFact]
+    public async Task Closing_with_tray_prompt_minimizes_and_remembers_choice()
+    {
+        var (window, terminals) = OpenWithTerminal(foreground: null);
+        await PumpUntil(() => terminals.Connections.Count > 0);
+        var tray = AppHost.Get<TrayService>();
+        var dialogs = AppHost.Get<FakeDialogService>();
+        var settings = AppHost.Get<Octopus.Storage.ISettingsStore>();
+        tray.ForceIconAvailableForTesting = true;
+        try
+        {
+            Assert.True(tray.AsksOnClose);
+
+            // Cancel keeps the window visible and terminals alive.
+            dialogs.CloseWindowPrompt = new CloseWindowPromptResult(CloseWindowDecision.Cancel, RememberChoice: false);
+            await window.HandleTrayCloseAsync(tray);
+            Assert.Equal(1, dialogs.CloseWindowPromptAsked);
+            Assert.True(window.IsVisible);
+            Assert.All(terminals.Connections, c => Assert.False(c.IsEnded));
+
+            // Minimize to tray with RememberChoice hides the window, keeps terminals running, and saves the setting.
+            dialogs.CloseWindowPrompt = new CloseWindowPromptResult(CloseWindowDecision.MinimizeToTray, RememberChoice: true);
+            await window.HandleTrayCloseAsync(tray);
+            Assert.Equal(2, dialogs.CloseWindowPromptAsked);
+            Assert.False(window.IsVisible);
+            Assert.All(terminals.Connections, c => Assert.False(c.IsEnded));
+            Assert.Equal(Octopus.Core.Settings.TrayCloseActions.MinimizeToTray, settings.Current.Tray.CloseAction);
+            Assert.True(settings.Current.Tray.CloseToTray);
+            Assert.True(tray.HidesOnClose);
+
+            // Next close hides directly without prompting again.
+            window.Show();
+            await window.HandleTrayCloseAsync(tray);
+            Assert.Equal(2, dialogs.CloseWindowPromptAsked);
+            Assert.False(window.IsVisible);
+        }
+        finally
+        {
+            tray.ForceIconAvailableForTesting = false;
+            window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_with_tray_prompt_quit_shuts_down_and_remembers_choice()
+    {
+        var (window, terminals) = OpenWithTerminal(foreground: null);
+        await PumpUntil(() => terminals.Connections.Count > 0);
+        var tray = AppHost.Get<TrayService>();
+        var dialogs = AppHost.Get<FakeDialogService>();
+        var settings = AppHost.Get<Octopus.Storage.ISettingsStore>();
+        tray.ForceIconAvailableForTesting = true;
+        try
+        {
+            dialogs.CloseWindowPrompt = new CloseWindowPromptResult(CloseWindowDecision.Quit, RememberChoice: true);
+            await window.HandleTrayCloseAsync(tray);
+            await PumpUntil(() => !window.IsVisible);
+
+            Assert.Equal(1, dialogs.CloseWindowPromptAsked);
+            Assert.All(terminals.Connections, c => Assert.True(c.IsEnded));
+            Assert.Equal(Octopus.Core.Settings.TrayCloseActions.Quit, settings.Current.Tray.CloseAction);
+            Assert.False(settings.Current.Tray.CloseToTray);
+            Assert.False(tray.AsksOnClose);
+            Assert.False(tray.HidesOnClose);
+        }
+        finally
+        {
+            tray.ForceIconAvailableForTesting = false;
+        }
+    }
 }

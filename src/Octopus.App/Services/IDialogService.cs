@@ -103,7 +103,22 @@ public interface IDialogService
         Octopus.Core.Bots.BotGroupDefinition group,
         IReadOnlyList<Octopus.Core.Bots.BotDefinition> bots) =>
         Task.FromResult<Octopus.App.Bots.Groups.BotGroupDialogResult?>(null);
+
+    /// <summary>Asks whether closing the main window should minimize to the system tray or quit Octopus.</summary>
+    Task<CloseWindowPromptResult> AskCloseWindowActionAsync() =>
+        Task.FromResult(new CloseWindowPromptResult(CloseWindowDecision.Quit, false));
 }
+
+/// <summary>Choice returned by the window-close tray prompt.</summary>
+public enum CloseWindowDecision
+{
+    Cancel,
+    MinimizeToTray,
+    Quit,
+}
+
+/// <summary>The user's decision from <see cref="IDialogService.AskCloseWindowActionAsync"/> and whether to save it.</summary>
+public sealed record CloseWindowPromptResult(CloseWindowDecision Decision, bool RememberChoice);
 
 /// <summary>What the project icon dialog returns: the color, a Lucide icon name (null: the initial) and a thumbnail file (null: none).</summary>
 public sealed record ProjectAppearanceChoice(string? Color, string? Icon, string? Image);

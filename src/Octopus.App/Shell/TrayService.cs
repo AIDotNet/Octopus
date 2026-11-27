@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using Octopus.App.Activity;
 using Octopus.App.Localization;
 using Octopus.App.Services;
+using Octopus.Core.Settings;
 using Octopus.Storage;
 using Octopus.Updates;
 
@@ -14,16 +15,25 @@ namespace Octopus.App.Shell;
 /// <summary>
 /// The icon in the notification area (the menu bar on macOS): click it to bring the window back, and its menu has Show,
 /// Check for updates and Quit. With "close to tray" on, the window's close button only hides the window
-/// (<see cref="HidesOnClose"/>); terminals and agents keep running. Quitting always goes through the window's normal
-/// close, so the question about running programs is still asked.
+/// (<see cref="HidesOnClose"/>); with "ask", closing asks whether to minimize to tray or quit (<see cref="AsksOnClose"/>).
+/// Quitting always goes through the window's normal close, so the question about running programs is still asked.
 /// </summary>
 internal sealed class TrayService(ISettingsStore settings, IWindowAccessor windows, IUpdateService updates, Activity.IItemActivityService activity, IProjectService projects)
 {
     private TrayIcon? _icon;
     private NativeMenuItem? _show, _check, _quit;
 
+    /// <summary>Headless-test hook: simulates an active tray icon when no OS notification area is attached.</summary>
+    internal bool ForceIconAvailableForTesting { get; set; }
+
+    /// <summary>True when the tray icon is active and can bring a hidden window back.</summary>
+    public bool CanHideToTray => (_icon is { IsVisible: true } || ForceIconAvailableForTesting) && settings.Current.Tray.Enabled;
+
     /// <summary>The close button hides the window instead of closing it.</summary>
-    public bool HidesOnClose => _icon is { IsVisible: true } && settings.Current.Tray is { Enabled: true, CloseToTray: true };
+    public bool HidesOnClose => CanHideToTray && settings.Current.Tray.EffectiveCloseAction() == TrayCloseActions.MinimizeToTray;
+
+    /// <summary>The close button asks the user whether to minimize to tray or quit.</summary>
+    public bool AsksOnClose => CanHideToTray && settings.Current.Tray.EffectiveCloseAction() == TrayCloseActions.Ask;
 
     public void Start(Application app)
     {

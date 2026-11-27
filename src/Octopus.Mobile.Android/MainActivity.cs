@@ -32,8 +32,28 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
             ConnectTimeout = TimeSpan.FromSeconds(10),
             AutomaticDecompression = automaticDecompression ? DecompressionMethods.All : DecompressionMethods.None,
         };
+        ConfigureWebSocketRoots();
         UseRealHosts(this);
         base.OnCreate();
+    }
+
+    private void ConfigureWebSocketRoots()
+    {
+        try
+        {
+            using var stream = Resources?.OpenRawResource(Resource.Raw.ca_roots);
+            if (stream is null) return;
+            using var reader = new StreamReader(stream);
+            var roots = RelayHttp.LoadPemCertificates(reader.ReadToEnd());
+            if (roots.Count > 0)
+            {
+                RelayHttp.WebSocketCertificateValidationCallback = RelayHttp.CreateCustomRootsValidator(roots);
+            }
+        }
+        catch
+        {
+            // Never block app startup if the bundled root CA resource cannot be read.
+        }
     }
 
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>

@@ -5,6 +5,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Channels;
+using Octopus.Remote.Relay;
 
 namespace Octopus.Remote.Transport;
 
@@ -34,6 +35,7 @@ public sealed class WebSocketTransport(WebSocket socket, IDisposable? owner = nu
             var target = string.IsNullOrEmpty(address.AbsolutePath) || address.AbsolutePath == "/"
                 ? new UriBuilder(address) { Path = Path }.Uri
                 : address;
+            RelayHttp.ConfigureWebSocket(client.Options, target);
             await client.ConnectAsync(target, cancellationToken).ConfigureAwait(false);
             return new WebSocketTransport(client);
         }

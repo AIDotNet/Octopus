@@ -301,7 +301,9 @@ internal static class RelaySockets
         socket.Options.SetRequestHeader("Authorization", "Bearer " + relay.Token);
         try
         {
-            await socket.ConnectAsync(relay.WebSocket(path), cancellationToken).ConfigureAwait(false);
+            var target = relay.WebSocket(path);
+            RelayHttp.ConfigureWebSocket(socket.Options, target);
+            await socket.ConnectAsync(target, cancellationToken).ConfigureAwait(false);
             return socket;
         }
         catch (Exception e) when (e is WebSocketException or IOException or HttpRequestException or InvalidOperationException)

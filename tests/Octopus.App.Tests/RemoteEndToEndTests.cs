@@ -371,9 +371,16 @@ public class RemoteEndToEndTests
         }
         finally { File.Delete(path); }
 
-        // Only pictures, only for a terminal of the host, and never larger than a picture may be.
+        // Terminals only take pictures, GUI conversations take both pictures and files, and nothing larger than the limit.
         Assert.Equal(RemoteProtocol.InvalidParams, (await Assert.ThrowsAsync<RemoteException>(() => Wait(client.UploadAsync(shell.Id, "notes.sh", [1, 2, 3])))).Code);
-        Assert.Equal(RemoteMethods.NotAllowed, (await Assert.ThrowsAsync<RemoteException>(() => Wait(client.UploadAsync(gui.Id, "a.png", [1, 2, 3])))).Code);
+        var guiUpload = await Wait(client.UploadAsync(gui.Id, "notes.txt", [1, 2, 3]));
+        try
+        {
+            Assert.Equal(Path.GetFullPath(ClipboardImages.DefaultFolder), Path.GetDirectoryName(guiUpload));
+            Assert.EndsWith("-notes.txt", Path.GetFileName(guiUpload), StringComparison.Ordinal);
+            Assert.Equal([1, 2, 3], File.ReadAllBytes(guiUpload));
+        }
+        finally { File.Delete(guiUpload); }
         Assert.Equal(RemoteMethods.NotFound, (await Assert.ThrowsAsync<RemoteException>(() => Wait(client.UploadAsync("nope", "a.png", [1, 2, 3])))).Code);
         await Assert.ThrowsAsync<InvalidDataException>(() => Wait(client.UploadAsync(shell.Id, "big.png", new byte[RemoteMethods.UploadMaxBytes + 1])));
     }

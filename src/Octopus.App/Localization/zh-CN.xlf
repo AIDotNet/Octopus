@@ -520,6 +520,16 @@
     <unit id="SettingsTrayShowHint"><segment><source>An Octopus icon in the notification area (the menu bar on macOS) brings the window back and has a Quit command.</source><target state="translated">在通知区域（macOS 为菜单栏）显示 Octopus 图标，点击可以唤回窗口，右键菜单里有退出。</target></segment></unit>
     <unit id="SettingsTrayClose"><segment><source>Keep running in the tray when the window is closed</source><target state="translated">关闭窗口时保留在托盘</target></segment></unit>
     <unit id="SettingsTrayCloseHint"><segment><source>The close button only hides the window; terminals and agents keep running. Quit from the tray menu.</source><target state="translated">关闭按钮只隐藏窗口，终端和智能体继续运行；要退出请用托盘菜单里的“退出”。</target></segment></unit>
+    <unit id="SettingsTrayCloseAction"><segment><source>When closing the window</source><target state="translated">关闭窗口时</target></segment></unit>
+    <unit id="SettingsTrayCloseActionHint"><segment><source>Choose whether the close button asks, minimizes to the tray to keep terminals and agents running, or quits Octopus.</source><target state="translated">选择点击关闭按钮时是每次询问、最小化到托盘保持后台运行，还是直接退出 Octopus。</target></segment></unit>
+    <unit id="SettingsTrayCloseAsk"><segment><source>Ask every time</source><target state="translated">每次询问</target></segment></unit>
+    <unit id="SettingsTrayCloseMinimize"><segment><source>Minimize to tray</source><target state="translated">最小化到托盘</target></segment></unit>
+    <unit id="SettingsTrayCloseQuit"><segment><source>Quit Octopus</source><target state="translated">直接退出</target></segment></unit>
+    <unit id="ClosePromptTitle"><segment><source>Close Octopus</source><target state="translated">关闭 Octopus</target></segment></unit>
+    <unit id="ClosePromptBody"><segment><source>Minimize to the system tray to keep terminals and agents running in the background, or quit Octopus?</source><target state="translated">要最小化到系统托盘保持终端和智能体在后台运行，还是直接退出 Octopus？</target></segment></unit>
+    <unit id="ClosePromptMinimize"><segment><source>Minimize to tray</source><target state="translated">最小化到托盘</target></segment></unit>
+    <unit id="ClosePromptQuit"><segment><source>Quit</source><target state="translated">直接退出</target></segment></unit>
+    <unit id="ClosePromptRemember"><segment><source>Remember my choice</source><target state="translated">记住我的选择</target></segment></unit>
     <unit id="UpdateSkip"><segment><source>Skip this version</source><target state="translated">跳过此版本</target></segment></unit>
     <unit id="UpdateLater"><segment><source>Later</source><target state="translated">稍后</target></segment></unit>
     <unit id="UpdateDownload"><segment><source>Download and update</source><target state="translated">下载并更新</target></segment></unit>

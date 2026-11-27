@@ -6,6 +6,9 @@ namespace Octopus.Agents;
 /// <summary>Compiles a definition, a profile and launch options into an executable plus an argument array. Pure.</summary>
 public sealed class AgentCommandCompiler : IAgentCommandCompiler
 {
+    private const string FastSuffix = "-fast";
+    private static readonly string[] KnownEffortSuffixes = ["-low", "-medium", "-high", "-xhigh", "-max"];
+
     private readonly IShellCommandBuilder _shell;
 
     public AgentCommandCompiler(IShellCommandBuilder shell) => _shell = shell;
@@ -75,13 +78,20 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
         if (caps.Model is { } modelCap && model is not null)
         {
             var modelParams = new List<string>();
-            if (effort is not null && !string.IsNullOrEmpty(caps.Effort?.ModelParam))
+            if (!model.Contains('[', StringComparison.Ordinal))
             {
-                modelParams.Add(Substitute(caps.Effort.ModelParam, effort));
-            }
-            if (fast == true && !string.IsNullOrEmpty(caps.Fast?.ModelParam))
-            {
-                modelParams.Add(Substitute(caps.Fast.ModelParam, "true"));
+                if (effort is not null
+                    && !string.IsNullOrEmpty(caps.Effort?.ModelParam)
+                    && !ModelEncodesEffort(model, effort))
+                {
+                    modelParams.Add(Substitute(caps.Effort.ModelParam, effort));
+                }
+                if (fast == true
+                    && !string.IsNullOrEmpty(caps.Fast?.ModelParam)
+                    && !ModelEncodesFast(model))
+                {
+                    modelParams.Add(Substitute(caps.Fast.ModelParam, "true"));
+                }
             }
             var value = modelParams.Count > 0 ? $"{model}[{string.Join(',', modelParams)}]" : model;
             var option = modelCap.Options.FirstOrDefault(o => o.Id == model);
@@ -368,6 +378,28 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
 
     private static string Substitute(string template, string value) =>
         template.Replace("{value}", value, StringComparison.Ordinal);
+
+    private static bool ModelEncodesEffort(string model, string effort)
+    {
+        var span = model.AsSpan();
+        if (span.EndsWith(FastSuffix.AsSpan(), StringComparison.OrdinalIgnoreCase))
+        {
+            span = span[..^FastSuffix.Length];
+        }
+        foreach (var suffix in KnownEffortSuffixes)
+        {
+            if (span.EndsWith(suffix.AsSpan(), StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return span.Length > effort.Length
+            && span[^(effort.Length + 1)] == '-'
+            && span[^effort.Length..].Equals(effort.AsSpan(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ModelEncodesFast(string model) =>
+        model.EndsWith(FastSuffix, StringComparison.OrdinalIgnoreCase);
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

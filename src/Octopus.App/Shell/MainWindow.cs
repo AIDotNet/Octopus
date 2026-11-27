@@ -67,6 +67,7 @@ public class MainWindow : ArcWindow
         SizeChanged += (_, e) => _shell.StarPrompt.SetWindowState(IsActive, e.NewSize.Width);
         PropertyChanged += OnWindowPropertyChanged;
         WindowPlacementTracker.Track(this, AppHost.Get<ISettingsStore>());
+        WindowsImeGuard.Attach(this);
     }
 
     private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -136,14 +137,18 @@ public class MainWindow : ArcWindow
         {
             return;
         }
-        // The close button with "close to tray" on: the window hides and the app goes on. Quitting from the tray menu, the
-        // updater's restart and the system ending the app close the window by code or for another reason, and are not hidden.
-        if (e is { IsProgrammatic: false, CloseReason: WindowCloseReason.WindowClosing } && AppHost.Get<TrayService>().HidesOnClose)
+        // The close button with "close to tray" or "ask" on: hide directly, or prompt the user to minimize vs quit.
+        // Quitting from the tray menu, the updater's restart, and the system ending the app close the window
+        // programmatically or for another reason, and bypass this prompt.
+        if (e is { IsProgrammatic: false, CloseReason: WindowCloseReason.WindowClosing })
         {
-            e.Cancel = true;
-            Hide();
-            TrimGraphicsCaches();
-            return;
+            var tray = AppHost.Get<TrayService>();
+            if (tray.HidesOnClose || tray.AsksOnClose)
+            {
+                e.Cancel = true;
+                await HandleTrayCloseAsync(tray);
+                return;
+            }
         }
         // The first close request only starts the shutdown (it may ask, and ending terminals takes a moment); the window
         // closes for real once everything is saved and ended. Further requests meanwhile change nothing.
@@ -153,6 +158,60 @@ public class MainWindow : ArcWindow
             return;
         }
         _closing = true;
+        await FinishShutDownAsync();
+    }
+
+    internal async Task HandleTrayCloseAsync(TrayService tray)
+    {
+        if (tray.HidesOnClose)
+        {
+            Hide();
+            TrimGraphicsCaches();
+            return;
+        }
+        if (!tray.AsksOnClose || _closing)
+        {
+            return;
+        }
+        _closing = true;
+        CloseWindowPromptResult choice;
+        try
+        {
+            choice = await AppHost.Get<IDialogService>().AskCloseWindowActionAsync();
+        }
+        catch (Exception)
+        {
+            _closing = false;
+            return;
+        }
+        if (choice.Decision == CloseWindowDecision.Cancel)
+        {
+            _closing = false;
+            return;
+        }
+        if (choice.RememberChoice)
+        {
+            var action = choice.Decision == CloseWindowDecision.MinimizeToTray
+                ? Octopus.Core.Settings.TrayCloseActions.MinimizeToTray
+                : Octopus.Core.Settings.TrayCloseActions.Quit;
+            AppHost.Get<ISettingsStore>().Update(s =>
+            {
+                s.Tray.CloseAction = action;
+                s.Tray.CloseToTray = action == Octopus.Core.Settings.TrayCloseActions.MinimizeToTray;
+            });
+        }
+        if (choice.Decision == CloseWindowDecision.MinimizeToTray)
+        {
+            _closing = false;
+            Hide();
+            TrimGraphicsCaches();
+            return;
+        }
+        await FinishShutDownAsync();
+    }
+
+    private async Task FinishShutDownAsync()
+    {
         var quit = true;
         try
         {

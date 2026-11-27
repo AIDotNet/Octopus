@@ -36,9 +36,14 @@
                              settings:SettingHelp.Tip="{l:AppLangResource SettingsTrayShowHint}">
                 <arc:Switch x:Name="TrayEnabledSwitch" IsChecked="{Binding TrayEnabled, Mode=TwoWay}" />
             </arc:SettingsRow>
-            <arc:SettingsRow Header="{l:AppLangResource SettingsTrayClose}"
-                             settings:SettingHelp.Tip="{l:AppLangResource SettingsTrayCloseHint}">
-                <arc:Switch x:Name="CloseToTraySwitch" IsChecked="{Binding CloseToTray, Mode=TwoWay}" IsEnabled="{Binding TrayEnabled}" />
+            <arc:SettingsRow Header="{l:AppLangResource SettingsTrayCloseAction}"
+                             settings:SettingHelp.Tip="{l:AppLangResource SettingsTrayCloseActionHint}">
+                <arc:Select x:Name="CloseActionSelect" AutoScrollToSelectedItem="False" Size="Small"
+                            Width="200"
+                            AutomationProperties.Name="{l:AppLangResource SettingsTrayCloseAction}"
+                            ItemsSource="{Binding CloseActions}"
+                            SelectedValue="{Binding CloseAction, Mode=TwoWay}"
+                            IsEnabled="{Binding TrayEnabled}" />
             </arc:SettingsRow>
         </arc:SettingsGroup>
     </StackPanel>

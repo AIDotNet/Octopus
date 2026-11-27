@@ -135,14 +135,56 @@ public class CompilerTests
     }
 
     [Fact]
-    public void Cursor_encodes_effort_and_fast_in_the_model()
+    public void Model_params_encode_effort_and_fast_and_skip_when_already_encoded_in_model()
     {
-        var profile = new AgentProfile { Model = "claude-opus-5-5", Effort = "high", Fast = true };
-        Assert.Equal(["--model", "claude-opus-5-5[effort=high,fast=true]"], Compile("cursor", profile).Arguments);
+        var def = new AgentDefinition
+        {
+            Id = "param-agent",
+            Capabilities = new AgentCapabilities
+            {
+                Model = new ModelCapability { Args = ["--model", "{value}"] },
+                Effort = new EffortCapability
+                {
+                    ModelParam = "effort={value}",
+                    Options = [new() { Id = "low" }, new() { Id = "high" }, new() { Id = "xhigh" }, new() { Id = "turbo" }],
+                },
+                Fast = new FastCapability { ModelParam = "fast=true" },
+            },
+        };
+        AgentCommand Run(AgentProfile profile) =>
+            Compiler.Compile(new AgentCompileRequest(def, profile, null, PermissionModes.Default, null));
+
+        Assert.Equal(["--model", "claude-opus-5-5[effort=high,fast=true]"],
+            Run(new AgentProfile { Model = "claude-opus-5-5", Effort = "high", Fast = true }).Arguments);
         Assert.Equal(["--model", "claude-opus-5-5[effort=high]"],
-            Compile("cursor", new AgentProfile { Model = "claude-opus-5-5", Effort = "high", Fast = false }).Arguments);
-        Assert.Equal(["--model", "auto"], Compile("cursor", new AgentProfile { Model = "auto" }).Arguments);
+            Run(new AgentProfile { Model = "claude-opus-5-5", Effort = "high", Fast = false }).Arguments);
+        Assert.Equal(["--model", "auto"], Run(new AgentProfile { Model = "auto" }).Arguments);
         // No model: model params are ignored and nothing is produced.
+        Assert.Empty(Run(new AgentProfile { Effort = "high", Fast = true }).Arguments);
+
+        // Defensive guard: do not double-append when the model id is already parameterized or encodes effort/fast.
+        Assert.Equal(["--model", "claude-opus-5-5[effort=low]"],
+            Run(new AgentProfile { Model = "claude-opus-5-5[effort=low]", Effort = "high", Fast = true }).Arguments);
+        Assert.Equal(["--model", "grok-4.7-xhigh"],
+            Run(new AgentProfile { Model = "grok-4.7-xhigh", Effort = "high", Fast = false }).Arguments);
+        Assert.Equal(["--model", "grok-4.7-xhigh[fast=true]"],
+            Run(new AgentProfile { Model = "grok-4.7-xhigh", Effort = "high", Fast = true }).Arguments);
+        Assert.Equal(["--model", "grok-4.7-xhigh-fast"],
+            Run(new AgentProfile { Model = "grok-4.7-xhigh-fast", Effort = "high", Fast = true }).Arguments);
+        Assert.Equal(["--model", "my-model-turbo"],
+            Run(new AgentProfile { Model = "my-model-turbo", Effort = "turbo", Fast = false }).Arguments);
+        Assert.Equal(["--model", "gpt-5.3-codex-fast[effort=high]"],
+            Run(new AgentProfile { Model = "gpt-5.3-codex-fast", Effort = "high", Fast = true }).Arguments);
+    }
+
+    [Fact]
+    public void Cursor_passes_model_id_verbatim_without_bracket_params()
+    {
+        var profile = new AgentProfile { Model = "grok-4.7-xhigh", Effort = "high", Fast = true };
+        Assert.Equal(["--model", "grok-4.7-xhigh"], Compile("cursor", profile).Arguments);
+        Assert.Equal(["--model", "grok-4.7-xhigh"],
+            Compile("cursor", launch: new AgentLaunchOptions { Model = "grok-4.7-xhigh", Effort = "high", Fast = true }).Arguments);
+        Assert.Equal(["--model", "auto"], Compile("cursor", new AgentProfile { Model = "auto" }).Arguments);
         Assert.Empty(Compile("cursor", new AgentProfile { Effort = "high", Fast = true }).Arguments);
     }
 
@@ -357,9 +399,20 @@ public class CompilerTests
     [Fact]
     public void Fast_false_overrides_a_profile_that_turned_it_on()
     {
+        var def = new AgentDefinition
+        {
+            Id = "fast-agent",
+            Capabilities = new AgentCapabilities
+            {
+                Model = new ModelCapability { Args = ["--model", "{value}"] },
+                Fast = new FastCapability { ModelParam = "fast=true" },
+            },
+        };
         var profile = new AgentProfile { Model = "auto", Fast = true };
-        Assert.Contains("fast=true", string.Join(' ', Compile("cursor", profile).Arguments));
-        var off = Compile("cursor", profile, new AgentLaunchOptions { Fast = false }).Arguments;
+        var on = Compiler.Compile(new AgentCompileRequest(def, profile, null, PermissionModes.Default, null)).Arguments;
+        Assert.Contains("fast=true", string.Join(' ', on));
+        var off = Compiler.Compile(
+            new AgentCompileRequest(def, profile, new AgentLaunchOptions { Fast = false }, PermissionModes.Default, null)).Arguments;
         Assert.Equal(["--model", "auto"], off.Take(2));
         Assert.DoesNotContain("fast", string.Join(' ', off));
     }

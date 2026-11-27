@@ -520,6 +520,16 @@
     <unit id="SettingsTrayShowHint"><segment><source>An Octopus icon in the notification area (the menu bar on macOS) brings the window back and has a Quit command.</source></segment></unit>
     <unit id="SettingsTrayClose"><segment><source>Keep running in the tray when the window is closed</source></segment></unit>
     <unit id="SettingsTrayCloseHint"><segment><source>The close button only hides the window; terminals and agents keep running. Quit from the tray menu.</source></segment></unit>
+    <unit id="SettingsTrayCloseAction"><segment><source>When closing the window</source></segment></unit>
+    <unit id="SettingsTrayCloseActionHint"><segment><source>Choose whether the close button asks, minimizes to the tray to keep terminals and agents running, or quits Octopus.</source></segment></unit>
+    <unit id="SettingsTrayCloseAsk"><segment><source>Ask every time</source></segment></unit>
+    <unit id="SettingsTrayCloseMinimize"><segment><source>Minimize to tray</source></segment></unit>
+    <unit id="SettingsTrayCloseQuit"><segment><source>Quit Octopus</source></segment></unit>
+    <unit id="ClosePromptTitle"><segment><source>Close Octopus</source></segment></unit>
+    <unit id="ClosePromptBody"><segment><source>Minimize to the system tray to keep terminals and agents running in the background, or quit Octopus?</source></segment></unit>
+    <unit id="ClosePromptMinimize"><segment><source>Minimize to tray</source></segment></unit>
+    <unit id="ClosePromptQuit"><segment><source>Quit</source></segment></unit>
+    <unit id="ClosePromptRemember"><segment><source>Remember my choice</source></segment></unit>
     <unit id="UpdateSkip"><segment><source>Skip this version</source></segment></unit>
     <unit id="UpdateLater"><segment><source>Later</source></segment></unit>
     <unit id="UpdateDownload"><segment><source>Download and update</source></segment></unit>

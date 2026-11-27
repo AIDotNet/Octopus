@@ -88,6 +88,30 @@ public sealed class DialogService(
                 AppLangResources.Get(AppLangResourceKind.Cancel), isDanger);
         });
 
+    public Task<CloseWindowPromptResult> AskCloseWindowActionAsync() =>
+        OnUiAsync(async () =>
+        {
+            if (windows.Window is null)
+            {
+                return new CloseWindowPromptResult(CloseWindowDecision.Quit, false);
+            }
+            var remember = new CheckBox
+            {
+                Content = AppLangResources.Get(AppLangResourceKind.ClosePromptRemember),
+                IsChecked = false,
+            };
+            var result = await Dialog.ShowAsync(
+                windows.Window,
+                AppLangResources.Get(AppLangResourceKind.ClosePromptTitle),
+                remember,
+                AppLangResources.Get(AppLangResourceKind.ClosePromptBody),
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.Cancel), CloseWindowDecision.Cancel),
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.ClosePromptQuit), CloseWindowDecision.Quit, ButtonVariant.Danger),
+                new DialogAction(AppLangResources.Get(AppLangResourceKind.ClosePromptMinimize), CloseWindowDecision.MinimizeToTray, ButtonVariant.Primary));
+            var decision = result is CloseWindowDecision chosen ? chosen : CloseWindowDecision.Cancel;
+            return new CloseWindowPromptResult(decision, remember.IsChecked == true);
+        });
+
     public async Task<string?> AskNameAsync(string title, string label, string? initial, string confirmText)
     {
         if (windows.Window is null)

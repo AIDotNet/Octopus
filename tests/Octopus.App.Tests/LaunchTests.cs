@@ -234,10 +234,34 @@ public class LaunchTests
     [AvaloniaFact]
     public void Fast_off_in_the_panel_overrides_a_profile_with_fast_on()
     {
-        var panel = Panel("cursor", new AgentProfile { Fast = true });
+        AppHost.Reset();
+        var definition = new AgentDefinition
+        {
+            Id = "fast-test",
+            Name = "Fast Test",
+            Capabilities = new AgentCapabilities
+            {
+                Model = new ModelCapability { Args = ["--model", "{value}"] },
+                Fast = new FastCapability { ModelParam = "fast=true" },
+            },
+        };
+        var panel = new AgentLaunchViewModel(
+            definition, new AgentProfile { Fast = true }, "default",
+            AppHost.Get<IAgentCommandCompiler>(), AppHost.Get<IModelDiscovery>(), null, _ => { });
+        Assert.True(panel.HasFast);
         Assert.True(panel.Fast);
         panel.Fast = false;
         Assert.False(panel.BuildOptions().Fast);
+    }
+
+    [AvaloniaFact]
+    public void Cursor_panel_hides_effort_and_fast_because_models_embed_them()
+    {
+        var cursor = Panel("cursor");
+        Assert.True(cursor.HasModel);
+        Assert.False(cursor.HasEffort);
+        Assert.False(cursor.HasFast);
+        Assert.Empty(cursor.Efforts);
     }
 
     [AvaloniaFact]

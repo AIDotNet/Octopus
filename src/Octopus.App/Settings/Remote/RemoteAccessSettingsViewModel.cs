@@ -78,7 +78,7 @@ public sealed partial class RemoteAccessSettingsViewModel : ObservableObject, ID
     public bool IsPairingLinkUsed => IsPairing && !HasPairingLink;
     public bool IsWaitingForRequest => IsPairing && !HasRequests;
     /// <summary>Remote access is on but closing the window would quit the app: the page says how to keep it running.</summary>
-    public bool ShowTrayHint => LanEnabled && !_settings.Current.Tray.CloseToTray;
+    public bool ShowTrayHint => LanEnabled && _settings.Current.Tray.EffectiveCloseAction() != Octopus.Core.Settings.TrayCloseActions.MinimizeToTray;
 
     public string DeviceName
     {

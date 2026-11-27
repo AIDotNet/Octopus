@@ -141,8 +141,16 @@ public sealed class FakeDialogService : IDialogService
     public int Asked { get; private set; }
     public string? LastTitle { get; private set; }
     public string? LastDescription { get; private set; }
+    public CloseWindowPromptResult CloseWindowPrompt { get; set; } = new(CloseWindowDecision.Quit, false);
+    public int CloseWindowPromptAsked { get; private set; }
     public NewProjectChoice? NewProject { get; set; }
     public NewProjectChoice? LastNewProjectInitial { get; private set; }
+
+    public Task<CloseWindowPromptResult> AskCloseWindowActionAsync()
+    {
+        CloseWindowPromptAsked++;
+        return Task.FromResult(CloseWindowPrompt);
+    }
 
     public Task<NewProjectChoice?> AskNewProjectAsync(NewProjectChoice? initial = null)
     {

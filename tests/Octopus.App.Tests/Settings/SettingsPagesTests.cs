@@ -383,14 +383,22 @@ public class SettingsPagesTests
     {
         var general = AppHost.Get<GeneralSettingsViewModel>();
         var settings = AppHost.Get<ISettingsStore>();
-        // Shown by default; the close button keeps quitting until the person asks otherwise.
+        // Shown by default; the close button asks until the person chooses minimize-to-tray or quit.
         Assert.True(general.TrayEnabled);
         Assert.False(general.CloseToTray);
+        Assert.Equal(Octopus.Core.Settings.TrayCloseActions.Ask, general.CloseAction);
 
         general.CloseToTray = true;
-        general.TrayEnabled = false;
-
+        Assert.Equal(Octopus.Core.Settings.TrayCloseActions.MinimizeToTray, general.CloseAction);
+        Assert.Equal(Octopus.Core.Settings.TrayCloseActions.MinimizeToTray, settings.Current.Tray.CloseAction);
         Assert.True(settings.Current.Tray.CloseToTray);
+
+        general.CloseAction = Octopus.Core.Settings.TrayCloseActions.Quit;
+        Assert.False(general.CloseToTray);
+        Assert.False(settings.Current.Tray.CloseToTray);
+        Assert.Equal(Octopus.Core.Settings.TrayCloseActions.Quit, settings.Current.Tray.CloseAction);
+
+        general.TrayEnabled = false;
         Assert.False(settings.Current.Tray.Enabled);
     }
 

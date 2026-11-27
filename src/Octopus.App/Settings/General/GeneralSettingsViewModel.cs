@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Octopus.App.Localization;
+using Octopus.Core.Settings;
 using Octopus.Platform;
 using Octopus.Storage;
 using TKCode.Arc;
@@ -18,9 +19,12 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject
         _settings = settings;
         _autoStart = autoStart;
         Languages = [.. AppLanguages.All.Select(l => new SelectOption(l.Tag.ToString(), l.Name))];
+        CloseActions = BuildCloseActions();
     }
 
     public IReadOnlyList<SelectOption> Languages { get; }
+
+    [ObservableProperty] public partial IReadOnlyList<SelectOption> CloseActions { get; private set; }
 
     /// <summary>The tag of the current language, for example <c>zh-CN</c>.</summary>
     public string Language
@@ -38,7 +42,9 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject
             }
             ArcLanguage.Set(tag);
             _settings.Update(s => s.Appearance.Language = tag.ToString());
+            CloseActions = BuildCloseActions();
             OnPropertyChanged();
+            OnPropertyChanged(nameof(CloseAction));
         }
     }
 
@@ -104,15 +110,47 @@ public sealed partial class GeneralSettingsViewModel : ObservableObject
 
     public bool CloseToTray
     {
-        get => _settings.Current.Tray.CloseToTray;
+        get => _settings.Current.Tray.EffectiveCloseAction() == TrayCloseActions.MinimizeToTray;
         set
         {
             if (value == CloseToTray)
             {
                 return;
             }
-            _settings.Update(s => s.Tray.CloseToTray = value);
+            _settings.Update(s =>
+            {
+                s.Tray.CloseToTray = value;
+                s.Tray.CloseAction = value ? TrayCloseActions.MinimizeToTray : TrayCloseActions.Quit;
+            });
             OnPropertyChanged();
+            OnPropertyChanged(nameof(CloseAction));
         }
     }
+
+    public string CloseAction
+    {
+        get => _settings.Current.Tray.EffectiveCloseAction();
+        set
+        {
+            if (value is not (TrayCloseActions.Ask or TrayCloseActions.MinimizeToTray or TrayCloseActions.Quit)
+                || value == CloseAction)
+            {
+                return;
+            }
+            _settings.Update(s =>
+            {
+                s.Tray.CloseAction = value;
+                s.Tray.CloseToTray = value == TrayCloseActions.MinimizeToTray;
+            });
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CloseToTray));
+        }
+    }
+
+    private static IReadOnlyList<SelectOption> BuildCloseActions() =>
+    [
+        new SelectOption(TrayCloseActions.Ask, AppLangResources.Get(AppLangResourceKind.SettingsTrayCloseAsk)),
+        new SelectOption(TrayCloseActions.MinimizeToTray, AppLangResources.Get(AppLangResourceKind.SettingsTrayCloseMinimize)),
+        new SelectOption(TrayCloseActions.Quit, AppLangResources.Get(AppLangResourceKind.SettingsTrayCloseQuit)),
+    ];
 }

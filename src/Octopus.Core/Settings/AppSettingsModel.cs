@@ -135,11 +135,30 @@ public sealed class RemoteSettings
     public bool PasswordAccessEnabled { get; set; } = true;
 }
 
+public static class TrayCloseActions
+{
+    public const string Ask = "ask";
+    public const string MinimizeToTray = "tray";
+    public const string Quit = "quit";
+}
+
 public sealed class TraySettings
 {
     public bool Enabled { get; set; } = true;
-    /// <summary>The window's close button hides the window to the tray instead of quitting; Quit in the tray menu (or the app menu) quits.</summary>
+    /// <summary>Legacy flag kept in sync with <see cref="CloseAction"/>: true when closing the window hides to tray.</summary>
     public bool CloseToTray { get; set; }
+    /// <summary>
+    /// What clicking the window's close button does when the tray icon is enabled:
+    /// <see cref="TrayCloseActions.Ask"/>, <see cref="TrayCloseActions.MinimizeToTray"/>, or <see cref="TrayCloseActions.Quit"/>.
+    /// Null preserves legacy settings (<see cref="CloseToTray"/> true maps to minimize, otherwise ask).
+    /// </summary>
+    public string? CloseAction { get; set; }
+
+    public string EffectiveCloseAction() => CloseAction switch
+    {
+        TrayCloseActions.Ask or TrayCloseActions.MinimizeToTray or TrayCloseActions.Quit => CloseAction,
+        _ => CloseToTray ? TrayCloseActions.MinimizeToTray : TrayCloseActions.Ask,
+    };
 }
 
 /// <summary>Desktop startup preferences (launch automatically when the user signs in).</summary>
