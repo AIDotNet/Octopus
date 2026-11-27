@@ -35,6 +35,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
     private readonly PluginSkillInstaller _skillInstaller;
     private readonly ISettingsStore _settings;
     private readonly IProjectService _projects;
+    private readonly List<MarketplacePluginRowViewModel> _allMarketItems = [];
     private bool _loadingThemes;
     private bool _marketLoadedOnce;
 
@@ -68,7 +69,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         _state.Changed += OnStateChanged;
         _manager.HostChanged += OnHostChanged;
         _themes.Changed += OnThemesChanged;
-        InitMarketCategories();
+        InitMarketFilters();
         Refresh();
         RefreshSkillTargets();
     }
@@ -76,24 +77,34 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
     public ObservableCollection<PluginRowViewModel> Builtin { get; } = [];
     public ObservableCollection<PluginRowViewModel> Installed { get; } = [];
     public ObservableCollection<MarketplacePluginRowViewModel> MarketItems { get; } = [];
+    public ObservableCollection<MarketplacePluginRowViewModel> FeaturedMarketItems { get; } = [];
     public ObservableCollection<SelectOption> MarketCategories { get; } = [];
+    public ObservableCollection<MarketplaceCategoryChipViewModel> MarketCategoryChips { get; } = [];
+    public ObservableCollection<SelectOption> MarketSortOptions { get; } = [];
     public ObservableCollection<SkillTargetRowViewModel> SkillTargets { get; } = [];
     public bool HasBuiltin => Builtin.Count > 0;
     public bool HasInstalled => Installed.Count > 0;
     public bool HasMarketItems => MarketItems.Count > 0;
+    public bool ShowFeaturedSection =>
+        FeaturedMarketItems.Count > 0
+        && string.Equals(MarketCategory, "all", StringComparison.OrdinalIgnoreCase)
+        && string.IsNullOrWhiteSpace(MarketQuery);
+    public bool HasActiveMarketFilters =>
+        !string.Equals(MarketCategory, "all", StringComparison.OrdinalIgnoreCase)
+        || !string.IsNullOrWhiteSpace(MarketQuery);
+    public string MarketCountLabel => PluginText.Get($"共 {MarketItems.Count} 项", $"{MarketItems.Count} plugins");
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsInstalledTab))]
     [NotifyPropertyChangedFor(nameof(IsMarketplaceTab))]
-    [NotifyPropertyChangedFor(nameof(IsSkillsTab))]
     public partial string ActiveTab { get; set; } = "installed";
 
     public bool IsInstalledTab => ActiveTab == "installed";
     public bool IsMarketplaceTab => ActiveTab == "marketplace";
-    public bool IsSkillsTab => ActiveTab == "skills";
 
     [ObservableProperty] public partial string MarketQuery { get; set; } = "";
     [ObservableProperty] public partial string MarketCategory { get; set; } = "all";
+    [ObservableProperty] public partial string MarketSort { get; set; } = "downloads";
     [ObservableProperty] public partial bool IsMarketLoading { get; private set; }
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMarketError))]
@@ -108,6 +119,12 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
     public partial string? SkillInstallSummary { get; private set; }
     public bool HasSkillResult => !string.IsNullOrWhiteSpace(SkillInstallSummary);
     public bool HasCurrentProject => _projects.Current is not null;
+    public int SelectedSkillTargetCount => SkillTargets.Count(t => t.IsSelected);
+    public bool HasSelectedSkillTargets => SelectedSkillTargetCount > 0;
+    public string SkillSelectedCounterText => PluginText.Get($"已选 {SelectedSkillTargetCount} / {SkillTargets.Count}", $"{SelectedSkillTargetCount} / {SkillTargets.Count} selected");
+    public string SkillInstallButtonText => $"{PluginStrings.SkillInstallNow} ({SelectedSkillTargetCount})";
+
+    internal event EventHandler? SkillDialogStateChanged;
 
     partial void OnActiveTabChanged(string value)
     {
@@ -116,18 +133,24 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
             _marketLoadedOnce = true;
             _ = RefreshMarketplaceAsync();
         }
-        else if (value == "skills")
-        {
-            RefreshSkillTargets();
-        }
     }
+
+    partial void OnMarketQueryChanged(string value) => ApplyMarketFilters();
 
     partial void OnMarketCategoryChanged(string value)
     {
-        if (IsMarketplaceTab) _ = RefreshMarketplaceAsync();
+        foreach (var chip in MarketCategoryChips)
+        {
+            chip.IsSelected = string.Equals(chip.Value, value, StringComparison.OrdinalIgnoreCase);
+        }
+        ApplyMarketFilters();
     }
 
+    partial void OnMarketSortChanged(string value) => ApplyMarketFilters();
+
     partial void OnSkillScopeKeyChanged(string value) => RefreshSkillTargets();
+
+    partial void OnIsSkillInstallingChanged(bool value) => NotifySkillDialogState();
 
     private string ActiveServerUrl()
     {
@@ -136,15 +159,41 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         return ServiceEndpoints.OfficialServiceUrl ?? ServiceEndpoints.DefaultOfficialServiceUrl;
     }
 
-    private void InitMarketCategories()
+    private void InitMarketFilters()
     {
-        MarketCategories.Add(new SelectOption("all", PluginText.Get("全部分类", "All categories")));
-        MarketCategories.Add(new SelectOption("agent", PluginText.Get("智能体", "Agents")));
-        MarketCategories.Add(new SelectOption("editor", PluginText.Get("查看器 / 编辑器", "Editors & Views")));
-        MarketCategories.Add(new SelectOption("theme", PluginText.Get("主题", "Themes")));
-        MarketCategories.Add(new SelectOption("terminal", PluginText.Get("终端", "Terminal")));
-        MarketCategories.Add(new SelectOption("workflow", PluginText.Get("工作流", "Workflow")));
-        MarketCategories.Add(new SelectOption("utility", PluginText.Get("工具", "Utilities")));
+        var categories = new (string Value, string Label)[]
+        {
+            ("all", PluginText.Get("全部分类", "All")),
+            ("agent", PluginText.Get("智能体", "Agents")),
+            ("utility", PluginText.Get("工具", "Utilities")),
+            ("editor", PluginText.Get("查看器 / 编辑器", "Editors & Views")),
+            ("terminal", PluginText.Get("终端", "Terminal")),
+            ("theme", PluginText.Get("主题", "Themes")),
+            ("workflow", PluginText.Get("工作流", "Workflow")),
+        };
+
+        foreach (var (value, label) in categories)
+        {
+            MarketCategories.Add(new SelectOption(value, label));
+            var chip = new MarketplaceCategoryChipViewModel(value, label, SelectMarketCategory)
+            {
+                IsSelected = string.Equals(value, MarketCategory, StringComparison.OrdinalIgnoreCase),
+            };
+            MarketCategoryChips.Add(chip);
+        }
+
+        MarketSortOptions.Add(new SelectOption("downloads", PluginText.Get("按热度排序", "Popular")));
+        MarketSortOptions.Add(new SelectOption("risk", PluginText.Get("低风险优先", "Lowest risk")));
+        MarketSortOptions.Add(new SelectOption("name", PluginText.Get("按名称排序", "Name A-Z")));
+    }
+
+    private void SelectMarketCategory(string category) => MarketCategory = category;
+
+    [RelayCommand]
+    private void ResetMarketFilters()
+    {
+        MarketQuery = "";
+        MarketCategory = "all";
     }
 
     [RelayCommand]
@@ -156,20 +205,23 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         {
             var page = await _marketplace.SearchAsync(
                 ActiveServerUrl(),
-                query: MarketQuery,
-                category: MarketCategory,
                 apiVersion: PluginApi.CurrentVersion);
             var installedMap = _catalog.Packages
                 .Where(p => p.Status != PluginStatus.Shadowed && p.Manifest is not null)
-                .ToDictionary(p => p.Id, p => p.Manifest!.Version, StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(p => p.Id, p => p, StringComparer.OrdinalIgnoreCase);
 
-            MarketItems.Clear();
+            _allMarketItems.Clear();
             foreach (var entry in page.Items)
             {
-                installedMap.TryGetValue(entry.Plugin.Id, out var installedVer);
-                MarketItems.Add(new MarketplacePluginRowViewModel(entry, installedVer, this));
+                installedMap.TryGetValue(entry.Plugin.Id, out var installedPkg);
+                var installedVer = installedPkg?.Manifest?.Version;
+                var localIcon = installedPkg is null
+                    ? null
+                    : Rendering.UiIcons.TryLoadPackageBitmap(installedPkg.Directory, installedPkg.Manifest?.Icon ?? entry.Plugin.Icon);
+                _allMarketItems.Add(new MarketplacePluginRowViewModel(entry, installedVer, localIcon, this));
             }
-            OnPropertyChanged(nameof(HasMarketItems));
+            UpdateCategoryChipCounts();
+            ApplyMarketFilters();
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or InvalidOperationException)
         {
@@ -181,12 +233,205 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         }
     }
 
-    [RelayCommand]
-    private async Task OpenWebMarketplaceAsync()
+    private void UpdateCategoryChipCounts()
     {
+        foreach (var chip in MarketCategoryChips)
+        {
+            chip.Count = string.Equals(chip.Value, "all", StringComparison.OrdinalIgnoreCase)
+                ? _allMarketItems.Count
+                : _allMarketItems.Count(i => string.Equals(i.Category, chip.Value, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private void ApplyMarketFilters()
+    {
+        var query = MarketQuery.Trim();
+        IEnumerable<MarketplacePluginRowViewModel> filtered = _allMarketItems;
+
+        if (!string.Equals(MarketCategory, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            filtered = filtered.Where(p => string.Equals(p.Category, MarketCategory, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            filtered = filtered.Where(p =>
+                p.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || p.Id.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || p.Description.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || p.PublisherSlug.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || p.CategoryLabel.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || p.Tags.Any(t => t.Contains(query, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        var ordered = MarketSort switch
+        {
+            "risk" => filtered.OrderBy(p => p.RiskOrder).ThenByDescending(p => p.Entry.Plugin.Downloads).ToList(),
+            "name" => filtered.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
+            _ => filtered.OrderByDescending(p => p.Entry.Plugin.Downloads).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
+        };
+
+        MarketItems.Clear();
+        foreach (var item in ordered) MarketItems.Add(item);
+
+        // Featured spotlight: prefer explicitly featured items, falling back to top 2 picks when browsing All.
+        FeaturedMarketItems.Clear();
+        var explicitFeatured = ordered.Where(p => p.Entry.Plugin.Featured).Take(2).ToList();
+        var spotlight = explicitFeatured.Count > 0 ? explicitFeatured : ordered.Take(2).ToList();
+        foreach (var item in spotlight) FeaturedMarketItems.Add(item);
+
+        OnPropertyChanged(nameof(HasMarketItems));
+        OnPropertyChanged(nameof(ShowFeaturedSection));
+        OnPropertyChanged(nameof(HasActiveMarketFilters));
+        OnPropertyChanged(nameof(MarketCountLabel));
+    }
+
+    [RelayCommand]
+    private Task OpenWebMarketplaceAsync() => OpenExternalUrlAsync($"{ActiveServerUrl()}/plugins");
+
+    internal async Task OpenExternalUrlAsync(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
         if (_window.Window is { } owner)
         {
-            await owner.Launcher.LaunchUriAsync(new Uri($"{ActiveServerUrl()}/plugins"));
+            await owner.Launcher.LaunchUriAsync(uri);
+        }
+    }
+
+    [RelayCommand]
+    private async Task OpenSkillDialogAsync()
+    {
+        if (_window.Window is not { } owner) return;
+        RefreshSkillTargets();
+        var view = new PluginSkillDialogView { DataContext = this };
+
+        var closeBtn = new TKCode.Arc.Button
+        {
+            Content = PluginStrings.Close,
+            Variant = ButtonVariant.Secondary,
+            Size = ControlSize.Small,
+        };
+        var installBtn = new TKCode.Arc.Button
+        {
+            Content = SkillInstallButtonText,
+            Variant = ButtonVariant.Primary,
+            Size = ControlSize.Small,
+            IsEnabled = HasSelectedSkillTargets,
+            IsLoading = IsSkillInstalling,
+        };
+
+        var actions = new Avalonia.Controls.StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            Spacing = 8,
+        };
+        actions.Children.Add(closeBtn);
+        actions.Children.Add(installBtn);
+
+        var dialog = new Dialog
+        {
+            Size = ControlSize.Large,
+            Title = PluginStrings.SkillHeading,
+            Description = PluginStrings.SkillSubtitle,
+            Content = view,
+            Actions = actions,
+        };
+        dialog.Resources[TKCode.Arc.DesignTokens.DialogSurfaceTokens.Key(TKCode.Arc.DesignTokens.DialogSurfaceTokenKind.PanelWidthLG)] = 640.0;
+
+        void SyncButtons(object? sender, EventArgs e)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                installBtn.Content = SkillInstallButtonText;
+                installBtn.IsEnabled = HasSelectedSkillTargets && !IsSkillInstalling;
+                installBtn.IsLoading = IsSkillInstalling;
+                closeBtn.IsEnabled = !IsSkillInstalling;
+            });
+        }
+
+        SkillDialogStateChanged += SyncButtons;
+        closeBtn.Click += (_, _) => dialog.Close(false);
+        installBtn.Click += async (_, _) => await InstallSkillAsync();
+        try
+        {
+            await dialog.ShowAsync(owner);
+        }
+        finally
+        {
+            SkillDialogStateChanged -= SyncButtons;
+        }
+    }
+
+    internal async Task OpenMarketplaceDetailAsync(MarketplacePluginRowViewModel row)
+    {
+        if (_window.Window is not { } owner) return;
+        var view = new MarketplacePluginDetailView { DataContext = row };
+
+        var closeBtn = new TKCode.Arc.Button
+        {
+            Content = PluginStrings.Close,
+            Variant = ButtonVariant.Secondary,
+            Size = ControlSize.Small,
+        };
+        var installBtn = new TKCode.Arc.Button
+        {
+            Content = row.ActionLabel,
+            Variant = ButtonVariant.Primary,
+            Size = ControlSize.Small,
+            IsVisible = row.ShowActionButton,
+            IsLoading = row.IsBusy,
+        };
+        var installedBadge = new TKCode.Arc.Badge
+        {
+            Size = BadgeSize.Small,
+            Tone = BadgeTone.Success,
+            Content = PluginStrings.MarketInstalledBadge,
+            IsVisible = !row.ShowActionButton,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+
+        var actions = new Avalonia.Controls.StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            Spacing = 8,
+        };
+        actions.Children.Add(closeBtn);
+        actions.Children.Add(installedBadge);
+        actions.Children.Add(installBtn);
+
+        var dialog = new Dialog
+        {
+            Size = ControlSize.Medium,
+            Title = row.Name,
+            Description = row.IdentitySummary,
+            Content = view,
+            Actions = actions,
+        };
+        dialog.Resources[TKCode.Arc.DesignTokens.DialogSurfaceTokens.Key(TKCode.Arc.DesignTokens.DialogSurfaceTokenKind.PanelWidthMD)] = 540.0;
+
+        void SyncRow(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                installBtn.Content = row.ActionLabel;
+                installBtn.IsVisible = row.ShowActionButton;
+                installBtn.IsLoading = row.IsBusy;
+                installedBadge.IsVisible = !row.ShowActionButton;
+            });
+        }
+
+        row.PropertyChanged += SyncRow;
+        closeBtn.Click += (_, _) => dialog.Close(false);
+        installBtn.Click += async (_, _) => await InstallFromMarketplaceAsync(row);
+        try
+        {
+            await dialog.ShowAsync(owner);
+        }
+        finally
+        {
+            row.PropertyChanged -= SyncRow;
         }
     }
 
@@ -221,6 +466,15 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
     private SkillInstallScope CurrentSkillScope() =>
         SkillScopeKey == "project" && _projects.Current is not null ? SkillInstallScope.ProjectLocal : SkillInstallScope.UserGlobal;
 
+    private void NotifySkillDialogState()
+    {
+        OnPropertyChanged(nameof(SelectedSkillTargetCount));
+        OnPropertyChanged(nameof(HasSelectedSkillTargets));
+        OnPropertyChanged(nameof(SkillSelectedCounterText));
+        OnPropertyChanged(nameof(SkillInstallButtonText));
+        SkillDialogStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     private void RefreshSkillTargets()
     {
         var scope = CurrentSkillScope();
@@ -233,7 +487,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         foreach (var status in statuses)
         {
             var selected = prevSelection.TryGetValue(status.Spec.Id, out var wasSelected) ? wasSelected : status.Spec.DefaultSelected;
-            SkillTargets.Add(new SkillTargetRowViewModel(status, selected));
+            SkillTargets.Add(new SkillTargetRowViewModel(status, selected, NotifySkillDialogState));
         }
         foreach (var custom in customRows)
         {
@@ -242,6 +496,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
             custom.RefreshStatus(Directory.Exists(resolved), PluginSkillInstaller.ReadInstalledVersion(resolved));
             SkillTargets.Add(custom);
         }
+        NotifySkillDialogState();
     }
 
     [RelayCommand]
@@ -253,8 +508,10 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         SkillTargets.Clear();
         foreach (var status in statuses)
         {
-            SkillTargets.Add(new SkillTargetRowViewModel(status, status.Spec.DefaultSelected));
+            SkillTargets.Add(new SkillTargetRowViewModel(status, status.Spec.DefaultSelected, NotifySkillDialogState));
         }
+        SkillInstallSummary = null;
+        NotifySkillDialogState();
     }
 
     [RelayCommand]
@@ -268,8 +525,9 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
             CustomSkillPath = "";
             return;
         }
-        SkillTargets.Add(new SkillTargetRowViewModel(resolved, PluginSkillInstaller.ReadInstalledVersion(resolved)));
+        SkillTargets.Add(new SkillTargetRowViewModel(resolved, PluginSkillInstaller.ReadInstalledVersion(resolved), NotifySkillDialogState));
         CustomSkillPath = "";
+        NotifySkillDialogState();
     }
 
     [RelayCommand]
@@ -397,8 +655,22 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
         var packages = _catalog.Packages.Where(p => p.Status != PluginStatus.Shadowed).ToList();
         Sync(Builtin, packages.Where(p => p.Source == PluginSource.Builtin));
         Sync(Installed, packages.Where(p => p.Source != PluginSource.Builtin));
+        SyncMarketInstalledStates(packages);
         OnPropertyChanged(nameof(HasBuiltin));
         OnPropertyChanged(nameof(HasInstalled));
+    }
+
+    private void SyncMarketInstalledStates(IReadOnlyList<PluginPackage> packages)
+    {
+        if (_allMarketItems.Count == 0) return;
+        var installedMap = packages
+            .Where(p => p.Manifest is not null)
+            .ToDictionary(p => p.Id, p => p.Manifest!.Version, StringComparer.OrdinalIgnoreCase);
+        foreach (var item in _allMarketItems)
+        {
+            installedMap.TryGetValue(item.Id, out var installedVer);
+            item.UpdateInstalledState(installedVer);
+        }
     }
 
     private void Sync(ObservableCollection<PluginRowViewModel> rows, IEnumerable<PluginPackage> packages)

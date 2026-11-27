@@ -4,23 +4,67 @@
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:settings="using:Octopus.App.Settings"
              xmlns:s="using:Octopus.App.Plugins.Settings"
+             x:Name="Root"
              x:Class="Octopus.App.Plugins.Settings.PluginsPageView"
              x:DataType="s:PluginsSettingsViewModel">
-    <!-- Settings -> Plugins: Installed, Built-in Marketplace, and Multi-Agent Authoring Skill Installer -->
+    <UserControl.Styles>
+        <Style Selector="Border.market-featured-card">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Margin" Value="5" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.market-featured-card:pointerover">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource AccentStrong}" />
+        </Style>
+        <Style Selector="Border.market-compact-card">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="Margin" Value="5" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.market-compact-card:pointerover">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- Settings -> Plugins: Installed, Proposal-B Card Marketplace (Featured + 3-Col Grid), and Authoring Skill Modal Button -->
     <StackPanel Spacing="16">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <TextBlock Classes="title" Text="{x:Static s:PluginStrings.Title}" VerticalAlignment="Center" />
                 <settings:SettingHelpTip Tip="{x:Static s:PluginStrings.Subtitle}" />
             </StackPanel>
-            <arc:SegmentedControl Grid.Column="1"
-                                  VerticalAlignment="Center"
-                                  AutoScrollToSelectedItem="False"
-                                  SelectedValue="{Binding ActiveTab, Mode=TwoWay}">
-                <arc:SegmentedOption Value="installed" Label="{x:Static s:PluginStrings.TabInstalled}" />
-                <arc:SegmentedOption Value="marketplace" Label="{x:Static s:PluginStrings.TabMarketplace}" />
-                <arc:SegmentedOption Value="skills" Label="{x:Static s:PluginStrings.TabSkills}" />
-            </arc:SegmentedControl>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <arc:SegmentedControl VerticalAlignment="Center"
+                                      AutoScrollToSelectedItem="False"
+                                      SelectedValue="{Binding ActiveTab, Mode=TwoWay}">
+                    <arc:SegmentedOption Value="installed" Label="{x:Static s:PluginStrings.TabInstalled}" />
+                    <arc:SegmentedOption Value="marketplace" Label="{x:Static s:PluginStrings.TabMarketplace}" />
+                </arc:SegmentedControl>
+                <Border Width="1"
+                        Height="18"
+                        Margin="2,0"
+                        VerticalAlignment="Center"
+                        Background="{arc:ArcDesignTokenResource BorderSubtle}" />
+                <arc:Button Variant="Secondary"
+                            Size="Small"
+                            VerticalAlignment="Center"
+                            Command="{Binding OpenSkillDialogCommand}"
+                            arc:Tooltip.Tip="{x:Static s:PluginStrings.SkillButtonTip}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <lucide:LucideIcon Kind="Sparkles" Size="14" Foreground="{arc:ArcDesignTokenResource AccentStrong}" />
+                        <TextBlock Text="{x:Static s:PluginStrings.TabSkills}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </arc:Button>
+            </StackPanel>
         </Grid>
 
         <arc:Alert Tone="{Binding MessageTone}" Title="{Binding Message}" IsVisible="{Binding HasMessage}">
@@ -127,173 +171,299 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- ==================== TAB 2: BUILT-IN MARKETPLACE ==================== -->
+        <!-- ==================== TAB 2: BUILT-IN MARKETPLACE (PROPOSAL B) ==================== -->
         <StackPanel Spacing="14" IsVisible="{Binding IsMarketplaceTab}">
-            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                    BorderThickness="1"
-                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
-                    Padding="12">
+            <!-- Search, sort, refresh & web portal controls -->
+            <StackPanel Spacing="10">
                 <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
-                    <arc:Input Text="{Binding MarketQuery, Mode=TwoWay}"
-                               Size="Small"
-                               Label="{x:Static s:PluginStrings.TabMarketplace}"
-                               IsLabelVisible="False"
-                               Placeholder="{x:Static s:PluginStrings.MarketSearchPlaceholder}" />
+                    <arc:SearchField Text="{Binding MarketQuery, Mode=TwoWay}"
+                                     Size="Small"
+                                     Label="{x:Static s:PluginStrings.TabMarketplace}"
+                                     IsLabelVisible="False"
+                                     Placeholder="{x:Static s:PluginStrings.MarketSearchPlaceholder}" />
                     <arc:Select Grid.Column="1"
                                 AutoScrollToSelectedItem="False"
                                 Size="Small"
-                                Width="150"
-                                ItemsSource="{Binding MarketCategories}"
-                                SelectedValue="{Binding MarketCategory, Mode=TwoWay}" />
+                                Width="136"
+                                ItemsSource="{Binding MarketSortOptions}"
+                                SelectedValue="{Binding MarketSort, Mode=TwoWay}" />
                     <arc:Button Grid.Column="2"
                                 Variant="Secondary"
                                 Size="Small"
                                 IsLoading="{Binding IsMarketLoading}"
-                                Content="{x:Static s:PluginStrings.MarketRefresh}"
-                                Command="{Binding RefreshMarketplaceCommand}" />
+                                Command="{Binding RefreshMarketplaceCommand}"
+                                AutomationProperties.Name="{x:Static s:PluginStrings.MarketRefresh}"
+                                arc:Tooltip.Tip="{x:Static s:PluginStrings.MarketRefresh}">
+                        <lucide:LucideIcon Kind="RefreshCw" Size="14" />
+                    </arc:Button>
                     <arc:Button Grid.Column="3"
                                 Variant="Ghost"
                                 Size="Small"
                                 Command="{Binding OpenWebMarketplaceCommand}"
+                                AutomationProperties.Name="{x:Static s:PluginStrings.MarketOpenWeb}"
                                 arc:Tooltip.Tip="{x:Static s:PluginStrings.MarketOpenWeb}">
                         <lucide:LucideIcon Kind="ExternalLink" Size="15" />
                     </arc:Button>
                 </Grid>
-            </Border>
+
+                <!-- Horizontal category pills -->
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                    <ItemsControl ItemsSource="{Binding MarketCategoryChips}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="s:MarketplaceCategoryChipViewModel">
+                                <arc:Button Variant="{Binding ButtonVariant}"
+                                            Size="Small"
+                                            Command="{Binding SelectCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Count}"
+                                                   Opacity="0.72"
+                                                   FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding HasCount}" />
+                                    </StackPanel>
+                                </arc:Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Grid.Column="1"
+                               Classes="hint"
+                               VerticalAlignment="Center"
+                               Text="{Binding MarketCountLabel}"
+                               IsVisible="{Binding HasMarketItems}" />
+                </Grid>
+            </StackPanel>
 
             <arc:Alert Tone="Danger" Title="{Binding MarketError}" IsVisible="{Binding HasMarketError}" />
 
-            <TextBlock Classes="hint"
-                       Margin="2,4,0,0"
-                       Text="{x:Static s:PluginStrings.MarketEmpty}"
-                       IsVisible="{Binding !HasMarketItems}" />
-
+            <!-- Empty state -->
             <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                     BorderThickness="1"
-                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
-                    ClipToBounds="True"
-                    IsVisible="{Binding HasMarketItems}">
-                <ItemsControl ItemsSource="{Binding MarketItems}" Margin="0,-1,0,0">
+                    CornerRadius="10"
+                    Padding="24,28"
+                    IsVisible="{Binding !HasMarketItems}">
+                <StackPanel Spacing="6" HorizontalAlignment="Center">
+                    <lucide:LucideIcon Kind="Search" Size="24"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                       Opacity="0.65" />
+                    <TextBlock Classes="name"
+                               HorizontalAlignment="Center"
+                               Text="{x:Static s:PluginStrings.MarketEmpty}" />
+                    <TextBlock Classes="hint"
+                               HorizontalAlignment="Center"
+                               Text="{x:Static s:PluginStrings.MarketEmptyHint}" />
+                    <arc:Button Variant="Secondary"
+                                Size="Small"
+                                Margin="0,6,0,0"
+                                HorizontalAlignment="Center"
+                                Content="{x:Static s:PluginStrings.MarketResetFilters}"
+                                Command="{Binding ResetMarketFiltersCommand}"
+                                IsVisible="{Binding HasActiveMarketFilters}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Featured Spotlight Banner (2-column) -->
+            <StackPanel Spacing="6" IsVisible="{Binding ShowFeaturedSection}">
+                <Grid ColumnDefinitions="*,Auto" Margin="2,0">
+                    <TextBlock Classes="group" Text="{x:Static s:PluginStrings.MarketFeaturedHeading}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="hint" Text="{x:Static s:PluginStrings.MarketFeaturedHint}" VerticalAlignment="Center" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding FeaturedMarketItems}" Margin="-5">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="{Binding #Root.FeaturedGridColumns}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="s:MarketplacePluginRowViewModel">
-                            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                                    BorderThickness="0,1,0,0"
-                                    Padding="14,12">
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
-                                    <StackPanel Spacing="4">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Classes="name" Text="{Binding Name}" VerticalAlignment="Center" />
-                                            <TextBlock Classes="hint" Text="{Binding VersionLabel}" VerticalAlignment="Center" />
-                                            <arc:Badge Size="Small" Tone="{Binding RiskTone}" Content="{Binding RiskLabel}" VerticalAlignment="Center" />
-                                            <arc:Badge Size="Small" Tone="Neutral" Content="{Binding PermissionsSummary}" VerticalAlignment="Center" />
+                            <Border Classes="market-featured-card"
+                                    PointerPressed="OnMarketplaceCardPointerPressed">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                    <Border Width="44" Height="44"
+                                            CornerRadius="10"
+                                            Background="{arc:ArcDesignTokenResource Surface}"
+                                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                            BorderThickness="1"
+                                            ClipToBounds="True"
+                                            VerticalAlignment="Center">
+                                        <Panel>
+                                            <Image Source="{Binding IconBitmap}"
+                                                   Width="28" Height="28"
+                                                   Stretch="Uniform"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   IsVisible="{Binding HasIconBitmap}" />
+                                            <lucide:LucideIcon Kind="{Binding Icon}" Size="20"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                               IsVisible="{Binding !HasIconBitmap}" />
+                                        </Panel>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <lucide:LucideIcon Kind="Sparkles" Size="11"
+                                                               Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                               VerticalAlignment="Center" />
+                                            <TextBlock FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                                       Text="{Binding FeaturedKicker}"
+                                                       TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
-                                        <TextBlock Classes="body" Text="{Binding Description}" TextWrapping="Wrap" />
-                                        <StackPanel Orientation="Horizontal" Spacing="10">
-                                            <TextBlock Classes="mono" Text="{Binding Id}" />
-                                            <TextBlock Classes="hint" Text="{Binding PublisherLabel}" />
-                                            <TextBlock Classes="hint" Text="{Binding DownloadsLabel}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <TextBlock Classes="name"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding Name}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                            <lucide:LucideIcon Kind="BadgeCheck" Size="13"
+                                                               Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                               VerticalAlignment="Center"
+                                                               IsVisible="{Binding PublisherVerified}" />
                                         </StackPanel>
+                                        <TextBlock Classes="hint"
+                                                   Text="{Binding Description}"
+                                                   TextWrapping="Wrap"
+                                                   MaxLines="2"
+                                                   TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
-                                        <arc:Badge Size="Small" Tone="Success" Content="{x:Static s:PluginStrings.MarketInstalledBadge}"
-                                                   IsVisible="{Binding !ShowActionButton}" VerticalAlignment="Center" />
-                                        <arc:Button Variant="Primary" Size="Small"
+
+                                    <Panel Grid.Column="2" VerticalAlignment="Center">
+                                        <arc:Badge Size="Small"
+                                                   Tone="Success"
+                                                   Content="{x:Static s:PluginStrings.MarketInstalledBadge}"
+                                                   IsVisible="{Binding !ShowActionButton}" />
+                                        <arc:Button Variant="Primary"
+                                                    Size="Small"
                                                     IsLoading="{Binding IsBusy}"
                                                     IsVisible="{Binding ShowActionButton}"
                                                     Content="{Binding ActionLabel}"
                                                     Command="{Binding InstallOrUpgradeCommand}" />
-                                    </StackPanel>
+                                    </Panel>
                                 </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </Border>
-        </StackPanel>
-
-        <!-- ==================== TAB 3: MULTI-AGENT AUTHORING SKILL INSTALLER ==================== -->
-        <StackPanel Spacing="14" IsVisible="{Binding IsSkillsTab}">
-            <StackPanel Orientation="Horizontal" Spacing="5">
-                <TextBlock Classes="group" Text="{x:Static s:PluginStrings.SkillHeading}" VerticalAlignment="Center" />
-                <settings:SettingHelpTip Tip="{x:Static s:PluginStrings.SkillSubtitle}" />
             </StackPanel>
 
-            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                    BorderThickness="1"
-                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
-                    Padding="12">
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                    <arc:SegmentedControl AutoScrollToSelectedItem="False"
-                                          SelectedValue="{Binding SkillScopeKey, Mode=TwoWay}">
-                        <arc:SegmentedOption Value="global" Label="{x:Static s:PluginStrings.SkillScopeGlobal}" />
-                        <arc:SegmentedOption Value="project" Label="{x:Static s:PluginStrings.SkillScopeProject}" IsEnabled="{Binding HasCurrentProject}" />
-                    </arc:SegmentedControl>
-                    <arc:Button Grid.Column="1"
-                                Variant="Secondary"
-                                Size="Small"
-                                Content="{x:Static s:PluginStrings.SkillResetDefaults}"
-                                Command="{Binding ResetSkillDefaultsCommand}" />
-                    <arc:Button Grid.Column="2"
-                                Variant="Primary"
-                                Size="Small"
-                                IsLoading="{Binding IsSkillInstalling}"
-                                Content="{x:Static s:PluginStrings.SkillInstallNow}"
-                                Command="{Binding InstallSkillCommand}" />
+            <!-- All Plugins Compact Card Grid (3-column, adapts to 2/1 on narrow windows) -->
+            <StackPanel Spacing="6" IsVisible="{Binding HasMarketItems}">
+                <Grid ColumnDefinitions="*,Auto" Margin="2,2,2,0">
+                    <TextBlock Classes="group" Text="{x:Static s:PluginStrings.MarketAllHeading}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="hint" Text="{Binding MarketCountLabel}" VerticalAlignment="Center" />
                 </Grid>
-            </Border>
-
-            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                    BorderThickness="1"
-                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
-                    ClipToBounds="True">
-                <ItemsControl ItemsSource="{Binding SkillTargets}" Margin="0,-1,0,0">
+                <ItemsControl ItemsSource="{Binding MarketItems}" Margin="-5">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="{Binding #Root.MarketGridColumns}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="s:SkillTargetRowViewModel">
-                            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                                    BorderThickness="0,1,0,0"
-                                    Padding="12,10">
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                                    <CheckBox Grid.Column="0"
-                                              VerticalAlignment="Center"
-                                              IsChecked="{Binding IsSelected, Mode=TwoWay}" />
-                                    <StackPanel Grid.Column="1" Spacing="2">
-                                        <TextBlock Classes="name" Text="{Binding DisplayName}" />
-                                        <TextBlock Classes="mono" Text="{Binding ResolvedPath}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Classes="hint" Text="{Binding ClientsNote}" TextWrapping="Wrap" />
+                        <DataTemplate x:DataType="s:MarketplacePluginRowViewModel">
+                            <Border Classes="market-compact-card"
+                                    PointerPressed="OnMarketplaceCardPointerPressed">
+                                <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+                                    <!-- Top row: icon tile + risk dot -->
+                                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                        <Border Width="34" Height="34"
+                                                CornerRadius="8"
+                                                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                                BorderThickness="1"
+                                                ClipToBounds="True">
+                                            <Panel>
+                                                <Image Source="{Binding IconBitmap}"
+                                                       Width="22" Height="22"
+                                                       Stretch="Uniform"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       IsVisible="{Binding HasIconBitmap}" />
+                                                <lucide:LucideIcon Kind="{Binding Icon}" Size="17"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                                   IsVisible="{Binding !HasIconBitmap}" />
+                                            </Panel>
+                                        </Border>
+
+                                        <StackPanel Grid.Column="2"
+                                                    Orientation="Horizontal"
+                                                    Spacing="5"
+                                                    VerticalAlignment="Center"
+                                                    arc:Tooltip.Tip="{Binding PermissionsSummary}">
+                                            <Panel VerticalAlignment="Center">
+                                                <Ellipse Width="7" Height="7" Fill="{arc:ArcDesignTokenResource Danger}" IsVisible="{Binding IsHighRisk}" />
+                                                <Ellipse Width="7" Height="7" Fill="{arc:ArcDesignTokenResource Warning}" IsVisible="{Binding IsMediumRisk}" />
+                                                <Ellipse Width="7" Height="7" Fill="{arc:ArcDesignTokenResource Success}" IsVisible="{Binding IsLowRisk}" />
+                                            </Panel>
+                                            <TextBlock Classes="hint" Text="{Binding RiskShortLabel}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Plugin name -->
+                                    <TextBlock Grid.Row="1"
+                                               Margin="0,8,0,0"
+                                               Classes="name"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding Name}"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <!-- Publisher + verified tick + category -->
+                                    <StackPanel Grid.Row="2" Margin="0,2,0,0" Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Classes="hint" Text="{Binding PublisherSlug}" VerticalAlignment="Center" />
+                                        <lucide:LucideIcon Kind="BadgeCheck" Size="12"
+                                                           Foreground="{arc:ArcDesignTokenResource Accent}"
+                                                           VerticalAlignment="Center"
+                                                           IsVisible="{Binding PublisherVerified}" />
+                                        <TextBlock Classes="hint" Text="·" VerticalAlignment="Center" />
+                                        <TextBlock Classes="hint" Text="{Binding CategoryLabel}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                     </StackPanel>
-                                    <arc:Badge Grid.Column="2"
-                                               VerticalAlignment="Center"
-                                               Size="Small"
-                                               Tone="{Binding StatusTone}"
-                                               Content="{Binding StatusLabel}" />
+
+                                    <!-- 2-line description -->
+                                    <TextBlock Grid.Row="3"
+                                               Margin="0,7,0,10"
+                                               Classes="hint"
+                                               Text="{Binding Description}"
+                                               TextWrapping="Wrap"
+                                               MaxLines="2"
+                                               MinHeight="34"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <!-- Footer: version + downloads + install/installed action -->
+                                    <Border Grid.Row="4"
+                                            BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                            BorderThickness="0,1,0,0"
+                                            Padding="0,8,0,0">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <TextBlock Classes="mono" Text="{Binding VersionLabel}" VerticalAlignment="Center" />
+                                                <TextBlock Classes="hint" Text="{Binding DownloadsLabel}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <Panel Grid.Column="1" VerticalAlignment="Center">
+                                                <arc:Badge Size="Small"
+                                                           Tone="Success"
+                                                           Content="{x:Static s:PluginStrings.MarketInstalledBadge}"
+                                                           IsVisible="{Binding !ShowActionButton}" />
+                                                <arc:Button Variant="Primary"
+                                                            Size="Small"
+                                                            IsLoading="{Binding IsBusy}"
+                                                            IsVisible="{Binding ShowActionButton}"
+                                                            Content="{Binding ActionLabel}"
+                                                            Command="{Binding InstallOrUpgradeCommand}" />
+                                            </Panel>
+                                        </Grid>
+                                    </Border>
                                 </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </Border>
-
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <arc:Input Text="{Binding CustomSkillPath, Mode=TwoWay}"
-                           Size="Small"
-                           Label="{x:Static s:PluginStrings.SkillAddCustom}"
-                           IsLabelVisible="False"
-                           Placeholder="{x:Static s:PluginStrings.SkillCustomPlaceholder}" />
-                <arc:Button Grid.Column="1"
-                            Variant="Secondary"
-                            Size="Small"
-                            Content="{x:Static s:PluginStrings.SkillAddCustom}"
-                            Command="{Binding AddCustomSkillTargetCommand}" />
-            </Grid>
-
-            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
-                    BorderThickness="1"
-                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
-                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
-                    Padding="12"
-                    IsVisible="{Binding HasSkillResult}">
-                <SelectableTextBlock Classes="mono" Text="{Binding SkillInstallSummary}" TextWrapping="Wrap" />
-            </Border>
+            </StackPanel>
         </StackPanel>
     </StackPanel>
 </UserControl>

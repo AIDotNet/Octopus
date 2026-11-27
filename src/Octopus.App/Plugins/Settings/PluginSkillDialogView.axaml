@@ -1,0 +1,125 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:s="using:Octopus.App.Plugins.Settings"
+             x:Class="Octopus.App.Plugins.Settings.PluginSkillDialogView"
+             x:DataType="s:PluginsSettingsViewModel">
+    <UserControl.Styles>
+        <Style Selector="Border.skill-card">
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource BorderSubtle}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusControl}" />
+            <Setter Property="Padding" Value="10,9" />
+            <Setter Property="Margin" Value="4" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.skill-card:pointerover">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        </Style>
+        <Style Selector="Border.skill-card.selected">
+            <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+            <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Spacing="12" HorizontalAlignment="Stretch">
+        <!-- Scope & selection counter -->
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <arc:SegmentedControl AutoScrollToSelectedItem="False"
+                                  HorizontalAlignment="Left"
+                                  SelectedValue="{Binding SkillScopeKey, Mode=TwoWay}">
+                <arc:SegmentedOption Value="global" Label="{x:Static s:PluginStrings.SkillScopeGlobal}" />
+                <arc:SegmentedOption Value="project" Label="{x:Static s:PluginStrings.SkillScopeProject}" IsEnabled="{Binding HasCurrentProject}" />
+            </arc:SegmentedControl>
+            <TextBlock Grid.Column="1"
+                       Classes="hint"
+                       VerticalAlignment="Center"
+                       Text="{Binding SkillSelectedCounterText}" />
+            <arc:Button Grid.Column="2"
+                        Variant="Ghost"
+                        Size="Small"
+                        Content="{x:Static s:PluginStrings.SkillResetDefaults}"
+                        Command="{Binding ResetSkillDefaultsCommand}" />
+        </Grid>
+
+        <!-- 2-column selectable Agent target cards -->
+        <arc:ScrollArea MaxHeight="310" OverlayScrollbarMode="Auto" FadeLength="0" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding SkillTargets}" Margin="-4">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="s:SkillTargetRowViewModel">
+                        <Border Classes="skill-card"
+                                Classes.selected="{Binding IsSelected}"
+                                PointerPressed="OnSkillCardPointerPressed">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
+                                <CheckBox Grid.Column="0"
+                                          VerticalAlignment="Top"
+                                          Margin="0,1,0,0"
+                                          IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                        <TextBlock Classes="name"
+                                                   Text="{Binding DisplayName}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <arc:Badge Grid.Column="1"
+                                                   Size="Small"
+                                                   VerticalAlignment="Center"
+                                                   Tone="{Binding StatusTone}"
+                                                   Content="{Binding StatusLabel}" />
+                                    </Grid>
+                                    <TextBlock Classes="mono"
+                                               Text="{Binding ResolvedPath}"
+                                               TextTrimming="CharacterEllipsis"
+                                               arc:Tooltip.Tip="{Binding ResolvedPath}" />
+                                    <TextBlock Classes="hint"
+                                               Text="{Binding ClientsNote}"
+                                               TextTrimming="CharacterEllipsis"
+                                               arc:Tooltip.Tip="{Binding ClientsNote}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </arc:ScrollArea>
+
+        <!-- Custom folder input -->
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <arc:Input Text="{Binding CustomSkillPath, Mode=TwoWay}"
+                       Size="Small"
+                       Label="{x:Static s:PluginStrings.SkillAddCustom}"
+                       IsLabelVisible="False"
+                       FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                       Placeholder="{x:Static s:PluginStrings.SkillCustomPlaceholder}" />
+            <arc:Button Grid.Column="1"
+                        Variant="Secondary"
+                        Size="Small"
+                        Content="{x:Static s:PluginStrings.SkillAddCustom}"
+                        Command="{Binding AddCustomSkillTargetCommand}" />
+        </Grid>
+
+        <!-- Overwrite result summary -->
+        <Border BorderBrush="{arc:ArcDesignTokenResource Success}"
+                BorderThickness="1"
+                CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                Padding="10,8"
+                IsVisible="{Binding HasSkillResult}">
+            <SelectableTextBlock Classes="mono" Text="{Binding SkillInstallSummary}" TextWrapping="Wrap" />
+        </Border>
+
+        <!-- Source verification note -->
+        <StackPanel Orientation="Horizontal" Spacing="6" Opacity="0.82">
+            <lucide:LucideIcon Kind="ShieldCheck" Size="13" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+            <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.SkillSourceNote}" VerticalAlignment="Center" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

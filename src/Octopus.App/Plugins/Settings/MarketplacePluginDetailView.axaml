@@ -1,0 +1,156 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+             xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
+             xmlns:s="using:Octopus.App.Plugins.Settings"
+             x:Class="Octopus.App.Plugins.Settings.MarketplacePluginDetailView"
+             x:DataType="s:MarketplacePluginRowViewModel">
+    <StackPanel Spacing="14" HorizontalAlignment="Stretch">
+        <!-- Header icon + full description -->
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+            <Border Width="44" Height="44"
+                    CornerRadius="10"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    ClipToBounds="True"
+                    VerticalAlignment="Top">
+                <Panel>
+                    <Image Source="{Binding IconBitmap}"
+                           Width="28" Height="28"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           IsVisible="{Binding HasIconBitmap}" />
+                    <lucide:LucideIcon Kind="{Binding Icon}" Size="22"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                                       IsVisible="{Binding !HasIconBitmap}" />
+                </Panel>
+            </Border>
+            <StackPanel Grid.Column="1" Spacing="6">
+                <TextBlock Classes="body" Text="{Binding Description}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasHomepage}">
+                    <arc:Button Variant="Ghost" Size="Small" Command="{Binding OpenHomepageCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <lucide:LucideIcon Kind="ExternalLink" Size="13" />
+                            <TextBlock Text="{x:Static s:PluginStrings.MarketDetailHomepage}" />
+                        </StackPanel>
+                    </arc:Button>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- 3-column summary metrics -->
+        <UniformGrid Columns="3" Margin="-4,0">
+            <Border Margin="4,0" Padding="10,8"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.MarketDetailRisk}" />
+                    <arc:Badge Size="Small" HorizontalAlignment="Left" Tone="{Binding RiskTone}" Content="{Binding RiskShortLabel}" />
+                </StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10,8"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.MarketDetailStats}" />
+                    <TextBlock Classes="name" Text="{Binding StatsSummary}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Border>
+            <Border Margin="4,0" Padding="10,8"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1">
+                <StackPanel Spacing="4">
+                    <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.MarketDetailMeta}" />
+                    <TextBlock Classes="name" Text="{Binding MetaSummary}" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <!-- Tags -->
+        <StackPanel Spacing="6" IsVisible="{Binding HasTags}">
+            <TextBlock Classes="group" Text="{x:Static s:PluginStrings.MarketDetailTags}" />
+            <ItemsControl ItemsSource="{Binding Tags}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Border Padding="8,3"
+                                CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                                Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                                BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                BorderThickness="1">
+                            <TextBlock Classes="hint" Text="{Binding .}" />
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Permissions -->
+        <StackPanel Spacing="6">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="group" Text="{Binding PermissionsHeading}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="hint" Text="{x:Static s:PluginStrings.MarketDetailPermissionsHint}" VerticalAlignment="Center" />
+            </Grid>
+
+            <Border Padding="11,9"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    IsVisible="{Binding HasNoPermissions}">
+                <TextBlock Classes="hint" Foreground="{arc:ArcDesignTokenResource Success}" Text="{x:Static s:PluginStrings.MarketDetailNoPermissions}" TextWrapping="Wrap" />
+            </Border>
+
+            <Border CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    ClipToBounds="True"
+                    IsVisible="{Binding HasPermissions}">
+                <ItemsControl ItemsSource="{Binding Permissions}" Margin="0,-1,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Border BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                                    BorderThickness="0,1,0,0"
+                                    Padding="11,7">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <lucide:LucideIcon Kind="KeyRound" Size="13" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                                    <TextBlock Classes="mono" Text="{Binding .}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+        </StackPanel>
+
+        <!-- Optional changelog -->
+        <StackPanel Spacing="6" IsVisible="{Binding HasChangelog}">
+            <TextBlock Classes="group" Text="{x:Static s:PluginStrings.MarketDetailChangelog}" />
+            <Border Padding="10,8"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1">
+                <SelectableTextBlock Classes="hint" Text="{Binding Changelog}" TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
+
+        <!-- SHA-256 note -->
+        <StackPanel Orientation="Horizontal" Spacing="6" Opacity="0.82">
+            <lucide:LucideIcon Kind="ShieldCheck" Size="13" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+            <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.MarketDetailShaNote}" VerticalAlignment="Center" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

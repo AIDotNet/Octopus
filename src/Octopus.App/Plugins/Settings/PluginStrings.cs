@@ -64,21 +64,41 @@ public static class PluginStrings
     public static string TabInstalled => PluginText.Get("已安装", "Installed");
     public static string TabMarketplace => PluginText.Get("发现市场", "Marketplace");
     public static string TabSkills => PluginText.Get("开发 Skill", "Authoring Skill");
-    public static string MarketSearchPlaceholder => PluginText.Get("搜索插件市场（名称、ID、标签）…", "Search marketplace (name, id, tags)…");
+    public static string SkillButtonTip => PluginText.Get(
+        "一键向 Claude Code、Cursor、Codex、.agents 等编程智能体安装/覆盖插件开发 Skill",
+        "Install or overwrite the plugin authoring Skill into Claude Code, Cursor, Codex, .agents, and more");
+    public static string MarketSearchPlaceholder => PluginText.Get("搜索插件市场（名称、ID、发布者、标签）…", "Search marketplace (name, id, publisher, tags)…");
     public static string MarketRefresh => PluginText.Get("刷新市场", "Refresh");
     public static string MarketOpenWeb => PluginText.Get("在网页打开市场 / 上传插件", "Open web marketplace / upload");
-    public static string MarketEmpty => PluginText.Get("插件市场暂无匹配结果。", "No matching plugins found in the marketplace.");
+    public static string MarketEmpty => PluginText.Get("没有找到匹配的插件。", "No matching plugins found in the marketplace.");
+    public static string MarketEmptyHint => PluginText.Get("试试更换关键词、清空筛选条件，或刷新插件市场。", "Try another keyword, reset filters, or refresh the marketplace.");
+    public static string MarketResetFilters => PluginText.Get("重置筛选条件", "Reset filters");
+    public static string MarketFeaturedHeading => PluginText.Get("编辑精选", "Featured");
+    public static string MarketFeaturedHint => PluginText.Get("高频装机推荐", "Recommended picks");
+    public static string MarketAllHeading => PluginText.Get("全部插件", "All plugins");
     public static string MarketInstall => PluginText.Get("安装", "Install");
     public static string MarketUpgrade => PluginText.Get("升级", "Upgrade");
     public static string MarketInstalledBadge => PluginText.Get("已安装", "Installed");
-    public static string SkillHeading => PluginText.Get("安装插件制作 Skill（octopus-plugin）", "Install plugin authoring Skill (octopus-plugin)");
+    public static string MarketDetailRisk => PluginText.Get("风险等级", "Risk level");
+    public static string MarketDetailStats => PluginText.Get("下载量 / 体积", "Downloads / Size");
+    public static string MarketDetailMeta => PluginText.Get("更新 / 协议", "Updated / License");
+    public static string MarketDetailPermissions => PluginText.Get("所需权限", "Permissions");
+    public static string MarketDetailPermissionsHint => PluginText.Get("安装后可在「已安装」随时开关", "Can be toggled individually after install");
+    public static string MarketDetailNoPermissions => PluginText.Get("该插件不需要任何敏感权限，运行于纯沙盒模式。", "This plugin requires no sensitive permissions and runs purely sandboxed.");
+    public static string MarketDetailChangelog => PluginText.Get("更新说明", "Changelog");
+    public static string MarketDetailTags => PluginText.Get("标签", "Tags");
+    public static string MarketDetailHomepage => PluginText.Get("打开主页", "Open homepage");
+    public static string MarketDetailShaNote => PluginText.Get("下载时自动执行 SHA-256 完整性校验", "SHA-256 checksum verified automatically on download");
+    public static string Close => PluginText.Get("关闭", "Close");
+    public static string SkillHeading => PluginText.Get("安装插件开发 Skill", "Install plugin authoring Skill");
     public static string SkillSubtitle => PluginText.Get(
-        "将官方插件开发规范、API 参考与脚手架模板写入所选 AI 智能体目录。每次点击安装都会强制覆盖旧版目录，杜绝过时文档残留；默认勾选 .agents、Claude Code、Cursor 与 Codex。",
-        "Writes the official plugin authoring guide, API reference, and templates into the selected AI coding agent directories. Every click strictly overwrites any previous version; defaults to .agents, Claude Code, Cursor, and Codex.");
+        "将官方插件开发规范、API 参考与脚手架模板写入所选 AI 智能体目录；每次安装都会强制覆盖旧版目录，杜绝过时文档残留。",
+        "Writes the official plugin authoring guide, API reference, and templates into the selected AI coding agent directories. Every install strictly overwrites any previous version.");
     public static string SkillScopeGlobal => PluginText.Get("用户全局 (~)", "User global (~)");
     public static string SkillScopeProject => PluginText.Get("当前项目 (./)", "Current project (./)");
     public static string SkillCustomPlaceholder => PluginText.Get("添加自定义 Skills 目录（例如 ~/.my-agent/skills）", "Add custom skills folder (e.g. ~/.my-agent/skills)");
     public static string SkillAddCustom => PluginText.Get("添加目录", "Add folder");
-    public static string SkillInstallNow => PluginText.Get("覆盖安装到所选 Agent", "Overwrite & install to selected agents");
+    public static string SkillInstallNow => PluginText.Get("覆盖安装到所选", "Overwrite & install");
     public static string SkillResetDefaults => PluginText.Get("恢复默认勾选", "Reset defaults");
+    public static string SkillSourceNote => PluginText.Get("优先拉取服务器最新校验包，离线自动回退内置版本", "Fetches latest verified bundle from server; falls back to built-in offline");
 }
