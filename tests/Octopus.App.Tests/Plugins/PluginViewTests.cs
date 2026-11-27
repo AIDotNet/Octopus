@@ -342,6 +342,148 @@ public sealed class PluginViewTests
         Assert.NotEqual(Avalonia.Media.Color.Parse("#fff0f0"), Token(ArcDesignTokenKind.Background));
     }
 
+    [AvaloniaFact]
+    public async Task PluginsPage_RendersProposalBCards_AndSkillDialogView()
+    {
+        var json = """
+        {
+          "total": 2,
+          "page": 1,
+          "pageSize": 24,
+          "items": [
+            {
+              "plugin": {
+                "id": "cowork.device-login",
+                "publisherSlug": "cowork",
+                "publisherName": "CoWork",
+                "publisherVerified": false,
+                "name": "CoWork Device Login",
+                "localizedNameZh": "CoWork 设备登录",
+                "description": "Device login",
+                "localizedDescriptionZh": "通过设备码登录一键配置客户端。",
+                "category": "agent",
+                "tags": ["auth", "cli"],
+                "downloads": 1248,
+                "featured": true,
+                "latestVersion": "1.0.2",
+                "updatedAt": "2026-11-25T00:00:00Z"
+              },
+              "latest": {
+                "pluginId": "cowork.device-login",
+                "version": "1.0.2",
+                "apiVersion": 0,
+                "permissions": ["net.hosts", "secrets"],
+                "riskLevel": "high",
+                "packageSize": 47104,
+                "sha256": "abc",
+                "downloadUrl": "https://example.test/cowork.octoplugin",
+                "reviewStatus": "approved",
+                "submittedAt": "2026-11-25T00:00:00Z",
+                "publishedAt": "2026-11-25T00:00:00Z"
+              }
+            },
+            {
+              "plugin": {
+                "id": "octopus.server-monitor",
+                "publisherSlug": "octopus",
+                "publisherName": "Octopus",
+                "publisherVerified": true,
+                "name": "Server Monitor",
+                "localizedNameZh": "服务器监控",
+                "description": "Live monitor",
+                "localizedDescriptionZh": "实时监控服务器指标。",
+                "category": "utility",
+                "tags": ["monitor"],
+                "icon": "lucide:activity",
+                "downloads": 3890,
+                "featured": true,
+                "latestVersion": "1.0.0",
+                "updatedAt": "2026-11-25T00:00:00Z"
+              },
+              "latest": {
+                "pluginId": "octopus.server-monitor",
+                "version": "1.0.0",
+                "apiVersion": 0,
+                "permissions": [],
+                "riskLevel": "low",
+                "packageSize": 38912,
+                "sha256": "def",
+                "downloadUrl": "https://example.test/monitor.octoplugin",
+                "reviewStatus": "approved",
+                "submittedAt": "2026-11-25T00:00:00Z",
+                "publishedAt": "2026-11-25T00:00:00Z"
+              }
+            }
+          ]
+        }
+        """;
+
+        using var http = new System.Net.Http.HttpClient(new StubMarketHandler(json));
+        var vm = new Octopus.App.Plugins.Settings.PluginsSettingsViewModel(
+            AppHost.Get<Octopus.Plugins.Catalog.IPluginCatalog>(),
+            AppHost.Get<IPluginStateStore>(),
+            AppHost.Get<PluginManager>(),
+            AppHost.Get<Octopus.Plugins.Packages.PluginInstaller>(),
+            AppHost.Get<PluginPaths>(),
+            AppHost.Get<IWindowAccessor>(),
+            AppHost.Get<PluginThemes>(),
+            AppHost.Get<Octopus.Plugins.Runtime.Modules.PluginConfigStore>(),
+            new Octopus.Plugins.Marketplace.PluginMarketplaceClient(http),
+            AppHost.Get<Octopus.Plugins.Skills.PluginSkillInstaller>(),
+            AppHost.Get<ISettingsStore>(),
+            AppHost.Get<IProjectService>());
+
+        var page = new Octopus.App.Plugins.Settings.PluginsPageView { DataContext = vm };
+        var window = new Window { Width = 960, Height = 720, Content = page };
+        window.Show();
+        Frames.Pump();
+
+        // Top segmented control has only Installed & Marketplace (Authoring Skill is now a standalone modal button).
+        var tabControl = page.GetLogicalDescendants().OfType<SegmentedControl>().First();
+        Assert.Equal(2, tabControl.Items.Count);
+
+        vm.ActiveTab = "marketplace";
+        await vm.RefreshMarketplaceCommand.ExecuteAsync(null);
+        Frames.Pump();
+
+        Assert.Equal(2, vm.MarketItems.Count);
+        Assert.Equal(2, vm.FeaturedMarketItems.Count);
+        Assert.True(vm.ShowFeaturedSection);
+
+        // Filtering narrows items and hides Featured banner while filtering.
+        vm.MarketCategory = "agent";
+        Frames.Pump();
+        Assert.Single(vm.MarketItems);
+        Assert.False(vm.ShowFeaturedSection);
+        vm.ResetMarketFiltersCommand.Execute(null);
+        Assert.Equal(2, vm.MarketItems.Count);
+        Assert.True(vm.ShowFeaturedSection);
+
+        // Verify Skill modal view and Detail modal view instantiate & bind cleanly.
+        var skillView = new Octopus.App.Plugins.Settings.PluginSkillDialogView { DataContext = vm };
+        window.Content = skillView;
+        Frames.Pump();
+        Assert.Equal(4, vm.SelectedSkillTargetCount);
+        vm.SkillTargets[0].IsSelected = false;
+        Assert.Equal(3, vm.SelectedSkillTargetCount);
+
+        var detailView = new Octopus.App.Plugins.Settings.MarketplacePluginDetailView { DataContext = vm.MarketItems[0] };
+        window.Content = detailView;
+        Frames.Pump();
+
+        window.Close();
+        vm.Dispose();
+    }
+
+    private sealed class StubMarketHandler(string json) : System.Net.Http.HttpMessageHandler
+    {
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new System.Net.Http.StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+            });
+    }
+
     private static Avalonia.Media.Color? Token(ArcDesignTokenKind kind)
     {
         Application.Current!.TryGetResource(ArcDesignTokens.Key(kind), Application.Current.ActualThemeVariant, out var value);
