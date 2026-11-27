@@ -154,6 +154,91 @@ public sealed class PluginSkillAndMarketplaceTests
         await Assert.ThrowsAsync<InvalidDataException>(() => client.DownloadVerifiedAsync("https://example.test", badVersion, ct));
     }
 
+    [Fact]
+    public async Task Marketplace_client_fetches_plugin_detail_and_handles_not_found()
+    {
+        var handler = new StubHttpHandler(req =>
+        {
+            if (req.RequestUri!.AbsolutePath == "/api/plugins/acme.csv")
+            {
+                const string json = """
+                {
+                  "plugin": {
+                    "id": "acme.csv",
+                    "publisherSlug": "acme",
+                    "publisherName": "Acme",
+                    "publisherVerified": true,
+                    "name": "CSV Table",
+                    "description": "CSV viewer",
+                    "category": "editor",
+                    "tags": ["csv"],
+                    "downloads": 42,
+                    "featured": false,
+                    "latestVersion": "1.0.0",
+                    "updatedAt": "2026-11-25T00:00:00Z"
+                  },
+                  "readmeMd": "# CSV Table",
+                  "versions": [
+                    {
+                      "pluginId": "acme.csv",
+                      "version": "1.0.0",
+                      "apiVersion": 0,
+                      "permissions": ["fs.project"],
+                      "riskLevel": "medium",
+                      "packageSize": 123,
+                      "sha256": "abc",
+                      "downloadUrl": "https://example.test/plugins/download/acme.csv/1.0.0.octoplugin",
+                      "reviewStatus": "approved",
+                      "submittedAt": "2026-11-25T00:00:00Z",
+                      "publishedAt": "2026-11-25T00:00:00Z"
+                    }
+                  ]
+                }
+                """;
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        var ct = TestContext.Current.CancellationToken;
+        var client = new PluginMarketplaceClient(new HttpClient(handler));
+        var detail = await client.GetDetailAsync("https://example.test", "acme.csv", ct);
+        Assert.NotNull(detail);
+        Assert.Equal("acme.csv", detail!.Plugin.Id);
+        Assert.Single(detail.Versions);
+        Assert.Equal("1.0.0", detail.Versions[0].Version);
+
+        var missing = await client.GetDetailAsync("https://example.test", "acme.missing", ct);
+        Assert.Null(missing);
+    }
+
+    [Fact]
+    public void Plugin_install_link_parses_and_validates_uris()
+    {
+        var link = PluginInstallLink.BuildUri("cowork.device-login", "1.0.2", "https://octoterm.si/");
+        Assert.Equal("octopus://plugin/install?id=cowork.device-login&version=1.0.2&server=https%3A%2F%2Foctoterm.si", link);
+
+        Assert.True(PluginInstallLink.TryParse(new Uri(link), out var req, out var err));
+        Assert.Null(err);
+        Assert.NotNull(req);
+        Assert.Equal("cowork.device-login", req!.PluginId);
+        Assert.Equal("1.0.2", req.Version);
+        Assert.Equal("https://octoterm.si", req.ServerUrl);
+
+        // Missing server / version is valid
+        Assert.True(PluginInstallLink.TryParse(new Uri("octopus://plugin/install?id=acme.csv"), out var minReq, out _));
+        Assert.Equal("acme.csv", minReq!.PluginId);
+        Assert.Null(minReq.Version);
+        Assert.Null(minReq.ServerUrl);
+
+        // Unsafe server schemes, missing id, or path traversal are rejected
+        Assert.False(PluginInstallLink.TryParse(new Uri("octopus://plugin/install?id=acme.csv&server=file%3A%2F%2F%2Fetc%2Fpasswd"), out _, out _));
+        Assert.False(PluginInstallLink.TryParse(new Uri("octopus://plugin/install?version=1.0.0"), out _, out _));
+        Assert.False(PluginInstallLink.TryParse(new Uri("octopus://plugin/install?id=..%2Fevil"), out _, out _));
+        Assert.False(PluginInstallLink.TryParse(new Uri("octopus://bot/import?data=123"), out _, out _));
+    }
+
     private sealed class StubHttpHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>

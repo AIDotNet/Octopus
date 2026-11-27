@@ -459,4 +459,89 @@ public class WorkspaceTests
         Assert.Equal(second.Id, projects.Current?.Id);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Closing_a_clean_file_tab_closes_in_one_pass_preserves_sidebar_rows_and_releases_after_frame()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-file-close-").FullName;
+        var window = Open();
+        try
+        {
+            var file = Path.Combine(dir, "Program.cs");
+            File.WriteAllText(file, "class Program {}\n");
+
+            var projects = AppHost.Get<IProjectService>();
+            var opener = AppHost.Get<IItemOpener>();
+            var panel = AppHost.Get<ProjectPanelViewModel>();
+            var registry = AppHost.Get<ITabContentRegistry>();
+
+            projects.AddProject(dir);
+            var terminal = opener.OpenTerminal()!;
+            Dispatcher.UIThread.RunJobs();
+
+            var terminalRowBefore = Assert.Single(panel.Items);
+            var fileItem = opener.OpenFile(file)!;
+            Dispatcher.UIThread.RunJobs();
+
+            // Opening a file must not rebuild the sidebar rows.
+            Assert.Same(terminalRowBefore, Assert.Single(panel.Items));
+
+            var layout = (DockLayout)AppHost.Get<WorkspaceViewModel>().CurrentLayout!;
+            var filePane = layout.Workspace.FindPane(fileItem.Id)!;
+            var closingCount = 0;
+            layout.PaneClosing += (_, _) => closingCount++;
+
+            Assert.True(layout.Close(filePane));
+            Assert.Equal(1, closingCount);
+            Assert.Null(layout.Workspace.FindPane(fileItem.Id));
+            Assert.Null(filePane.Content);
+            Assert.Null(filePane.Icon);
+            Assert.Equal(terminal.Id, layout.ActivePane?.Id);
+
+            // Closing a file must not rebuild the sidebar rows either.
+            Assert.Same(terminalRowBefore, Assert.Single(panel.Items));
+
+            // Deferred release runs at Background priority and frees the registry entry once drained.
+            Dispatcher.UIThread.RunJobs();
+            Assert.Null(registry.Find(fileItem.Id));
+        }
+        finally
+        {
+            window.Close();
+            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [AvaloniaFact]
+    public void Opening_a_file_inside_a_git_worktree_preserves_workspace_scope()
+    {
+        var root = Directory.CreateTempSubdirectory("octopus-wt-root-").FullName;
+        var wt = Directory.CreateTempSubdirectory("octopus-wt-branch-").FullName;
+        var window = Open();
+        try
+        {
+            var wtFile = Path.Combine(wt, "Feature.cs");
+            File.WriteAllText(wtFile, "class Feature {}\n");
+
+            var projects = AppHost.Get<IProjectService>();
+            var opener = AppHost.Get<IItemOpener>();
+            var project = projects.AddProject(root);
+            var workspace = new ProjectWorkspace { Id = "ws-feat", Branch = "feat/demo", Path = wt };
+            projects.AddWorkspace(project, workspace);
+
+            var opened = opener.OpenFile(wtFile)!;
+            Assert.Equal(workspace.Id, opened.WorkspaceId);
+
+            var rootFile = Path.Combine(root, "Main.cs");
+            File.WriteAllText(rootFile, "class Main {}\n");
+            var openedRoot = opener.OpenFile(rootFile)!;
+            Assert.Null(openedRoot.WorkspaceId);
+        }
+        finally
+        {
+            window.Close();
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+            try { Directory.Delete(wt, recursive: true); } catch (IOException) { }
+        }
+    }
 }

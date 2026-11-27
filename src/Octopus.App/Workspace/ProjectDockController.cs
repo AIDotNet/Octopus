@@ -23,6 +23,7 @@ public sealed class ProjectDockController : IDisposable
     private readonly Dictionary<string, DockPane> _panes = [];
     private readonly Dictionary<string, Action> _paneCleanups = [];
     private readonly HashSet<string> _approvedClose = [];
+    private readonly HashSet<string> _pendingRelease = [];
     /// <summary>The panes of diff tabs: they have no project item, so syncing with the items must leave them alone.</summary>
     private readonly HashSet<string> _diffKeys = [];
     /// <summary>The items whose tab was closed while they keep running (<see cref="ProjectItem.TabClosed"/>): no pane.</summary>
@@ -263,9 +264,33 @@ public sealed class ProjectDockController : IDisposable
         {
             _ = _registry.ReleaseAsync(id);
         }
+        foreach (var id in _pendingRelease)
+        {
+            _ = _registry.ReleaseAsync(id);
+        }
         _panes.Clear();
         _hidden.Clear();
+        _pendingRelease.Clear();
         _paneCleanups.Clear();
+    }
+
+    /// <summary>
+    /// Runs tab teardown after Avalonia paints the close frame so disposing editors and file watchers
+    /// never delays the visual tab removal and switch back to the previous tab.
+    /// </summary>
+    private void ScheduleRelease(string itemId)
+    {
+        if (!_pendingRelease.Add(itemId))
+        {
+            return;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_pendingRelease.Remove(itemId))
+            {
+                _ = _registry.ReleaseAsync(itemId);
+            }
+        }, DispatcherPriority.Background);
     }
 
     private void Focus(DockPane pane)
@@ -471,13 +496,32 @@ public sealed class ProjectDockController : IDisposable
         && _project.Items.FirstOrDefault(i => i.Id == paneId) is { Kind: ProjectItemKind.Agent or ProjectItemKind.Terminal };
 
     /// <summary>
+    /// Fast synchronous check so clean file and diff tabs close in a single pass instead of cancelling,
+    /// scheduling an async confirmation, and re-entering <see cref="DockLayout.Close"/>.
+    /// </summary>
+    private bool NeedsCloseConfirmation(string paneId)
+    {
+        if (_diffKeys.Contains(paneId))
+        {
+            return false;
+        }
+        return _registry.Find(paneId) switch
+        {
+            FileTabView fileView => fileView.Model?.HasUnsavedChanges == true,
+            DiffTabView => false,
+            null => false,
+            _ => true,
+        };
+    }
+
+    /// <summary>
     /// A tab with a running program or unsaved edits asks first: the close is cancelled, confirmed, then done again. A
-    /// tab that only hides has nothing to ask.
+    /// tab that only hides or has no unsaved edits closes in one pass.
     /// </summary>
     private void OnPaneClosing(object? sender, DockPaneClosingEventArgs e)
     {
         var pane = e.Pane!;
-        if (_syncing || _approvedClose.Remove(pane.Id) || HidesOnClose(pane.Id))
+        if (_syncing || _approvedClose.Remove(pane.Id) || HidesOnClose(pane.Id) || !NeedsCloseConfirmation(pane.Id))
         {
             return;
         }
@@ -528,7 +572,7 @@ public sealed class ProjectDockController : IDisposable
             finally { _syncing = false; }
             return;
         }
-        _ = _registry.ReleaseAsync(pane.Id);
+        ScheduleRelease(pane.Id);
         if (_diffKeys.Remove(pane.Id))
         {
             return;

@@ -100,6 +100,7 @@ internal static class PluginsAppModule
         services.AddSingleton<PluginPanels>();
         services.AddSingleton<PluginThemes>();
         services.AddSingleton<PluginMarketplaceClient>();
+        services.AddSingleton<PluginDeepLinkInstaller>();
         services.AddSingleton(_ => new PluginSkillInstaller(BuiltinSkillDirectory()));
     }
 

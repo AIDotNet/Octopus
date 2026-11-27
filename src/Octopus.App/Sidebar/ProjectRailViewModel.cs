@@ -285,7 +285,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
             }
             _shownExpanded = _projects.ExpandedGroupId;
         }
-        else if (e.Kind == ProjectChangeKind.Items && e.Project is { } project)
+        else if (e.Kind == ProjectChangeKind.Items && e.Project is { } project && e.Item?.Kind != ProjectItemKind.File)
         {
             // A working agent's tab was closed (or one was added).
             ShowWork(project);

@@ -118,9 +118,44 @@ public sealed class ItemOpener(
             projects.ActivateItem(existing.Id);
             return existing;
         }
-        var item = new ProjectItem { Kind = ProjectItemKind.File, FilePath = path, Title = Path.GetFileName(path) };
+        // Keep the owning git worktree on the file item so opening and closing a worktree file does not flip the
+        // right-side Explorer between the worktree and main project root.
+        var workspaceId = FindContainingWorkspaceId(project, path);
+        var item = new ProjectItem { Kind = ProjectItemKind.File, FilePath = path, Title = Path.GetFileName(path), WorkspaceId = workspaceId };
         projects.AddItem(project, item);
         return item;
+    }
+
+    private string? FindContainingWorkspaceId(Project project, string path)
+    {
+        if (!ProjectLocation.IsOnThisComputer(project) || project.Workspaces.Count == 0 || string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+        string fullFile;
+        try { fullFile = Path.GetFullPath(path); }
+        catch { return null; }
+
+        var comparison = OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        ProjectWorkspace? best = null;
+        var bestLength = -1;
+        foreach (var ws in project.Workspaces)
+        {
+            if (string.IsNullOrWhiteSpace(ws.Path)) continue;
+            string wsRoot;
+            try { wsRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ws.Path)); }
+            catch { continue; }
+
+            if (fullFile.Length > wsRoot.Length
+                && fullFile.StartsWith(wsRoot, comparison)
+                && (fullFile[wsRoot.Length] == Path.DirectorySeparatorChar || fullFile[wsRoot.Length] == Path.AltDirectorySeparatorChar)
+                && wsRoot.Length > bestLength)
+            {
+                best = ws;
+                bestLength = wsRoot.Length;
+            }
+        }
+        return best?.Id;
     }
 
     public ProjectItem? OpenView(string viewId, string title, string? state = null)

@@ -81,6 +81,32 @@ public interface IFileSearchService
     IAsyncEnumerable<ContentMatch> SearchContentAsync(string root, string query, CancellationToken cancellationToken = default);
 }
 
+/// <summary>One ranked match returned by <see cref="IWorkspaceFileIndex"/>.</summary>
+public sealed record WorkspaceFileMatch(string RelativePath, string FullPath, int Score);
+
+/// <summary>
+/// Cached, filesystem-watched index of workspace files for instant fuzzy path lookup (such as inline <c>@</c> mentions).
+/// </summary>
+public interface IWorkspaceFileIndex : IDisposable
+{
+    /// <summary>
+    /// Searches indexed files under <paramref name="root"/> synchronously from the cached snapshot, returning up to
+    /// <paramref name="maxResults"/> best-ranked matches. When <paramref name="root"/> is not yet indexed or has
+    /// changed on disk, starts a coalesced background refresh and invokes <paramref name="onRefreshed"/> when ready.
+    /// </summary>
+    IReadOnlyList<WorkspaceFileMatch> Search(
+        string root,
+        string query,
+        int maxResults = 20,
+        Action? onRefreshed = null);
+
+    /// <summary>Ensures an up-to-date snapshot is built for <paramref name="root"/> in the background.</summary>
+    Task WarmAsync(string root, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks <paramref name="root"/> dirty so the next query refreshes its snapshot.</summary>
+    void Invalidate(string root);
+}
+
 /// <summary>
 /// A folder tree that is on another machine (an SSH host, a computer that runs Octopus): besides listing it reads and
 /// writes whole files, and says how the connection is doing. Nothing is watched: the tree is read again when asked.

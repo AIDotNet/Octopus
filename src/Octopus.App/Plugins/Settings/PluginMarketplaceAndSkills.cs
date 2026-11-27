@@ -42,16 +42,37 @@ public sealed partial class MarketplaceCategoryChipViewModel : ObservableObject
 /// <summary>One plugin card fetched from the Octopus Plugin Marketplace.</summary>
 public sealed partial class MarketplacePluginRowViewModel : ObservableObject
 {
-    private readonly PluginsSettingsViewModel _owner;
+    private readonly PluginsSettingsViewModel? _owner;
+    private readonly Func<string?, Task>? _openUrl;
 
     public MarketplacePluginRowViewModel(
         MarketplaceCatalogEntry entry,
         string? installedVersion,
         Bitmap? localIconBitmap,
         PluginsSettingsViewModel owner)
+        : this(entry, installedVersion, localIconBitmap, owner, owner.OpenExternalUrlAsync)
+    {
+    }
+
+    public MarketplacePluginRowViewModel(
+        MarketplaceCatalogEntry entry,
+        string? installedVersion,
+        Bitmap? localIconBitmap,
+        Func<string?, Task>? openUrl = null)
+        : this(entry, installedVersion, localIconBitmap, owner: null, openUrl)
+    {
+    }
+
+    private MarketplacePluginRowViewModel(
+        MarketplaceCatalogEntry entry,
+        string? installedVersion,
+        Bitmap? localIconBitmap,
+        PluginsSettingsViewModel? owner,
+        Func<string?, Task>? openUrl)
     {
         Entry = entry;
         _owner = owner;
+        _openUrl = openUrl;
         var isZh = PluginText.Language.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
         Name = (isZh && !string.IsNullOrWhiteSpace(entry.Plugin.LocalizedNameZh) ? entry.Plugin.LocalizedNameZh : entry.Plugin.Name)!;
         Description = (isZh && !string.IsNullOrWhiteSpace(entry.Plugin.LocalizedDescriptionZh) ? entry.Plugin.LocalizedDescriptionZh : entry.Plugin.Description)!;
@@ -156,13 +177,13 @@ public sealed partial class MarketplacePluginRowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private Task InstallOrUpgradeAsync() => _owner.InstallFromMarketplaceAsync(this);
+    private Task InstallOrUpgradeAsync() => _owner?.InstallFromMarketplaceAsync(this) ?? Task.CompletedTask;
 
     [RelayCommand]
-    private Task OpenDetailsAsync() => _owner.OpenMarketplaceDetailAsync(this);
+    private Task OpenDetailsAsync() => _owner?.OpenMarketplaceDetailAsync(this) ?? Task.CompletedTask;
 
     [RelayCommand]
-    private Task OpenHomepageAsync() => _owner.OpenExternalUrlAsync(Homepage);
+    private Task OpenHomepageAsync() => _openUrl?.Invoke(Homepage) ?? Task.CompletedTask;
 
     public static string FormatCategory(string category) => category.ToLowerInvariant() switch
     {

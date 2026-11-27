@@ -1,7 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Octopus.App.AgentGui;
 using Octopus.App.Bots;
 using Octopus.App.Common;
+using Octopus.App.Files;
 using Octopus.Core.Bots;
 using Octopus.Core.Projects;
 using TKCode.Arc;
@@ -21,6 +23,7 @@ public sealed class BotDockController : IDisposable
     private readonly CloseConfirmation _confirmation;
     private readonly Dictionary<string, DockPane> _panes = new(StringComparer.Ordinal);
     private readonly HashSet<string> _approvedClose = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _pendingRelease = new(StringComparer.Ordinal);
     private bool _syncing;
     private bool _active = true;
     private bool _disposed;
@@ -163,7 +166,27 @@ public sealed class BotDockController : IDisposable
         {
             _ = _registry.ReleaseAsync(id);
         }
+        foreach (var id in _pendingRelease)
+        {
+            _ = _registry.ReleaseAsync(id);
+        }
         _panes.Clear();
+        _pendingRelease.Clear();
+    }
+
+    private void ScheduleRelease(string itemId)
+    {
+        if (!_pendingRelease.Add(itemId))
+        {
+            return;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_pendingRelease.Remove(itemId))
+            {
+                _ = _registry.ReleaseAsync(itemId);
+            }
+        }, DispatcherPriority.Background);
     }
 
     private void OnLayoutChanged(object? sender, EventArgs e)
@@ -177,8 +200,30 @@ public sealed class BotDockController : IDisposable
     private void OnActivePaneChanged(object? sender, EventArgs e)
     {
         if (_syncing || _loading || _disposed || !_active || Layout.ActivePane is not { } pane) return;
-        _bots.ActivateBackingItem(_botId, pane.Id);
-        _registry.Find(pane.Id)?.FocusContent();
+        _syncing = true;
+        try { _bots.ActivateBackingItem(_botId, pane.Id); }
+        finally { _syncing = false; }
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_active && !_disposed && ReferenceEquals(Layout.ActivePane, pane))
+            {
+                _registry.Find(pane.Id)?.FocusContent();
+            }
+        }, DispatcherPriority.Input);
+    }
+
+    private bool NeedsCloseConfirmation(ITabContent content)
+    {
+        if (content is FileTabView fileView)
+        {
+            return fileView.Model?.HasUnsavedChanges == true;
+        }
+        if (content is AgentGuiTabView)
+        {
+            var running = content.HasRunningChildAsync();
+            return !running.IsCompletedSuccessfully || running.Result;
+        }
+        return true;
     }
 
     private void OnPaneClosing(object? sender, DockPaneClosingEventArgs e)
@@ -186,6 +231,7 @@ public sealed class BotDockController : IDisposable
         if (_syncing || e.Pane is null) return;
         if (_approvedClose.Remove(e.Pane.Id)) return;
         if (_registry.Find(e.Pane.Id) is not { } content) return;
+        if (!NeedsCloseConfirmation(content)) return;
 
         e.Cancel = true;
         _ = ConfirmCloseAsync(e.Pane);
@@ -195,23 +241,28 @@ public sealed class BotDockController : IDisposable
     {
         if (!await _confirmation.ConfirmCloseTabAsync(pane.Id)) return;
         _approvedClose.Add(pane.Id);
-        Layout.Close(pane);
+        if (!Layout.Close(pane))
+        {
+            _approvedClose.Remove(pane.Id);
+        }
     }
 
     private void OnPaneClosed(object? sender, DockPaneEventArgs e)
     {
-        if (e.Pane is null) return;
+        if (e.Pane is null || _syncing) return;
         var id = e.Pane.Id;
         _panes.Remove(id);
-        if (!_syncing)
-        {
-            _bots.CloseBackingItem(_botId, id);
-        }
-        _ = _registry.ReleaseAsync(id);
+        e.Pane.Content = null;
+        e.Pane.Icon = null;
+        _syncing = true;
+        try { _bots.CloseBackingItem(_botId, id); }
+        finally { _syncing = false; }
+        ScheduleRelease(id);
     }
 
     private void OnBotsChanged(object? sender, BotChangedEventArgs e)
     {
+        if (_syncing || _disposed) return;
         if (e.Bot is not null && e.Bot.Id != _botId) return;
         UiContext.Run(SyncWithBacking);
     }
@@ -241,9 +292,11 @@ public sealed class BotDockController : IDisposable
                 _syncing = true;
                 try { Layout.Close(stale); }
                 finally { _syncing = false; }
+                stale.Content = null;
+                stale.Icon = null;
             }
             _panes.Remove(staleId);
-            _ = _registry.ReleaseAsync(staleId);
+            ScheduleRelease(staleId);
         }
 
         // Activate active item

@@ -291,7 +291,10 @@ public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
         _activity = activity;
         _botGroups = botGroups;
 
-        _bots.Changed += (_, _) => UiContext.Run(Rebuild);
+        _bots.Changed += (_, e) =>
+        {
+            if (e.Kind != BotChangeKind.Files) UiContext.Run(Rebuild);
+        };
         _botGroups?.Changed += (_, _) => UiContext.Run(Rebuild);
         _activity?.Changed += (_, _) => UiContext.Run(Rebuild);
         ArcLanguage.Changed += OnLanguageChanged;

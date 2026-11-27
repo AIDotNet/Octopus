@@ -227,20 +227,31 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         // rebuild the whole list.
         if (e.Kind == ProjectChangeKind.Active)
         {
-            var active = _projects.Current?.ActiveItemId;
-            foreach (var item in Items)
-            {
-                item.RefreshActiveRecursive(active);
-            }
-            foreach (var group in WorkspaceGroups)
-            {
-                group.RefreshActive();
-            }
+            RefreshActiveRows();
+            return;
+        }
+        // Open files are tabs only (Rebuild skips them), so opening or closing a file never alters the sidebar rows.
+        if (e.Kind == ProjectChangeKind.Items && e.Item?.Kind == ProjectItemKind.File)
+        {
+            RefreshActiveRows();
             return;
         }
         if (e.Kind is not (ProjectChangeKind.Layout or ProjectChangeKind.GroupExpanded or ProjectChangeKind.Tunnels) && !_moving)
         {
             Rebuild();
+        }
+    }
+
+    private void RefreshActiveRows()
+    {
+        var active = _projects.Current?.ActiveItemId;
+        foreach (var item in Items)
+        {
+            item.RefreshActiveRecursive(active);
+        }
+        foreach (var group in WorkspaceGroups)
+        {
+            group.RefreshActive();
         }
     }
 

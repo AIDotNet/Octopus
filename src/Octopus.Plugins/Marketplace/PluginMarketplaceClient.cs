@@ -43,11 +43,17 @@ public sealed record MarketplaceCatalogEntry(MarketplacePluginSummary Plugin, Ma
 
 public sealed record MarketplaceCatalogPage(int Total, int Page, int PageSize, IReadOnlyList<MarketplaceCatalogEntry> Items);
 
+public sealed record MarketplacePluginDetail(
+    MarketplacePluginSummary Plugin,
+    string? ReadmeMd,
+    IReadOnlyList<MarketplacePluginVersion> Versions);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(MarketplaceCatalogPage))]
 [JsonSerializable(typeof(MarketplaceCatalogEntry))]
 [JsonSerializable(typeof(MarketplacePluginSummary))]
 [JsonSerializable(typeof(MarketplacePluginVersion))]
+[JsonSerializable(typeof(MarketplacePluginDetail))]
 internal sealed partial class MarketplaceClientJson : JsonSerializerContext;
 
 /// <summary>HTTP client for the Octopus Server Plugin Marketplace (NativeAOT-safe source-generated JSON).</summary>
@@ -76,6 +82,21 @@ public sealed class PluginMarketplaceClient(HttpClient? httpClient = null)
         await using var stream = await resp.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         return await JsonSerializer.DeserializeAsync(stream, MarketplaceClientJson.Default.MarketplaceCatalogPage, cancellationToken).ConfigureAwait(false)
             ?? new MarketplaceCatalogPage(0, 1, 24, []);
+    }
+
+    /// <summary>Fetches a single published plugin's metadata and approved versions (<c>/api/plugins/{id}</c>).</summary>
+    public async Task<MarketplacePluginDetail?> GetDetailAsync(
+        string serverBaseUrl,
+        string pluginId,
+        CancellationToken cancellationToken = default)
+    {
+        var baseUrl = serverBaseUrl.Trim().TrimEnd('/');
+        var url = $"{baseUrl}/api/plugins/{Uri.EscapeDataString(pluginId.Trim())}";
+        using var resp = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        resp.EnsureSuccessStatusCode();
+        await using var stream = await resp.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await JsonSerializer.DeserializeAsync(stream, MarketplaceClientJson.Default.MarketplacePluginDetail, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -89,6 +89,12 @@ public class App : Application
                     if (e is ProtocolActivatedEventArgs { Uri: { } uri }) HandleProtocolUri(desktop, uri);
                 };
             }
+            if (desktop.Args is { Length: > 0 } args && ProtocolActivation.TryParseProtocolUri(args) is { } startupUri)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => HandleProtocolUri(desktop, startupUri),
+                    Avalonia.Threading.DispatcherPriority.Background);
+            }
             AppHost.Get<Shell.TrayService>().Start(this);
             StartupTrace.Log("app:initialize:tray");
             AppHost.Get<Activity.AgentAttentionNotifier>().Start();
@@ -158,8 +164,9 @@ public class App : Application
                 protocolServer.Dispose();
                 // No ssh process of a tunnel outlives the app (an installer that starts now may replace the files they run from).
                 AppHost.Get<Octopus.App.Services.ITunnelService>().StopAll();
-                // Settings are written a moment after each change: the last one goes to disk before an installer starts.
+                // Settings and bots are written a moment after each change: the last ones go to disk before an installer starts.
                 AppHost.Get<Octopus.Storage.ISettingsStore>().Flush();
+                AppHost.Get<Octopus.Storage.IBotStore>().Flush();
                 Updates.UpdateLifecycle.InstallOnExit();
                 AppHost.Reset();
             };
@@ -190,6 +197,10 @@ public class App : Application
             if (Bots.BotShareCodec.IsBotImportUri(uri))
             {
                 _ = HandleBotImportUriAsync(uri);
+            }
+            else if (Octopus.Plugins.Marketplace.PluginInstallLink.IsPluginInstallUri(uri))
+            {
+                _ = AppHost.Get<Plugins.PluginDeepLinkInstaller>().HandleInstallUriAsync(uri);
             }
         });
     }

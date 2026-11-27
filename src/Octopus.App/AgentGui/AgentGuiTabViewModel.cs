@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Text;
 using Avalonia;
@@ -26,6 +25,7 @@ using Octopus.App.Sidebar;
 using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
+using Octopus.FileSystem;
 using Octopus.Platform;
 using Octopus.Storage;
 using TKCode.Arc.Icons.Lucide;
@@ -185,9 +185,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
     };
 
-    private static readonly ConcurrentDictionary<string, (DateTimeOffset IndexedAt, string[] Files)> SharedWorkspaceFileCache = new(StringComparer.Ordinal);
-    private static readonly TimeSpan WorkspaceFileCacheTtl = TimeSpan.FromSeconds(60);
-    private const int MaxCachedWorkspaces = 16;
+    private const int MaxMentionSuggestions = 20;
+    private const int MinFileMentionSuggestions = 12;
     private const int StreamFlushIntervalMs = 60;
 
     private readonly Project _project;
@@ -211,6 +210,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private readonly IBotService? _bots;
     private readonly BotScheduleMcpServer? _botScheduleMcp;
     private readonly ICollabCoordinator? _collab;
+    private readonly IWorkspaceFileIndex _workspaceFileIndex;
+    private readonly Action _onWorkspaceFilesRefreshed;
     private readonly Dictionary<string, UrlElicitationCardItem> _urlElicitations = new(StringComparer.Ordinal);
 
     private IAcpSession? _session;
@@ -243,8 +244,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private QueuedPrompt? _urgentPrompt;
     private bool _isTurnActive;
     private bool _manualStopRequested;
-    private string[] _workspaceFiles = [];
-    private bool _workspaceIndexing;
     private string _lastFileFilterQuery = "";
     private readonly List<MentionToken> _draftMentions = [];
     private IReadOnlyList<MentionSpan> _mentionSpans = [];
@@ -286,7 +285,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         IFileOpener? fileOpener = null,
         IBotService? bots = null,
         ICollabCoordinator? collab = null,
-        BotScheduleMcpServer? botScheduleMcp = null)
+        BotScheduleMcpServer? botScheduleMcp = null,
+        IWorkspaceFileIndex? workspaceFileIndex = null)
     {
         _project = project;
         _item = item;
@@ -309,6 +309,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _bots = bots;
         _collab = collab;
         _botScheduleMcp = botScheduleMcp;
+        _workspaceFileIndex = workspaceFileIndex ?? WorkspaceFileIndex.Shared;
+        _onWorkspaceFilesRefreshed = OnWorkspaceFilesRefreshed;
 
         var profile = settings.Current.Agents.ProfileOf(definition.Id);
         var effectivePerm = !string.IsNullOrWhiteSpace(item.Launch?.Permission)
@@ -456,13 +458,24 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 tcs.TrySetResult(false);
                 return;
             }
-            if (_session is null)
+            if (!HasStarted)
+            {
+                // State starts at Connecting even before the view is ever attached; kick off the first connection now.
+                EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
+                EnsureStarted();
+                tcs.TrySetResult(true);
+                return;
+            }
+            if (State == AgentGuiState.Connecting)
             {
                 EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
-                if (State != AgentGuiState.Connecting)
-                {
-                    _ = ConnectAsync();
-                }
+                tcs.TrySetResult(true);
+                return;
+            }
+            if (_session is null || State is AgentGuiState.Disconnected or AgentGuiState.Error)
+            {
+                EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
+                _ = ConnectAsync();
                 tcs.TrySetResult(true);
                 return;
             }
@@ -1045,6 +1058,10 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         if (HasStarted || _disposed) return;
         HasStarted = true;
+        if (!string.IsNullOrWhiteSpace(WorkingDirectory))
+        {
+            _ = _workspaceFileIndex.WarmAsync(WorkingDirectory);
+        }
         _ = ConnectAsync();
     }
 
@@ -1052,11 +1069,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     public async Task ConnectAsync()
     {
         if (_disposed) return;
-        await DisconnectInternalAsync();
-
-        _connectCts = new CancellationTokenSource();
-        var ct = _connectCts.Token;
-
+        HasStarted = true;
         SetUi(() =>
         {
             State = AgentGuiState.Connecting;
@@ -1066,6 +1079,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             OnPropertyChanged(nameof(HasErrorBanner));
             OnPropertyChanged(nameof(ShowEmptyState));
         });
+
+        await DisconnectInternalAsync();
+        if (_disposed) return;
+
+        _connectCts = new CancellationTokenSource();
+        var ct = _connectCts.Token;
 
         try
         {
@@ -2494,7 +2513,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             {
                 FilterFiles(query.Query);
             }
-            IsFilePopupOpen = true;
+            IsFilePopupOpen = FilteredFiles.Count > 0;
             return;
         }
         IsFilePopupOpen = false;
@@ -2565,7 +2584,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private void FilterFiles(string query)
     {
         _lastFileFilterQuery = query;
-        EnsureWorkspaceFilesIndexed();
         FilteredFiles.Clear();
 
         var q = query.Trim();
@@ -2574,17 +2592,32 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             FilteredFiles.Add(suggestion);
         }
 
-        // 3. Workspace files.
-        foreach (var rel in _workspaceFiles)
+        // 3. Workspace files (ranked via shared fuzzy path index).
+        if (!string.IsNullOrWhiteSpace(WorkingDirectory))
         {
-            if (string.IsNullOrEmpty(q) || rel.Contains(q, StringComparison.OrdinalIgnoreCase))
+            var fileLimit = Math.Max(MinFileMentionSuggestions, MaxMentionSuggestions - FilteredFiles.Count);
+            var matches = _workspaceFileIndex.Search(WorkingDirectory, q, fileLimit, _onWorkspaceFilesRefreshed);
+            foreach (var match in matches)
             {
-                FilteredFiles.Add(new FileMentionSuggestion(rel, Path.Combine(WorkingDirectory, rel)));
-                if (FilteredFiles.Count >= 18) break;
+                FilteredFiles.Add(new FileMentionSuggestion(match.RelativePath, match.FullPath));
             }
         }
+
         SelectedPickerIndex = 0;
         SyncPickerHighlights();
+    }
+
+    private void OnWorkspaceFilesRefreshed()
+    {
+        UiContext.PostToUi(() =>
+        {
+            if (_disposed) return;
+            if (MentionText.FindQuery(InputText, _caretForPickers, _mentionSpans) is { } activeQuery)
+            {
+                FilterFiles(activeQuery.Query);
+                IsFilePopupOpen = FilteredFiles.Count > 0;
+            }
+        });
     }
 
     private void OnSessionEvent(AcpRuntimeEvent evt)
@@ -4393,80 +4426,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private static string? NormalizeLaunchOption(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private void EnsureWorkspaceFilesIndexed()
-    {
-        var root = WorkingDirectory;
-        if (string.IsNullOrWhiteSpace(root)) return;
-
-        var now = DateTimeOffset.UtcNow;
-        if (SharedWorkspaceFileCache.TryGetValue(root, out var cached)
-            && now - cached.IndexedAt < WorkspaceFileCacheTtl)
-        {
-            _workspaceFiles = cached.Files;
-            return;
-        }
-
-        if (_workspaceIndexing || !Directory.Exists(root)) return;
-        _workspaceIndexing = true;
-        _ = Task.Run(() =>
-        {
-            var found = new List<string>(256);
-            try
-            {
-                var stack = new Stack<string>();
-                stack.Push(root);
-                while (stack.Count > 0 && found.Count < 400)
-                {
-                    var dir = stack.Pop();
-                    foreach (var file in Directory.EnumerateFiles(dir))
-                    {
-                        found.Add(Path.GetRelativePath(root, file).Replace('\\', '/'));
-                        if (found.Count >= 400) break;
-                    }
-                    foreach (var sub in Directory.EnumerateDirectories(dir))
-                    {
-                        var name = Path.GetFileName(sub);
-                        if (name is ".git" or "node_modules" or "bin" or "obj" or ".vs" or ".idea" or "dist" or "build") continue;
-                        stack.Push(sub);
-                    }
-                }
-            }
-            catch
-            {
-                // Best-effort workspace file indexing for @ mentions.
-            }
-
-            var snapshot = found.ToArray();
-            if (SharedWorkspaceFileCache.Count >= MaxCachedWorkspaces)
-            {
-                // Evict oldest cached workspace entry to keep static cache bounded.
-                string? oldestKey = null;
-                var oldestTime = DateTimeOffset.MaxValue;
-                foreach (var kv in SharedWorkspaceFileCache)
-                {
-                    if (kv.Value.IndexedAt < oldestTime)
-                    {
-                        oldestTime = kv.Value.IndexedAt;
-                        oldestKey = kv.Key;
-                    }
-                }
-                if (oldestKey is not null) SharedWorkspaceFileCache.TryRemove(oldestKey, out _);
-            }
-            SharedWorkspaceFileCache[root] = (DateTimeOffset.UtcNow, snapshot);
-
-            UiContext.PostToUi(() =>
-            {
-                _workspaceIndexing = false;
-                if (_disposed) return;
-                _workspaceFiles = snapshot;
-                if (IsFilePopupOpen)
-                {
-                    FilterFiles(_lastFileFilterQuery);
-                }
-            });
-        });
-    }
-
     private void RefreshDiagnostics()
     {
         DiagnosticsText = _session?.GetStderrSnapshot() ?? "";
@@ -4546,7 +4505,6 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             ResetOrchestrationState();
             DiagnosticsText = "";
         });
-        _workspaceFiles = [];
         _promptHistory.Clear();
     }
 

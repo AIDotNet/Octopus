@@ -4,12 +4,23 @@ using Octopus.Platform;
 
 namespace Octopus.Storage;
 
-/// <summary>Stores Bot definitions, chats, connectors, and work items in <c>&lt;DataDirectory&gt;/bots.json</c>.</summary>
-public sealed class JsonBotStore(IAppPaths paths) : IBotStore
+/// <summary>
+/// Stores Bot definitions, chats, connectors, and work items in <c>&lt;DataDirectory&gt;/bots.json</c>.
+/// <see cref="Update"/> updates <see cref="Current"/> immediately and debounces disk writes onto a pool thread,
+/// avoiding synchronous <c>FlushFileBuffers</c> stalls on the UI thread (for example when closing a tab updates both
+/// chat state and dock layout). <see cref="Flush"/> and <see cref="Dispose"/> persist any pending change immediately.
+/// </summary>
+public sealed class JsonBotStore(IAppPaths paths) : IBotStore, IDisposable
 {
+    private static readonly TimeSpan WriteDelay = TimeSpan.FromMilliseconds(400);
+
     private readonly string _path = Path.Combine(paths.DataDirectory, "bots.json");
     private readonly object _gate = new();
+    private readonly object _writeGate = new();
+    private Timer? _timer;
     private bool _loaded;
+    private bool _dirty;
+    private bool _disposed;
 
     public BotsDocument Current
     {
@@ -27,6 +38,7 @@ public sealed class JsonBotStore(IAppPaths paths) : IBotStore
 
     public void Load()
     {
+        Flush();
         lock (_gate)
         {
             Current = Read();
@@ -37,6 +49,7 @@ public sealed class JsonBotStore(IAppPaths paths) : IBotStore
 
     public void Update(Action<BotsDocument> mutate)
     {
+        var writeNow = false;
         lock (_gate)
         {
             if (!_loaded)
@@ -46,18 +59,72 @@ public sealed class JsonBotStore(IAppPaths paths) : IBotStore
             }
             mutate(Current);
             Current = Normalize(Current);
+            _dirty = true;
+            if (_disposed)
+            {
+                writeNow = true;
+            }
+            else
+            {
+                _timer ??= new Timer(_ => WritePending());
+                _timer.Change(WriteDelay, Timeout.InfiniteTimeSpan);
+            }
+        }
+        if (writeNow)
+        {
+            WritePending();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void Flush()
+    {
+        lock (_gate)
+        {
+            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        }
+        WritePending();
+    }
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            _disposed = true;
+            _timer?.Dispose();
+            _timer = null;
+        }
+        WritePending();
+    }
+
+    private void WritePending()
+    {
+        lock (_writeGate)
+        {
+            string text;
+            lock (_gate)
+            {
+                if (!_dirty)
+                {
+                    return;
+                }
+                _dirty = false;
+                text = JsonSerializer.Serialize(Current, OctopusJsonContext.FileTypeInfo<BotsDocument>());
+            }
             try
             {
-                var text = JsonSerializer.Serialize(Current, OctopusJsonContext.FileTypeInfo<BotsDocument>());
                 AtomicFile.WriteAllText(_path, text);
                 LastError = null;
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
             {
                 LastError = e;
+                lock (_gate)
+                {
+                    _dirty = true;
+                }
             }
         }
-        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void EnsureLoaded()

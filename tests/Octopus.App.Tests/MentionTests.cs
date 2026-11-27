@@ -221,4 +221,51 @@ public sealed class MentionTests
             window.Close();
         }
     }
+
+    [AvaloniaFact]
+    public async Task Composer_at_mention_finds_deep_workspace_file_past_hundreds_of_files()
+    {
+        var dir = Directory.CreateTempSubdirectory("octopus-mention-files-").FullName;
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(dir, "docs"));
+            for (var i = 0; i < 450; i++)
+            {
+                File.WriteAllText(Path.Combine(dir, "docs", $"note_{i:D3}.md"), "");
+            }
+            var meterDir = Path.Combine(dir, "py", "api", "device_server", "electric_meter");
+            Directory.CreateDirectory(meterDir);
+            var targetFile = Path.Combine(meterDir, "fast_frequency40.py");
+            File.WriteAllText(targetFile, "");
+
+            await AppHost.Get<Octopus.FileSystem.IWorkspaceFileIndex>().WarmAsync(dir);
+
+            var projects = AppHost.Get<IProjectService>();
+            var project = projects.AddProject(dir);
+            var lead = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "claude", Title = "Lead", Surface = AgentSurface.Gui };
+            projects.AddItem(project, lead);
+
+            var view = AppHost.Get<ITabContentRegistry>().GetOrCreate(project, lead);
+            var vm = Assert.IsType<AgentGuiTabViewModel>(view.DataContext);
+
+            vm.InputText = "麻烦看一下 @fast";
+            vm.ComposerCaretIndex = vm.InputText.Length;
+            Frames.Pump();
+
+            Assert.True(vm.IsFilePopupOpen);
+            var fileMatch = vm.FilteredFiles.FirstOrDefault(m => m.IsFile);
+            Assert.NotNull(fileMatch);
+            Assert.Equal("py/api/device_server/electric_meter/fast_frequency40.py", fileMatch.RelativePath);
+            Assert.Equal("fast_frequency40.py", fileMatch.DisplayName);
+            Assert.Equal("py/api/device_server/electric_meter", fileMatch.Subtitle);
+
+            vm.InsertFileMention(fileMatch);
+            Assert.False(vm.IsFilePopupOpen);
+            Assert.Contains(vm.Attachments, a => a.Attachment.Kind == "file" && a.Attachment.DisplayName == fileMatch.RelativePath);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
 }

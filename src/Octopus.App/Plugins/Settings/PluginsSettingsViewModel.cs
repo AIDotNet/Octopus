@@ -835,16 +835,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
             _installer.Discard(staged);
             return false;
         }
-        await _manager.SetEnabledAsync(manifest.Id, false);
-        await Task.Run(() => _installer.Install(staged));
-        _state.Update(d =>
-        {
-            var record = d.Find(manifest.Id) ?? (d.Plugins[manifest.Id] = new PluginRecord { InstalledAt = DateTimeOffset.Now });
-            record.Source = PluginSource.File;
-            record.Version = manifest.Version;
-            foreach (var request in required) record.Grants[request.Key] = request.Details.FirstOrDefault() ?? "granted";
-        });
-        await _manager.SetEnabledAsync(manifest.Id, true);
+        await PluginDeepLinkInstaller.CommitStagedInstallAsync(_manager, _installer, _state, staged);
         Say(PluginText.Get($"已{verb} {manifest.Name}。", $"{manifest.Name}: {verb.ToLowerInvariant()} done."));
         return true;
     }

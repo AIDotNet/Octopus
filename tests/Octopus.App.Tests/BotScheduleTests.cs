@@ -1,8 +1,14 @@
 using System.Text.Json.Nodes;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Octopus.Acp.Protocol;
+using Octopus.App.AgentGui;
 using Octopus.App.Bots;
 using Octopus.App.Composition;
+using Octopus.App.Workspace;
+using Octopus.Core.Agents;
 using Octopus.Core.Bots;
+using Octopus.Storage;
 using Xunit;
 
 namespace Octopus.App.Tests;
@@ -129,6 +135,105 @@ public sealed class BotScheduleTests
         await scheduler.TickAsync();
 
         Assert.Equal(BotScheduleRunStatus.Failed, Saved(bots, bot.Id, s.Id).LastRunStatus);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task ScheduledRun_WakesUnshownBotChat_WithoutDoubleConnectingWhenOpened()
+    {
+        AppHost.Get<ISettingsStore>().Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+        var bots = AppHost.Get<IBotService>();
+        var tabs = AppHost.Get<ITabContentRegistry>();
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+
+        string? sent = null;
+        fakeFactory.ConfigureNext = s =>
+        {
+            s.PromptHandler = (_, text, _, _) =>
+            {
+                sent = text;
+                return Task.FromResult(new AcpPromptResult { StopReason = "end_turn" });
+            };
+        };
+
+        var clock = new ManualTime(At(8, 0));
+        using var scheduler = new BotScheduler(bots, () => tabs, clock);
+        var bot = bots.CreateBot(new NewBotRequest("小李", "claude", "#2f9e63", null, null));
+        scheduler.SyncBuiltIns(bot.Id);
+        var s = scheduler.Create(bot.Id, "Check morning inbox.", null, At(8, 5), "早间巡检");
+
+        // Fire while the bot view has never been attached to any window (user has not clicked into the bot).
+        clock.Set(At(8, 5, 5));
+        await scheduler.TickAsync();
+
+        var backing = bots.GetBackingProject(bots.Bots.First(b => b.Id == bot.Id));
+        var item = Assert.Single(backing.Items, i => i.Id == bot.HomeChatId);
+        var control = tabs.GetOrCreate(backing, item);
+        var vm = Assert.IsType<AgentGuiTabViewModel>(control.DataContext);
+
+        Assert.True(Frames.Until(() => sent is not null, milliseconds: 5000), $"Scheduled prompt was not sent (state={vm.State}, error={vm.ErrorBanner}).");
+        Assert.StartsWith($"[Octopus scheduled run: schedule {s.Id} “早间巡检”]", sent);
+        Assert.Contains("Check morning inbox.", sent);
+        Assert.Single(fakeFactory.Created);
+        Assert.True(vm.HasStarted);
+
+        // Clicking into the bot later attaches the view and invokes EnsureStarted(); it must not reconnect.
+        var window = new Window { Width = 800, Height = 600, Content = control };
+        window.Show();
+        try
+        {
+            Frames.Pump();
+            Assert.Single(fakeFactory.Created);
+        }
+        finally
+        {
+            window.Content = null;
+            window.Close();
+            Frames.Pump();
+            await tabs.ReleaseAllAsync();
+        }
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task ScheduledRun_ReconnectsDisconnectedBotChat_AndDeliversPrompt()
+    {
+        AppHost.Get<ISettingsStore>().Update(s => s.Agents.DefaultSurface = AgentSurface.Gui);
+        var bots = AppHost.Get<IBotService>();
+        var tabs = AppHost.Get<ITabContentRegistry>();
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+
+        var prompts = new List<string>();
+        fakeFactory.ConfigureNext = s =>
+        {
+            s.PromptHandler = (_, text, _, _) =>
+            {
+                prompts.Add(text);
+                return Task.FromResult(new AcpPromptResult { StopReason = "end_turn" });
+            };
+        };
+
+        var clock = new ManualTime(At(8, 0));
+        using var scheduler = new BotScheduler(bots, () => tabs, clock);
+        var bot = bots.CreateBot(new NewBotRequest("小李", "claude", "#2f9e63", null, null));
+        scheduler.SyncBuiltIns(bot.Id);
+        scheduler.Create(bot.Id, "Ping.", "*/10 * * * *", null);
+
+        // First run establishes the session.
+        clock.Set(At(8, 10));
+        await scheduler.TickAsync();
+        Assert.True(Frames.Until(() => prompts.Count == 1, milliseconds: 5000));
+        var firstSession = Assert.Single(fakeFactory.Created);
+
+        // Simulate the background CLI exiting while the bot is idle (State -> Disconnected, _session still held).
+        firstSession.Emit(new AcpClosedEvent(new IOException("Exited")));
+        Frames.Pump();
+
+        // Next scheduled run must reconnect a fresh session and deliver the prompt.
+        clock.Set(At(8, 20));
+        await scheduler.TickAsync();
+        Assert.True(Frames.Until(() => prompts.Count == 2, milliseconds: 5000));
+        Assert.Equal(2, fakeFactory.Created.Count);
+
+        await tabs.ReleaseAllAsync();
     }
 
     [AvaloniaFact]

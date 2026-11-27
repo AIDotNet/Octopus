@@ -435,13 +435,43 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         Files.OpenRequested += (_, path) => OpenBotFile(path);
         Search.OpenRequested += (_, path) => OpenBotFile(path);
 
-        _bots.Changed += (_, _) => UiContext.Run(Refresh);
+        _bots.Changed += OnBotsChanged;
         _activity?.Changed += (_, _) => UiContext.Run(RefreshStatusAndChats);
         ArcLanguage.Changed += OnLanguageChanged;
 
         BuildStaleDayOptions();
         Refresh();
     }
+
+    private void OnBotsChanged(object? sender, BotChangedEventArgs e) => UiContext.Run(() =>
+    {
+        var current = _bots.CurrentBot;
+        var sameBot = HasBot && current is not null && string.Equals(BotId, current.Id, StringComparison.Ordinal);
+        if (sameBot && e.Bot is not null && !string.Equals(e.Bot.Id, current!.Id, StringComparison.Ordinal)
+            && e.Kind is BotChangeKind.Chats or BotChangeKind.ActiveChat or BotChangeKind.Files or BotChangeKind.Schedules)
+        {
+            return;
+        }
+        if (sameBot)
+        {
+            switch (e.Kind)
+            {
+                case BotChangeKind.Files:
+                    // Opening or closing a Bot home file tab does not change right-panel overview or chat lists.
+                    return;
+                case BotChangeKind.Chats:
+                case BotChangeKind.ActiveChat:
+                    // Avoid synchronous disk reads (SOUL.md, MEMORY.md, directory counts) on every tab switch/close.
+                    RefreshStatusAndChats();
+                    return;
+                case BotChangeKind.Schedules:
+                    RefreshScheduledTasks();
+                    RefreshStatusAndChats();
+                    return;
+            }
+        }
+        Refresh();
+    });
 
     private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.Run(() =>
     {

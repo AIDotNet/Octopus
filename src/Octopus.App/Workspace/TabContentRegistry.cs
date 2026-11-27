@@ -119,7 +119,8 @@ public sealed class TabContentRegistry(
             services.GetService<Octopus.Platform.IFileOpener>(),
             services.GetService<Octopus.App.Bots.IBotService>(),
             services.GetService<Octopus.App.Collab.ICollabCoordinator>(),
-            services.GetService<Octopus.App.Bots.BotScheduleMcpServer>());
+            services.GetService<Octopus.App.Bots.BotScheduleMcpServer>(),
+            services.GetService<IWorkspaceFileIndex>());
         return new AgentGuiTabView { DataContext = vm };
     }
 

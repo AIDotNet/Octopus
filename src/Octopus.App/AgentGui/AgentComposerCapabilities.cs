@@ -29,7 +29,7 @@ public sealed partial class SlashCommandSuggestion(string name, string descripti
 public sealed partial class FileMentionSuggestion : ObservableObject
 {
     public FileMentionSuggestion(string relativePath, string fullPath)
-        : this("file", fullPath, relativePath, null, null, null)
+        : this("file", fullPath, relativePath, null, ExtractDirectory(relativePath), null)
     {
     }
 
@@ -64,7 +64,11 @@ public sealed partial class FileMentionSuggestion : ObservableObject
     public bool IsFile => Kind == "file";
     public bool HasAgentIcon => !string.IsNullOrWhiteSpace(AgentId);
     public bool HasSubtitle => !string.IsNullOrWhiteSpace(Subtitle);
-    public string DisplayName => IsSession ? $"@{RelativePath}" : IsAgent ? $"@{RelativePath}" : RelativePath;
+    public string DisplayName => IsSession
+        ? $"@{RelativePath}"
+        : IsAgent
+            ? $"@{RelativePath}"
+            : ExtractFileName(RelativePath);
     public string KindBadge => Kind switch
     {
         "session" => "会话",
@@ -74,6 +78,18 @@ public sealed partial class FileMentionSuggestion : ObservableObject
     public bool HasKindBadge => KindBadge.Length > 0;
 
     [ObservableProperty] public partial bool IsSelected { get; set; }
+
+    private static string ExtractFileName(string relativePath)
+    {
+        var slash = relativePath.LastIndexOf('/');
+        return slash >= 0 && slash + 1 < relativePath.Length ? relativePath[(slash + 1)..] : relativePath;
+    }
+
+    private static string? ExtractDirectory(string relativePath)
+    {
+        var slash = relativePath.LastIndexOf('/');
+        return slash > 0 ? relativePath[..slash] : null;
+    }
 }
 
 /// <summary>One selectable item displayed inside a composer popover picker (Mode, Permission, Model, or Effort).</summary>

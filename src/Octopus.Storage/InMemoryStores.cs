@@ -70,6 +70,10 @@ public sealed class InMemoryBotStore(BotsDocument? initial = null) : IBotStore
         Current = JsonBotStore.Normalize(Current);
         Changed?.Invoke(this, EventArgs.Empty);
     }
+
+    public void Flush()
+    {
+    }
 }
 
 /// <summary>A bot group store that keeps group metadata and room transcripts in memory (headless tests).</summary>

@@ -18,7 +18,7 @@ public sealed class BotStoreTests : IDisposable
     [Fact]
     public void RoundTripsBotsChatsConnectorsAndWorkItems()
     {
-        var store = new JsonBotStore(Paths());
+        using var store = new JsonBotStore(Paths());
         store.Update(d =>
         {
             d.IsBotMode = true;
@@ -49,8 +49,9 @@ public sealed class BotStoreTests : IDisposable
             d.Bots.Add(bot);
             d.ActiveBotId = bot.Id;
         });
+        store.Flush();
 
-        var reloaded = new JsonBotStore(Paths());
+        using var reloaded = new JsonBotStore(Paths());
         reloaded.Load();
 
         Assert.True(reloaded.Current.IsBotMode);
@@ -80,5 +81,21 @@ public sealed class BotStoreTests : IDisposable
         });
 
         Assert.Equal(["bot", "bot-2", "pr-reviewer", "pr-reviewer-2"], doc.Bots.Select(b => b.Slug).ToArray());
+    }
+
+    [Fact]
+    public void DebouncesUpdatesAndPersistsOnDispose()
+    {
+        using (var store = new JsonBotStore(Paths()))
+        {
+            store.Update(d => d.Bots.Add(new BotDefinition { Id = "b1", Name = "First", AgentId = "claude" }));
+            store.Update(d => d.Bots[0].DockLayout = "{\"active\":\"c1\"}");
+            Assert.Equal("{\"active\":\"c1\"}", store.Current.Bots[0].DockLayout);
+        }
+
+        using var reloaded = new JsonBotStore(Paths());
+        reloaded.Load();
+        Assert.Single(reloaded.Current.Bots);
+        Assert.Equal("{\"active\":\"c1\"}", reloaded.Current.Bots[0].DockLayout);
     }
 }

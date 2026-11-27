@@ -1657,7 +1657,8 @@
                                                         <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
                                                                    FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                                         <TextBlock Grid.Column="2" Classes="hint" IsVisible="{Binding HasSubtitle}"
-                                                                   Text="{Binding Subtitle}" FontSize="10.5" VerticalAlignment="Center" />
+                                                                   Text="{Binding Subtitle}" FontSize="10.5" MaxWidth="280"
+                                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                                         <Border Grid.Column="3" IsVisible="{Binding HasKindBadge}"
                                                                 Padding="5,0" CornerRadius="4"
                                                                 Background="{arc:ArcDesignTokenResource AccentSubtle}" VerticalAlignment="Center">

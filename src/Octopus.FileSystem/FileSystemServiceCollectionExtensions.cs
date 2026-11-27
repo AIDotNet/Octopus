@@ -9,6 +9,7 @@ public static class FileSystemServiceCollectionExtensions
     {
         services.AddSingleton<IFileTreeService, FileTreeService>();
         services.AddSingleton<IFileSearchService, FileSearchService>();
+        services.AddSingleton<IWorkspaceFileIndex, WorkspaceFileIndex>();
         services.AddSingleton<IFileAccessService>(_ => new FileAccessService());
         return services;
     }

@@ -70,8 +70,11 @@ public interface IBotStore
 
     void Load();
 
-    /// <summary>Changes <see cref="Current"/>, normalizes it, and writes the file.</summary>
+    /// <summary>Changes <see cref="Current"/>, normalizes it, and schedules writing the file.</summary>
     void Update(Action<BotsDocument> mutate);
+
+    /// <summary>Writes a change that is still waiting to be written, before returning (the end of the app).</summary>
+    void Flush();
 }
 
 /// <summary>
