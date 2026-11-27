@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Octopus.Core.Bots;
 using Octopus.Platform;
@@ -160,12 +161,10 @@ public sealed class JsonBotStore(IAppPaths paths) : IBotStore, IDisposable
         var seenBots = new HashSet<string>(StringComparer.Ordinal);
         document.Bots.RemoveAll(b => b is null || string.IsNullOrWhiteSpace(b.Id) || !seenBots.Add(b.Id.Trim()));
 
-        var usedSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var bot in document.Bots)
         {
             bot.Id = bot.Id.Trim();
             bot.Name = string.IsNullOrWhiteSpace(bot.Name) ? "Bot" : bot.Name.Trim();
-            bot.Slug = MakeUniqueSlug(bot.Slug, bot.Name, usedSlugs);
             bot.AgentId = string.IsNullOrWhiteSpace(bot.AgentId) ? "claude" : bot.AgentId.Trim();
             bot.Color = string.IsNullOrWhiteSpace(bot.Color) ? BotCatalog.AvatarPalette[0] : bot.Color.Trim();
             bot.Chats ??= [];
@@ -199,6 +198,23 @@ public sealed class JsonBotStore(IAppPaths paths) : IBotStore, IDisposable
             {
                 item.Options ??= [];
             }
+        }
+
+        // Assign/reserve slugs in priority order without reordering document.Bots:
+        // explicit non-empty slugs first, then older bots first, then original list index.
+        var usedSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var slugOrder = document.Bots
+            .Select((bot, index) => (
+                Bot: bot,
+                Index: index,
+                HasExplicitSlug: !string.IsNullOrWhiteSpace(bot.Slug),
+                CreatedAt: bot.CreatedAt == default ? DateTimeOffset.MaxValue : bot.CreatedAt))
+            .OrderByDescending(x => x.HasExplicitSlug)
+            .ThenBy(x => x.CreatedAt)
+            .ThenBy(x => x.Index);
+        foreach (var entry in slugOrder)
+        {
+            entry.Bot.Slug = MakeUniqueSlug(entry.Bot.Slug, entry.Bot.Name, usedSlugs);
         }
 
         if (document.ActiveBotId is not null && document.Bots.All(b => b.Id != document.ActiveBotId))
@@ -235,15 +251,59 @@ public sealed class JsonBotStore(IAppPaths paths) : IBotStore, IDisposable
         return chars.Count > 0 ? new string(chars.ToArray()) : "bot";
     }
 
+    /// <summary>Allocates a unique slug against <paramref name="existingSlugs"/> (case-insensitive) without modifying any existing slug.</summary>
+    public static string AllocateUniqueSlug(string? raw, string fallbackName, IEnumerable<string> existingSlugs)
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (existingSlugs is not null)
+        {
+            foreach (var slug in existingSlugs)
+            {
+                if (!string.IsNullOrWhiteSpace(slug))
+                {
+                    used.Add(slug.Trim());
+                }
+            }
+        }
+        return MakeUniqueSlug(raw, fallbackName, used);
+    }
+
     private static string MakeUniqueSlug(string? raw, string fallbackName, HashSet<string> used)
     {
         var baseSlug = SanitizeSlug(raw, fallbackName);
-        var candidate = baseSlug;
-        var suffix = 2;
-        while (!used.Add(candidate))
+        if (used.Add(baseSlug))
         {
-            candidate = $"{baseSlug}-{suffix++}";
+            return baseSlug;
         }
-        return candidate;
+
+        var stem = StripDedupSuffix(baseSlug);
+        var suffix = 2;
+        while (true)
+        {
+            var candidate = $"{stem}-{suffix++}";
+            if (used.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    private static string StripDedupSuffix(string slug)
+    {
+        var lastDash = slug.LastIndexOf('-');
+        if (lastDash <= 0 || lastDash >= slug.Length - 1)
+        {
+            return slug;
+        }
+
+        var tail = slug.AsSpan(lastDash + 1);
+        if (tail[0] == '0')
+        {
+            return slug;
+        }
+
+        return int.TryParse(tail, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number >= 2
+            ? slug[..lastDash]
+            : slug;
     }
 }

@@ -1818,4 +1818,6 @@ public enum AppLangResourceKind
     BotGroupRightItemsEmptyTitle,
     BotGroupRightItemsEmptyDescription,
     BotGroupHopsOption,
+    BotSettingsDefaultModel,
+    BotSettingsModelFollowAgent,
 }

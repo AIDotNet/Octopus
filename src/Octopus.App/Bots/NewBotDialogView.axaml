@@ -261,6 +261,13 @@
                         SelectedValue="{Binding SelectedAgentId, Mode=TwoWay}" />
         </Grid>
 
+        <!-- Row 3b: Optional Default Model selector (shown when the selected agent supports models) -->
+        <arc:Select x:Name="ModelSelect" Size="Small" AutoScrollToSelectedItem="False"
+                    IsVisible="{Binding HasModelOptions}"
+                    Label="{l:AppLangResource BotSettingsDefaultModel}"
+                    ItemsSource="{Binding ModelOptions}"
+                    SelectedValue="{Binding SelectedModelId, Mode=TwoWay}" />
+
         <!-- Row 4: Compact starter templates -->
         <StackPanel Spacing="6">
             <TextBlock Classes="caption" Text="{l:AppLangResource BotDialogTemplateLabel}" />

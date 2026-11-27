@@ -41,6 +41,7 @@ public static class BotShareCodec
             Version = 1,
             Name = bot.Name,
             AgentId = bot.AgentId,
+            Model = bot.Model,
             Color = bot.Color,
             Icon = bot.Icon,
             TemplateId = bot.TemplateId,

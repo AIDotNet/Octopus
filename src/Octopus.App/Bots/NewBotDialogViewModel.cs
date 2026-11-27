@@ -4,8 +4,11 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Agents;
+using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
+using Octopus.App.Settings;
+using Octopus.Core.Agents;
 using Octopus.Core.Bots;
 using Octopus.Remote.Client;
 using Octopus.Storage;
@@ -42,8 +45,8 @@ public sealed partial class BotTemplateOptionViewModel(
     private void Pick() => select(Template);
 }
 
-/// <summary>ViewModel for the "New Bot" creation dialog: identity, SOUL.md summary, host computer, agent, and starter template.</summary>
-public sealed partial class NewBotDialogViewModel : ObservableObject
+/// <summary>ViewModel for the "New Bot" creation dialog: identity, SOUL.md summary, host computer, agent, default model, and starter template.</summary>
+public sealed partial class NewBotDialogViewModel : ObservableObject, IDisposable
 {
     private readonly IAgentCatalog _catalog;
     private readonly IAgentScanner _scanner;
@@ -51,9 +54,14 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
     private readonly RemoteHostConnections? _remoteHosts;
     private readonly IPickerService? _pickers;
     private readonly IProjectIconStore? _icons;
+    private readonly IModelDiscovery? _modelDiscovery;
+    private readonly Dictionary<string, IReadOnlyList<AgentOption>> _discoveredModels = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _draftId = Guid.NewGuid().ToString("N");
     private readonly List<string> _createdImages = [];
     private readonly bool _initialized;
+    private bool _rebuildingAgents;
+    private bool _disposed;
+    private CancellationTokenSource? _modelDiscoveryCts;
     private BotTemplateDefinition _selectedTemplate;
 
     public NewBotDialogViewModel(
@@ -65,7 +73,8 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
         string? initialHostKey = null,
         RemoteHostConnections? remoteHosts = null,
         IPickerService? pickers = null,
-        IProjectIconStore? icons = null)
+        IProjectIconStore? icons = null,
+        IModelDiscovery? modelDiscovery = null)
     {
         _catalog = catalog;
         _scanner = scanner;
@@ -73,6 +82,7 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
         _remoteHosts = remoteHosts;
         _pickers = pickers;
         _icons = icons;
+        _modelDiscovery = modelDiscovery;
 
         _selectedTemplate = BotCatalog.FindTemplate(initialTemplateId);
         SelectedColor = _selectedTemplate.Color;
@@ -124,6 +134,12 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
     public bool HasAgents => AgentOptions.Count > 0;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModelOptions))]
+    public partial IReadOnlyList<SelectOption> ModelOptions { get; private set; } = [];
+
+    public bool HasModelOptions => ModelOptions.Count > 0;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvatarInitial))]
     public partial string Name { get; set; } = "";
 
@@ -142,6 +158,7 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
 
     [ObservableProperty] public partial string SelectedHostKey { get; set; } = "local";
     [ObservableProperty] public partial string SelectedAgentId { get; set; } = "";
+    [ObservableProperty] public partial string SelectedModelId { get; set; } = "";
     [ObservableProperty] public partial string Soul { get; set; } = "";
 
     partial void OnSelectedHostKeyChanged(string value)
@@ -152,8 +169,17 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
         }
     }
 
+    partial void OnSelectedAgentIdChanged(string value)
+    {
+        if (_initialized && !_rebuildingAgents)
+        {
+            RebuildModelOptions(resetSelection: true, triggerDiscovery: true);
+        }
+    }
+
     private void RebuildAgentOptions()
     {
+        var prevAgentId = SelectedAgentId;
         var options = new List<SelectOption>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string? preferredDefault = null;
@@ -202,8 +228,236 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
             }
         }
 
-        AgentOptions = options;
-        SelectedAgentId = PickSelectedAgentId(options, SelectedAgentId, preferredDefault);
+        _rebuildingAgents = true;
+        try
+        {
+            AgentOptions = options;
+            SelectedAgentId = PickSelectedAgentId(options, SelectedAgentId, preferredDefault);
+        }
+        finally
+        {
+            _rebuildingAgents = false;
+        }
+
+        var agentChanged = !string.Equals(prevAgentId, SelectedAgentId, StringComparison.OrdinalIgnoreCase);
+        RebuildModelOptions(resetSelection: agentChanged, triggerDiscovery: true);
+    }
+
+    private void RebuildModelOptions(bool resetSelection, bool triggerDiscovery)
+    {
+        var agentId = SelectedAgentId;
+        var definition = string.IsNullOrWhiteSpace(agentId) ? null : _catalog.Find(agentId);
+        var profile = definition is null ? null : _settings.Current.Agents.ProfileOf(definition.Id);
+        var discovered = definition is not null && _discoveredModels.TryGetValue(definition.Id, out var cached) ? cached : null;
+        var currentModel = resetSelection ? null : SelectedModelId;
+
+        var options = BuildModelSelectOptions(definition, profile, discovered, currentModel);
+        ModelOptions = options;
+        if (options.Count == 0 || resetSelection)
+        {
+            SelectedModelId = "";
+        }
+        else if (!string.IsNullOrWhiteSpace(currentModel)
+            && options.FirstOrDefault(o => string.Equals(o.Value?.ToString(), currentModel, StringComparison.OrdinalIgnoreCase)) is { Value: not null } existing)
+        {
+            SelectedModelId = existing.Value.ToString()!;
+        }
+        else
+        {
+            SelectedModelId = "";
+        }
+
+        if (triggerDiscovery)
+        {
+            StartModelDiscovery(definition, profile);
+        }
+    }
+
+    private void StartModelDiscovery(AgentDefinition? definition, AgentProfile? profile)
+    {
+        _modelDiscoveryCts?.Cancel();
+        _modelDiscoveryCts?.Dispose();
+        _modelDiscoveryCts = null;
+
+        if (_disposed || _modelDiscovery is null
+            || !CanDiscoverModels(definition, _scanner, SelectedHostKey, out var executable))
+        {
+            return;
+        }
+
+        var def = definition!;
+        var hostKey = SelectedHostKey;
+        var cts = new CancellationTokenSource();
+        _modelDiscoveryCts = cts;
+        var ct = cts.Token;
+        var envOverrides = BuildDiscoveryEnvironmentOverrides(def, profile);
+
+        _ = DiscoverModelsCoreAsync(def, executable, hostKey, envOverrides, ct);
+    }
+
+    private async Task DiscoverModelsCoreAsync(
+        AgentDefinition definition,
+        string executable,
+        string hostKey,
+        IReadOnlyDictionary<string, string> envOverrides,
+        CancellationToken ct)
+    {
+        try
+        {
+            var found = await Task.Run(
+                () => _modelDiscovery!.DiscoverAsync(definition, executable, false, ct, envOverrides),
+                ct);
+            if (found.Count == 0 || ct.IsCancellationRequested || _disposed)
+            {
+                return;
+            }
+            UiContext.Run(() =>
+            {
+                if (ct.IsCancellationRequested || _disposed
+                    || !string.Equals(SelectedHostKey, hostKey, StringComparison.Ordinal)
+                    || !string.Equals(SelectedAgentId, definition.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+                _discoveredModels[definition.Id] = found;
+                RebuildModelOptions(resetSelection: false, triggerDiscovery: false);
+            });
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            // Model discovery is best-effort; built-in catalog options remain available.
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _modelDiscoveryCts?.Cancel();
+        _modelDiscoveryCts?.Dispose();
+        _modelDiscoveryCts = null;
+    }
+
+    internal static IReadOnlyList<SelectOption> BuildModelSelectOptions(
+        AgentDefinition? definition,
+        AgentProfile? profile,
+        IReadOnlyList<AgentOption>? discovered,
+        string? currentModel)
+    {
+        if (definition?.Capabilities.Model is not { } modelCap)
+        {
+            return [];
+        }
+
+        var language = AgentLanguage.Current;
+        var options = new List<SelectOption>
+        {
+            new("", AppLangResources.Get(AppLangResourceKind.BotSettingsModelFollowAgent)),
+        };
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (discovered is not null)
+        {
+            foreach (var opt in discovered)
+            {
+                if (!string.IsNullOrWhiteSpace(opt.Id) && seen.Add(opt.Id))
+                {
+                    options.Add(new SelectOption(opt.Id, opt.LabelFor(language)));
+                }
+            }
+        }
+
+        foreach (var opt in modelCap.Options)
+        {
+            if (!string.IsNullOrWhiteSpace(opt.Id) && seen.Add(opt.Id))
+            {
+                options.Add(new SelectOption(opt.Id, opt.LabelFor(language)));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile?.Model))
+        {
+            var profileModel = profile.Model.Trim();
+            if (seen.Add(profileModel))
+            {
+                options.Add(new SelectOption(profileModel, profileModel));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentModel))
+        {
+            var savedModel = currentModel.Trim();
+            if (seen.Add(savedModel))
+            {
+                options.Add(new SelectOption(savedModel, savedModel));
+            }
+        }
+
+        return options;
+    }
+
+    internal static bool CanDiscoverModels(
+        AgentDefinition? definition,
+        IAgentScanner? scanner,
+        string? hostDeviceKey,
+        out string executable)
+    {
+        executable = "";
+        if (!string.IsNullOrWhiteSpace(hostDeviceKey)
+            && !string.Equals(hostDeviceKey, "local", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        var discover = definition?.Capabilities.Model?.Discover;
+        if (definition is null || discover is null)
+        {
+            return false;
+        }
+        executable = scanner?.Find(definition.Id)?.Path ?? "";
+        if (string.Equals(discover.Kind, "command", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(executable))
+        {
+            return false;
+        }
+        return true;
+    }
+
+    internal static Dictionary<string, string> BuildDiscoveryEnvironmentOverrides(AgentDefinition definition, AgentProfile? profile)
+    {
+        var env = new Dictionary<string, string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        if (profile is null)
+        {
+            return env;
+        }
+        foreach (var feature in definition.Capabilities.Features)
+        {
+            if (string.IsNullOrEmpty(feature.Env)) continue;
+            if (!profile.Features.TryGetValue(feature.Id, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+            if (feature.Type == "bool")
+            {
+                if (string.Equals(raw.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    env[feature.Env] = string.IsNullOrEmpty(feature.EnvValue) ? "true" : feature.EnvValue;
+                }
+            }
+            else if (feature.Type == "list")
+            {
+                var items = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (items.Length > 0) env[feature.Env] = string.Join(',', items);
+            }
+            else
+            {
+                env[feature.Env] = raw;
+            }
+        }
+        foreach (var (k, v) in profile.Env)
+        {
+            env[k] = v;
+        }
+        return env;
     }
 
     private static string PickSelectedAgentId(IReadOnlyList<SelectOption> options, string? currentId, string? preferredDefault)
@@ -245,7 +499,8 @@ public sealed partial class NewBotDialogViewModel : ObservableObject
         _selectedTemplate.Id,
         string.IsNullOrWhiteSpace(Soul) ? null : Soul.Trim(),
         SelectedHostKey,
-        HasAvatarImage ? SelectedImage : null);
+        HasAvatarImage ? SelectedImage : null,
+        HasModelOptions && !string.IsNullOrWhiteSpace(SelectedModelId) ? SelectedModelId.Trim() : null);
 
     [RelayCommand]
     private async Task PickImageAsync()

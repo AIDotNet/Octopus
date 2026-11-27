@@ -93,6 +93,7 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
                 Name = bot.Name,
                 Slug = bot.Slug,
                 AgentId = bot.AgentId,
+                Model = bot.Model,
                 HostDeviceKey = bot.HostDeviceKey,
                 Color = bot.Color,
                 IsPaused = bot.IsPaused,
@@ -204,6 +205,65 @@ public sealed class BotHomeManager(BotRootOptions? options = null)
     public string GetSkillsDirectory(BotDefinition bot) => Path.Combine(GetHomePath(bot), "skills");
 
     public string GetMemoryDirectory(BotDefinition bot) => Path.Combine(GetHomePath(bot), "memory");
+
+    /// <summary>Returns existing workspace folder names under <see cref="BotsRootDirectory"/> that do not belong to <paramref name="excludeBotId"/>.</summary>
+    public IReadOnlyCollection<string> GetOccupiedSlugsOnDisk(string? excludeBotId = null)
+    {
+        var root = BotsRootDirectory;
+        if (!Directory.Exists(root))
+        {
+            return Array.Empty<string>();
+        }
+
+        var occupied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        List<string> directories;
+        try
+        {
+            directories = [.. Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly)];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return occupied;
+        }
+
+        foreach (var dir in directories)
+        {
+            var folderName = Path.GetFileName(dir);
+            if (string.IsNullOrWhiteSpace(folderName))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(excludeBotId) && IsOwnedByBot(dir, excludeBotId))
+            {
+                continue;
+            }
+
+            occupied.Add(folderName);
+        }
+
+        return occupied;
+    }
+
+    private static bool IsOwnedByBot(string botDirectory, string botId)
+    {
+        var manifestPath = Path.Combine(botDirectory, "bot.json");
+        if (!File.Exists(manifestPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(manifestPath, Encoding.UTF8);
+            var manifest = JsonSerializer.Deserialize(json, OctopusJsonContext.FileTypeInfo<BotHomeManifest>());
+            return manifest is not null && string.Equals(manifest.Id, botId, StringComparison.Ordinal);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
+    }
 
     public int CountMemoryFiles(BotDefinition bot)
     {

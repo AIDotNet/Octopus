@@ -26,7 +26,8 @@ public sealed record NewBotRequest(
     string? TemplateId,
     string? Soul,
     string HostDeviceKey = "local",
-    string? Image = null);
+    string? Image = null,
+    string? Model = null);
 
 /// <summary>
 /// Manages Bots, Bot mode switching, home directories, chats, connectors, and backing projects for the workspace dock.

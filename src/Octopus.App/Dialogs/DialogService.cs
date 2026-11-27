@@ -585,6 +585,7 @@ public sealed class DialogService(
             var catalog = Composition.AppHost.Get<Octopus.Agents.IAgentCatalog>();
             var scanner = Composition.AppHost.Get<Octopus.Agents.IAgentScanner>();
             var settings = Composition.AppHost.Get<Octopus.Storage.ISettingsStore>();
+            var discovery = Composition.AppHost.Get<Octopus.Agents.IModelDiscovery>();
             var hostOptions = new List<SelectOption>
             {
                 new("local", AppLangResources.Get(AppLangResourceKind.NewProjectLocalMachine)),
@@ -600,7 +601,7 @@ public sealed class DialogService(
                 hostOptions.Add(new SelectOption("ssh:" + ssh.Alias, ssh.Alias));
             }
             var initialHost = projects?.ActiveDeviceKey ?? "local";
-            var model = new Octopus.App.Bots.NewBotDialogViewModel(catalog, scanner, settings, initialTemplateId, hostOptions, initialHost, remoteRuntime, pickers, icons);
+            using var model = new Octopus.App.Bots.NewBotDialogViewModel(catalog, scanner, settings, initialTemplateId, hostOptions, initialHost, remoteRuntime, pickers, icons, discovery);
             var view = new Octopus.App.Bots.NewBotDialogView(model);
             var dialog = new Dialog
             {

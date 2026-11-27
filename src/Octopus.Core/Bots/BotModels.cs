@@ -11,6 +11,8 @@ public sealed class BotDefinition
     public string Slug { get; set; } = "bot";
     /// <summary>Default agent definition id used for new chats (e.g. <c>claude</c>, <c>codex</c>).</summary>
     public string AgentId { get; set; } = "claude";
+    /// <summary>Optional default model id used for new chats of this bot; null follows the agent's global default model.</summary>
+    public string? Model { get; set; }
     /// <summary>Device/host key where this bot runs (e.g. <c>local</c>, <c>remote:&lt;id&gt;</c>, <c>ssh:&lt;alias&gt;</c>). Independent of projects.</summary>
     public string HostDeviceKey { get; set; } = "local";
     /// <summary>Avatar background hex color.</summary>
@@ -88,6 +90,8 @@ public sealed class BotChat
     public string? CustomTitle { get; set; }
     /// <summary>Agent definition id for this chat; null falls back to the parent bot's default agent.</summary>
     public string? AgentId { get; set; }
+    /// <summary>Optional model id for this chat; null falls back to the parent bot's default model.</summary>
+    public string? Model { get; set; }
     /// <summary>Short preview or status line shown under the chat title.</summary>
     public string? Subtitle { get; set; }
     public string? SessionId { get; set; }
@@ -231,6 +235,7 @@ public sealed class BotHomeManifest
     public string Name { get; set; } = "";
     public string Slug { get; set; } = "";
     public string AgentId { get; set; } = "";
+    public string? Model { get; set; }
     public string HostDeviceKey { get; set; } = "local";
     public string Color { get; set; } = "";
     public bool IsPaused { get; set; }
@@ -257,6 +262,7 @@ public sealed class BotSharePayload
     public int Version { get; set; } = 1;
     public string Name { get; set; } = "";
     public string AgentId { get; set; } = "claude";
+    public string? Model { get; set; }
     public string Color { get; set; } = "#5b5bd6";
     public string? Icon { get; set; }
     public string? TemplateId { get; set; }

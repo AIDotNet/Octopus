@@ -1785,5 +1785,7 @@
     <unit id="BotGroupRightItemsEmptyTitle"><segment><source>No work items</source><target state="translated">暂无待办事项</target></segment></unit>
     <unit id="BotGroupRightItemsEmptyDescription"><segment><source>Work items created by member bots will appear here.</source><target state="translated">群内成员 Bot 创建的工作事项会汇总显示在这里。</target></segment></unit>
     <unit id="BotGroupHopsOption"><segment><source>{0} hops</source><target state="translated">{0} 跳</target></segment></unit>
+    <unit id="BotSettingsDefaultModel"><segment><source>Default model</source><target state="translated">默认模型</target></segment></unit>
+    <unit id="BotSettingsModelFollowAgent"><segment><source>Agent default</source><target state="translated">跟随智能体默认</target></segment></unit>
   </file>
 </xliff>

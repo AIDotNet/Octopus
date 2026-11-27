@@ -324,6 +324,14 @@
                                                 ItemsSource="{Binding AgentOptions}"
                                                 SelectedValue="{Binding SelectedAgentId, Mode=TwoWay}" />
                                 </Grid>
+                                <Border Classes="bot-settings-sep" IsVisible="{Binding HasModelOptions}" />
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,6" IsVisible="{Binding HasModelOptions}">
+                                    <lucide:LucideIcon Kind="Sparkles" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Classes="body" Text="{l:AppLangResource BotSettingsDefaultModel}" VerticalAlignment="Center" />
+                                    <arc:Select Grid.Column="2" Size="Small" MinWidth="118" MaxWidth="156" AutoScrollToSelectedItem="False"
+                                                ItemsSource="{Binding ModelOptions}"
+                                                SelectedValue="{Binding SelectedModelId, Mode=TwoWay}" />
+                                </Grid>
                                 <Border Classes="bot-settings-sep" />
                                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,6">
                                     <lucide:LucideIcon Kind="Shield" Size="15" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />

@@ -10,6 +10,7 @@ using Octopus.App.Explorer.Files;
 using Octopus.App.Explorer.Search;
 using Octopus.App.Localization;
 using Octopus.App.Services;
+using Octopus.Core.Agents;
 using Octopus.Core.Bots;
 using Octopus.Platform;
 using Octopus.Storage;
@@ -403,6 +404,11 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
     private readonly IItemActivityService? _activity;
     private readonly IAgentScanner? _scanner;
     private readonly ISettingsStore? _settings;
+    private readonly IModelDiscovery? _modelDiscovery;
+    private readonly Dictionary<string, IReadOnlyList<AgentOption>> _discoveredModels = new(StringComparer.OrdinalIgnoreCase);
+    private CancellationTokenSource? _modelDiscoveryCts;
+    private string? _modelDiscoveryKey;
+    private bool _disposed;
     private string? _loadedFilesRoot;
     private bool _hydrating;
     private readonly BotScheduler? _scheduler;
@@ -418,7 +424,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         IItemActivityService? activity = null,
         IAgentScanner? scanner = null,
         ISettingsStore? settings = null,
-        BotScheduler? scheduler = null)
+        BotScheduler? scheduler = null,
+        IModelDiscovery? modelDiscovery = null)
     {
         _bots = bots;
         _scheduler = scheduler;
@@ -431,6 +438,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         _activity = activity;
         _scanner = scanner;
         _settings = settings;
+        _modelDiscovery = modelDiscovery;
 
         Files.OpenRequested += (_, path) => OpenBotFile(path);
         Search.OpenRequested += (_, path) => OpenBotFile(path);
@@ -479,7 +487,13 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         Refresh();
     });
 
-    public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
+    public void Dispose()
+    {
+        _disposed = true;
+        _bots.Changed -= OnBotsChanged;
+        ArcLanguage.Changed -= OnLanguageChanged;
+        CancelModelDiscovery();
+    }
 
     public FileTreeViewModel Files { get; }
     public FileSearchViewModel Search { get; }
@@ -491,6 +505,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
     public ObservableCollection<BotChatRowViewModel> FilteredChats { get; } = [];
     public ObservableCollection<SelectOption> StaleDayOptions { get; } = [];
     public ObservableCollection<SelectOption> AgentOptions { get; } = [];
+    public ObservableCollection<SelectOption> ModelOptions { get; } = [];
     public ObservableCollection<SelectOption> PermissionOptions { get; } = [];
     public ObservableCollection<SelectOption> WhoCanAskOptions { get; } = [];
 
@@ -520,6 +535,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
     [ObservableProperty] public partial IBrush BotAgentAccent { get; private set; } = SolidColorBrush.Parse("#d97757");
     [ObservableProperty] public partial string BotAgentName { get; private set; } = "";
     [ObservableProperty] public partial string SelectedAgentId { get; set; } = "";
+    [ObservableProperty] public partial string SelectedModelId { get; set; } = "";
+    [ObservableProperty] public partial bool HasModelOptions { get; private set; }
     [ObservableProperty] public partial string BotHostDisplayName { get; private set; } = "";
     [ObservableProperty] public partial string PermissionModeLabel { get; private set; } = "";
     [ObservableProperty] public partial string SelectedPermissionMode { get; set; } = "same_as_chat";
@@ -650,7 +667,19 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
     {
         if (_hydrating || string.IsNullOrWhiteSpace(value) || _bots.CurrentBot is not { } bot) return;
         if (string.Equals(bot.AgentId, value, StringComparison.OrdinalIgnoreCase)) return;
-        _bots.UpdateBotSettings(bot.Id, b => b.AgentId = value);
+        _bots.UpdateBotSettings(bot.Id, b =>
+        {
+            b.AgentId = value;
+            b.Model = null;
+        });
+    }
+
+    partial void OnSelectedModelIdChanged(string value)
+    {
+        if (_hydrating || _bots.CurrentBot is not { } bot) return;
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (string.Equals(bot.Model, normalized, StringComparison.Ordinal)) return;
+        _bots.UpdateBotSettings(bot.Id, b => b.Model = normalized);
     }
 
     partial void OnSelectedPermissionModeChanged(string value)
@@ -726,17 +755,129 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         }
     }
 
+    private void BuildModelOptions(string? agentId, string? currentModel)
+    {
+        var definition = string.IsNullOrWhiteSpace(agentId) ? null : _catalog.Find(agentId);
+        var profile = definition is null ? null : _settings?.Current.Agents.ProfileOf(definition.Id);
+        var discovered = definition is not null && _discoveredModels.TryGetValue(definition.Id, out var cached) ? cached : null;
+        var next = NewBotDialogViewModel.BuildModelSelectOptions(definition, profile, discovered, currentModel);
+
+        HasModelOptions = next.Count > 0;
+        if (ModelOptions.Count == next.Count
+            && !ModelOptions.Where((opt, i) => !Equals(opt.Value, next[i].Value) || opt.Label != next[i].Label).Any())
+        {
+            return;
+        }
+
+        ModelOptions.Clear();
+        foreach (var opt in next)
+        {
+            ModelOptions.Add(opt);
+        }
+    }
+
+    private void TriggerModelDiscovery(BotDefinition bot, bool force = false)
+    {
+        if (_disposed || _modelDiscovery is null)
+        {
+            return;
+        }
+        var definition = _catalog.Find(bot.AgentId);
+        if (!NewBotDialogViewModel.CanDiscoverModels(definition, _scanner, bot.HostDeviceKey, out var executable))
+        {
+            CancelModelDiscovery();
+            return;
+        }
+
+        var key = $"{bot.Id}|{definition!.Id}|{bot.HostDeviceKey}";
+        if (!force && string.Equals(_modelDiscoveryKey, key, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        CancelModelDiscovery();
+        _modelDiscoveryKey = key;
+        var cts = new CancellationTokenSource();
+        _modelDiscoveryCts = cts;
+        var ct = cts.Token;
+        var profile = _settings?.Current.Agents.ProfileOf(definition.Id);
+        var envOverrides = NewBotDialogViewModel.BuildDiscoveryEnvironmentOverrides(definition, profile);
+
+        _ = DiscoverModelsCoreAsync(bot.Id, definition, executable, envOverrides, ct);
+    }
+
+    private async Task DiscoverModelsCoreAsync(
+        string botId,
+        AgentDefinition definition,
+        string executable,
+        IReadOnlyDictionary<string, string> envOverrides,
+        CancellationToken ct)
+    {
+        try
+        {
+            var found = await Task.Run(
+                () => _modelDiscovery!.DiscoverAsync(definition, executable, false, ct, envOverrides),
+                ct);
+            if (found.Count == 0 || ct.IsCancellationRequested || _disposed)
+            {
+                return;
+            }
+            UiContext.Run(() =>
+            {
+                if (ct.IsCancellationRequested || _disposed) return;
+                _discoveredModels[definition.Id] = found;
+                var current = _bots.CurrentBot;
+                if (current is null
+                    || !string.Equals(current.Id, botId, StringComparison.Ordinal)
+                    || !string.Equals(current.AgentId, definition.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+                var wasHydrating = _hydrating;
+                _hydrating = true;
+                try
+                {
+                    BuildModelOptions(current.AgentId, current.Model);
+                    SelectedModelId = HasModelOptions ? (current.Model ?? "") : "";
+                }
+                finally
+                {
+                    _hydrating = wasHydrating;
+                }
+            });
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            // Model discovery is best-effort; built-in catalog options remain available.
+        }
+    }
+
+    private void CancelModelDiscovery()
+    {
+        _modelDiscoveryKey = null;
+        _modelDiscoveryCts?.Cancel();
+        _modelDiscoveryCts?.Dispose();
+        _modelDiscoveryCts = null;
+    }
+
     public void Refresh()
     {
         var bot = _bots.CurrentBot;
         if (bot is null)
         {
+            CancelModelDiscovery();
             HasBot = false;
             IsSettingsOpen = false;
             BotId = "";
             BotName = "";
             BotSlug = "bot";
             BotHomePath = "";
+            HasModelOptions = false;
+            ModelOptions.Clear();
+            SelectedModelId = "";
             WorkItems.Clear();
             MemoryLines.Clear();
             Connectors.Clear();
@@ -776,6 +917,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
             BotAgentName = _catalog.Find(bot.AgentId)?.Name ?? bot.AgentId;
             BuildAgentOptions(bot.AgentId);
             SelectedAgentId = bot.AgentId;
+            BuildModelOptions(bot.AgentId, bot.Model);
+            SelectedModelId = HasModelOptions ? (bot.Model ?? "") : "";
             BotHostDisplayName = FormatHostName(bot.HostDeviceKey);
             PermissionModeLabel = FormatPermissionMode(bot.PermissionMode);
             SelectedPermissionMode = Array.IndexOf(PermissionModes, bot.PermissionMode) >= 0 ? bot.PermissionMode : "same_as_chat";
@@ -816,6 +959,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         {
             _hydrating = false;
         }
+
+        TriggerModelDiscovery(bot);
 
         var soul = _bots.Home.ReadSoulSummary(bot);
         SoulSummary = soul;
@@ -1004,11 +1149,14 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
             {
                 BuildAgentOptions(bot.AgentId);
                 SelectedAgentId = bot.AgentId;
+                BuildModelOptions(bot.AgentId, bot.Model);
+                SelectedModelId = HasModelOptions ? (bot.Model ?? "") : "";
             }
             finally
             {
                 _hydrating = false;
             }
+            TriggerModelDiscovery(bot, force: true);
         }
         Tab = BotRightTab.Home;
         IsSettingsOpen = true;
@@ -1024,8 +1172,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         {
             Refresh();
         }
-        Tab = BotRightTab.Home;
-        IsSettingsOpen = true;
+        OpenSettings();
     }
 
     [RelayCommand]
@@ -1068,7 +1215,12 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
             }
         }
         var next = list[(idx + 1) % list.Count];
-        _bots.UpdateBotSettings(bot.Id, b => b.AgentId = next.Id);
+        if (string.Equals(bot.AgentId, next.Id, StringComparison.OrdinalIgnoreCase)) return;
+        _bots.UpdateBotSettings(bot.Id, b =>
+        {
+            b.AgentId = next.Id;
+            b.Model = null;
+        });
     }
 
     private IReadOnlyList<Octopus.Core.Agents.AgentDefinition> AvailableAgentsForCycle()

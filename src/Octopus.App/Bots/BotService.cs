@@ -173,6 +173,7 @@ public sealed class BotService : IBotService
             Name = name,
             Slug = JsonBotStore.SanitizeSlug(null, name),
             AgentId = agentId,
+            Model = string.IsNullOrWhiteSpace(request.Model) ? null : request.Model.Trim(),
             HostDeviceKey = string.IsNullOrWhiteSpace(request.HostDeviceKey) ? "local" : request.HostDeviceKey.Trim(),
             Color = color,
             Image = string.IsNullOrWhiteSpace(request.Image) ? null : request.Image.Trim(),
@@ -188,6 +189,10 @@ public sealed class BotService : IBotService
 
         _store.Update(d =>
         {
+            bot.Slug = JsonBotStore.AllocateUniqueSlug(
+                null,
+                name,
+                d.Bots.Select(b => b.Slug).Concat(Home.GetOccupiedSlugsOnDisk(botId)));
             d.Bots.Insert(0, bot);
             d.ActiveBotId = bot.Id;
             d.ActiveChatId = homeChat.Id;
@@ -360,9 +365,11 @@ public sealed class BotService : IBotService
             if (d.Bots.FirstOrDefault(b => b.Id == botId) is { } target)
             {
                 mutate(target);
+                target.Model = string.IsNullOrWhiteSpace(target.Model) ? null : target.Model.Trim();
             }
         });
         var updated = FindBot(botId)!;
+        SyncBackingItemModels(updated);
         Home.SyncManagedFiles(updated);
         Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, updated));
     }
@@ -1035,6 +1042,7 @@ public sealed class BotService : IBotService
             Name = name,
             Slug = JsonBotStore.SanitizeSlug(null, name),
             AgentId = agentId,
+            Model = string.IsNullOrWhiteSpace(payload.Model) ? null : payload.Model.Trim(),
             HostDeviceKey = string.IsNullOrWhiteSpace(hostDeviceKey) ? "local" : hostDeviceKey.Trim(),
             Color = color,
             Icon = string.IsNullOrWhiteSpace(payload.Icon) ? null : payload.Icon.Trim(),
@@ -1057,6 +1065,10 @@ public sealed class BotService : IBotService
 
         _store.Update(d =>
         {
+            bot.Slug = JsonBotStore.AllocateUniqueSlug(
+                null,
+                name,
+                d.Bots.Select(b => b.Slug).Concat(Home.GetOccupiedSlugsOnDisk(botId)));
             d.Bots.Insert(0, bot);
             d.ActiveBotId = bot.Id;
             d.ActiveChatId = homeChat.Id;
@@ -1416,6 +1428,8 @@ public sealed class BotService : IBotService
     {
         var agentId = ResolveAgentId(chat.AgentId ?? bot.AgentId);
         var homePath = Home.GetHomePath(bot);
+        var effectiveModel = ResolveEffectiveModel(bot, chat, agentId);
+        var sessionId = string.IsNullOrWhiteSpace(chat.SessionId) ? null : chat.SessionId;
         return new ProjectItem
         {
             Id = chat.Id,
@@ -1426,11 +1440,76 @@ public sealed class BotService : IBotService
             WorkingDirectory = homePath,
             Surface = chat.Surface ?? ResolveSurface(agentId),
             AcpSessionId = chat.AcpSessionId,
-            Launch = string.IsNullOrWhiteSpace(chat.SessionId)
-                ? null
-                : new AgentLaunchOptions { SessionId = chat.SessionId },
+            Launch = effectiveModel is not null || sessionId is not null
+                ? new AgentLaunchOptions
+                {
+                    Model = effectiveModel,
+                    SessionId = sessionId,
+                }
+                : null,
             CreatedAt = chat.CreatedAt,
         };
+    }
+
+    private static string? ResolveEffectiveModel(BotDefinition bot, BotChat chat, string resolvedAgentId)
+    {
+        if (!string.IsNullOrWhiteSpace(chat.Model))
+        {
+            return chat.Model.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(bot.Model)
+            && (string.IsNullOrWhiteSpace(chat.AgentId)
+                || string.Equals(resolvedAgentId, bot.AgentId, StringComparison.OrdinalIgnoreCase)))
+        {
+            return bot.Model.Trim();
+        }
+        return null;
+    }
+
+    private void SyncBackingItemModels(BotDefinition bot)
+    {
+        if (_backingProjects.TryGetValue(bot.Id, out var backing))
+        {
+            foreach (var item in backing.Items)
+            {
+                if (item.Kind != ProjectItemKind.Agent) continue;
+                SyncItemModel(bot, item);
+            }
+        }
+        foreach (var chat in bot.Chats)
+        {
+            if (_groupMemberItems.TryGetValue(chat.Id, out var groupItem))
+            {
+                SyncItemModel(bot, groupItem, chat);
+            }
+        }
+    }
+
+    private static void SyncItemModel(BotDefinition bot, ProjectItem item, BotChat? knownChat = null)
+    {
+        var chat = knownChat ?? bot.Chats.FirstOrDefault(c => c.Id == item.Id);
+        if (chat is null || !string.IsNullOrWhiteSpace(chat.Model)) return;
+        var resolvedAgentId = item.AgentId ?? chat.AgentId ?? bot.AgentId;
+        var effectiveModel = ResolveEffectiveModel(bot, chat, resolvedAgentId);
+        if (effectiveModel is not null)
+        {
+            item.Launch ??= new AgentLaunchOptions();
+            item.Launch.Model = effectiveModel;
+        }
+        else if (item.Launch is not null)
+        {
+            item.Launch.Model = null;
+            if (item.Launch.SessionId is null
+                && item.Launch.Effort is null
+                && item.Launch.Fast is null
+                && item.Launch.Permission is null
+                && item.Launch.AccountId is null
+                && item.Launch.Surface is null
+                && item.Launch.Env is null)
+            {
+                item.Launch = null;
+            }
+        }
     }
 
     private string ResolveAgentId(string? requested)

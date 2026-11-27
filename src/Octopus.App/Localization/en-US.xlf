@@ -1784,5 +1784,7 @@
     <unit id="BotGroupRightItemsEmptyTitle"><segment><source>No work items</source></segment></unit>
     <unit id="BotGroupRightItemsEmptyDescription"><segment><source>Work items created by member bots will appear here.</source></segment></unit>
     <unit id="BotGroupHopsOption"><segment><source>{0} hops</source></segment></unit>
+    <unit id="BotSettingsDefaultModel"><segment><source>Default model</source></segment></unit>
+    <unit id="BotSettingsModelFollowAgent"><segment><source>Agent default</source></segment></unit>
   </file>
 </xliff>
