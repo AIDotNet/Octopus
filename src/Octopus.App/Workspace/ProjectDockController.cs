@@ -28,6 +28,8 @@ public sealed class ProjectDockController : IDisposable
     /// <summary>The items whose tab was closed while they keep running (<see cref="ProjectItem.TabClosed"/>): no pane.</summary>
     private readonly HashSet<string> _hidden = [];
     private bool _syncing;
+    private bool _disposed;
+    private int _activateVersion;
     private readonly Activity.IItemActivityService? _activity;
     /// <summary>
     /// Turns the loading ring of the tabs whose agent is working; runs only while there is one. It ticks at display rate
@@ -125,10 +127,23 @@ public sealed class ProjectDockController : IDisposable
     /// <summary>Selects the project's active tab and puts the keyboard focus into it.</summary>
     public void ActivateCurrent()
     {
-        if (_project.ActiveItemId is { } id && _panes.TryGetValue(id, out var pane))
+        var version = ++_activateVersion;
+        if (!_active || _disposed || _project.ActiveItemId is not { } id || !_panes.TryGetValue(id, out var pane))
         {
-            Dispatcher.UIThread.Post(() => Focus(pane), DispatcherPriority.Background);
+            return;
         }
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_active || _disposed || version != _activateVersion
+                || !ReferenceEquals(_projects.Current, _project)
+                || _project.ActiveItemId != id
+                || !_panes.TryGetValue(id, out var current)
+                || !ReferenceEquals(current, pane))
+            {
+                return;
+            }
+            FocusInLayout(pane, focusContent: true);
+        }, DispatcherPriority.Background);
     }
 
     public void SplitRight()
@@ -180,7 +195,7 @@ public sealed class ProjectDockController : IDisposable
         if (_panes.TryGetValue(key, out var existing))
         {
             ((existing.Content as Control)?.DataContext as DiffTabViewModel)?.Refresh();
-            Focus(existing);
+            FocusInLayout(existing, focusContent: _active);
             return;
         }
         var control = _registry.GetOrCreateDiff(request);
@@ -195,7 +210,7 @@ public sealed class ProjectDockController : IDisposable
         _panes[key] = pane;
         _diffKeys.Add(key);
         Layout.Open(pane);
-        Focus(pane);
+        FocusInLayout(pane, focusContent: _active);
     }
 
     public void CloseActive()
@@ -228,6 +243,9 @@ public sealed class ProjectDockController : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
+        _active = false;
+        ++_activateVersion;
         _spin.Stop();
         _spin.Tick -= OnSpinTick;
         Layout.LayoutChanged -= OnLayoutChanged;
@@ -252,11 +270,22 @@ public sealed class ProjectDockController : IDisposable
 
     private void Focus(DockPane pane)
     {
+        FocusInLayout(pane, focusContent: _active);
+        if (_active && !_disposed)
+        {
+            _projects.ActivateItem(pane.Id);
+        }
+    }
+
+    private void FocusInLayout(DockPane pane, bool focusContent)
+    {
         _syncing = true;
         try { Layout.Activate(pane); }
         finally { _syncing = false; }
-        _projects.ActivateItem(pane.Id);
-        _registry.Find(pane.Id)?.FocusContent();
+        if (focusContent && !_disposed)
+        {
+            _registry.Find(pane.Id)?.FocusContent();
+        }
     }
 
     private DockPane PaneOf(ProjectItem item)
@@ -329,6 +358,10 @@ public sealed class ProjectDockController : IDisposable
     {
         if (_active == active) return;
         _active = active;
+        if (!active)
+        {
+            ++_activateVersion;
+        }
         SetSpinning(active && _panes.Keys.Any(IsWorking));
         if (active)
         {
@@ -413,14 +446,20 @@ public sealed class ProjectDockController : IDisposable
 
     private void OnActivePaneChanged(object? sender, DockPaneEventArgs e)
     {
-        if (_syncing || _loading || e.Pane is not { } pane)
+        if (_syncing || _loading || _disposed || !_active || e.Pane is not { } pane)
         {
             return;
         }
         _syncing = true;
         try { _projects.ActivateItem(pane.Id); }
         finally { _syncing = false; }
-        Dispatcher.UIThread.Post(() => _registry.Find(pane.Id)?.FocusContent(), DispatcherPriority.Input);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_active && !_disposed && ReferenceEquals(Layout.ActivePane, pane))
+            {
+                _registry.Find(pane.Id)?.FocusContent();
+            }
+        }, DispatcherPriority.Input);
     }
 
     /// <summary>
@@ -481,7 +520,7 @@ public sealed class ProjectDockController : IDisposable
             {
                 _projects.CloseItemTab(pane.Id);
                 // The dock put another tab in front; the project follows it.
-                if (Layout.ActivePane is { } front && front.Id != _project.ActiveItemId)
+                if (_active && Layout.ActivePane is { } front && front.Id != _project.ActiveItemId)
                 {
                     _projects.ActivateItem(front.Id);
                 }
@@ -523,9 +562,21 @@ public sealed class ProjectDockController : IDisposable
                 }
                 break;
             case ProjectChangeKind.Active when !_syncing && e.Item is { } active
-                                              && _panes.TryGetValue(active.Id, out var pane) && pane.Group is not null
-                                              && !ReferenceEquals(Layout.ActivePane, pane):
-                Focus(pane);
+                                              && _panes.TryGetValue(active.Id, out var pane) && pane.Group is not null:
+                if (!ReferenceEquals(Layout.ActivePane, pane))
+                {
+                    FocusInLayout(pane, focusContent: _active);
+                }
+                else if (_active)
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (_active && !_disposed && ReferenceEquals(Layout.ActivePane, pane))
+                        {
+                            _registry.Find(pane.Id)?.FocusContent();
+                        }
+                    }, DispatcherPriority.Input);
+                }
                 break;
         }
     }
@@ -569,7 +620,12 @@ public sealed class ProjectDockController : IDisposable
             var behind = changed is not null && item.Id == changed.Id && item.Id != _project.ActiveItemId ? Layout.ActivePane : null;
             if (behind is null)
             {
-                Layout.Open(PaneOf(item), NewTabGroup is { Panes.Count: > 0 } target ? DockTarget.Into(target) : null);
+                _syncing = true;
+                try
+                {
+                    Layout.Open(PaneOf(item), NewTabGroup is { Panes.Count: > 0 } target ? DockTarget.Into(target) : null);
+                }
+                finally { _syncing = false; }
                 continue;
             }
             _syncing = true;

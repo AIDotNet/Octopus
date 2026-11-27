@@ -379,8 +379,8 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
 
     private void Select(ProjectChipViewModel chip)
     {
-        _bots?.SetBotMode(false);
         _projects.SetCurrent(chip.Id);
+        _bots?.SetBotMode(false);
     }
 
     private void Rename(ProjectChipViewModel chip)

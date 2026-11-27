@@ -22,6 +22,9 @@ public sealed class BotDockController : IDisposable
     private readonly Dictionary<string, DockPane> _panes = new(StringComparer.Ordinal);
     private readonly HashSet<string> _approvedClose = new(StringComparer.Ordinal);
     private bool _syncing;
+    private bool _active = true;
+    private bool _disposed;
+    private int _activateVersion;
     private readonly bool _loading;
 
     public BotDockController(
@@ -74,12 +77,36 @@ public sealed class BotDockController : IDisposable
     public DockLayout Layout { get; }
     public DockGroup? NewTabGroup { get; set; }
 
+    public void SetActive(bool active)
+    {
+        if (_active == active) return;
+        _active = active;
+        if (!active)
+        {
+            ++_activateVersion;
+        }
+    }
+
     public void ActivateCurrent()
     {
-        if (_backing.ActiveItemId is { } id && _panes.TryGetValue(id, out var pane))
+        var version = ++_activateVersion;
+        if (!_active || _disposed || _backing.ActiveItemId is not { } id || !_panes.TryGetValue(id, out var pane))
         {
-            Dispatcher.UIThread.Post(() => Focus(pane), DispatcherPriority.Background);
+            return;
         }
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_active || _disposed || version != _activateVersion
+                || !_bots.IsBotMode
+                || _bots.CurrentBot?.Id != _botId
+                || _backing.ActiveItemId != id
+                || !_panes.TryGetValue(id, out var current)
+                || !ReferenceEquals(current, pane))
+            {
+                return;
+            }
+            Focus(pane);
+        }, DispatcherPriority.Background);
     }
 
     public void SplitRight()
@@ -124,6 +151,9 @@ public sealed class BotDockController : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
+        _active = false;
+        ++_activateVersion;
         Layout.LayoutChanged -= OnLayoutChanged;
         Layout.ActivePaneChanged -= OnActivePaneChanged;
         Layout.PaneClosing -= OnPaneClosing;
@@ -146,7 +176,7 @@ public sealed class BotDockController : IDisposable
 
     private void OnActivePaneChanged(object? sender, EventArgs e)
     {
-        if (_syncing || _loading || Layout.ActivePane is not { } pane) return;
+        if (_syncing || _loading || _disposed || !_active || Layout.ActivePane is not { } pane) return;
         _bots.ActivateBackingItem(_botId, pane.Id);
         _registry.Find(pane.Id)?.FocusContent();
     }
@@ -242,7 +272,10 @@ public sealed class BotDockController : IDisposable
         _syncing = true;
         try { Layout.Activate(pane); }
         finally { _syncing = false; }
-        _registry.Find(pane.Id)?.FocusContent();
+        if (_active && !_disposed)
+        {
+            _registry.Find(pane.Id)?.FocusContent();
+        }
     }
 
     private DockPane PaneOf(ProjectItem item)

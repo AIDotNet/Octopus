@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Octopus.App.Bots;
 using Octopus.App.Composition;
 using Octopus.App.Launcher;
 using Octopus.App.Services;
@@ -358,5 +359,104 @@ public class WorkspaceTests
             var center = rendered.GetPixel((int)Math.Round(origin.X + logo.Bounds.Width / 2), (int)Math.Round(origin.Y + logo.Bounds.Height / 2));
             Assert.True(center.Red > 140, $"center={center}");
         }
+    }
+
+    [AvaloniaFact]
+    public void Switching_projects_rapidly_does_not_oscillate_between_projects()
+    {
+        var window = Open();
+        var projects = AppHost.Get<IProjectService>();
+        var opener = AppHost.Get<IItemOpener>();
+        var workspace = AppHost.Get<WorkspaceViewModel>();
+
+        var first = AddProject();
+        opener.OpenTerminal();
+        Dispatcher.UIThread.RunJobs();
+
+        var second = AddProject();
+        opener.OpenTerminal();
+        Dispatcher.UIThread.RunJobs();
+
+        var switches = 0;
+        projects.Changed += (_, e) =>
+        {
+            if (e.Kind == ProjectChangeKind.CurrentProject) switches++;
+        };
+
+        // Switch first -> second before Background ActivateCurrent jobs have drained.
+        projects.SetCurrent(first.Id);
+        projects.SetCurrent(second.Id);
+        Dispatcher.UIThread.RunJobs();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(second.Id, projects.Current?.Id);
+        Assert.Equal(2, switches);
+        Assert.NotNull(workspace.CurrentLayout);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Leaving_bot_mode_to_another_project_does_not_oscillate()
+    {
+        var window = Open();
+        var projects = AppHost.Get<IProjectService>();
+        var opener = AppHost.Get<IItemOpener>();
+        var rail = AppHost.Get<ProjectRailViewModel>();
+        var bots = AppHost.Get<IBotService>();
+
+        var first = AddProject();
+        opener.OpenTerminal();
+        Dispatcher.UIThread.RunJobs();
+
+        var second = AddProject();
+        opener.OpenTerminal();
+        Dispatcher.UIThread.RunJobs();
+
+        // Active on first, enter Bot mode (like opening Bot view and cancelling New Bot), then click second on the rail.
+        projects.SetCurrent(first.Id);
+        Dispatcher.UIThread.RunJobs();
+
+        bots.SetBotMode(true);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(bots.IsBotMode);
+
+        var switches = 0;
+        projects.Changed += (_, e) =>
+        {
+            if (e.Kind == ProjectChangeKind.CurrentProject) switches++;
+        };
+
+        var secondChip = rail.Chips.Single(c => c.Id == second.Id);
+        secondChip.SelectCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(bots.IsBotMode);
+        Assert.Equal(second.Id, projects.Current?.Id);
+        Assert.Equal(1, switches);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Adding_an_item_to_an_inactive_project_does_not_switch_the_current_project()
+    {
+        var window = Open();
+        var projects = AppHost.Get<IProjectService>();
+        var opener = AppHost.Get<IItemOpener>();
+
+        var first = AddProject();
+        opener.OpenTerminal();
+        Dispatcher.UIThread.RunJobs();
+
+        var second = AddProject();
+        opener.OpenTerminal();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(second.Id, projects.Current?.Id);
+
+        projects.AddItem(first, new ProjectItem { Kind = ProjectItemKind.Terminal, Title = "bg" }, activate: true);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(second.Id, projects.Current?.Id);
+        window.Close();
     }
 }

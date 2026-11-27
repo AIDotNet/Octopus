@@ -154,6 +154,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
             }
             if (_botGroups?.CurrentGroup is not null && GroupRoom is not null)
             {
+                foreach (var botController in _botControllers.Values) botController.SetActive(false);
                 HasProject = true;
                 IsGroupRoomActive = true;
                 CurrentLayout = null;
@@ -164,6 +165,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
             HasProject = currentBot is not null;
             if (currentBot is null)
             {
+                foreach (var botController in _botControllers.Values) botController.SetActive(false);
                 CurrentLayout = null;
                 return;
             }
@@ -172,6 +174,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
                 existingBot = CreateBot(currentBot);
                 _botControllers[currentBot.Id] = existingBot;
             }
+            foreach (var botController in _botControllers.Values) botController.SetActive(ReferenceEquals(botController, existingBot));
             var botChanged = !ReferenceEquals(CurrentLayout, existingBot.Layout);
             CurrentLayout = existingBot.Layout;
             if (botChanged)
@@ -181,12 +184,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
             return;
         }
 
+        foreach (var botController in _botControllers.Values) botController.SetActive(false);
         IsGroupRoomActive = false;
 
         var current = _projects.Current;
         HasProject = current is not null;
         if (current is null)
         {
+            foreach (var controller in _controllers.Values) controller.SetActive(false);
             CurrentLayout = null;
             return;
         }
