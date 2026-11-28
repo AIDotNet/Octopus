@@ -103,6 +103,46 @@ public class ThemeReaderTests
         var result = ThemeReader.Parse("""{ "appearance": "dark", "colors": { "Background": "#FAFAFA", "Foreground": "#111111" } }""");
         Assert.Contains(result.Issues, i => i.Path == "$.appearance" && i.Message.Contains("lighter"));
     }
+
+    [Fact]
+    public void Reads_declarative_effects_without_warnings()
+    {
+        var result = ThemeReader.Parse("""
+            {
+              "schema": 1,
+              "name": "Orbital Cyan",
+              "appearance": "dark",
+              "accent": "#22D3EE",
+              "colors": { "Background": "#060A13", "Surface": "#0B1220", "Foreground": "#E6F1FF", "TextSecondary": "#9FB4D0", "Accent": "#22D3EE", "AccentForeground": "#04121D" },
+              "effects": {
+                "inputGlow": { "style": "orbit", "colors": ["#22d3ee", "#38bdf8", "#818cf8"], "intensity": 0.25, "accelerateOnAgentWorking": true },
+                "chromeGlow": null,
+                "ambientGrid": { "pattern": "grid", "opacity": 0.05 },
+                "hudCorners": true
+              }
+            }
+            """);
+
+        Assert.True(result.IsUsable);
+        Assert.Empty(result.Issues);
+        var fx = result.Theme!.Effects;
+        Assert.NotNull(fx);
+        Assert.NotNull(fx!.InputGlow);
+        Assert.Equal(InputGlowStyle.Orbit, fx.InputGlow!.Style);
+        Assert.Equal(["#22D3EE", "#38BDF8", "#818CF8"], fx.InputGlow.Colors);
+        Assert.Equal(0.25, fx.InputGlow.Intensity, 3);
+        Assert.True(fx.InputGlow.AccelerateOnAgentWorking);
+        Assert.Null(fx.ChromeGlow);
+        Assert.NotNull(fx.AmbientGrid);
+        Assert.Equal("grid", fx.AmbientGrid!.Pattern);
+        Assert.Equal(0.05, fx.AmbientGrid.Opacity, 3);
+        Assert.True(fx.HudCorners);
+
+        var composed = ThemeComposer.Compose(ThemeAppearance.Dark, result.Theme, UserAppearance.FollowTheme);
+        Assert.True(composed.IsAcceptable);
+        Assert.Empty(composed.Problems);
+        Assert.Equal(fx, composed.Effects);
+    }
 }
 
 public class ThemeComposerTests

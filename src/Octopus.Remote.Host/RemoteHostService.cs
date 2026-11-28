@@ -89,6 +89,7 @@ public sealed class RemoteHostService : IAsyncDisposable
     private readonly HelloMessage _hello;
     private readonly object _gate = new();
     private readonly List<(HostConnection Connection, IPEndPoint? Remote)> _connections = [];
+    private readonly RemoteLlmLoopbackProxy _llmProxy = new();
     private WebSocketListener? _listener;
     private CancellationTokenSource? _listening;
     private QuicTransportListener? _quicListener;
@@ -383,7 +384,7 @@ public sealed class RemoteHostService : IAsyncDisposable
             Transport = _hello.Transport,
             HostInfo = _hello.HostInfo ?? _workspace.Info,
         };
-        var connection = new HostConnection(new RemoteConnection(channel), _workspace, helloWithInfo, HandleP2pHandshakeAsync);
+        var connection = new HostConnection(new RemoteConnection(channel), _workspace, helloWithInfo, HandleP2pHandshakeAsync, _llmProxy);
         lock (_gate) _connections.Add((connection, remote));
         connection.Start();
         Changed?.Invoke();
@@ -408,6 +409,7 @@ public sealed class RemoteHostService : IAsyncDisposable
         List<HostConnection> connections;
         lock (_gate) connections = [.. _connections.Select(c => c.Connection)];
         foreach (var connection in connections) await connection.DisposeAsync().ConfigureAwait(false);
+        await _llmProxy.DisposeAsync().ConfigureAwait(false);
     }
 
     private async Task AcceptLoopAsync(WebSocketListener listener, CancellationToken cancellationToken)

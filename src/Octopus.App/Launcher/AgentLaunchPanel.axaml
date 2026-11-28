@@ -8,6 +8,34 @@
              x:Class="Octopus.App.Launcher.AgentLaunchPanel"
              x:DataType="vm:AgentLaunchViewModel">
     <StackPanel Spacing="0">
+        <!-- Scheme C: unified Source selector (Accounts / Managed Providers / Local Tunnel) sits at the TOP -->
+        <StackPanel Margin="8,8,8,2" Spacing="4" IsVisible="{Binding HasBackends}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="hint" VerticalAlignment="Center" Text="{l:AppLangResource BackendSourceLabel}" />
+                <arc:Button Grid.Column="1"
+                            Variant="Ghost"
+                            Size="Small"
+                            IsVisible="{Binding CanManageProviders}"
+                            Command="{Binding OpenProvidersCommand}"
+                            Content="{l:AppLangResource ProvidersManageMenu}" />
+            </Grid>
+            <arc:Select AutoScrollToSelectedItem="False"
+                        Size="Small"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="{l:AppLangResource BackendSourceLabel}"
+                        ItemsSource="{Binding BackendOptions}"
+                        SelectedValue="{Binding SelectedBackendRef, Mode=TwoWay}" />
+            <Border Padding="6,3"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Background="{arc:ArcDesignTokenResource AccentSubtle}"
+                    IsVisible="{Binding IsTunnelSelected}">
+                <TextBlock FontSize="11"
+                           Foreground="{arc:ArcDesignTokenResource AccentStrong}"
+                           TextWrapping="Wrap"
+                           Text="{l:AppLangResource BackendRemoteTunnelGroup}" />
+            </Border>
+        </StackPanel>
+
         <!-- model -->
         <StackPanel IsVisible="{Binding HasModel}">
             <arc:SearchField Margin="6,6,6,4" Size="Small" IsLabelVisible="False"
@@ -25,13 +53,23 @@
                         <DataTemplate x:DataType="vm:ModelOptionViewModel">
                             <Button Classes="row" Height="{DynamicResource OctopusLauncherModelRowHeight}" Command="{Binding SelectCommand}"
                                     AutomationProperties.Name="{Binding Label}">
-                                <Grid ColumnDefinitions="Auto,*,Auto,20" ColumnSpacing="8" Margin="8,0,4,0">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,20" ColumnSpacing="6" Margin="8,0,4,0">
                                     <common:ModelIconView Grid.Column="0" IconKey="{Binding IconKey}" Size="14" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="1" Classes="body" VerticalAlignment="Center" Text="{Binding Label}"
                                                TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="2" Classes="hint" VerticalAlignment="Center"
-                                               Text="{Binding Note}" TextTrimming="CharacterEllipsis" MaxWidth="120" />
-                                    <lucide:LucideIcon Grid.Column="3" Kind="Check" Size="14" HorizontalAlignment="Right"
+                                    <Border Grid.Column="2"
+                                            IsVisible="{Binding HasSourceBadge}"
+                                            VerticalAlignment="Center"
+                                            Padding="5,1"
+                                            CornerRadius="{arc:ArcDesignTokenResource RadiusPill}"
+                                            Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                                        <TextBlock FontSize="10"
+                                                   Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                   Text="{Binding SourceBadge}" />
+                                    </Border>
+                                    <TextBlock Grid.Column="3" Classes="hint" VerticalAlignment="Center"
+                                               Text="{Binding Note}" TextTrimming="CharacterEllipsis" MaxWidth="96" />
+                                    <lucide:LucideIcon Grid.Column="4" Kind="Check" Size="14" HorizontalAlignment="Right"
                                                        IsVisible="{Binding IsSelected}" />
                                 </Grid>
                             </Button>
@@ -42,16 +80,6 @@
         </StackPanel>
 
         <StackPanel Margin="{DynamicResource OctopusLauncherSectionMargin}" Spacing="{DynamicResource OctopusLauncherSectionSpacing}">
-            <!-- account -->
-            <StackPanel Spacing="4" IsVisible="{Binding HasAccounts}">
-                <TextBlock Classes="hint" Text="{l:AppLangResource AccountLauncherLabel}" />
-                <arc:Select AutoScrollToSelectedItem="False"
-                            Size="Small"
-                            HorizontalAlignment="Stretch"
-                            AutomationProperties.Name="{l:AppLangResource AccountLauncherLabel}"
-                            ItemsSource="{Binding AccountOptions}"
-                            SelectedValue="{Binding SelectedAccountId, Mode=TwoWay}" />
-            </StackPanel>
             <!-- effort -->
             <StackPanel Spacing="4" IsVisible="{Binding HasEffort}">
                 <TextBlock Classes="hint" Text="{Binding EffortCaption}" />
@@ -71,11 +99,19 @@
         </StackPanel>
 
         <StackPanel Spacing="6" Margin="{DynamicResource OctopusLauncherFooterMargin}">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                 <TextBlock Classes="hint" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                     <Run Text="{l:AppLangResource PermissionPrefix}" /><Run Text=" " /><Run Text="{Binding PermissionName}" />
                 </TextBlock>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <arc:Button Variant="Ghost"
+                                Size="Small"
+                                IsVisible="{Binding CanPin}"
+                                Command="{Binding PinCurrentCommand}"
+                                arc:Tooltip.Tip="{l:AppLangResource ProvidersPinPreset}"
+                                AutomationProperties.Name="{l:AppLangResource ProvidersPinPreset}">
+                        <lucide:LucideIcon Kind="Pin" Size="13" />
+                    </arc:Button>
                     <arc:Button x:Name="SecondaryLaunchButton"
                                 Variant="Secondary"
                                 Size="Small"

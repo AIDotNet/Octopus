@@ -3,6 +3,7 @@
              xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
              xmlns:lucide="https://github.com/AIDotNet/TKCode.Arc/lucide"
              xmlns:l="using:Octopus.App.Localization"
+             xmlns:appearance="using:Octopus.App.Appearance"
              xmlns:common="using:Octopus.App.Common"
              xmlns:mentions="using:Octopus.App.Common.Mentions"
              xmlns:gui="using:Octopus.App.AgentGui"
@@ -497,6 +498,9 @@
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Background="{arc:ArcDesignTokenResource Background}">
+        <!-- Optional theme ambient background pattern (zero cost when active theme has no ambientGrid) -->
+        <appearance:ThemeAmbientGridOverlay Grid.RowSpan="4" />
+
         <!-- Slim Compact IDE Header Bar -->
         <Border Grid.Row="0"
                 Height="{DynamicResource OctopusAgentGuiHeaderHeight}"
@@ -1676,7 +1680,8 @@
                     </common:SmoothCollapse.ContentTemplate>
                 </common:SmoothCollapse>
 
-                <!-- Sleek Unified Floating Composer Card (frameless input + dynamic popover pills) -->
+                <!-- Sleek Unified Floating Composer Card (frameless input + dynamic popover pills + optional theme border glow) -->
+                <Panel ClipToBounds="False">
                 <Border x:Name="ComposerCard"
                         Classes="composerCard"
                         Padding="{DynamicResource OctopusAgentGuiComposerPadding}">
@@ -2142,6 +2147,11 @@
                         </Grid>
                     </StackPanel>
                 </Border>
+                <appearance:ThemeInputGlowOverlay x:Name="ComposerGlowOverlay"
+                                                  CornerRadius="10"
+                                                  IsAgentWorking="{Binding IsTurnActive}"
+                                                  IsTargetFocused="{Binding #ComposerCard.IsKeyboardFocusWithin}" />
+                </Panel>
             </StackPanel>
         </Border>
 

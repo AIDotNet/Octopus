@@ -39,5 +39,26 @@
       { "id": "yesAlways", "type": "bool", "label": "Answer yes to every confirmation", "args": ["--yes-always"], "localized": { "zh-CN": { "label": "自动确认所有提示" } } },
       { "id": "restoreChat", "type": "bool", "label": "Restore chat history", "args": ["--restore-chat-history"], "localized": { "zh-CN": { "label": "恢复聊天记录" } } }
     ]
+  },
+  "providerSupport": {
+    "protocols": ["openaiChat", "openaiResponses", "anthropic", "gemini"],
+    "strategy": "env",
+    "protocolBaseUrlEnvs": {
+      "openaiChat": "OPENAI_API_BASE",
+      "openaiResponses": "OPENAI_API_BASE",
+      "anthropic": "ANTHROPIC_BASE_URL"
+    },
+    "protocolApiKeyEnvs": {
+      "openaiChat": "OPENAI_API_KEY",
+      "openaiResponses": "OPENAI_API_KEY",
+      "anthropic": "ANTHROPIC_API_KEY",
+      "gemini": "GEMINI_API_KEY"
+    },
+    "protocolModelPrefixes": {
+      "openaiChat": "openai/",
+      "openaiResponses": "openai/",
+      "anthropic": "anthropic/",
+      "gemini": "gemini/"
+    }
   }
 }

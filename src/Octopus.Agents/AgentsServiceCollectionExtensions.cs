@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Octopus.Agents.Accounts;
 using Octopus.Agents.Probes;
+using Octopus.Agents.Providers;
 using Octopus.Agents.Sessions;
 using Octopus.Agents.Signals;
 using Octopus.Platform;
@@ -31,7 +32,18 @@ public static class AgentsServiceCollectionExtensions
         services.AddSingleton<ISignalAttachPlanner, SignalAttachPlanner>();
         services.AddSingleton<IProbeRunner, ProbeRunner>();
         services.TryAddSingleton<IAccountStore, InMemoryAccountStore>();
+        services.TryAddSingleton<IProviderStore, InMemoryProviderStore>();
         services.TryAddSingleton<ISecretStore, NoSecretStore>();
+        services.AddSingleton<ProviderMaterializer>(sp => new ProviderMaterializer(sp.GetRequiredService<IAppPaths>()));
+        services.AddSingleton<IModelProviderService>(sp => new ModelProviderService(
+            sp.GetRequiredService<IProviderStore>(),
+            sp.GetRequiredService<ISecretStore>(),
+            coworkFactory: () => sp.GetService<ICoWorkProviderBridge>()));
+        services.AddSingleton<IAgentBackendResolver>(sp => new AgentBackendResolver(
+            sp.GetRequiredService<IModelProviderService>(),
+            sp.GetRequiredService<ProviderMaterializer>(),
+            sp.GetService<IAgentAccountService>(),
+            sp.GetService<ICoWorkProviderBridge>()));
         services.AddSingleton<IAgentAccountDiscovery>(sp => new AgentAccountDiscovery(
             sp.GetRequiredService<ISignalHub>(),
             sp.GetRequiredService<IAgentCatalog>(),

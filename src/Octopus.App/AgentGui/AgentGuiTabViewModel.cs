@@ -203,6 +203,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private readonly IPickerService? _pickers;
     private readonly IItemActivityService? _activity;
     private readonly IAgentAccountService? _accounts;
+    private readonly Octopus.Agents.Providers.IAgentBackendResolver? _backends;
     private readonly Func<IWorkspaceCommands?>? _workspaceCommands;
     private readonly ISubagentService? _subagents;
     private readonly IModelDiscovery? _modelDiscovery;
@@ -286,7 +287,8 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         IBotService? bots = null,
         ICollabCoordinator? collab = null,
         BotScheduleMcpServer? botScheduleMcp = null,
-        IWorkspaceFileIndex? workspaceFileIndex = null)
+        IWorkspaceFileIndex? workspaceFileIndex = null,
+        Octopus.Agents.Providers.IAgentBackendResolver? backends = null)
     {
         _project = project;
         _item = item;
@@ -302,6 +304,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _pickers = pickers;
         _activity = activity;
         _accounts = accounts;
+        _backends = backends;
         _workspaceCommands = workspaceCommands;
         _subagents = subagents;
         _modelDiscovery = modelDiscovery;
@@ -1092,12 +1095,28 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             var profile = agentSettings.ProfileOf(_definition.Id);
             IReadOnlyDictionary<string, string>? accountEnv = null;
             IReadOnlyList<string>? unsetEnv = null;
-            if (_accounts is not null && _definition.Accounts is not null)
+            ModelProviderRecord? resolvedProvider = null;
+            string? resolvedModelPrefix = null;
+            if (_backends is not null)
+            {
+                var resolvedBackend = await _backends.ResolveAsync(_definition, profile, _project, _item.Launch, ct).ConfigureAwait(false);
+                accountEnv = resolvedBackend.Environment;
+                unsetEnv = resolvedBackend.UnsetEnvironment;
+                resolvedProvider = resolvedBackend.Provider;
+                resolvedModelPrefix = resolvedBackend.ModelPrefix;
+            }
+            else if (_accounts is not null && _definition.Accounts is not null)
             {
                 var resolvedAcc = _accounts.Resolve(_definition, profile, _project, _item.Launch);
                 accountEnv = resolvedAcc.Environment;
                 unsetEnv = resolvedAcc.UnsetEnvironment;
             }
+
+            var effectiveInitialModel = !string.IsNullOrWhiteSpace(_desiredModelId)
+                && !string.IsNullOrWhiteSpace(resolvedModelPrefix)
+                && !_desiredModelId.StartsWith(resolvedModelPrefix, StringComparison.OrdinalIgnoreCase)
+                    ? resolvedModelPrefix + _desiredModelId
+                    : _desiredModelId;
 
             var installation = _scanner.Find(_definition.Id);
             var perm = Composer.SelectedPermissionId ?? PermissionModes.Default;
@@ -1112,7 +1131,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 ct,
                 progress => SetUi(() => StatusDetail = progress),
                 launchEnv: _item.Launch?.Env,
-                initialModelId: _desiredModelId,
+                initialModelId: effectiveInitialModel,
                 initialEffortId: _desiredEffortId).ConfigureAwait(false);
 
             SetUi(() => StatusDetail = null);
@@ -1208,8 +1227,26 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 RefreshDiagnostics();
             });
 
-            // Discover third-party gateway/catalog models in the background so custom API models show up in the GUI picker.
-            if (_modelDiscovery is not null
+            // Feed managed provider models immediately into the GUI model picker; otherwise fall back to third-party discovery.
+            if (resolvedProvider is not null)
+            {
+                var providerModels = resolvedProvider.Models
+                    .Where(m => m.Enabled && !string.IsNullOrWhiteSpace(m.Id))
+                    .Select(m => new AgentOption
+                    {
+                        Id = !string.IsNullOrWhiteSpace(resolvedModelPrefix) && !m.Id.StartsWith(resolvedModelPrefix, StringComparison.OrdinalIgnoreCase)
+                            ? resolvedModelPrefix + m.Id
+                            : m.Id,
+                        Label = m.EffectiveLabel,
+                        Note = resolvedProvider.Name,
+                    })
+                    .ToList();
+                if (providerModels.Count > 0)
+                {
+                    SetUi(() => Composer.MergeSupplementalModels(providerModels));
+                }
+            }
+            else if (_modelDiscovery is not null
                 && _definition.Capabilities.Model?.Discover is { } discover
                 && !string.Equals(discover.Kind, "command", StringComparison.OrdinalIgnoreCase))
             {
@@ -1235,18 +1272,25 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
             if (!_initialPromptSent && !string.IsNullOrWhiteSpace(_item.Launch?.Prompt))
             {
-                _initialPromptSent = true;
-                var firstPrompt = _item.Launch!.Prompt!.Trim();
                 Task? pump = null;
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     if (_disposed || _session is null) return;
-                    if (_isTurnActive || IsTurnActive)
+                    if (!_initialPromptSent && _item.Launch?.Prompt is { } rawInitialPrompt && !string.IsNullOrWhiteSpace(rawInitialPrompt))
                     {
-                        EnqueuePrompt(firstPrompt, []);
-                        return;
+                        _initialPromptSent = true;
+                        var firstPrompt = rawInitialPrompt.Trim();
+                        if (_isTurnActive || IsTurnActive)
+                        {
+                            EnqueuePrompt(firstPrompt, []);
+                            return;
+                        }
+                        pump = StartPumpAsync(CreateQueuedPrompt(firstPrompt, []));
                     }
-                    pump = StartPumpAsync(CreateQueuedPrompt(firstPrompt, []));
+                    else if (QueuedPrompts.Count > 0 && !_isTurnActive && !IsTurnActive)
+                    {
+                        pump = StartPumpAsync();
+                    }
                 });
                 if (pump is not null)
                 {
@@ -1862,11 +1906,22 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     Task ICollabSessionBridge.CancelActiveTurnAsync()
     {
         if (_disposed) return Task.CompletedTask;
-        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+
+        Task CancelOnUi()
         {
+            if (!_initialPromptSent)
+            {
+                _initialPromptSent = true;
+                _item.Launch?.Prompt = null;
+            }
             return RequestCancelActiveTurnAsync(isManualStop: true);
         }
-        return Dispatcher.UIThread.InvokeAsync(() => RequestCancelActiveTurnAsync(isManualStop: true));
+
+        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+        {
+            return CancelOnUi();
+        }
+        return Dispatcher.UIThread.InvokeAsync(CancelOnUi);
     }
 
     /// <summary>

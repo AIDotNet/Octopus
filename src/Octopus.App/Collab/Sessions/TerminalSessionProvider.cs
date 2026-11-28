@@ -61,7 +61,14 @@ internal sealed class TerminalSessionProvider : ICollabSessionProvider
         if (!_settings.Current.Agents.Collab.EnableTerminalBridge || _terminals is null) return null;
         if (_terminals.Find(item.Id) is null)
         {
-            await CollabUi.InvokeAsync(() => _tabs?.Invoke()?.GetOrCreate(project, item)).ConfigureAwait(false);
+            await CollabUi.InvokeAsync(() =>
+            {
+                var control = _tabs?.Invoke()?.GetOrCreate(project, item);
+                if (control is Terminals.TerminalTabView termView)
+                {
+                    termView.EnsureStarted();
+                }
+            }).ConfigureAwait(false);
             // Give the new tab a moment to attach and spawn its PTY.
             for (var i = 0; i < 15 && _terminals.Find(item.Id) is null; i++)
             {

@@ -109,6 +109,47 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         // Only folders of this computer: a project on an SSH host is this computer's view of yet another machine.
         [.. _projects.Projects.Where(ProjectLocation.IsOnThisComputer).Select(ToMessage)]);
 
+    public Task<IReadOnlyList<ProjectGroupMessage>> ListProjectGroupsAsync() => OnUi<IReadOnlyList<ProjectGroupMessage>>(() =>
+        [.. _projects.Groups.Select(ToGroupMessage)]);
+
+    public Task<ProjectGroupMessage> CreateProjectGroupAsync(CreateProjectGroupMessage request) => OnUi(() =>
+    {
+        var name = request.Name.Trim();
+        if (name.Length == 0) throw new RemoteException(RemoteProtocol.InvalidParams, "Group name is required.");
+        var group = _projects.AddGroup(name, request.ProjectIds);
+        if (!string.IsNullOrWhiteSpace(request.Color)) _projects.SetGroupColor(group.Id, request.Color.Trim());
+        if (request.MergeWorkspaces) _projects.SetGroupMergeWorkspaces(group.Id, true);
+        return ToGroupMessage(group);
+    });
+
+    public Task<ProjectGroupMessage> UpdateProjectGroupAsync(UpdateProjectGroupMessage request) => OnUi(() =>
+    {
+        var group = _projects.Groups.FirstOrDefault(g => g.Id == request.GroupId)
+            ?? throw new RemoteException(RemoteMethods.NotFound, "The project group does not exist on the host.");
+        if (!string.IsNullOrWhiteSpace(request.Name)) _projects.RenameGroup(group.Id, request.Name.Trim());
+        if (request.ClearColor) _projects.SetGroupColor(group.Id, null);
+        else if (request.Color is not null) _projects.SetGroupColor(group.Id, Blank(request.Color));
+        if (request.MergeWorkspaces is { } merge) _projects.SetGroupMergeWorkspaces(group.Id, merge);
+        return ToGroupMessage(group);
+    });
+
+    public Task DeleteProjectGroupAsync(string groupId) => OnUi(() =>
+    {
+        if (_projects.Groups.All(g => g.Id != groupId))
+            throw new RemoteException(RemoteMethods.NotFound, "The project group does not exist on the host.");
+        _projects.RemoveGroup(groupId);
+        return true;
+    });
+
+    public Task SetProjectGroupAsync(string projectId, string? groupId) => OnUi(() =>
+    {
+        FindProject(projectId);
+        if (!string.IsNullOrWhiteSpace(groupId) && _projects.Groups.All(g => g.Id != groupId))
+            throw new RemoteException(RemoteMethods.NotFound, "The project group does not exist on the host.");
+        _projects.MoveProjectToGroup(projectId, string.IsNullOrWhiteSpace(groupId) ? null : groupId);
+        return true;
+    });
+
     public Task<ProjectMessage> CreateProjectAsync(CreateProjectMessage request) => OnUi(() =>
     {
         var path = ExpandHome(request.Path.Trim());
@@ -178,6 +219,31 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                 ItemSurfaces.Terminal => AgentSurface.Terminal,
                 _ => null,
             };
+            RemoteTunnelProviderSpec? tunnelSpec = null;
+            string? tunnelLoopback = null;
+            if (request.TunnelProvider is { } tp && !string.IsNullOrWhiteSpace(tp.LoopbackBaseUrl))
+            {
+                tunnelLoopback = tp.LoopbackBaseUrl;
+                tunnelSpec = new RemoteTunnelProviderSpec
+                {
+                    GrantToken = tp.GrantToken,
+                    DisplayName = tp.DisplayName,
+                    Protocol = ParseTunnelProtocol(tp.Protocol),
+                    AuthEnvPreference = tp.AuthEnvPreference,
+                    IsolateConfigDir = tp.IsolateConfigDir,
+                    Models =
+                    [
+                        .. tp.Models.Select(m => new ManagedModelSpec
+                        {
+                            Id = m.Id,
+                            DisplayName = m.DisplayName,
+                            Enabled = true,
+                            Tier = Enum.TryParse<ModelSlotTier>(m.Tier, ignoreCase: true, out var tier) ? tier : ModelSlotTier.None,
+                            SupportedEfforts = m.SupportedEfforts is { Count: > 0 } ? [.. m.SupportedEfforts] : null,
+                        }),
+                    ],
+                };
+            }
             item = new ProjectItem
             {
                 Kind = ProjectItemKind.Agent,
@@ -194,6 +260,8 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                     Effort = Blank(request.Effort),
                     Prompt = prompt,
                     Surface = requestedSurface,
+                    TunnelProvider = tunnelSpec,
+                    TunnelLoopbackBaseUrl = tunnelLoopback,
                 },
             };
         }
@@ -1384,6 +1452,14 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         };
     }
 
+    private static ProjectGroupMessage ToGroupMessage(ProjectGroup group) => new()
+    {
+        Id = group.Id,
+        Name = group.Name,
+        Color = group.Color,
+        MergeWorkspaces = group.MergeWorkspaces,
+    };
+
     private static ProjectMessage ToMessage(Project project)
     {
         var (isGit, defaultBranch) = InspectGitRepository(project.Path);
@@ -1395,6 +1471,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             Color = project.Color,
             Icon = project.Icon,
             Image = project.Image,
+            GroupId = project.GroupId,
             IsGitRepository = isGit,
             DefaultBranch = defaultBranch,
             Workspaces = project.Workspaces.Count > 0 ? [.. project.Workspaces.Select(ToWorkspaceMessage)] : null,
@@ -1797,4 +1874,13 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         private static int? CodeOf(Octopus.Core.Terminals.TerminalExit? exit) =>
             exit is { } ended ? ended.ExitCode ?? (ended.Signal is { } signal ? 128 + signal : null) : null;
     }
+
+    private static ProviderProtocol ParseTunnelProtocol(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "openairesponses" => ProviderProtocol.OpenAIResponses,
+        "openaichat" => ProviderProtocol.OpenAIChat,
+        "gemini" => ProviderProtocol.Gemini,
+        "geminiofficialkey" => ProviderProtocol.GeminiOfficialKey,
+        _ => ProviderProtocol.Anthropic,
+    };
 }

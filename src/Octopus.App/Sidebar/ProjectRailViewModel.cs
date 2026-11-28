@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
+using Octopus.Agents.Providers;
 using Octopus.App.Activity;
 using Octopus.App.Bots;
 using Octopus.App.Bots.Groups;
@@ -54,6 +55,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
     private readonly IAgentScanner? _scanner;
     private readonly ISettingsStore? _settings;
     private readonly IAgentAccountService? _accounts;
+    private readonly IModelProviderService? _providers;
     private readonly DeviceSwitcherViewModel? _devices;
     private readonly IBotService? _bots;
     private readonly IBotGroupService? _botGroups;
@@ -76,7 +78,8 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
         IAgentAccountService? accounts = null,
         DeviceSwitcherViewModel? devices = null,
         IBotService? bots = null,
-        IBotGroupService? botGroups = null)
+        IBotGroupService? botGroups = null,
+        IModelProviderService? providers = null)
     {
         _icons = icons;
         _activity = activity;
@@ -84,6 +87,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
         _scanner = scanner;
         _settings = settings;
         _accounts = accounts;
+        _providers = providers;
         _devices = devices;
         _bots = bots;
         _botGroups = botGroups;
@@ -94,6 +98,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
         _navigator = navigator;
         _projects.Changed += OnProjectsChanged;
         _accounts?.Changed += (_, _) => UiContext.Run(Rebuild);
+        _providers?.Changed += (_, _) => UiContext.Run(Rebuild);
         _settings?.Changed += (_, _) => UiContext.Run(OnSettingsChanged);
         _scanner?.Changed += (_, _) => UiContext.Run(Rebuild);
         _bots?.Changed += (_, e) => UiContext.Run(() => RefreshBotState(e.Kind));
@@ -132,7 +137,7 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
             ? ""
             : string.Join("|", _settings.Current.Agents.Profiles
                 .OrderBy(p => p.Key, StringComparer.Ordinal)
-                .Select(p => $"{p.Key}:{p.Value.Enabled}:{p.Value.DefaultAccountId}"));
+                .Select(p => $"{p.Key}:{p.Value.Enabled}:{p.Value.DefaultAccountId}:{p.Value.DefaultBackend}"));
 
     public void Dispose() => ArcLanguage.Changed -= OnLanguageChanged;
 
@@ -430,16 +435,59 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
 
     private void MoveToGroup(ProjectChipViewModel chip, string? groupId) => _projects.MoveProjectToGroup(chip.Id, groupId);
 
-    private void SetProjectAgentAccount(ProjectChipViewModel chip, ProjectAgentAccountSelection selection) =>
+    private void SetProjectAgentAccount(ProjectChipViewModel chip, ProjectAgentAccountSelection selection)
+    {
+        if (selection.AccountId is null)
+        {
+            _projects.SetProjectAgentBackend(chip.Id, selection.AgentId, null);
+            return;
+        }
+        if (AgentBackendRefs.TryParseProvider(selection.AccountId, out _)
+            || AgentBackendRefs.TryParseTunnel(selection.AccountId, out _)
+            || AgentBackendRefs.TryParseAccount(selection.AccountId, out _))
+        {
+            _projects.SetProjectAgentBackend(chip.Id, selection.AgentId, selection.AccountId);
+            return;
+        }
         _projects.SetProjectAgentAccount(chip.Id, selection.AgentId, selection.AccountId);
+    }
 
     private IReadOnlyList<ProjectAgentAccountMenu> BuildAgentAccountMenus(Project project)
     {
-        if (!ProjectLocation.IsOnThisComputer(project)
-            || _accounts is null
-            || _catalog is null
-            || _scanner is null
-            || _settings is null)
+        if (_catalog is null || _settings is null)
+        {
+            return [];
+        }
+
+        var isRemoteHost = project.RemoteHost is not null;
+        if (isRemoteHost)
+        {
+            if (_providers is null) return [];
+            var remoteMenus = new List<ProjectAgentAccountMenu>();
+            foreach (var remoteAgent in Composition.AppHost.Get<Remote.RemoteClientRuntime>().AgentsOf(project.RemoteHost!))
+            {
+                var def = _catalog.Find(remoteAgent.Id);
+                if (def is null || !def.SupportsManagedProviders) continue;
+                var tunnelProviders = _providers.ListCompatibleProviders(def, requireRemoteTunnel: true);
+                if (tunnelProviders.Count == 0) continue;
+
+                string? currentRef = null;
+                project.AgentBackends?.TryGetValue(def.Id, out currentRef);
+                var options = new List<ProjectAgentAccountOption>
+                {
+                    new(null, AppLangResources.Get(AppLangResourceKind.BackendFollowGlobal), string.IsNullOrEmpty(currentRef)),
+                };
+                foreach (var prov in tunnelProviders)
+                {
+                    var refVal = AgentBackendRefs.Tunnel(prov.Id);
+                    options.Add(new ProjectAgentAccountOption(refVal, $"⚡ {prov.Name}", refVal == currentRef));
+                }
+                remoteMenus.Add(new ProjectAgentAccountMenu(def.Id, remoteAgent.Name, options));
+            }
+            return remoteMenus;
+        }
+
+        if (!ProjectLocation.IsOnThisComputer(project) || _scanner is null)
         {
             return [];
         }
@@ -449,34 +497,69 @@ public sealed partial class ProjectRailViewModel : ObservableObject, IDisposable
         foreach (var installation in _scanner.Current.Installations)
         {
             var definition = _catalog.Find(installation.AgentId);
-            if (definition?.Accounts is null || !agentSettings.ProfileOf(definition.Id).Enabled)
+            if (definition is null || !agentSettings.ProfileOf(definition.Id).Enabled)
             {
                 continue;
             }
-            var accounts = _accounts.GetAccounts(definition);
-            if (accounts.Count < 2)
+            var accounts = definition.Accounts is not null && _accounts is not null
+                ? _accounts.GetAccounts(definition)
+                : [];
+            var compatProviders = definition.SupportsManagedProviders && _providers is not null
+                ? _providers.ListCompatibleProviders(definition)
+                : [];
+
+            if (accounts.Count < 2 && compatProviders.Count == 0)
             {
                 continue;
             }
 
             var profile = agentSettings.ProfileOf(definition.Id);
-            var globalPreferredId = _accounts.ResolvePreferredAccountId(definition, profile, project: null);
-            var globalPreferred = accounts.FirstOrDefault(a => a.Id == globalPreferredId) ?? accounts[0];
-            var globalLabel = DisplayAccountLabel(globalPreferred);
-
-            project.AgentAccounts.TryGetValue(definition.Id, out var projectOverrideId);
-            if (!string.IsNullOrWhiteSpace(projectOverrideId) && accounts.All(a => a.Id != projectOverrideId))
+            string globalLabel;
+            if (!string.IsNullOrWhiteSpace(profile.DefaultBackend)
+                && AgentBackendRefs.TryParseProvider(profile.DefaultBackend, out var defaultPid)
+                && _providers?.Find(defaultPid) is { Enabled: true } defaultProv)
             {
-                projectOverrideId = null;
+                globalLabel = defaultProv.Name;
+            }
+            else if (accounts.Count > 0 && _accounts is not null)
+            {
+                var globalPreferredId = _accounts.ResolvePreferredAccountId(definition, profile, project: null);
+                var globalPreferred = accounts.FirstOrDefault(a => a.Id == globalPreferredId) ?? accounts[0];
+                globalLabel = DisplayAccountLabel(globalPreferred);
+            }
+            else
+            {
+                globalLabel = AppLangResources.Get(AppLangResourceKind.AgentDefault);
+            }
+
+            string? projectBackendOverride = null;
+            if (project.AgentBackends is not null && project.AgentBackends.TryGetValue(definition.Id, out var rawBackend) && !string.IsNullOrWhiteSpace(rawBackend))
+            {
+                projectBackendOverride = rawBackend;
+            }
+            else if (project.AgentAccounts.TryGetValue(definition.Id, out var projectAccOverride)
+                     && !string.IsNullOrWhiteSpace(projectAccOverride)
+                     && accounts.Any(a => a.Id == projectAccOverride))
+            {
+                projectBackendOverride = AgentBackendRefs.Account(projectAccOverride);
             }
 
             var options = new List<ProjectAgentAccountOption>
             {
-                new(null, AppLangResources.Format(AppLangResourceKind.ProjectAccountFollowDefault, globalLabel), string.IsNullOrEmpty(projectOverrideId)),
+                new(null, AppLangResources.Format(AppLangResourceKind.ProjectAccountFollowDefault, globalLabel), string.IsNullOrEmpty(projectBackendOverride)),
             };
             foreach (var account in accounts)
             {
-                options.Add(new ProjectAgentAccountOption(account.Id, DisplayAccountLabel(account), account.Id == projectOverrideId));
+                var accRef = AgentBackendRefs.Account(account.Id);
+                var isChecked = projectBackendOverride == accRef;
+                // Keep plain account id when no managed providers are present so existing account selections work identically.
+                var optValue = compatProviders.Count == 0 ? account.Id : accRef;
+                options.Add(new ProjectAgentAccountOption(optValue, DisplayAccountLabel(account), isChecked));
+            }
+            foreach (var prov in compatProviders)
+            {
+                var provRef = AgentBackendRefs.Provider(prov.Id);
+                options.Add(new ProjectAgentAccountOption(provRef, $"{prov.Name} ({ProviderProtocolNames.DisplayLabel(prov.Protocol)})", projectBackendOverride == provRef));
             }
             menus.Add(new ProjectAgentAccountMenu(definition.Id, definition.Name, options));
         }

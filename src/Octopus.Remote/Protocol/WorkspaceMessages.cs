@@ -8,6 +8,14 @@ public static class RemoteMethods
     public const string ProjectCreate = "project/create";
     /// <summary>Fetches the custom thumbnail PNG of a project whose <see cref="ProjectMessage.Image"/> is set.</summary>
     public const string ProjectIcon = "project/icon";
+    /// <summary>Moves a project into a Desktop project group, or out of any group when <c>groupId</c> is null.</summary>
+    public const string ProjectSetGroup = "project/setGroup";
+    /// <summary>Creates a Desktop project group (<see cref="ProjectGroupMessage"/>).</summary>
+    public const string ProjectGroupCreate = "projectGroup/create";
+    /// <summary>Updates a Desktop project group's name, color, or workspace-merging setting.</summary>
+    public const string ProjectGroupUpdate = "projectGroup/update";
+    /// <summary>Dissolves a Desktop project group (its member projects stay ungrouped).</summary>
+    public const string ProjectGroupDelete = "projectGroup/delete";
     public const string ItemList = "item/list";
     public const string ItemCreate = "item/create";
     public const string ItemRemove = "item/remove";
@@ -153,10 +161,20 @@ public static class RemoteMethods
     public const string CapabilityTransportMigrate = "transport.migrate";
     /// <summary>The host exposes custom project thumbnail images (<see cref="ProjectMessage.Image"/> and <see cref="ProjectIcon"/>).</summary>
     public const string CapabilityProjectIcons = "project.icons";
+    /// <summary>The host exposes Desktop project groups (<see cref="ProjectListMessage.Groups"/>, <see cref="ProjectMessage.GroupId"/>, and <c>projectGroup/*</c>).</summary>
+    public const string CapabilityProjectGroups = "project.groups";
     /// <summary>The host exposes Bots, Bot multi-chat session management, work items, and connectors (<c>bot/*</c>).</summary>
     public const string CapabilityBots = "bots";
     /// <summary>The host exposes multi-bot Group Rooms (<c>botGroup/*</c>).</summary>
     public const string CapabilityBotGroups = "bot.groups";
+    /// <summary>Both sides support encrypted reverse LLM API proxy tunneling (<c>llm/proxy/*</c>).</summary>
+    public const string CapabilityLlmTunnel = "llm.tunnel";
+
+    // Encrypted reverse LLM API tunnel (remote host -> controller -> upstream provider, design/20 §6).
+    public const string LlmProxyOpen = "llm/proxy/open";
+    public const string LlmProxyCancel = "llm/proxy/cancel";
+    public const string LlmProxyRebind = "llm/proxy/rebind";
+    public const string LlmProxyRevoke = "llm/proxy/revoke";
 
     /// <summary>Maximum byte size of a single project thumbnail returned by <see cref="ProjectIcon"/>.</summary>
     public const int ProjectIconMaxBytes = 512 * 1024;
@@ -243,6 +261,8 @@ public sealed class ProjectMessage
     public bool IsGitRepository { get; set; }
     /// <summary>Current or default branch of the project's main directory, when it is a git repository.</summary>
     public string? DefaultBranch { get; set; }
+    /// <summary>Optional Desktop project group id this project belongs to; null when ungrouped.</summary>
+    public string? GroupId { get; set; }
     /// <summary>Isolated branch worktree workspaces belonging to this project.</summary>
     public List<WorkspaceMessage>? Workspaces { get; set; }
 }
@@ -309,9 +329,50 @@ public sealed class CreateWorkspaceMessage
     public string? TaskBody { get; set; }
 }
 
+/// <summary>One Desktop project group synced over the remote protocol (<see cref="RemoteMethods.CapabilityProjectGroups"/>).</summary>
+public sealed class ProjectGroupMessage
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string? Color { get; set; }
+    /// <summary>When true, launching an agent in a local project of this group shares sibling local project folders.</summary>
+    public bool MergeWorkspaces { get; set; }
+}
+
+public sealed class CreateProjectGroupMessage
+{
+    public string Name { get; set; } = "";
+    public string? Color { get; set; }
+    public bool MergeWorkspaces { get; set; }
+    public List<string>? ProjectIds { get; set; }
+}
+
+public sealed class UpdateProjectGroupMessage
+{
+    public string GroupId { get; set; } = "";
+    public string? Name { get; set; }
+    public string? Color { get; set; }
+    public bool ClearColor { get; set; }
+    public bool? MergeWorkspaces { get; set; }
+}
+
+public sealed class ProjectGroupRefMessage
+{
+    public string GroupId { get; set; } = "";
+}
+
+public sealed class SetProjectGroupMessage
+{
+    public string ProjectId { get; set; } = "";
+    /// <summary>Target group id, or null to move the project out of any group.</summary>
+    public string? GroupId { get; set; }
+}
+
 public sealed class ProjectListMessage
 {
     public List<ProjectMessage> Projects { get; set; } = [];
+    /// <summary>Desktop project groups in rail order; null from older hosts that predate <see cref="RemoteMethods.CapabilityProjectGroups"/>.</summary>
+    public List<ProjectGroupMessage>? Groups { get; set; }
 }
 
 public sealed class CreateProjectMessage
@@ -398,6 +459,8 @@ public sealed class CreateItemMessage
     public string? OriginDevice { get; set; }
     /// <summary>The delegating session as its device labels it (<c>Claude Code · Lead</c>); with <see cref="OriginDevice"/>.</summary>
     public string? OriginSession { get; set; }
+    /// <summary>Optional non-secret tunnel provider descriptor when forwarding local controller API keys into this remote session.</summary>
+    public LlmTunnelProviderMessage? TunnelProvider { get; set; }
 }
 
 public sealed class ItemRefMessage

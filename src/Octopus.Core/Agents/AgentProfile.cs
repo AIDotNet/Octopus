@@ -17,6 +17,8 @@ public sealed class AgentProfile
     public AgentSurface? Surface { get; set; }
     /// <summary>Global default account id for this agent; null uses the implicit <c>default</c> account.</summary>
     public string? DefaultAccountId { get; set; }
+    /// <summary>Unified global default backend (<c>account:&lt;id&gt;</c> or <c>provider:&lt;id&gt;</c>); falls back to <see cref="DefaultAccountId"/> when null.</summary>
+    public string? DefaultBackend { get; set; }
     public List<string> ExtraArgs { get; set; } = [];
     public Dictionary<string, string> Env { get; set; } = [];
     /// <summary>Feature id to value. bool: "true"; list: items separated by newlines.</summary>
@@ -33,6 +35,8 @@ public sealed class AgentLaunchOptions
     public string? Permission { get; set; }
     /// <summary>Account chosen for this tab in the "+" launcher; overrides project and profile defaults when set.</summary>
     public string? AccountId { get; set; }
+    /// <summary>Unified backend chosen for this tab (<c>account:&lt;id&gt;</c>, <c>provider:&lt;id&gt;</c>, or <c>tunnel:&lt;id&gt;</c>); overrides project and profile defaults when set.</summary>
+    public string? BackendRef { get; set; }
     /// <summary>Surface explicitly chosen for this launch (GUI or Terminal); null follows the profile and global default.</summary>
     public AgentSurface? Surface { get; set; }
 
@@ -55,6 +59,17 @@ public sealed class AgentLaunchOptions
     /// <c>CODEX_HOME</c>). Null when the tab runs with the profile's account.
     /// </summary>
     public Dictionary<string, string>? Env { get; set; }
+
+    /// <summary>
+    /// Runtime-only remote host tunnel provider spec (populated on the remote host when a controller launches a tunneled
+    /// session). Never persisted to disk.
+    /// </summary>
+    [JsonIgnore]
+    public RemoteTunnelProviderSpec? TunnelProvider { get; set; }
+
+    /// <summary>Runtime-only loopback proxy base URL on the remote host (e.g. <c>http://127.0.0.1:54321/t/&lt;grant&gt;</c>). Never persisted.</summary>
+    [JsonIgnore]
+    public string? TunnelLoopbackBaseUrl { get; set; }
 }
 
 /// <summary>Where an agent was found on this machine.</summary>

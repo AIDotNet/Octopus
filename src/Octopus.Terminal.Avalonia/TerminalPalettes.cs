@@ -18,14 +18,45 @@ public static class TerminalPalettes
         0x666666, 0xCD3131, 0x14A814, 0xB5BA00, 0x0451A5, 0xBC05BC, 0x0598BC, 0xA5A5A5,
     ];
 
+    private static TerminalPalette? s_customDark;
+    private static TerminalPalette? s_customLight;
+
+    /// <summary>Raised on the UI thread when plugin themes install or clear custom terminal palettes.</summary>
+    public static event EventHandler? Changed;
+
     /// <summary>Near-black, neutral background.</summary>
     public static TerminalPalette Dark { get; } = Build(Base16Dark, foreground: 0xD4D4D4, background: 0x161617, cursor: 0xD4D4D4);
 
     /// <summary>Near-white background.</summary>
     public static TerminalPalette Light { get; } = Build(Base16Light, foreground: 0x1F2328, background: 0xFAFAFA, cursor: 0x1F2328);
 
-    /// <summary>The palette for a theme.</summary>
-    public static TerminalPalette For(bool dark) => dark ? Dark : Light;
+    /// <summary>The palette for a theme (uses the active plugin theme's override when installed).</summary>
+    public static TerminalPalette For(bool dark) => dark ? (s_customDark ?? Dark) : (s_customLight ?? Light);
+
+    /// <summary>Installs or clears custom palettes provided by plugin themes.</summary>
+    public static void SetCustomOverrides(TerminalPalette? light, TerminalPalette? dark)
+    {
+        s_customLight = light;
+        s_customDark = dark;
+        Changed?.Invoke(null, EventArgs.Empty);
+    }
+
+    /// <summary>Builds a 256-colour palette starting from the built-in dark or light base and overriding any provided fields.</summary>
+    public static TerminalPalette BuildCustom(bool dark, int? foreground = null, int? background = null, int? cursor = null, IReadOnlyList<int>? ansi16 = null)
+    {
+        var basePalette = dark ? Dark : Light;
+        var base16 = (int[])(dark ? Base16Dark : Base16Light).Clone();
+        if (ansi16 is { Count: 16 })
+        {
+            for (var i = 0; i < 16; i++) base16[i] = ansi16[i];
+        }
+        var fg = foreground ?? Pack(basePalette.Foreground);
+        var bg = background ?? Pack(basePalette.Background);
+        var cur = cursor ?? Pack(basePalette.Cursor ?? basePalette.Foreground);
+        return Build(base16, fg, bg, cur);
+    }
+
+    private static int Pack(TerminalRgb rgb) => (rgb.R << 16) | (rgb.G << 8) | rgb.B;
 
     /// <summary>The colour scheme the core reports to programs that ask.</summary>
     public static ColorScheme SchemeFor(bool dark) => dark ? ColorScheme.Dark : ColorScheme.Light;

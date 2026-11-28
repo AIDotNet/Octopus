@@ -47,7 +47,7 @@ public static class ThemeReader
     private static readonly string[] KnownTopLevel =
     [
         "$schema", "schema", "name", "appearance", "accent", "corners", "density", "fontScale",
-        "colors", "controls", "terminal", "syntax", "app", "fonts",
+        "colors", "controls", "terminal", "syntax", "app", "fonts", "effects",
     ];
 
     public sealed record Result(ThemeDefinition? Theme, IReadOnlyList<ManifestIssue> Issues)
@@ -139,6 +139,7 @@ public static class ThemeReader
                 "is not an Octopus color"),
             UiFont = fonts?.String("ui"),
             MonoFont = fonts?.String("mono"),
+            Effects = ReadEffects(root.Object("effects")),
         };
     }
 
@@ -226,6 +227,65 @@ public static class ThemeReader
             ansi = parsed!;
         }
         return new TerminalColors(Color(terminal, "foreground"), Color(terminal, "background"), Color(terminal, "cursor"), Color(terminal, "selection"), ansi);
+    }
+
+    private static ThemeEffects? ReadEffects(ManifestObject? obj)
+    {
+        if (obj is not { } effects) return null;
+        effects.WarnUnknown("inputGlow", "chromeGlow", "ambientGrid", "hudCorners");
+
+        InputGlowEffect? inputGlow = null;
+        if (effects.Object("inputGlow") is { } glow)
+        {
+            glow.WarnUnknown("style", "colors", "intensity", "accelerateOnAgentWorking");
+            var style = glow.String("style") switch
+            {
+                null or "orbit" => InputGlowStyle.Orbit,
+                "pulse" => InputGlowStyle.Pulse,
+                "static" => InputGlowStyle.Static,
+                "focus" => InputGlowStyle.Focus,
+                var other => Ignore(glow, "style", $"\"{other}\" must be orbit, pulse, static or focus", InputGlowStyle.Orbit),
+            };
+            var colors = new List<string>();
+            foreach (var raw in glow.Strings("colors"))
+            {
+                if (ThemeColor.TryParse(raw, out var parsed)) colors.Add(parsed.ToString());
+                else glow.Log.Warn(glow.At("colors"), $"\"{raw}\" is not a color (#RRGGBB or #RRGGBBAA); ignored");
+            }
+            var intensity = Number(glow, "intensity", 0.0, 1.2) ?? 0.65;
+            var accelerate = glow.Bool("accelerateOnAgentWorking", fallback: true);
+            inputGlow = new InputGlowEffect(style, colors, intensity, accelerate);
+        }
+
+        ChromeGlowEffect? chromeGlow = null;
+        if (effects.Object("chromeGlow") is { } chrome)
+        {
+            chrome.WarnUnknown("tabBeam", "railEnergyPillar", "titlebarLaserLine", "specularCardTopEdge", "statusBeaconPulse");
+            chromeGlow = new ChromeGlowEffect(
+                chrome.Bool("tabBeam"),
+                chrome.Bool("railEnergyPillar"),
+                chrome.Bool("titlebarLaserLine"),
+                chrome.Bool("specularCardTopEdge"),
+                chrome.Bool("statusBeaconPulse"));
+        }
+
+        AmbientGridEffect? ambientGrid = null;
+        if (effects.Object("ambientGrid") is { } grid)
+        {
+            grid.WarnUnknown("pattern", "opacity");
+            var pattern = grid.String("pattern") switch
+            {
+                null or "grid" => "grid",
+                "dots" => "dots",
+                var other => Ignore(grid, "pattern", $"\"{other}\" must be grid or dots", "grid"),
+            };
+            var opacity = Number(grid, "opacity", 0.0, 0.25) ?? 0.05;
+            ambientGrid = new AmbientGridEffect(pattern, opacity);
+        }
+
+        var hudCorners = effects.Bool("hudCorners");
+        if (inputGlow is null && chromeGlow is null && ambientGrid is null && !hudCorners) return null;
+        return new ThemeEffects(inputGlow, chromeGlow, ambientGrid, hudCorners);
     }
 
     /// <summary>A "dark" theme whose background is lighter than its text is almost certainly mislabeled.</summary>

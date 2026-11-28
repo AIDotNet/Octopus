@@ -28,6 +28,12 @@
     "extraArgs": true,
     "env": { "allowCustom": true }
   },
+  "providerSupport": {
+    "protocols": ["openaiChat", "openaiResponses"],
+    "strategy": "env",
+    "baseUrlEnv": "OPENAI_BASE_URL",
+    "apiKeyEnv": "OPENAI_API_KEY"
+  },
   "acp": {
     "mode": "native",
     "args": ["acp"],

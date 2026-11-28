@@ -42,6 +42,8 @@ public sealed class Project
     public List<TunnelSpec> Tunnels { get; set; } = [];
     /// <summary>Project-level default account id per agent id (design/13-多账户切换.md §4.3); empty follows global profile defaults.</summary>
     public Dictionary<string, string> AgentAccounts { get; set; } = [];
+    /// <summary>Project-level default backend ref (<c>account:*</c>, <c>provider:*</c>, or <c>tunnel:*</c>) per agent id (design/20-模型提供商与模型托管.md §3.2).</summary>
+    public Dictionary<string, string> AgentBackends { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 

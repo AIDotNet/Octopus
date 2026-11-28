@@ -4,6 +4,7 @@ using Octopus.App.Settings.Agents;
 using Octopus.App.Settings.Appearance;
 using Octopus.App.Settings.Experiments;
 using Octopus.App.Settings.General;
+using Octopus.App.Settings.Providers;
 using Octopus.App.Settings.Shortcuts;
 using Octopus.App.Settings.Ssh;
 using Octopus.App.Settings.Terminal;
@@ -19,6 +20,7 @@ internal static class SettingsModule
         services.AddSingleton<IPathPicker, StoragePathPicker>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<AgentsSettingsViewModel>();
+        services.AddTransient<ProvidersSettingsViewModel>();
         services.AddTransient<GeneralSettingsViewModel>();
         services.AddTransient<WorkspaceCleanupSettingsViewModel>();
         services.AddTransient<TerminalSettingsViewModel>();

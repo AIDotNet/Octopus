@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
 using Octopus.Core.Agents;
@@ -55,8 +56,8 @@ internal sealed class CollabLedger : IDisposable
     public Dictionary<string, CollabThreadRecord> Threads { get; } = new(StringComparer.Ordinal);
     /// <summary>Open permission cards raised by children, keyed by child + card: a child (a remote one especially) may have several.</summary>
     public Dictionary<(string Child, string Approval), CollabBubbledApproval> Approvals { get; } = [];
-    /// <summary>Per session: the answer it owes (the implicit reply when its turn ends without reply_thread).</summary>
-    public Dictionary<string, PendingExpectation> Pending { get; } = new(StringComparer.Ordinal);
+    /// <summary>Per session: FIFO queue of answers it owes (each implicit reply when a turn ends without reply_thread).</summary>
+    public Dictionary<string, List<PendingExpectation>> Pending { get; } = new(StringComparer.Ordinal);
     public List<EventWaiter> Waiters { get; } = [];
     /// <summary>Per caller: task/thread id → the sequence number await_events last reported.</summary>
     public Dictionary<string, Dictionary<string, long>> Seen { get; } = new(StringComparer.Ordinal);
@@ -130,6 +131,74 @@ internal sealed class CollabLedger : IDisposable
             if (seq > map.GetValueOrDefault(id)) map[id] = seq;
         }
         _dirty = true;
+    }
+
+    /* ---------- pending expectations (hold Gate) ---------- */
+
+    public void EnqueuePending(string targetItemId, PendingExpectation expectation)
+    {
+        if (!Pending.TryGetValue(targetItemId, out var list))
+        {
+            list = [];
+            Pending[targetItemId] = list;
+        }
+        list.Add(expectation);
+    }
+
+    public bool TryDequeuePending(string itemId, [NotNullWhen(true)] out PendingExpectation? pending)
+    {
+        if (!Pending.TryGetValue(itemId, out var list) || list.Count == 0)
+        {
+            pending = null;
+            return false;
+        }
+        pending = list[0];
+        list.RemoveAt(0);
+        if (list.Count == 0) Pending.Remove(itemId);
+        return true;
+    }
+
+    public void RemovePendingByThread(string itemId, string threadId)
+    {
+        if (!Pending.TryGetValue(itemId, out var list)) return;
+        var index = list.FindIndex(p => string.Equals(p.ThreadId, threadId, StringComparison.Ordinal));
+        if (index < 0) return;
+        list.RemoveAt(index);
+        if (list.Count == 0) Pending.Remove(itemId);
+    }
+
+    public void RemovePendingExact(string itemId, PendingExpectation expectation)
+    {
+        if (!Pending.TryGetValue(itemId, out var list)) return;
+        var index = list.FindIndex(p => ReferenceEquals(p, expectation));
+        if (index < 0) index = list.IndexOf(expectation);
+        if (index < 0) return;
+        list.RemoveAt(index);
+        if (list.Count == 0) Pending.Remove(itemId);
+    }
+
+    public bool RemovePendingMatching(string itemId, string? taskId, string? threadId)
+    {
+        if (!Pending.TryGetValue(itemId, out var list)) return false;
+        var removed = list.RemoveAll(p =>
+            (taskId is not null && string.Equals(p.TaskId, taskId, StringComparison.Ordinal))
+            || (threadId is not null && string.Equals(p.ThreadId, threadId, StringComparison.Ordinal)));
+        if (list.Count == 0) Pending.Remove(itemId);
+        return removed > 0;
+    }
+
+    public List<PendingExpectation> TakePendingForAbort(string itemId, bool allOpenTasks)
+    {
+        if (!Pending.TryGetValue(itemId, out var list) || list.Count == 0) return [];
+        if (allOpenTasks)
+        {
+            Pending.Remove(itemId);
+            return list;
+        }
+        var head = list[0];
+        list.RemoveAt(0);
+        if (list.Count == 0) Pending.Remove(itemId);
+        return [head];
     }
 
     /* ---------- waiters (any thread) ---------- */

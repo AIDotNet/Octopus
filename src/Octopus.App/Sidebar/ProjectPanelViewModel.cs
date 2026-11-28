@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
+using Octopus.Agents.Providers;
 using Octopus.App.Collab;
 using Octopus.App.Common;
 using Octopus.App.Localization;
@@ -31,6 +32,8 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
     private readonly Activity.IItemActivityService _activity;
     private readonly Activity.ISubagentService? _subagents;
     private readonly IAgentAccountService? _accounts;
+    private readonly IModelProviderService? _providers;
+    private readonly IAgentBackendResolver? _backends;
     private readonly ISettingsStore? _settings;
     private readonly IGitService? _git;
     private readonly IWorkspaceManager? _workspaces;
@@ -61,10 +64,14 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         IFileOpener? fileOpener = null,
         ISettingsNavigator? settingsNavigator = null,
         DeviceSwitcherViewModel? devices = null,
-        ICollabCoordinator? collab = null)
+        ICollabCoordinator? collab = null,
+        IModelProviderService? providers = null,
+        IAgentBackendResolver? backends = null)
     {
         _subagents = subagents;
         _accounts = accounts;
+        _providers = providers;
+        _backends = backends;
         _settings = settings;
         _git = git;
         _workspaces = workspaces;
@@ -75,6 +82,7 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
         _collab?.Changed += _ => UiContext.Run(RefreshCollabBadges);
         _devices?.Changed += (_, _) => UiContext.Run(NotifyDeviceState);
         _accounts?.Changed += (_, _) => UiContext.Run(Rebuild);
+        _providers?.Changed += (_, _) => UiContext.Run(Rebuild);
         _settings?.Changed += (_, _) => UiContext.Run(Rebuild);
         if (_subagents is not null)
         {
@@ -614,16 +622,41 @@ public sealed partial class ProjectPanelViewModel : ObservableObject, IRecipient
 
     private string? AccountBadgeOf(Project project, ProjectItem item)
     {
-        if (item.Kind != ProjectItemKind.Agent || item.AgentId is null || _accounts is null || _settings is null)
+        if (item.Kind != ProjectItemKind.Agent || item.AgentId is null || _settings is null)
         {
             return null;
         }
+        // Check remote tunnel or managed provider first.
+        if (item.Launch?.BackendRef is { } launchRef)
+        {
+            if (AgentBackendRefs.TryParseTunnel(launchRef, out var tpid))
+            {
+                var name = _providers?.Find(tpid)?.Name ?? tpid;
+                return $"⚡ {name}";
+            }
+            if (AgentBackendRefs.TryParseProvider(launchRef, out var pid) && _providers?.Find(pid) is { } p)
+            {
+                return p.Name;
+            }
+        }
         var definition = _catalog.Find(item.AgentId);
-        if (definition?.Accounts is null) return null;
+        if (definition is null) return null;
+        var profile = _settings.Current.Agents.ProfileOf(definition.Id);
+        if (_backends is not null && ProjectLocation.IsOnThisComputer(project))
+        {
+            var preferredRef = !string.IsNullOrWhiteSpace(item.Launch?.BackendRef)
+                ? item.Launch!.BackendRef
+                : _backends.ResolvePreferredBackendRef(definition, profile, project);
+            if (AgentBackendRefs.TryParseProvider(preferredRef, out var resolvedPid)
+                && _providers?.Find(resolvedPid) is { Enabled: true } resolvedProv)
+            {
+                return resolvedProv.Name;
+            }
+        }
+        if (definition.Accounts is null || _accounts is null) return null;
         var list = _accounts.GetAccounts(definition);
         if (list.Count < 2) return null;
 
-        var profile = _settings.Current.Agents.ProfileOf(definition.Id);
         var resolved = _accounts.Resolve(definition, profile, project, item.Launch);
         if (resolved.Account is not { } acc) return null;
         return acc.IsDefaultOrigin && acc.Label == "Default"

@@ -17,7 +17,14 @@ internal sealed class LocalGuiSessionProvider(CollabSessions sessions, Func<ITab
 
     public async Task<ICollabSessionBridge?> EnsureAsync(Project project, ProjectItem item, CancellationToken ct)
     {
-        await CollabUi.InvokeAsync(() => tabs?.Invoke()?.GetOrCreate(project, item)).ConfigureAwait(false);
+        await CollabUi.InvokeAsync(() =>
+        {
+            var control = tabs?.Invoke()?.GetOrCreate(project, item);
+            if (control is AgentGui.AgentGuiTabView guiView)
+            {
+                guiView.EnsureStarted();
+            }
+        }).ConfigureAwait(false);
         return sessions.Find(item.Id);
     }
 

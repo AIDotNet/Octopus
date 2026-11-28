@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Octopus.Acp.Dialects;
 using Octopus.Agents;
+using Octopus.Agents.Providers;
 using Octopus.Agents.Signals;
 using Octopus.Core.Agents;
 using Octopus.Core.Settings;
@@ -131,20 +132,20 @@ public sealed class AcpLaunchResolver(
         ApplyFeatureEnvironment(definition.Capabilities.Features, profile, env, protectedKeys);
         foreach (var (k, v) in profile.Env)
         {
-            env[k] = v;
+            SetMergedEnv(env, k, v);
             protectedKeys.Add(k);
         }
         if (launchEnv is not null)
         {
             foreach (var (k, v) in launchEnv)
             {
-                env[k] = v;
+                SetMergedEnv(env, k, v);
                 protectedKeys.Add(k);
             }
         }
         foreach (var (k, v) in acp.Env)
         {
-            env[k] = v;
+            SetMergedEnv(env, k, v);
             protectedKeys.Add(k);
         }
 
@@ -547,6 +548,20 @@ public sealed class AcpLaunchResolver(
         catch
         {
             return resolvedExecutable;
+        }
+    }
+
+    private static void SetMergedEnv(Dictionary<string, string> env, string key, string value)
+    {
+        if (string.Equals(key, ProviderMaterializer.OpenCodeConfigContentEnv, StringComparison.OrdinalIgnoreCase)
+            && env.TryGetValue(key, out var existing)
+            && !string.IsNullOrWhiteSpace(existing))
+        {
+            env[key] = ProviderMaterializer.MergeOpenCodeConfigJson(existing, value);
+        }
+        else
+        {
+            env[key] = value;
         }
     }
 }

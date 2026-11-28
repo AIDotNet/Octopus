@@ -119,6 +119,11 @@
       "linuxUserAttribute": "username"
     }
   },
+  "providerSupport": {
+    "protocols": ["geminiOfficialKey"],
+    "strategy": "env",
+    "apiKeyEnv": "GEMINI_API_KEY"
+  },
   "acp": {
     "mode": "native",
     "args": [

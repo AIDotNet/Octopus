@@ -29,7 +29,8 @@ public sealed record ComposedTheme(
     IReadOnlyDictionary<string, string> App,
     string? UiFont,
     string? MonoFont,
-    IReadOnlyList<ContrastProblem> Problems)
+    IReadOnlyList<ContrastProblem> Problems,
+    ThemeEffects? Effects = null)
 {
     /// <summary>False when the text would be unreadable: the app keeps the previous theme and shows <see cref="Problems"/>.</summary>
     public bool IsAcceptable => Problems.All(p => !p.Blocking);
@@ -65,6 +66,7 @@ public static class ThemeComposer
         var syntax = new Dictionary<string, string>(StringComparer.Ordinal);
         var app = new Dictionary<string, string>(StringComparer.Ordinal);
         TerminalColors? terminal = null;
+        ThemeEffects? effects = null;
 
         foreach (var layer in layers)
         {
@@ -89,6 +91,16 @@ public static class ThemeComposer
                     : new TerminalColors(t.Foreground ?? terminal.Foreground, t.Background ?? terminal.Background,
                         t.Cursor ?? terminal.Cursor, t.Selection ?? terminal.Selection, t.Ansi ?? terminal.Ansi);
             }
+            if (layer.Effects is { } e)
+            {
+                effects = effects is null
+                    ? e
+                    : new ThemeEffects(
+                        e.InputGlow ?? effects.InputGlow,
+                        e.ChromeGlow ?? effects.ChromeGlow,
+                        e.AmbientGrid ?? effects.AmbientGrid,
+                        e.HudCorners || effects.HudCorners);
+            }
         }
 
         var problems = CheckContrast(colors, terminal, baseColors);
@@ -96,7 +108,7 @@ public static class ThemeComposer
             appearance, accent, corners ?? DefaultCorners, density ?? ThemeDensity.Standard,
             Math.Clamp(fontScale ?? 1.0, ThemeReader.MinFontScale, ThemeReader.MaxFontScale),
             colors, controls.ToDictionary(kv => kv.Key, kv => (IReadOnlyDictionary<string, string>)kv.Value, StringComparer.Ordinal),
-            terminal, syntax, app, uiFont, monoFont, problems);
+            terminal, syntax, app, uiFont, monoFont, problems, effects);
     }
 
     private static void Merge(Dictionary<string, string> target, IReadOnlyDictionary<string, string> source)

@@ -68,6 +68,9 @@ public class RemoteHostConnections : IDisposable
     /// <summary>How a transport to an address is opened; replaced in tests.</summary>
     public Func<Uri, CancellationToken, Task<IMessageTransport>> Dial { get; set; }
 
+    /// <summary>Optional controller-side reverse LLM API proxy handler attached automatically to every connected host.</summary>
+    public RemoteLlmProxyHandler? LlmProxy { get; set; }
+
     private async Task<IMessageTransport> DialAsync(Uri address, CancellationToken cancellationToken)
     {
         if (address.Scheme != RelayScheme) return await Transports.ConnectAsync(address, cancellationToken).ConfigureAwait(false);
@@ -542,6 +545,7 @@ public class RemoteHostConnections : IDisposable
         }
         client.WorkspaceChanged += () => WorkspaceChanged?.Invoke(hostId);
         client.ItemChanged += item => ItemChanged?.Invoke(hostId, item);
+        LlmProxy?.Attach(hostId, client);
         _ = client.Completion.ContinueWith(_ => OnLost(hostId, client), TaskScheduler.Default);
         _ = LoadAgentsAsync(hostId, client);
         StateChanged?.Invoke(hostId);

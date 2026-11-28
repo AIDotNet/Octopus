@@ -12,8 +12,10 @@ using TKCode.Arc.Localization;
 namespace Octopus.App.Launcher;
 
 /// <summary>
-/// The second panel of the launcher for one agent. Which controls it has follows the agent's capability blocks: no
-/// model block, no model list; no effort block, no effort control; and so on.
+/// The second panel of the launcher for one agent (Scheme C).
+/// Top source selector switches between subscription accounts, managed model providers, and (for remote host projects)
+/// local providers forwarded via encrypted tunnel. Model list, search (with cross-provider jump), effort narrowing,
+/// and pinned quick-launch all react to the active source.
 /// </summary>
 public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
 {
@@ -23,11 +25,16 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
     private readonly IModelDiscovery _discovery;
     private readonly string? _executable;
     private readonly Action<AgentLaunchOptions> _launch;
+    private readonly Action<PinnedLaunchPreset>? _onPin;
+    private readonly Action? _onOpenProviders;
     private readonly List<AgentOption> _known = [];
     private readonly List<AgentOption> _customModels = [];
     private readonly IReadOnlyList<AgentAccountRecord> _accounts;
+    private readonly IReadOnlyList<ModelProviderRecord> _providers;
+    private readonly bool _isRemoteHostProject;
     private readonly string _permissionId;
     private int _discoverGeneration;
+    private bool _syncingSelection;
 
     public AgentLaunchViewModel(
         AgentDefinition definition,
@@ -40,7 +47,12 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         IReadOnlyList<AgentAccountRecord>? accounts = null,
         string? preferredAccountId = null,
         AgentSurface defaultSurface = AgentSurface.Terminal,
-        bool? allowGui = null)
+        bool? allowGui = null,
+        IReadOnlyList<ModelProviderRecord>? compatibleProviders = null,
+        string? preferredBackendRef = null,
+        bool isRemoteHostProject = false,
+        Action<PinnedLaunchPreset>? onPin = null,
+        Action? onOpenProviders = null)
     {
         _definition = definition;
         _profile = profile;
@@ -49,6 +61,10 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         _executable = executable;
         _launch = launch;
         _accounts = accounts ?? [];
+        _providers = compatibleProviders ?? [];
+        _isRemoteHostProject = isRemoteHostProject;
+        _onPin = onPin;
+        _onOpenProviders = onOpenProviders;
 
         var capabilities = definition.Capabilities;
         HasModel = capabilities.Model is not null;
@@ -56,6 +72,7 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         HasFast = capabilities.Fast is not null;
         HasPrompt = capabilities.Prompt is not null;
         HasAccounts = _accounts.Count >= 2;
+        HasBackends = HasAccounts || _providers.Count > 0;
         AllowCustomModel = capabilities.Model?.AllowCustom ?? false;
         AgentName = definition.Name;
         SupportsAcp = allowGui ?? definition.SupportsAcp;
@@ -63,29 +80,22 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
 
         _permissionId = compiler.ResolvePermission(definition, profile, globalPermission) ?? PermissionModes.Default;
 
-        if (capabilities.Model is { } model)
-        {
-            _known.AddRange(model.Options);
-            if (!string.IsNullOrEmpty(profile.Model) && _known.All(o => o.Id != profile.Model))
-            {
-                _known.Add(new AgentOption { Id = profile.Model });
-            }
-        }
+        SeedDefaultKnownModels();
         SelectedModelId = string.IsNullOrEmpty(profile.Model) ? null : profile.Model;
         Fast = profile.Fast ?? false;
         SelectedEffortId = profile.Effort ?? "";
+
+        _syncingSelection = true;
         SelectedAccountId = HasAccounts
             ? (_accounts.FirstOrDefault(a => a.Id == preferredAccountId)?.Id ?? _accounts[0].Id)
             : null;
-        RebuildAccounts();
-        RebuildModels();
+        SelectedBackendRef = ResolveInitialBackendRef(preferredBackendRef, preferredAccountId);
+        _syncingSelection = false;
+
+        RebuildBackends();
+        ApplyActiveBackendModels(allowDiscovery: true);
         RebuildEfforts();
         ArcLanguage.Changed += OnLanguageChanged;
-
-        if (CanDiscover())
-        {
-            _ = DiscoverAsync();
-        }
     }
 
     public string AgentName { get; }
@@ -102,6 +112,9 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
     public bool HasFast { get; }
     public bool HasPrompt { get; }
     public bool HasAccounts { get; }
+    public bool HasBackends { get; }
+    public bool CanPin => _onPin is not null;
+    public bool CanManageProviders => _onOpenProviders is not null && _definition.SupportsManagedProviders;
     public bool AllowCustomModel { get; }
     public string EffortCaption => EffortCaptionOf(_definition.Capabilities.Effort?.Label);
 
@@ -112,14 +125,19 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
     public ObservableCollection<ModelOptionViewModel> Models { get; } = [];
     public ObservableCollection<EffortChoiceViewModel> Efforts { get; } = [];
     public ObservableCollection<SelectOption> AccountOptions { get; } = [];
+    public ObservableCollection<SelectOption> BackendOptions { get; } = [];
 
     [ObservableProperty] public partial string ModelQuery { get; set; } = "";
     [ObservableProperty] public partial string? SelectedModelId { get; set; }
     [ObservableProperty] public partial string SelectedEffortId { get; set; } = "";
     [ObservableProperty] public partial string? SelectedAccountId { get; set; }
+    [ObservableProperty] public partial string? SelectedBackendRef { get; set; }
     [ObservableProperty] public partial bool Fast { get; set; }
     [ObservableProperty] public partial string Prompt { get; set; } = "";
     [ObservableProperty] public partial bool IsDiscovering { get; set; }
+    [ObservableProperty] public partial bool IsPinnedFeedback { get; set; }
+
+    public bool IsTunnelSelected => SelectedBackendRef is not null && AgentBackendRefs.TryParseTunnel(SelectedBackendRef, out _);
 
     partial void OnModelQueryChanged(string value) => RebuildModels();
 
@@ -131,7 +149,138 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedAccountIdChanged(string? value)
     {
-        if (CanDiscover())
+        if (_syncingSelection) return;
+        _syncingSelection = true;
+        SelectedBackendRef = string.IsNullOrWhiteSpace(value) ? "" : AgentBackendRefs.Account(value);
+        _syncingSelection = false;
+        OnPropertyChanged(nameof(IsTunnelSelected));
+        ApplyActiveBackendModels(allowDiscovery: true);
+        RebuildEfforts();
+    }
+
+    partial void OnSelectedBackendRefChanged(string? value)
+    {
+        OnPropertyChanged(nameof(IsTunnelSelected));
+        if (_syncingSelection) return;
+        _syncingSelection = true;
+        if (value is not null && AgentBackendRefs.TryParseAccount(value, out var accId))
+        {
+            SelectedAccountId = accId;
+        }
+        else if (HasAccounts && string.IsNullOrEmpty(value))
+        {
+            SelectedAccountId = _accounts[0].Id;
+        }
+        _syncingSelection = false;
+        ApplyActiveBackendModels(allowDiscovery: true);
+        RebuildEfforts();
+    }
+
+    private string? ResolveInitialBackendRef(string? preferredBackendRef, string? preferredAccountId)
+    {
+        if (!HasBackends)
+        {
+            return null;
+        }
+        if (!string.IsNullOrWhiteSpace(preferredBackendRef))
+        {
+            if (AgentBackendRefs.TryParseProvider(preferredBackendRef, out var pId)
+                && !_isRemoteHostProject
+                && _providers.Any(p => p.Id == pId))
+            {
+                return preferredBackendRef;
+            }
+            if (AgentBackendRefs.TryParseTunnel(preferredBackendRef, out var tId)
+                && _isRemoteHostProject
+                && _providers.Any(p => p.Id == tId))
+            {
+                return preferredBackendRef;
+            }
+            if (AgentBackendRefs.TryParseAccount(preferredBackendRef, out var aId)
+                && !_isRemoteHostProject
+                && _accounts.Any(a => a.Id == aId))
+            {
+                return preferredBackendRef;
+            }
+        }
+        if (!_isRemoteHostProject && _accounts.Count > 0)
+        {
+            var acc = _accounts.FirstOrDefault(a => a.Id == preferredAccountId) ?? _accounts[0];
+            return AgentBackendRefs.Account(acc.Id);
+        }
+        return "";
+    }
+
+    private ModelProviderRecord? ActiveProvider()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedBackendRef))
+        {
+            return null;
+        }
+        if (AgentBackendRefs.TryParseProvider(SelectedBackendRef, out var pid)
+            || AgentBackendRefs.TryParseTunnel(SelectedBackendRef, out pid))
+        {
+            return _providers.FirstOrDefault(p => p.Id == pid);
+        }
+        return null;
+    }
+
+    private string BackendRefFor(ModelProviderRecord provider) =>
+        _isRemoteHostProject
+            ? AgentBackendRefs.Tunnel(provider.Id)
+            : AgentBackendRefs.Provider(provider.Id);
+
+    private void SeedDefaultKnownModels()
+    {
+        _known.Clear();
+        if (_definition.Capabilities.Model is { } model)
+        {
+            _known.AddRange(model.Options);
+            if (!string.IsNullOrEmpty(_profile.Model) && _known.All(o => o.Id != _profile.Model))
+            {
+                _known.Add(new AgentOption { Id = _profile.Model });
+            }
+        }
+        foreach (var custom in _customModels)
+        {
+            if (_known.All(o => o.Id != custom.Id))
+            {
+                _known.Add(custom);
+            }
+        }
+    }
+
+    private void ApplyActiveBackendModels(bool allowDiscovery)
+    {
+        var provider = ActiveProvider();
+        if (provider is not null)
+        {
+            // Cancel any in-flight native discovery so it doesn't overwrite provider models.
+            Interlocked.Increment(ref _discoverGeneration);
+            IsDiscovering = false;
+            _known.Clear();
+            var enabledModels = provider.Models.Where(m => m.Enabled).ToList();
+            foreach (var spec in enabledModels)
+            {
+                var note = spec.Tier != ModelSlotTier.None ? spec.Tier.ToString() : null;
+                _known.Add(new AgentOption
+                {
+                    Id = spec.Id,
+                    Label = string.IsNullOrWhiteSpace(spec.DisplayName) ? spec.Id : spec.DisplayName,
+                    Note = note,
+                });
+            }
+            if (SelectedModelId is not null && enabledModels.All(m => !string.Equals(m.Id, SelectedModelId, StringComparison.OrdinalIgnoreCase)))
+            {
+                SelectedModelId = enabledModels.FirstOrDefault()?.Id;
+            }
+            RebuildModels();
+            return;
+        }
+
+        SeedDefaultKnownModels();
+        RebuildModels();
+        if (allowDiscovery && CanDiscover())
         {
             _ = DiscoverAsync();
         }
@@ -143,6 +292,14 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         {
             return;
         }
+        if (!string.IsNullOrWhiteSpace(option.SwitchBackendRef)
+            && !string.Equals(option.SwitchBackendRef, SelectedBackendRef, StringComparison.Ordinal))
+        {
+            SelectedBackendRef = option.SwitchBackendRef;
+            SelectedModelId = option.Id;
+            ModelQuery = "";
+            return;
+        }
         if (option.IsCustom && option.Id is { } customId)
         {
             if (_customModels.All(o => o.Id != customId))
@@ -151,7 +308,6 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
             }
             if (_known.All(o => o.Id != customId))
             {
-                // Keep a typed model id in the list so it stays visible (and checked) once the search is cleared.
                 _known.Add(new AgentOption { Id = customId });
             }
         }
@@ -193,34 +349,125 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void LaunchTerminal() => _launch(BuildOptions(AgentSurface.Terminal));
 
+    [RelayCommand]
+    private void PinCurrent()
+    {
+        if (_onPin is null) return;
+        var provider = ActiveProvider();
+        var modelLabel = SelectedModelId is null
+            ? null
+            : Models.FirstOrDefault(m => m.Id == SelectedModelId)?.Label ?? SelectedModelId;
+        var parts = new List<string> { _definition.Name };
+        if (provider is not null) parts.Add(provider.Name);
+        if (!string.IsNullOrWhiteSpace(modelLabel)) parts.Add(modelLabel);
+        var preset = new PinnedLaunchPreset
+        {
+            Id = Guid.NewGuid().ToString("N")[..12],
+            CustomLabel = string.Join(" · ", parts),
+            AgentId = _definition.Id,
+            BackendRef = string.IsNullOrWhiteSpace(SelectedBackendRef) ? "" : SelectedBackendRef,
+            ModelId = HasModel && !string.IsNullOrWhiteSpace(SelectedModelId) ? SelectedModelId : null,
+            Effort = HasEffort && !string.IsNullOrWhiteSpace(SelectedEffortId) ? SelectedEffortId : null,
+        };
+        _onPin(preset);
+        IsPinnedFeedback = true;
+    }
+
+    [RelayCommand]
+    private void OpenProviders() => _onOpenProviders?.Invoke();
+
     /// <summary>
     /// The choice made in the panel. The panel always shows a selection, so an explicit "agent default" is the empty
     /// string (it overrides the profile's value and produces no argument); null is only for blocks the agent lacks.
     /// </summary>
-    public AgentLaunchOptions BuildOptions(AgentSurface? surface = null) => new()
+    public AgentLaunchOptions BuildOptions(AgentSurface? surface = null)
     {
-        Model = HasModel ? SelectedModelId ?? "" : null,
-        Effort = HasEffort ? SelectedEffortId : null,
-        Fast = HasFast ? Fast : null,
-        AccountId = HasAccounts && !string.IsNullOrWhiteSpace(SelectedAccountId) ? SelectedAccountId : null,
-        Prompt = HasPrompt && !string.IsNullOrWhiteSpace(Prompt) ? Prompt.Trim() : null,
-        Surface = surface is { } chosen ? (SupportsAcp ? chosen : AgentSurface.Terminal) : null,
-    };
+        var backendRef = HasBackends && !string.IsNullOrWhiteSpace(SelectedBackendRef) ? SelectedBackendRef : null;
+        string? accountId = null;
+        if (backendRef is not null && AgentBackendRefs.TryParseAccount(backendRef, out var parsedAcc))
+        {
+            accountId = HasAccounts ? parsedAcc : null;
+        }
+        else if (backendRef is null && HasAccounts && !string.IsNullOrWhiteSpace(SelectedAccountId))
+        {
+            accountId = SelectedAccountId;
+        }
 
-    private void RebuildAccounts()
+        return new AgentLaunchOptions
+        {
+            Model = HasModel ? SelectedModelId ?? "" : null,
+            Effort = HasEffort ? SelectedEffortId : null,
+            Fast = HasFast ? Fast : null,
+            AccountId = accountId,
+            BackendRef = backendRef,
+            Prompt = HasPrompt && !string.IsNullOrWhiteSpace(Prompt) ? Prompt.Trim() : null,
+            Surface = surface is { } chosen ? (SupportsAcp ? chosen : AgentSurface.Terminal) : null,
+        };
+    }
+
+    private void RebuildBackends()
     {
         AccountOptions.Clear();
-        if (!HasAccounts) return;
-        foreach (var account in _accounts)
+        BackendOptions.Clear();
+
+        if (HasAccounts)
         {
-            var label = account.IsDefaultOrigin && account.Label == "Default"
-                ? AppLangResources.Get(AppLangResourceKind.AccountDefaultName)
-                : account.Label;
-            if (!string.IsNullOrWhiteSpace(account.Identity))
+            foreach (var account in _accounts)
             {
-                label = $"{label} ({account.Identity})";
+                var label = account.IsDefaultOrigin && account.Label == "Default"
+                    ? AppLangResources.Get(AppLangResourceKind.AccountDefaultName)
+                    : account.Label;
+                if (!string.IsNullOrWhiteSpace(account.Identity))
+                {
+                    label = $"{label} ({account.Identity})";
+                }
+                AccountOptions.Add(new SelectOption(account.Id, label));
             }
-            AccountOptions.Add(new SelectOption(account.Id, label));
+        }
+
+        if (!HasBackends)
+        {
+            return;
+        }
+
+        if (_isRemoteHostProject)
+        {
+            BackendOptions.Add(new SelectOption("", AppLangResources.Get(AppLangResourceKind.BackendFollowGlobal)));
+            foreach (var provider in _providers)
+            {
+                var tag = ProviderProtocolNames.DisplayLabel(provider.Protocol);
+                BackendOptions.Add(new SelectOption(
+                    AgentBackendRefs.Tunnel(provider.Id),
+                    $"⚡ {provider.Name} ({tag})"));
+            }
+            return;
+        }
+
+        if (_accounts.Count > 0)
+        {
+            foreach (var account in _accounts)
+            {
+                var label = account.IsDefaultOrigin && account.Label == "Default"
+                    ? AppLangResources.Get(AppLangResourceKind.AccountDefaultName)
+                    : account.Label;
+                if (!string.IsNullOrWhiteSpace(account.Identity))
+                {
+                    label = $"{label} ({account.Identity})";
+                }
+                BackendOptions.Add(new SelectOption(AgentBackendRefs.Account(account.Id), label));
+            }
+        }
+        else
+        {
+            BackendOptions.Add(new SelectOption("", AppLangResources.Get(AppLangResourceKind.AgentDefault)));
+        }
+
+        foreach (var provider in _providers)
+        {
+            var tag = ProviderProtocolNames.DisplayLabel(provider.Protocol);
+            BackendOptions.Add(new SelectOption(
+                AgentBackendRefs.Provider(provider.Id),
+                $"{provider.Name} ({tag})"));
         }
     }
 
@@ -229,6 +476,8 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         Models.Clear();
         var query = ModelQuery.Trim();
         var language = AgentLanguage.Current;
+        var activeProvider = ActiveProvider();
+
         Models.Add(new ModelOptionViewModel(null, AppLangResources.Get(AppLangResourceKind.AgentDefault), select: SelectModel)
         {
             IsSelected = SelectedModelId is null,
@@ -249,6 +498,38 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
                 IsSelected = option.Id == SelectedModelId,
             });
         }
+
+        // Cross-provider model search: when user types a query, also match models from other compatible providers.
+        if (query.Length > 0 && _providers.Count > 0)
+        {
+            foreach (var other in _providers)
+            {
+                if (activeProvider is not null && other.Id == activeProvider.Id) continue;
+                var targetRef = BackendRefFor(other);
+                var badge = _isRemoteHostProject ? $"⚡ {other.Name}" : other.Name;
+                foreach (var spec in other.Models)
+                {
+                    if (!spec.Enabled) continue;
+                    var display = string.IsNullOrWhiteSpace(spec.DisplayName) ? spec.Id : spec.DisplayName;
+                    if (!display.Contains(query, StringComparison.OrdinalIgnoreCase)
+                        && !spec.Id.Contains(query, StringComparison.OrdinalIgnoreCase)
+                        && !other.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    var iconKey = ModelIcons.KeyFor(spec.Id, display, null, _definition.Id);
+                    Models.Add(new ModelOptionViewModel(
+                        spec.Id,
+                        display,
+                        note: null,
+                        select: SelectModel,
+                        iconKey: iconKey,
+                        switchBackendRef: targetRef,
+                        sourceBadge: badge));
+                }
+            }
+        }
+
         if (AllowCustomModel && query.Length > 0 && _known.All(o => !string.Equals(o.Id, query, StringComparison.OrdinalIgnoreCase)))
         {
             Models.Add(new ModelOptionViewModel(
@@ -273,6 +554,17 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
         }
         Efforts.Add(new EffortChoiceViewModel("", AppLangResources.Get(AppLangResourceKind.EffortDefault)));
         var options = _compiler.EffortOptionsFor(_definition, SelectedModelId);
+
+        // If a managed provider model explicitly restricts SupportedEfforts, narrow the effort chips accordingly.
+        var activeProvider = ActiveProvider();
+        var modelSpec = activeProvider?.Models.FirstOrDefault(m =>
+            string.Equals(m.Id, SelectedModelId, StringComparison.OrdinalIgnoreCase));
+        if (modelSpec is { SupportedEfforts.Count: > 0 })
+        {
+            var allowed = new HashSet<string>(modelSpec.SupportedEfforts, StringComparer.OrdinalIgnoreCase);
+            options = options.Where(o => allowed.Contains(o.Id)).ToList();
+        }
+
         foreach (var option in options)
         {
             Efforts.Add(new EffortChoiceViewModel(option.Id, EffortName(option)));
@@ -285,6 +577,7 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
 
     private bool CanDiscover()
     {
+        if (ActiveProvider() is not null || _isRemoteHostProject) return false;
         var discover = _definition.Capabilities.Model?.Discover;
         if (discover is null) return false;
         if (!string.Equals(discover.Kind, "command", StringComparison.OrdinalIgnoreCase))
@@ -345,8 +638,7 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
                 environmentOverrides: envOverrides));
             UiContext.PostToUi(() =>
             {
-                if (gen != _discoverGeneration) return;
-                // Rebuild cleanly from discovered -> custom -> static -> profile so switching accounts never leaks stale models.
+                if (gen != _discoverGeneration || ActiveProvider() is not null) return;
                 _known.Clear();
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var option in found)
@@ -386,7 +678,7 @@ public sealed partial class AgentLaunchViewModel : ObservableObject, IDisposable
 
     private void OnLanguageChanged(object? sender, LanguageChangedEventArgs e) => UiContext.PostToUi(() =>
     {
-        RebuildAccounts();
+        RebuildBackends();
         RebuildModels();
         RebuildEfforts();
         OnPropertyChanged(nameof(EffortCaption));

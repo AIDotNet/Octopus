@@ -64,7 +64,9 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         Octopus.Terminal.ITerminalLaunchPlanner? launchPlanner = null,
         Services.IProjectService? projects = null,
         Octopus.Terminal.Avalonia.TerminalSessionRegistry? sessions = null,
-        IAgentInstaller? installer = null)
+        IAgentInstaller? installer = null,
+        Octopus.Agents.Providers.IModelProviderService? providers = null,
+        Octopus.App.Shell.ISettingsNavigator? navigator = null)
     {
         _installer = installer;
         _settings = settings;
@@ -73,7 +75,7 @@ public sealed partial class AgentsSettingsViewModel : ObservableObject, IDisposa
         _opener = opener;
         _store = store;
         _dialogs = dialogs;
-        _services = new AgentServices(settings, compiler, discovery, opener, pathPicker, accounts, dialogs, launchPlanner, projects, sessions);
+        _services = new AgentServices(settings, compiler, discovery, opener, pathPicker, accounts, dialogs, launchPlanner, projects, sessions, providers, navigator);
         _isScanning = scanner.IsScanning;
         BuildPermissionOptions();
         BuildAcpAdapterPolicyOptions();

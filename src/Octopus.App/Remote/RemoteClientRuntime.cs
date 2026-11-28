@@ -1,3 +1,5 @@
+using Octopus.Agents.Providers;
+using Octopus.Core.Agents;
 using Octopus.Platform;
 using Octopus.Remote.Client;
 using Octopus.Remote.Security;
@@ -68,13 +70,46 @@ public sealed class RemoteIdentityProvider(IAppPaths paths, ISecretStore secrets
 
 /// <summary>
 /// The device side of remote operation inside the desktop app (<see cref="RemoteHostConnections"/>, shared with the
-/// phone app): this computer's key from the keystore, its paired hosts beside it, its name from the settings, and the
-/// relay it is signed in to.
+/// phone app): this computer's key from the keystore, its paired hosts beside it, its name from the settings, the
+/// relay it is signed in to, and the controller-side encrypted LLM tunnel proxy handler.
 /// </summary>
-public sealed class RemoteClientRuntime(RemoteIdentityProvider identity, ISettingsStore settings, RelayAccess? relay = null)
-    : RemoteHostConnections(
-        identity.GetAsync,
-        () => new PairedPeerStore(Path.Combine(identity.Folder, "hosts.json")),
-        () => new DeviceDescription(string.IsNullOrWhiteSpace(settings.Current.Remote.DeviceName) ? Environment.MachineName : settings.Current.Remote.DeviceName!.Trim(), DeviceKind.Desktop),
-        RemoteHostRuntime.Hello,
-        relay);
+public sealed class RemoteClientRuntime : RemoteHostConnections
+{
+    public RemoteClientRuntime(
+        RemoteIdentityProvider identity,
+        ISettingsStore settings,
+        RelayAccess? relay = null,
+        IModelProviderService? providers = null)
+        : base(
+            identity.GetAsync,
+            () => new PairedPeerStore(Path.Combine(identity.Folder, "hosts.json")),
+            () => new DeviceDescription(string.IsNullOrWhiteSpace(settings.Current.Remote.DeviceName) ? Environment.MachineName : settings.Current.Remote.DeviceName!.Trim(), DeviceKind.Desktop),
+            RemoteHostRuntime.Hello,
+            relay)
+    {
+        if (providers is not null)
+        {
+            LlmProxy = new RemoteLlmProxyHandler(new LocalProviderTunnelResolver(providers));
+        }
+    }
+
+    private sealed class LocalProviderTunnelResolver(IModelProviderService providers) : ILlmTunnelProviderResolver
+    {
+        public async Task<ResolvedTunnelUpstream?> ResolveUpstreamAsync(string providerId, CancellationToken cancellationToken = default)
+        {
+            var provider = providers.Find(providerId);
+            if (provider is null || !provider.Enabled || !provider.AllowRemoteTunnel)
+            {
+                return null;
+            }
+            var secret = await providers.ReadSecretAsync(provider.Id, cancellationToken).ConfigureAwait(false) ?? "";
+            return new ResolvedTunnelUpstream(
+                ProviderProtocolNames.ToConfigName(provider.Protocol),
+                provider.BaseUrl,
+                secret,
+                provider.AuthEnvPreference,
+                provider.Headers.Count > 0 ? provider.Headers : null,
+                provider.AllowRemoteTunnel);
+        }
+    }
+}

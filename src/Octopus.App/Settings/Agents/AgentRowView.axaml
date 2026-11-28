@@ -254,6 +254,23 @@
                         <TextBlock Classes="mono" Text="{Binding AcpCommandPreview}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                     </agents:FieldRow>
 
+                    <agents:FieldRow Label="{l:AppLangResource BackendSourceLabel}"
+                                     IsVisible="{Binding HasProviderSupport}">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <arc:Select AutoScrollToSelectedItem="False"
+                                        Size="Small"
+                                        HorizontalAlignment="Stretch"
+                                        ItemsSource="{Binding BackendOptions}"
+                                        SelectedValue="{Binding SelectedBackendRef, Mode=TwoWay}" />
+                            <arc:Button Grid.Column="1"
+                                        Variant="Ghost"
+                                        Size="Small"
+                                        IsVisible="{Binding CanOpenProviders}"
+                                        Command="{Binding OpenProvidersSettingsCommand}"
+                                        Content="{l:AppLangResource ProvidersManageMenu}" />
+                        </Grid>
+                    </agents:FieldRow>
+
                     <agents:FieldRow Label="{l:AppLangResource AccountSectionLabel}"
                                      Description="{Binding AccountsSection.SectionHint}"
                                      TopAligned="True"

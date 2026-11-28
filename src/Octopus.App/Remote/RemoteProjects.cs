@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using Octopus.Agents.Providers;
 using Octopus.App.Activity;
 using Octopus.App.Services;
 using Octopus.Core.Agents;
@@ -21,15 +22,17 @@ public sealed class RemoteProjects : IDisposable
     private readonly IProjectService _projects;
     private readonly RemoteClientRuntime _runtime;
     private readonly IItemActivityService _activity;
+    private readonly IModelProviderService? _providers;
     // The names the person gave, as last sent or received: only a change of one is sent to the host.
     private readonly Dictionary<string, string?> _customTitles = new(StringComparer.Ordinal);
     private bool _applying;
 
-    public RemoteProjects(IProjectService projects, RemoteClientRuntime runtime, IItemActivityService activity)
+    public RemoteProjects(IProjectService projects, RemoteClientRuntime runtime, IItemActivityService activity, IModelProviderService? providers = null)
     {
         _projects = projects;
         _runtime = runtime;
         _activity = activity;
+        _providers = providers;
         projects.Changed += OnProjectsChanged;
         runtime.StateChanged += OnHostStateChanged;
         runtime.WorkspaceChanged += OnHostWorkspaceChanged;
@@ -57,6 +60,52 @@ public sealed class RemoteProjects : IDisposable
     {
         if (project.RemoteHost is not { } hostId || project.RemoteId is not { } remoteId) return null;
         var client = await _runtime.ConnectAsync(hostId);
+
+        LlmTunnelProviderMessage? tunnelProvider = null;
+        if (agentId is not null)
+        {
+            var effectiveRef = launch?.BackendRef;
+            if (string.IsNullOrWhiteSpace(effectiveRef)
+                && project.AgentBackends is not null
+                && project.AgentBackends.TryGetValue(agentId, out var projectRef))
+            {
+                effectiveRef = projectRef;
+            }
+            if (AgentBackendRefs.TryParseTunnel(effectiveRef, out var providerId)
+                && _providers is not null
+                && _runtime.LlmProxy is not null)
+            {
+                if (!client.SupportsLlmTunnel)
+                {
+                    throw new RemoteException(RemoteMethods.NotAllowed, "The remote host does not support encrypted API tunneling. Update Octopus on the remote host.");
+                }
+                var provider = _providers.Find(providerId);
+                if (provider is null || !provider.Enabled || !provider.AllowRemoteTunnel)
+                {
+                    throw new RemoteException(RemoteMethods.NotAllowed, "The selected local model provider is disabled or does not allow remote tunneling.");
+                }
+                var grantToken = _runtime.LlmProxy.IssueGrant(hostId, provider.Id);
+                tunnelProvider = new LlmTunnelProviderMessage
+                {
+                    GrantToken = grantToken,
+                    DisplayName = provider.Name,
+                    Protocol = ProviderProtocolNames.ToConfigName(provider.Protocol),
+                    AuthEnvPreference = provider.AuthEnvPreference,
+                    IsolateConfigDir = provider.IsolateConfigDir,
+                    Models =
+                    [
+                        .. provider.Models.Where(m => m.Enabled).Select(m => new LlmTunnelModelMessage
+                        {
+                            Id = m.Id,
+                            DisplayName = m.DisplayName,
+                            Tier = m.Tier.ToString(),
+                            SupportedEfforts = m.SupportedEfforts is { Count: > 0 } ? [.. m.SupportedEfforts] : null,
+                        }),
+                    ],
+                };
+            }
+        }
+
         var created = await client.CreateItemAsync(new CreateItemMessage
         {
             ProjectId = remoteId,
@@ -65,9 +114,14 @@ public sealed class RemoteProjects : IDisposable
             Model = launch?.Model,
             Effort = launch?.Effort,
             Prompt = launch?.Prompt,
+            TunnelProvider = tunnelProvider,
         });
         await SyncAsync(project);
         if (_projects.FindItem(created.Id) is not { } item) return null;
+        if (tunnelProvider is not null && item.Launch is not null)
+        {
+            item.Launch.BackendRef = launch?.BackendRef;
+        }
         _projects.ActivateItem(item.Id);
         return item;
     }

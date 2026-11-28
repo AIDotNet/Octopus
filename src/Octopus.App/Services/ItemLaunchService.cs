@@ -1,5 +1,6 @@
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
+using Octopus.Agents.Providers;
 using Octopus.Agents.Signals;
 using Octopus.App.Collab;
 using Octopus.App.Common;
@@ -27,7 +28,9 @@ public sealed class ItemLaunchService(
     ISystemProxy? systemProxy = null,
     PathComparer? paths = null,
     IAgentAccountService? accounts = null,
-    CollabCliMcpInjector? collabInjector = null) : IItemLaunchService
+    CollabCliMcpInjector? collabInjector = null,
+    IAgentBackendResolver? backends = null,
+    ProviderMaterializer? materializer = null) : IItemLaunchService
 {
     /// <summary>Points at an <c>octopus-signal</c> build when it is not next to the app (development).</summary>
     public const string ForwarderVariable = "OCTOPUS_SIGNAL_FORWARDER";
@@ -115,13 +118,39 @@ public sealed class ItemLaunchService(
             Fast = item.Launch?.Fast,
             Permission = item.Launch?.Permission,
             AccountId = item.Launch?.AccountId,
+            BackendRef = item.Launch?.BackendRef,
             Prompt = restored ? null : item.Launch?.Prompt,
             Resume = continueLatest,
             SessionId = sessionId,
             Env = item.Launch?.Env,
         };
         var profile = current.Agents.ProfileOf(definition.Id);
-        var resolvedAccount = accounts?.Resolve(definition, profile, project, launch);
+        IReadOnlyDictionary<string, string>? backendEnv = null;
+        IReadOnlyList<string>? unsetEnv = null;
+        string? modelPrefix = null;
+        if (item.Launch?.TunnelProvider is { } tunnelSpec
+            && !string.IsNullOrWhiteSpace(item.Launch.TunnelLoopbackBaseUrl)
+            && materializer is not null)
+        {
+            var chosenModel = !string.IsNullOrWhiteSpace(launch.Model) ? launch.Model : profile.Model;
+            var materialized = materializer.MaterializeTunnel(definition, tunnelSpec, item.Launch.TunnelLoopbackBaseUrl!, chosenModel);
+            backendEnv = materialized.Environment;
+            unsetEnv = materialized.UnsetEnvironment;
+            modelPrefix = materialized.ModelPrefix;
+        }
+        else if (backends is not null)
+        {
+            var resolved = backends.ResolveAsync(definition, profile, project, launch).GetAwaiter().GetResult();
+            backendEnv = resolved.Environment;
+            unsetEnv = resolved.UnsetEnvironment;
+            modelPrefix = resolved.ModelPrefix;
+        }
+        else if (accounts is not null)
+        {
+            var resolvedAccount = accounts.Resolve(definition, profile, project, launch);
+            backendEnv = resolvedAccount.Environment;
+            unsetEnv = resolvedAccount.UnsetEnvironment;
+        }
         var request = new AgentCompileRequest(
             definition,
             profile,
@@ -129,8 +158,9 @@ public sealed class ItemLaunchService(
             current.Agents.DefaultPermission,
             scanner.Find(definition.Id)?.Path,
             AdditionalDirectories: ResolveAdditionalDirectories(project, cwd),
-            AccountEnvironment: resolvedAccount?.Environment,
-            UnsetEnvironment: resolvedAccount?.UnsetEnvironment);
+            AccountEnvironment: backendEnv,
+            UnsetEnvironment: unsetEnv,
+            ModelPrefix: modelPrefix);
         var command = compiler.Compile(request);
         // The signal channel (design/plugins/11-补充能力.md §1): status line, hooks and notify reach Octopus through
         // the forwarder. Nothing of the user's own configuration is changed; without a hub or forwarder the agent

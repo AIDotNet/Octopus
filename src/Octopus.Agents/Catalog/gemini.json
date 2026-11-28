@@ -45,6 +45,13 @@
       "allowCustom": true
     }
   },
+  "providerSupport": {
+    "protocols": ["gemini", "geminiOfficialKey"],
+    "strategy": "env",
+    "baseUrlEnv": "GOOGLE_GEMINI_BASE_URL",
+    "apiKeyEnv": "GEMINI_API_KEY",
+    "unsetEnv": ["GOOGLE_API_KEY"]
+  },
   "acp": {
     "mode": "native",
     "args": [

@@ -30,6 +30,23 @@
       { "id": "model", "type": "string", "label": "Model", "env": "GOOSE_MODEL", "localized": { "zh-CN": { "label": "模型" } } }
     ]
   },
+  "providerSupport": {
+    "protocols": ["openaiChat", "anthropic"],
+    "strategy": "env",
+    "modelEnv": "GOOSE_MODEL",
+    "protocolBaseUrlEnvs": {
+      "openaiChat": "OPENAI_HOST",
+      "anthropic": "ANTHROPIC_HOST"
+    },
+    "protocolApiKeyEnvs": {
+      "openaiChat": "OPENAI_API_KEY",
+      "anthropic": "ANTHROPIC_API_KEY"
+    },
+    "protocolExtraEnv": {
+      "openaiChat": { "GOOSE_PROVIDER": "openai" },
+      "anthropic": { "GOOSE_PROVIDER": "anthropic" }
+    }
+  },
   "acp": {
     "mode": "native",
     "args": [

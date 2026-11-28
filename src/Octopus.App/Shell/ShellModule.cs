@@ -44,6 +44,8 @@ internal static class ShellModule
         services.AddSingleton<Octopus.App.Remote.HostWorkspace>();
         // Device side: the hosts this computer is paired with and the connections to them.
         services.AddSingleton<Octopus.App.Remote.RelayAccess>();
+        services.AddSingleton<Octopus.App.Remote.CoWorkIntegrationService>();
+        services.AddSingleton<Octopus.Agents.Providers.ICoWorkProviderBridge>(p => p.GetRequiredService<Octopus.App.Remote.CoWorkIntegrationService>());
         services.AddSingleton<Octopus.App.Remote.RemoteClientRuntime>();
         services.AddSingleton<Octopus.App.Remote.RemoteProjects>();
         services.AddSingleton<Octopus.App.Remote.RemoteProjectAccess>();

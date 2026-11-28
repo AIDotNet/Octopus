@@ -11,6 +11,12 @@ public interface IHostWorkspace
 {
     HostInfoMessage Info { get; }
     Task<IReadOnlyList<ProjectMessage>> ListProjectsAsync();
+    /// <summary>Desktop project groups in rail order; empty when no groups exist or unsupported.</summary>
+    Task<IReadOnlyList<ProjectGroupMessage>> ListProjectGroupsAsync() => Task.FromResult<IReadOnlyList<ProjectGroupMessage>>([]);
+    Task<ProjectGroupMessage> CreateProjectGroupAsync(CreateProjectGroupMessage request) => throw NoProjectGroups();
+    Task<ProjectGroupMessage> UpdateProjectGroupAsync(UpdateProjectGroupMessage request) => throw NoProjectGroups();
+    Task DeleteProjectGroupAsync(string groupId) => throw NoProjectGroups();
+    Task SetProjectGroupAsync(string projectId, string? groupId) => throw NoProjectGroups();
     /// <summary>Adds a folder of this computer as a project, or returns the project that folder already is.</summary>
     Task<ProjectMessage> CreateProjectAsync(CreateProjectMessage request);
     /// <summary>Reads the custom picture thumbnail of a project (<see cref="ProjectMessage.Image"/>); null when the project has none.</summary>
@@ -124,6 +130,8 @@ public interface IHostWorkspace
     Task ContinueBotGroupHandoffAsync(BotGroupContinueHandoffMessage request) => throw NoBotGroups();
     Task<BotGroupThreadDto> CreateBotGroupThreadAsync(string groupId) => throw NoBotGroups();
     Task RespondBotGroupApprovalAsync(BotGroupApprovalRespondMessage request) => throw NoBotGroups();
+
+    private static RemoteException NoProjectGroups() => new(RemoteProtocol.MethodNotFound, "Project groups are not supported by this host.");
 
     private static RemoteException NoBots() => new(RemoteProtocol.MethodNotFound, "Bots are not supported by this host.");
 

@@ -1,3 +1,4 @@
+using Octopus.Agents.Providers;
 using Octopus.Core.Agents;
 using Octopus.Platform;
 
@@ -94,6 +95,11 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
                 }
             }
             var value = modelParams.Count > 0 ? $"{model}[{string.Join(',', modelParams)}]" : model;
+            if (!string.IsNullOrWhiteSpace(request.ModelPrefix)
+                && !value.StartsWith(request.ModelPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                value = request.ModelPrefix + value;
+            }
             var option = modelCap.Options.FirstOrDefault(o => o.Id == model);
             AddTemplate(args, option?.Args ?? modelCap.Args, value);
         }
@@ -183,7 +189,16 @@ public sealed class AgentCommandCompiler : IAgentCommandCompiler
         {
             foreach (var (k, v) in attached.Environment)
             {
-                env[k] = v;
+                if (string.Equals(k, ProviderMaterializer.OpenCodeConfigContentEnv, StringComparison.Ordinal)
+                    && env.TryGetValue(k, out var existingOpenCode)
+                    && !string.IsNullOrWhiteSpace(existingOpenCode))
+                {
+                    env[k] = ProviderMaterializer.MergeOpenCodeConfigJson(existingOpenCode, v);
+                }
+                else
+                {
+                    env[k] = v;
+                }
             }
         }
 

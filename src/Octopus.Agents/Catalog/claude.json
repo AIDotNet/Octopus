@@ -134,6 +134,21 @@
       "jsonPaths": ["oauthAccount.emailAddress", "oauthAccount.displayName", "oauthAccount.organizationName"]
     }
   },
+  "providerSupport": {
+    "protocols": ["anthropic"],
+    "strategy": "env",
+    "baseUrlEnv": "ANTHROPIC_BASE_URL",
+    "apiKeyEnv": "ANTHROPIC_AUTH_TOKEN",
+    "altApiKeyEnv": "ANTHROPIC_API_KEY",
+    "modelEnv": "ANTHROPIC_MODEL",
+    "tierModelEnvs": {
+      "flagship": "ANTHROPIC_DEFAULT_OPUS_MODEL",
+      "balanced": "ANTHROPIC_DEFAULT_SONNET_MODEL",
+      "fast": "ANTHROPIC_DEFAULT_HAIKU_MODEL"
+    },
+    "isolateConfigDirEnv": "CLAUDE_CONFIG_DIR",
+    "unsetEnv": ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
+  },
   "acp": {
     "mode": "adapter",
     "dialect": "claude-acp",

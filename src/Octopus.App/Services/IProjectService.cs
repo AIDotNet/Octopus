@@ -40,6 +40,8 @@ public interface IProjectService
     void SetProjectAppearance(string projectId, string? color, string? icon, string? image);
     /// <summary>Binds an agent's default subscription account for one project; null or empty clears the override so the project follows global defaults.</summary>
     void SetProjectAgentAccount(string projectId, string agentId, string? accountId);
+    /// <summary>Binds an agent's default backend (<c>account:*</c>, <c>provider:*</c>, or <c>tunnel:*</c>) for one project; null clears the override.</summary>
+    void SetProjectAgentBackend(string projectId, string agentId, string? backendRef);
     void SetCurrent(string projectId);
 
     /// <summary>Adds a port forward to a project on an SSH host (design/11-SSH隧道.md); saved after a pause.</summary>

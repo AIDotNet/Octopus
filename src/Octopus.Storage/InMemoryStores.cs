@@ -56,6 +56,22 @@ public sealed class InMemoryAccountStore(AccountsDocument? initial = null) : IAc
     }
 }
 
+/// <summary>A model provider store that keeps <c>providers.json</c> in memory (headless tests).</summary>
+public sealed class InMemoryProviderStore(ProvidersDocument? initial = null) : IProviderStore
+{
+    public ProvidersDocument Current { get; private set; } = JsonProviderStore.Normalize(initial);
+    public event EventHandler? Changed;
+
+    public void Load() => Changed?.Invoke(this, EventArgs.Empty);
+
+    public void Update(Action<ProvidersDocument> mutate)
+    {
+        mutate(Current);
+        Current = JsonProviderStore.Normalize(Current);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+}
+
 /// <summary>A bot store that keeps <c>bots.json</c> in memory (headless tests).</summary>
 public sealed class InMemoryBotStore(BotsDocument? initial = null) : IBotStore
 {

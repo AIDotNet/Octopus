@@ -1,5 +1,6 @@
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
+using Octopus.Agents.Providers;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.Core.Agents;
@@ -23,7 +24,8 @@ public sealed class ItemOpener(
     Octopus.App.Remote.RemoteProjects? remoteProjects = null,
     Octopus.App.Remote.RemoteClientRuntime? remoteHosts = null,
     Octopus.App.Remote.RemoteProjectAccess? access = null,
-    IAgentAccountService? accounts = null) : IItemOpener
+    IAgentAccountService? accounts = null,
+    IAgentBackendResolver? backends = null) : IItemOpener
 {
     public ProjectItem? OpenTerminal(string? workspaceId = null, string? workingDirectory = null)
     {
@@ -69,20 +71,27 @@ public sealed class ItemOpener(
             return null;
         }
         var (resolvedWorkspaceId, resolvedCwd) = ResolveTarget(project, workspaceId, workingDirectory);
-        // For globalKeyring agents (Antigravity CLI), ensure the active keychain snapshot matches the resolved account before the PTY starts.
+        // For globalKeyring agents (Antigravity CLI), ensure the active keychain snapshot matches the resolved account
+        // when launching with an OAuth subscription account (skip when using a managed API-key provider).
         if (accounts is not null && definition.Accounts is { Mode: AccountModes.GlobalKeyring })
         {
             var profile = settings.Current.Agents.ProfileOf(definition.Id);
-            var resolved = accounts.Resolve(definition, profile, project, launch);
-            if (resolved.Account is { } targetAccount && accounts.GetActiveGlobalAccountId(definition.Id) != targetAccount.Id)
+            var effectiveRef = !string.IsNullOrWhiteSpace(launch?.BackendRef)
+                ? launch!.BackendRef
+                : backends?.ResolvePreferredBackendRef(definition, profile, project);
+            if (!AgentBackendRefs.TryParseProvider(effectiveRef, out _))
             {
-                try
+                var resolved = accounts.Resolve(definition, profile, project, launch);
+                if (resolved.Account is { } targetAccount && accounts.GetActiveGlobalAccountId(definition.Id) != targetAccount.Id)
                 {
-                    accounts.SwitchGlobalKeyringAsync(definition, targetAccount.Id).GetAwaiter().GetResult();
-                }
-                catch
-                {
-                    // If the snapshot is missing or keychain refuses, still open the terminal so the CLI can report or re-login.
+                    try
+                    {
+                        accounts.SwitchGlobalKeyringAsync(definition, targetAccount.Id).GetAwaiter().GetResult();
+                    }
+                    catch
+                    {
+                        // If the snapshot is missing or keychain refuses, still open the terminal so the CLI can report or re-login.
+                    }
                 }
             }
         }

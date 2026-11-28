@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Agents;
 using Octopus.Agents.Accounts;
+using Octopus.Agents.Providers;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.App.Services;
@@ -15,7 +16,7 @@ using Octopus.Storage;
 
 namespace Octopus.App.Launcher;
 
-/// <summary>The "+" menu: new terminal, open file, and the installed and enabled agents with their launch panels.</summary>
+/// <summary>The "+" menu: new terminal, open file, pinned quick launches, and the installed and enabled agents with their launch panels (Scheme C).</summary>
 public sealed partial class LauncherViewModel : ObservableObject
 {
     private readonly IAgentScanner _scanner;
@@ -28,6 +29,8 @@ public sealed partial class LauncherViewModel : ObservableObject
     private readonly ISettingsNavigator _navigator;
     private readonly IAgentAccountService? _accounts;
     private readonly IWorkspaceManager? _workspaces;
+    private readonly IModelProviderService? _providers;
+    private readonly IAgentBackendResolver? _backends;
     private readonly Dictionary<string, AgentLaunchViewModel> _panels = [];
     private readonly Plugins.PluginWorkbench? _plugins;
     private string? _targetWorkspaceId;
@@ -44,11 +47,15 @@ public sealed partial class LauncherViewModel : ObservableObject
         IProjectService projects,
         Plugins.PluginWorkbench? plugins = null,
         IAgentAccountService? accounts = null,
-        IWorkspaceManager? workspaces = null)
+        IWorkspaceManager? workspaces = null,
+        IModelProviderService? providers = null,
+        IAgentBackendResolver? backends = null)
     {
         _plugins = plugins;
         _accounts = accounts;
         _workspaces = workspaces;
+        _providers = providers;
+        _backends = backends;
         _scanner = scanner;
         _catalog = catalog;
         _settings = settings;
@@ -66,6 +73,7 @@ public sealed partial class LauncherViewModel : ObservableObject
         _catalog.Changed += (_, _) => UiContext.PostToUi(Refresh);
         _settings.Changed += (_, _) => UiContext.PostToUi(Refresh);
         _accounts?.Changed += (_, _) => UiContext.PostToUi(Refresh);
+        _providers?.Changed += (_, _) => UiContext.PostToUi(Refresh);
         plugins?.Manager.HostChanged += (_, _) => UiContext.PostToUi(RefreshViews);
         Refresh();
     }
@@ -73,6 +81,10 @@ public sealed partial class LauncherViewModel : ObservableObject
     /// <summary>Plugin views offered in the menu, under the agents.</summary>
     public ObservableCollection<LauncherViewEntry> Views { get; } = [];
     public bool HasViews => Views.Count > 0;
+
+    /// <summary>Pinned quick-launch combos (Agent + Provider + Model + Effort) shown at the top of the agent section.</summary>
+    public ObservableCollection<LauncherPinnedPresetViewModel> PinnedPresets { get; } = [];
+    public bool HasPinnedPresets => PinnedPresets.Count > 0 && !IsRemoteProject;
 
     private void RefreshViews()
     {
@@ -139,9 +151,8 @@ public sealed partial class LauncherViewModel : ObservableObject
         ShowWorkspaceBanner = true;
     }
 
-    /// <summary>In a project on an SSH host no agent is offered: agents need this computer's files and programs.</summary>
     /// <summary>The current project is somewhere agents cannot run (an SSH host): the menu says so instead of listing them.</summary>
-    public bool IsRemoteProject => _projects.Current is { } current && !Octopus.Core.Projects.ProjectLocation.CanRunAgents(current);
+    public bool IsRemoteProject => _projects.Current is { } current && !ProjectLocation.CanRunAgents(current);
     public bool ShowRemoteNote => IsRemoteProject;
     public bool ShowScanning => IsScanning && Agents.Count == 0 && !IsRemoteProject;
     public bool ShowNoAgents => !IsScanning && Agents.Count == 0 && !IsRemoteProject;
@@ -153,16 +164,18 @@ public sealed partial class LauncherViewModel : ObservableObject
     public void Refresh()
     {
         var agents = _settings.Current.Agents;
+        var currentProject = _projects.Current;
+        var isRemoteHost = currentProject?.RemoteHost is not null;
         var rows = new List<LauncherAgentViewModel>();
         var installed = IsRemoteProject ? Enumerable.Empty<AgentInstallation>() : _scanner.Current.Installations;
-        if (_projects.Current is { RemoteHost: { } remoteHost })
+        if (currentProject is { RemoteHost: { } remoteHost })
         {
-            // A project on another computer: the agents that computer has, with its own default first. The panel beside
-            // a row is built from this computer's definition of the same agent, when it knows one.
+            // A project on another computer: the agents that computer has, with its own default first.
             installed = [];
             foreach (var agent in Composition.AppHost.Get<Remote.RemoteClientRuntime>().AgentsOf(remoteHost))
             {
-                rows.Add(new LauncherAgentViewModel(agent.Id, agent.Name, agent.IsDefault, LaunchAgent, Expand));
+                var (badge, isTunnel) = ResolveSourceBadge(agent.Id, currentProject, isRemoteHost: true);
+                rows.Add(new LauncherAgentViewModel(agent.Id, agent.Name, agent.IsDefault, LaunchAgent, Expand, sourceBadge: badge, isTunnelSource: isTunnel));
             }
         }
         foreach (var installation in installed)
@@ -172,7 +185,16 @@ public sealed partial class LauncherViewModel : ObservableObject
             {
                 continue;
             }
-            rows.Add(new LauncherAgentViewModel(definition.Id, definition.Name, definition.Id == agents.DefaultAgentId, LaunchAgent, Expand, definition.SupportsAcp));
+            var (badge, isTunnel) = ResolveSourceBadge(definition.Id, currentProject, isRemoteHost: false);
+            rows.Add(new LauncherAgentViewModel(
+                definition.Id,
+                definition.Name,
+                definition.Id == agents.DefaultAgentId,
+                LaunchAgent,
+                Expand,
+                definition.SupportsAcp,
+                sourceBadge: badge,
+                isTunnelSource: isTunnel));
         }
         // The default agent first; the rest keep the catalog's order.
         var ordered = rows.OrderByDescending(r => r.IsDefault).ToList();
@@ -182,15 +204,123 @@ public sealed partial class LauncherViewModel : ObservableObject
         {
             Agents.Add(row);
         }
+
+        RefreshPinnedPresets(ordered, isRemoteHost);
+
         IsScanning = _scanner.IsScanning;
         RefreshViews();
         ClearPanels();
         Expand(Agents.FirstOrDefault(a => a.Id == expandedId));
+        OnPropertyChanged(nameof(HasPinnedPresets));
         OnPropertyChanged(nameof(ShowScanning));
         OnPropertyChanged(nameof(ShowNoAgents));
         OnPropertyChanged(nameof(IsRemoteProject));
         OnPropertyChanged(nameof(ShowRemoteNote));
     }
+
+    private (string? Badge, bool IsTunnel) ResolveSourceBadge(string agentId, Project? project, bool isRemoteHost)
+    {
+        if (isRemoteHost)
+        {
+            if (project?.AgentBackends is not null
+                && project.AgentBackends.TryGetValue(agentId, out var remoteRef)
+                && AgentBackendRefs.TryParseTunnel(remoteRef, out var tunnelPid)
+                && _providers?.Find(tunnelPid) is { Enabled: true, AllowRemoteTunnel: true } tunnelProv)
+            {
+                return ($"⚡ {tunnelProv.Name}", true);
+            }
+            return (null, false);
+        }
+
+        if (_backends is null) return (null, false);
+        var definition = _catalog.Find(agentId);
+        if (definition is null) return (null, false);
+        var profile = _settings.Current.Agents.ProfileOf(agentId);
+        var preferredRef = _backends.ResolvePreferredBackendRef(definition, profile, project);
+        if (AgentBackendRefs.TryParseProvider(preferredRef, out var pid)
+            && _providers?.Find(pid) is { Enabled: true } prov)
+        {
+            return (prov.Name, false);
+        }
+        return (null, false);
+    }
+
+    private void RefreshPinnedPresets(IReadOnlyList<LauncherAgentViewModel> availableAgents, bool isRemoteHost)
+    {
+        PinnedPresets.Clear();
+        if (_providers is null || IsRemoteProject)
+        {
+            return;
+        }
+        var agentMap = availableAgents.ToDictionary(a => a.Id, a => a.Name, StringComparer.OrdinalIgnoreCase);
+        foreach (var preset in _providers.ListPinnedPresets())
+        {
+            if (!agentMap.TryGetValue(preset.AgentId, out var agentName))
+            {
+                continue;
+            }
+            var isTunnel = false;
+            string? sourceName = null;
+            if (!string.IsNullOrWhiteSpace(preset.BackendRef))
+            {
+                if (AgentBackendRefs.TryParseProvider(preset.BackendRef, out var pid)
+                    || AgentBackendRefs.TryParseTunnel(preset.BackendRef, out pid))
+                {
+                    var prov = _providers.Find(pid);
+                    if (prov is null || !prov.Enabled) continue;
+                    if (isRemoteHost && !prov.AllowRemoteTunnel) continue;
+                    isTunnel = isRemoteHost || AgentBackendRefs.TryParseTunnel(preset.BackendRef, out _);
+                    sourceName = isTunnel ? $"⚡ {prov.Name}" : prov.Name;
+                }
+            }
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(sourceName)) parts.Add(sourceName);
+            if (!string.IsNullOrWhiteSpace(preset.ModelId)) parts.Add(preset.ModelId);
+            if (!string.IsNullOrWhiteSpace(preset.Effort)) parts.Add(preset.Effort);
+            var title = string.IsNullOrWhiteSpace(preset.CustomLabel) ? agentName : preset.CustomLabel;
+            var subtitle = string.Join(" · ", parts);
+            PinnedPresets.Add(new LauncherPinnedPresetViewModel(
+                preset.Id,
+                preset.AgentId,
+                agentName,
+                title,
+                subtitle,
+                isTunnel,
+                LaunchPinnedPreset,
+                UnpinPreset));
+        }
+    }
+
+    private void LaunchPinnedPreset(LauncherPinnedPresetViewModel item)
+    {
+        if (_providers is null) return;
+        var preset = _providers.ListPinnedPresets().FirstOrDefault(p => p.Id == item.Id);
+        if (preset is null) return;
+
+        var isRemoteHost = _projects.Current?.RemoteHost is not null;
+        var backendRef = string.IsNullOrWhiteSpace(preset.BackendRef) ? null : preset.BackendRef;
+        if (isRemoteHost && backendRef is not null && AgentBackendRefs.TryParseProvider(backendRef, out var pid))
+        {
+            backendRef = AgentBackendRefs.Tunnel(pid);
+        }
+        string? accountId = null;
+        if (!isRemoteHost && backendRef is not null && AgentBackendRefs.TryParseAccount(backendRef, out var accId))
+        {
+            accountId = accId;
+        }
+        var options = new AgentLaunchOptions
+        {
+            Model = preset.ModelId,
+            Effort = preset.Effort,
+            AccountId = accountId,
+            BackendRef = backendRef,
+            Surface = isRemoteHost ? AgentSurface.Terminal : null,
+        };
+        _opener.OpenAgent(preset.AgentId, options, _targetWorkspaceId);
+        Close();
+    }
+
+    private void UnpinPreset(LauncherPinnedPresetViewModel item) => _providers?.UnpinPreset(item.Id);
 
     partial void OnIsScanningChanged(bool value)
     {
@@ -243,10 +373,16 @@ public sealed partial class LauncherViewModel : ObservableObject
         {
             return;
         }
-        if (_projects.Current is { RemoteHost: not null })
+        if (_projects.Current is { RemoteHost: not null } remoteProject)
         {
-            // The host's own settings for that agent apply: nothing of this computer's is sent along.
-            _opener.OpenAgent(agent.Id, null);
+            AgentLaunchOptions? remoteOptions = null;
+            if (remoteProject.AgentBackends is not null
+                && remoteProject.AgentBackends.TryGetValue(agent.Id, out var tunnelRef)
+                && AgentBackendRefs.TryParseTunnel(tunnelRef, out _))
+            {
+                remoteOptions = new AgentLaunchOptions { BackendRef = tunnelRef };
+            }
+            _opener.OpenAgent(agent.Id, remoteOptions);
             Close();
             return;
         }
@@ -262,6 +398,13 @@ public sealed partial class LauncherViewModel : ObservableObject
         _navigator.OpenSettings("agents");
     }
 
+    [RelayCommand]
+    private void OpenProviderSettings()
+    {
+        Close();
+        _navigator.OpenSettings("providers");
+    }
+
     private AgentLaunchViewModel? PanelOf(LauncherAgentViewModel agent)
     {
         if (_panels.TryGetValue(agent.Id, out var existing))
@@ -275,14 +418,34 @@ public sealed partial class LauncherViewModel : ObservableObject
         }
         var current = _settings.Current.Agents;
         var profile = current.ProfileOf(agent.Id);
+        var currentProject = _projects.Current;
+        var isRemoteHost = currentProject?.RemoteHost is not null;
+
         IReadOnlyList<AgentAccountRecord>? accounts = null;
         string? preferredAccountId = null;
-        if (_accounts is not null && _projects.Current is { RemoteHost: null } localProject)
+        if (_accounts is not null && currentProject is { RemoteHost: null } localProject)
         {
             accounts = _accounts.GetAccounts(definition);
             preferredAccountId = _accounts.ResolvePreferredAccountId(definition, profile, localProject);
         }
-        var isLocal = _projects.Current is null || ProjectLocation.IsOnThisComputer(_projects.Current);
+
+        IReadOnlyList<ModelProviderRecord>? compatibleProviders = null;
+        string? preferredBackendRef = null;
+        if (_providers is not null && definition.SupportsManagedProviders)
+        {
+            compatibleProviders = _providers.ListCompatibleProviders(definition, requireRemoteTunnel: isRemoteHost);
+
+            if (isRemoteHost)
+            {
+                currentProject?.AgentBackends?.TryGetValue(definition.Id, out preferredBackendRef);
+            }
+            else if (_backends is not null)
+            {
+                preferredBackendRef = _backends.ResolvePreferredBackendRef(definition, profile, currentProject);
+            }
+        }
+
+        var isLocal = currentProject is null || ProjectLocation.IsOnThisComputer(currentProject);
         var defaultSurface = isLocal
             ? AgentSurfaceResolver.Resolve(definition, current)
             : AgentSurface.Terminal;
@@ -301,7 +464,12 @@ public sealed partial class LauncherViewModel : ObservableObject
             accounts,
             preferredAccountId,
             defaultSurface,
-            allowGui: isLocal && definition.SupportsAcp);
+            allowGui: isLocal && definition.SupportsAcp,
+            compatibleProviders: compatibleProviders,
+            preferredBackendRef: preferredBackendRef,
+            isRemoteHostProject: isRemoteHost,
+            onPin: _providers is null ? null : preset => _providers.PinPreset(preset),
+            onOpenProviders: OpenProviderSettings);
         _panels[agent.Id] = panel;
         return panel;
     }

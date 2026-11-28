@@ -62,6 +62,21 @@ public interface IAccountStore
     void Update(Action<AccountsDocument> mutate);
 }
 
+/// <summary>
+/// Reads and writes <c>providers.json</c>: non-secret metadata for managed model providers, model catalogs, and
+/// pinned quick-launch presets (design/20-模型提供商与模型托管.md §3.1). API keys live in <c>ISecretStore</c>.
+/// </summary>
+public interface IProviderStore
+{
+    ProvidersDocument Current { get; }
+    event EventHandler? Changed;
+
+    void Load();
+
+    /// <summary>Changes <see cref="Current"/>, normalizes it, and writes the file.</summary>
+    void Update(Action<ProvidersDocument> mutate);
+}
+
 /// <summary>Reads and writes <c>bots.json</c>: persisted Bots, their chats, connectors, and work items.</summary>
 public interface IBotStore
 {

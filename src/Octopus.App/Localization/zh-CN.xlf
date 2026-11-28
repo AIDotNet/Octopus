@@ -1785,6 +1785,34 @@
     <unit id="BotGroupRightItemsEmptyTitle"><segment><source>No work items</source><target state="translated">暂无待办事项</target></segment></unit>
     <unit id="BotGroupRightItemsEmptyDescription"><segment><source>Work items created by member bots will appear here.</source><target state="translated">群内成员 Bot 创建的工作事项会汇总显示在这里。</target></segment></unit>
     <unit id="BotGroupHopsOption"><segment><source>{0} hops</source><target state="translated">{0} 跳</target></segment></unit>
+    <unit id="SettingsNavProviders"><segment><source>Model Providers</source><target state="translated">模型提供商</target></segment></unit>
+    <unit id="ProvidersTitle"><segment><source>Model Providers</source><target state="translated">模型提供商</target></segment></unit>
+    <unit id="ProvidersSubtitle"><segment><source>Manage shared API providers, keychain secrets, and model catalogs across agents. Supports direct isolation and encrypted remote-host tunneling.</source><target state="translated">统一托管跨智能体共享的 API 提供商、系统密钥库凭据与模型目录；支持本地隔离物化及远程主机加密隧道转发。</target></segment></unit>
+    <unit id="ProvidersAddButton"><segment><source>Add Provider</source><target state="translated">新增提供商</target></segment></unit>
+    <unit id="ProvidersQuickPresets"><segment><source>Quick presets:</source><target state="translated">快速添加预设：</target></segment></unit>
+    <unit id="ProvidersTestConnection"><segment><source>Test</source><target state="translated">测速</target></segment></unit>
+    <unit id="ProvidersConfigure"><segment><source>Configure</source><target state="translated">配置模型</target></segment></unit>
+    <unit id="ProvidersPreviewMaterialize"><segment><source>Launch Preview</source><target state="translated">物化预览</target></segment></unit>
+    <unit id="ProvidersProtocolLabel"><segment><source>API Protocol</source><target state="translated">API 协议格式</target></segment></unit>
+    <unit id="ProvidersBaseUrlLabel"><segment><source>Base URL</source><target state="translated">Base URL</target></segment></unit>
+    <unit id="ProvidersApiKeyLabel"><segment><source>API Key</source><target state="translated">API Key</target></segment></unit>
+    <unit id="ProvidersApiKeySavedHint"><segment><source>Stored securely in OS Keychain</source><target state="translated">已加密存入系统密钥库</target></segment></unit>
+    <unit id="ProvidersIsolateDirLabel"><segment><source>Isolate agent config dir (avoid OAuth conflict)</source><target state="translated">隔离智能体配置目录（避免与官方 OAuth 冲突）</target></segment></unit>
+    <unit id="ProvidersAllowRemoteTunnelLabel"><segment><source>Allow encrypted tunnel sharing to remote hosts</source><target state="translated">允许经加密隧道共享给远程控制的主机（远程零密钥）</target></segment></unit>
+    <unit id="ProvidersModelsHeading"><segment><source>Managed Models</source><target state="translated">托管模型目录</target></segment></unit>
+    <unit id="ProvidersFetchModels"><segment><source>Fetch /models</source><target state="translated">拉取 /models</target></segment></unit>
+    <unit id="ProvidersAddModel"><segment><source>Add Model</source><target state="translated">添加模型</target></segment></unit>
+    <unit id="ProvidersCompatibleAgents"><segment><source>Compatible:</source><target state="translated">适用于：</target></segment></unit>
+    <unit id="ProvidersEmptyHint"><segment><source>No model providers yet. Pick a preset above or click Add Provider to get started.</source><target state="translated">暂无托管的模型提供商。点击上方快速预设或右上角「新增提供商」即可开始。</target></segment></unit>
+    <unit id="ProvidersPinPreset"><segment><source>Pin</source><target state="translated">置顶</target></segment></unit>
+    <unit id="ProvidersPinnedHeading"><segment><source>Pinned Quick Launch</source><target state="translated">置顶快捷组合</target></segment></unit>
+    <unit id="ProvidersManageMenu"><segment><source>Model providers…</source><target state="translated">管理模型提供商…</target></segment></unit>
+    <unit id="BackendSourceLabel"><segment><source>Source (Account / Provider)</source><target state="translated">来源（订阅账户 / 托管提供商）</target></segment></unit>
+    <unit id="BackendFollowGlobal"><segment><source>Follow global default ({0})</source><target state="translated">跟随全局默认（{0}）</target></segment></unit>
+    <unit id="BackendRemoteTunnelGroup"><segment><source>Local Providers (Encrypted Tunnel)</source><target state="translated">本机提供商（经加密隧道转发）</target></segment></unit>
+    <unit id="BackendAccountsGroup"><segment><source>Subscription Accounts</source><target state="translated">官方订阅账户</target></segment></unit>
+    <unit id="BackendProvidersGroup"><segment><source>Managed Model Providers</source><target state="translated">托管模型提供商</target></segment></unit>
+    <unit id="BackendOtherProvidersGroup"><segment><source>From other providers</source><target state="translated">来自其他兼容提供商</target></segment></unit>
     <unit id="BotSettingsDefaultModel"><segment><source>Default model</source><target state="translated">默认模型</target></segment></unit>
     <unit id="BotSettingsModelFollowAgent"><segment><source>Agent default</source><target state="translated">跟随智能体默认</target></segment></unit>
   </file>

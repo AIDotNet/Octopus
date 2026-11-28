@@ -6,6 +6,7 @@ using Octopus.Core.Plugins;
 using Octopus.Plugins.Catalog;
 using Octopus.Plugins.Themes;
 using Octopus.Storage;
+using Octopus.Terminal.Avalonia;
 using TKCode.Arc;
 using TKCode.Arc.DesignTokens;
 
@@ -24,6 +25,22 @@ public sealed class PluginThemes
 {
     public const string PresetName = "octopus.plugin-theme";
 
+    private static ComposedTheme? s_lightTheme;
+    private static ComposedTheme? s_darkTheme;
+    private static bool s_trackingAppearance;
+
+    /// <summary>Raised on the UI thread whenever the active theme's visual effects or appearance change.</summary>
+    public static event EventHandler? ActiveEffectsChanged;
+
+    /// <summary>The composed theme currently matching the app's active light/dark appearance.</summary>
+    public static ComposedTheme? ActiveComposed => ArcTheme.Manager.IsDark ? s_darkTheme : s_lightTheme;
+
+    /// <summary>Declarative visual effects (input glow, ambient grid, HUD corners) for the active theme, or null.</summary>
+    public static ThemeEffects? CurrentEffects => ActiveComposed?.Effects;
+
+    /// <summary>Primary accent color hex from the active plugin theme, if any.</summary>
+    public static string? CurrentAccentHex => ActiveComposed?.Colors.GetValueOrDefault("Accent") ?? ActiveComposed?.Accent;
+
     private readonly IPluginCatalog _catalog;
     private readonly IPluginStateStore _state;
     private readonly ConcurrentDictionary<string, PluginThemeOption> _registered = new(StringComparer.Ordinal);
@@ -36,6 +53,11 @@ public sealed class PluginThemes
         _state = state;
         _catalog.Changed += (_, _) => QueueApply();
         _state.Changed += (_, _) => QueueApply();
+        if (!s_trackingAppearance)
+        {
+            s_trackingAppearance = true;
+            ArcTheme.Manager.StateChanged += (_, _) => Dispatcher.UIThread.Post(() => ActiveEffectsChanged?.Invoke(null, EventArgs.Empty));
+        }
     }
 
     /// <summary>Why the last theme was refused or partly applied; null when it applied cleanly.</summary>
@@ -162,7 +184,42 @@ public sealed class PluginThemes
                 Problem = inner.Message;
             }
         }
+        s_lightTheme = light;
+        s_darkTheme = dark;
+        TerminalPalettes.SetCustomOverrides(BuildTerminalPalette(light, dark: false), BuildTerminalPalette(dark, dark: true));
+        ActiveEffectsChanged?.Invoke(null, EventArgs.Empty);
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static TKCode.Terminal.Core.TerminalPalette? BuildTerminalPalette(ComposedTheme theme, bool dark)
+    {
+        var t = theme.Terminal;
+        if (t is null) return null;
+        int? ParseRgb(string? hex) => ThemeColor.TryParse(hex, out var c) ? (c.R << 16) | (c.G << 8) | c.B : null;
+        IReadOnlyList<int>? ansi = null;
+        if (t.Ansi is { Count: 16 })
+        {
+            var list = new int[16];
+            var ok = true;
+            for (var i = 0; i < 16; i++)
+            {
+                if (ParseRgb(t.Ansi[i]) is { } rgb)
+                {
+                    list[i] = rgb;
+                }
+                else
+                {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) ansi = list;
+        }
+        var fg = ParseRgb(t.Foreground);
+        var bg = ParseRgb(t.Background) ?? ParseRgb(theme.Colors.GetValueOrDefault("Surface"));
+        var cur = ParseRgb(t.Cursor);
+        if (fg is null && bg is null && cur is null && ansi is null) return null;
+        return TerminalPalettes.BuildCustom(dark, fg, bg, cur, ansi);
     }
 
     private static ArcThemePreset Preset(ComposedTheme light, ComposedTheme dark, bool withControls) =>

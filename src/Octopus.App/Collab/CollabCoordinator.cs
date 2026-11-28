@@ -488,7 +488,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             expectReply: false,
             maxTurnsOverride: null,
             isDirectUserRelay: true,
-            ct).ConfigureAwait(false);
+            ct: ct).ConfigureAwait(false);
         return res.Thread;
     }
 
@@ -520,7 +520,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 expectReply: false,
                 maxTurnsOverride: thread is null ? defaultMaxHops + targets.Count - 1 : null,
                 isDirectUserRelay: true,
-                ct).ConfigureAwait(false);
+                ct: ct).ConfigureAwait(false);
             thread ??= res.Thread;
         }
         return thread;
@@ -646,20 +646,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             }
             var title = request.Title ?? TruncateTitle(goal);
             var taskId = _ledger.NextId("task");
-            var sent = await SendMessageInternalAsync(
-                callerItemId,
-                existingItem.Id,
-                CollabEnvelope.TaskBody(taskId, goal, request.ContextFiles),
-                threadId: null,
-                title: title,
-                expectReply: true,
-                maxTurnsOverride: null,
-                isDirectUserRelay: false,
-                ct).ConfigureAwait(false);
-            if (!sent.Succeeded)
-            {
-                return ToolError(sent.Error ?? "Failed to deliver task to existing session.");
-            }
+            var threadId = _ledger.NextId("t");
             var taskRecord = new CollabTaskRecord
             {
                 TaskId = taskId,
@@ -669,7 +656,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 Title = title,
                 Goal = goal,
                 Isolation = CollabIsolationMode.Shared,
-                ThreadId = sent.Thread?.ThreadId,
+                ThreadId = threadId,
                 Status = CollabTaskStatus.Running,
                 LatestActivity = "Dispatched to existing session",
             };
@@ -677,14 +664,39 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             {
                 _ledger.Add(taskRecord);
             }
+            var sent = await SendMessageInternalAsync(
+                callerItemId,
+                existingItem.Id,
+                CollabEnvelope.TaskBody(taskId, goal, request.ContextFiles),
+                threadId: threadId,
+                title: title,
+                expectReply: true,
+                maxTurnsOverride: null,
+                isDirectUserRelay: false,
+                taskId: taskId,
+                ct: ct).ConfigureAwait(false);
+            if (!sent.Succeeded)
+            {
+                lock (_ledger.Gate)
+                {
+                    _ledger.Tasks.Remove(taskId);
+                }
+                RaiseChanged(callerItemId);
+                return ToolError(sent.Error ?? "Failed to deliver task to existing session.");
+            }
+            CollabTaskStatus currentStatus;
+            lock (_ledger.Gate)
+            {
+                currentStatus = _ledger.Tasks.TryGetValue(taskId, out var current) ? current.Status : taskRecord.Status;
+            }
             RaiseChanged(callerItemId);
             return ToolOk(new JsonObject
             {
                 ["task_id"] = taskId,
                 ["session_id"] = existingItem.Id,
-                ["thread_id"] = sent.Thread?.ThreadId,
+                ["thread_id"] = sent.Thread?.ThreadId ?? threadId,
                 ["reused_existing_session"] = true,
-                ["status"] = "running",
+                ["status"] = currentStatus.ToString().ToLowerInvariant(),
             });
         }
 
@@ -731,6 +743,46 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         if (resolvedSurface == AgentSurface.Terminal && !collabCfg.EnableTerminalBridge)
         {
             return ToolError($"Agent '{definition.Name}' resolves to Terminal mode, but Terminal CLI collaboration bridge is disabled in settings.");
+        }
+
+        var trimmedGoal = goal.Trim();
+        CollabTaskRecord? dup;
+        lock (_ledger.Gate)
+        {
+            dup = _ledger.Tasks.Values.FirstOrDefault(t =>
+                !t.IsFinished
+                && t.CallerItemId == callerItemId
+                && string.Equals(t.TargetAgentId, definition.Id, StringComparison.OrdinalIgnoreCase)
+                && t.Isolation == isolation
+                && string.Equals(t.Goal.Trim(), trimmedGoal, StringComparison.Ordinal));
+        }
+        if (dup is not null
+            && _index.FindItem(dup.TargetItemId) is { } dupItem
+            && _index.FindProjectOf(dup.TargetItemId) is { } dupProject)
+        {
+            await InvokeOnUiAsync(() =>
+            {
+                var control = _tabRegistryFactory?.Invoke()?.GetOrCreate(dupProject, dupItem);
+                if (control is AgentGui.AgentGuiTabView guiView)
+                {
+                    guiView.EnsureStarted();
+                }
+                else if (control is Terminals.TerminalTabView termView)
+                {
+                    termView.EnsureStarted();
+                }
+            }).ConfigureAwait(false);
+            return ToolOk(new JsonObject
+            {
+                ["task_id"] = dup.TaskId,
+                ["session_id"] = dup.TargetItemId,
+                ["thread_id"] = dup.ThreadId,
+                ["agent_id"] = dup.TargetAgentId,
+                ["title"] = dup.Title,
+                ["status"] = dup.Status.ToString().ToLowerInvariant(),
+                ["deduplicated"] = true,
+                ["note"] = "An identical task is already running on this agent; wait for it with await_events or cancel it with cancel_task before re-delegating.",
+            });
         }
 
         var taskIdNew = _ledger.NextId("task");
@@ -866,7 +918,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         {
             _ledger.Add(thread);
             _ledger.Add(record);
-            _ledger.Pending[childItem.Id] = new PendingExpectation(callerItemId, taskIdNew, threadIdNew, DateTimeOffset.UtcNow);
+            _ledger.EnqueuePending(childItem.Id, new PendingExpectation(callerItemId, taskIdNew, threadIdNew, DateTimeOffset.UtcNow));
         }
 
         // Mount the spawned agent underneath its parent in the sidebar and start its session behind the scenes.
@@ -918,7 +970,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         var maxTurns = request.MaxTurns;
 
         var sent = await SendMessageInternalAsync(
-            callerItemId, targetId, message, threadId, title, expectReply, maxTurns, isDirectUserRelay: false, ct).ConfigureAwait(false);
+            callerItemId, targetId, message, threadId, title, expectReply, maxTurns, isDirectUserRelay: false, ct: ct).ConfigureAwait(false);
 
         if (!sent.Succeeded)
         {
@@ -950,13 +1002,21 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             return ToolError(result.Error ?? "Failed to reply to thread.");
         }
 
-        return ToolOk(new JsonObject
+        var payload = new JsonObject
         {
             ["thread_id"] = threadId,
             ["round"] = result.Round,
             ["status"] = status,
-            ["delivered_to"] = result.RecipientItemId,
-        });
+            ["recorded"] = true,
+            ["delivered_to"] = result.Delivered ? result.RecipientItemId : null,
+            ["wakeup_delivered"] = result.Delivered,
+        };
+        if (result.RecipientItemId is not null && !result.Delivered)
+        {
+            payload["recipient_id"] = result.RecipientItemId;
+            payload["note"] = "Reply recorded in thread, but wakeup prompt could not be delivered to the recipient session.";
+        }
+        return ToolOk(payload);
     }
 
     public async Task<JsonObject> AwaitEventsAsync(string callerItemId, IReadOnlyCollection<string> ids, int timeoutSeconds, CancellationToken ct)
@@ -1226,7 +1286,8 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         bool expectReply,
         int? maxTurnsOverride,
         bool isDirectUserRelay,
-        CancellationToken ct)
+        string? taskId = null,
+        CancellationToken ct = default)
     {
         if (callerItemId == targetItemId)
         {
@@ -1309,7 +1370,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
         var targetIsRemote = _index.FindProjectOf(targetItemId) is { } tp && ProjectLocation.IsOnRemoteHost(tp);
         var envelope = CollabEnvelope.Message(thread.ThreadId, callerLabel, round, thread.MaxHops, message, expectReply, targetIsRemote);
-        var delivered = await DeliverEnvelopeAsync(targetItemId, envelope, thread.ThreadId, taskId: null, expectReply, callerItemId, ct).ConfigureAwait(false);
+        var delivered = await DeliverEnvelopeAsync(targetItemId, envelope, thread.ThreadId, taskId: taskId, expectReply, callerItemId, ct).ConfigureAwait(false);
         if (!delivered)
         {
             return (false, thread, $"Could not deliver message to '{targetLabel}' (session not running).");
@@ -1321,7 +1382,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         return (true, thread, null);
     }
 
-    private async Task<(bool Succeeded, int Round, string? RecipientItemId, string? Error)> RecordReplyAndWakeAsync(
+    private async Task<(bool Succeeded, int Round, string? RecipientItemId, bool Delivered, string? Error)> RecordReplyAndWakeAsync(
         string responderItemId,
         string threadId,
         string message,
@@ -1341,16 +1402,16 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         {
             if (!_ledger.Threads.TryGetValue(threadId, out var thread))
             {
-                return (false, 0, null, $"Unknown collaboration thread '{threadId}'.");
+                return (false, 0, null, false, $"Unknown collaboration thread '{threadId}'.");
             }
             if (!thread.ParticipantItemIds.Contains(responderItemId, StringComparer.Ordinal))
             {
-                return (false, 0, null, $"You are not a participant of thread '{threadId}'.");
+                return (false, 0, null, false, $"You are not a participant of thread '{threadId}'.");
             }
             // Clear pending implicit expectation so an explicit reply_thread won't fire again at end_turn.
-            if (!isImplicitFallback && _ledger.Pending.TryGetValue(responderItemId, out var pending) && pending.ThreadId == threadId)
+            if (!isImplicitFallback)
             {
-                _ledger.Pending.Remove(responderItemId);
+                _ledger.RemovePendingByThread(responderItemId, threadId);
             }
 
             thread.Status = status switch
@@ -1408,16 +1469,24 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         RaiseChanged(responderItemId);
         if (recipientId is not null) RaiseChanged(recipientId);
 
-        if (recipientId is not null && !callerActivelyAwaiting && _policy.WakeCallerOnReply)
+        var delivered = false;
+        if (recipientId is not null)
         {
-            var wakeup = CollabEnvelope.Reply(
-                threadId, threadTitle, responderLabel, round, maxHops, status, TruncateBody(message, _policy.MaxReplyChars),
-                autoReportedFromSessionId: isImplicitFallback ? responderItemId : null);
-            var shouldExpectFollowUp = status == "continue" && round < maxHops;
-            await DeliverEnvelopeAsync(recipientId, wakeup, threadId, taskId: null, expectReply: shouldExpectFollowUp, callerItemId: responderItemId, ct).ConfigureAwait(false);
+            if (callerActivelyAwaiting)
+            {
+                delivered = true;
+            }
+            else if (_policy.WakeCallerOnReply)
+            {
+                var wakeup = CollabEnvelope.Reply(
+                    threadId, threadTitle, responderLabel, round, maxHops, status, TruncateBody(message, _policy.MaxReplyChars),
+                    autoReportedFromSessionId: isImplicitFallback ? responderItemId : null);
+                var shouldExpectFollowUp = status == "continue" && round < maxHops;
+                delivered = await DeliverEnvelopeAsync(recipientId, wakeup, threadId, taskId: null, expectReply: shouldExpectFollowUp, callerItemId: responderItemId, ct).ConfigureAwait(false);
+            }
         }
 
-        return (true, round, recipientId, null);
+        return (true, round, recipientId, delivered, null);
     }
 
     public void NotifyTurnCompleted(string itemId, string? finalAssistantText)
@@ -1425,8 +1494,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
         PendingExpectation? pending;
         lock (_ledger.Gate)
         {
-            if (!_ledger.Pending.TryGetValue(itemId, out pending)) return;
-            _ledger.Pending.Remove(itemId);
+            if (!_ledger.TryDequeuePending(itemId, out pending)) return;
         }
 
         var summary = string.IsNullOrWhiteSpace(finalAssistantText)
@@ -1465,14 +1533,24 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     {
         if (_index.FindItem(targetItemId) is not { } targetItem || _index.FindProjectOf(targetItemId) is not { } targetProject) return false;
         if (await _sessions.EnsureAsync(targetProject, targetItem, ct).ConfigureAwait(false) is not { } bridge) return false;
+        PendingExpectation? expectation = null;
         if (expectReply)
+        {
+            expectation = new PendingExpectation(callerItemId, taskId, threadId, DateTimeOffset.UtcNow);
+            lock (_ledger.Gate)
+            {
+                _ledger.EnqueuePending(targetItemId, expectation);
+            }
+        }
+        var delivered = await bridge.DeliverCollabPromptAsync(envelope, threadId, taskId, ct).ConfigureAwait(false);
+        if (!delivered && expectation is not null)
         {
             lock (_ledger.Gate)
             {
-                _ledger.Pending[targetItemId] = new PendingExpectation(callerItemId, taskId, threadId, DateTimeOffset.UtcNow);
+                _ledger.RemovePendingExact(targetItemId, expectation);
             }
         }
-        return await bridge.DeliverCollabPromptAsync(envelope, threadId, taskId, ct).ConfigureAwait(false);
+        return delivered;
     }
 
     /* ==================== Remote Hosts ==================== */
@@ -1617,7 +1695,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             _ledger.Add(thread);
             _ledger.Add(record);
             // Set before following the session, so an answer already in its first snapshot is taken as this task's.
-            _ledger.Pending[created.Id] = new PendingExpectation(callerItemId, taskId, threadId, DateTimeOffset.UtcNow);
+            _ledger.EnqueuePending(created.Id, new PendingExpectation(callerItemId, taskId, threadId, DateTimeOffset.UtcNow));
         }
 
         var followed = await _remoteProvider.FollowAsync(host, hostName, project, created.Id, definition.Id, title, callerItemId, fresh: true, ct).ConfigureAwait(false);
@@ -1690,22 +1768,26 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
 
         lock (_ledger.Gate)
         {
-            _ledger.Pending.Remove(targetItemId, out var pending);
-            if (pending is null && !allOpenTasks) return;
+            var drained = _ledger.TakePendingForAbort(targetItemId, allOpenTasks);
+            if (drained.Count == 0 && !allOpenTasks) return;
 
             foreach (var task in _ledger.Tasks.Values)
             {
                 if (task.TargetItemId != targetItemId || task.IsFinished) continue;
                 var owed = allOpenTasks
-                    || (pending!.TaskId is not null && task.TaskId == pending.TaskId)
-                    || (pending!.ThreadId is not null && task.ThreadId == pending.ThreadId);
+                    || drained.Any(p =>
+                        (p.TaskId is not null && task.TaskId == p.TaskId)
+                        || (p.ThreadId is not null && task.ThreadId == p.ThreadId));
                 if (!owed) continue;
                 _ledger.SetTaskStatus(task, newStatus, failed ? "Failed" : "Stopped", reason);
             }
 
             // Close the thread(s) the target owed a reply on, recording why, so the other side sees the outcome.
             var threadIds = new HashSet<string>(StringComparer.Ordinal);
-            if (pending?.ThreadId is { } pendingThread) threadIds.Add(pendingThread);
+            foreach (var p in drained)
+            {
+                if (p.ThreadId is { } pendingThread) threadIds.Add(pendingThread);
+            }
             if (allOpenTasks)
             {
                 foreach (var th in _ledger.Threads.Values)
@@ -1716,7 +1798,8 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
             foreach (var threadId in threadIds)
             {
                 if (!_ledger.Threads.TryGetValue(threadId, out var thread) || thread.IsClosed) continue;
-                var callerId = pending?.ThreadId == threadId ? pending.CallerItemId : ResolveReplyRecipientLocked(thread, targetItemId);
+                var callerId = drained.FirstOrDefault(p => p.ThreadId == threadId)?.CallerItemId
+                    ?? ResolveReplyRecipientLocked(thread, targetItemId);
                 thread.Status = threadStatus;
                 _ledger.AppendMessage(thread, new CollabMessageRecord
                 {
@@ -1771,10 +1854,7 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
                 task = found;
                 _ledger.SetTaskStatus(task, CollabTaskStatus.Cancelled, "Cancelled", next.Reason);
 
-                var wasOwed = _ledger.Pending.TryGetValue(task.TargetItemId, out var pending)
-                    && ((pending.TaskId is not null && pending.TaskId == task.TaskId)
-                        || (pending.ThreadId is not null && pending.ThreadId == task.ThreadId));
-                if (wasOwed) _ledger.Pending.Remove(task.TargetItemId);
+                var wasOwed = _ledger.RemovePendingMatching(task.TargetItemId, task.TaskId, task.ThreadId);
 
                 if (task.ThreadId is { } tid && _ledger.Threads.TryGetValue(tid, out var thread) && !thread.IsClosed)
                 {
@@ -1805,6 +1885,10 @@ public sealed class CollabCoordinator : ICollabCoordinator, ICollabToolHandler, 
     private void StopDelegate(CollabTaskRecord task, bool interrupt)
     {
         if (_index.FindItem(task.TargetItemId) is not { } item || _index.FindProjectOf(task.TargetItemId) is not { } project) return;
+        if (item.ParentItemId == task.CallerItemId && item.Launch is not null)
+        {
+            item.Launch.Prompt = null;
+        }
         if (_sessions.TryAttach(project, item) is not { } bridge) return;
         bridge.CancelQueuedCollabPrompts(task.ThreadId, task.TaskId);
         if (!interrupt) return;

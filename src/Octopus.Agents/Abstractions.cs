@@ -78,7 +78,8 @@ public sealed record AgentCompileRequest(
     SignalAttachment? Signals = null,
     IReadOnlyList<string>? AdditionalDirectories = null,
     IReadOnlyDictionary<string, string>? AccountEnvironment = null,
-    IReadOnlyList<string>? UnsetEnvironment = null);
+    IReadOnlyList<string>? UnsetEnvironment = null,
+    string? ModelPrefix = null);
 
 /// <summary>
 /// Pure function from a definition, the user's profile and one launch's options to a command. No IO.

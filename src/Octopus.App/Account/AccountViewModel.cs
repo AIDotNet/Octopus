@@ -23,6 +23,7 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
     private readonly RemoteHostRuntime _runtime;
     private readonly ISettingsNavigator _navigator;
     private readonly IFileOpener? _opener;
+    private readonly CoWorkIntegrationService? _cowork;
     private CancellationTokenSource? _signIn;
     private string? _loginPage;
     private bool _disposed;
@@ -34,19 +35,22 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
         RelayAccess relay,
         RemoteHostRuntime runtime,
         ISettingsNavigator navigator,
-        IFileOpener? opener = null)
+        IFileOpener? opener = null,
+        CoWorkIntegrationService? cowork = null)
     {
         _settings = settings;
         _relay = relay;
         _runtime = runtime;
         _navigator = navigator;
         _opener = opener;
+        _cowork = cowork;
 
         CustomServerUrl = _settings.Current.Remote.RelayUrl ?? "";
         ShowCustomServer = !string.IsNullOrWhiteSpace(CustomServerUrl);
 
         _relay.Changed += OnExternalChanged;
         _runtime.Changed += OnExternalChanged;
+        _cowork?.Changed += OnCoWorkChanged;
         _settings.Changed += OnSettingsChanged;
         ArcLanguage.Changed += OnLanguageChanged;
 
@@ -94,6 +98,8 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string CodeConfirmHintText { get; private set; } = "";
     [ObservableProperty] public partial string RelayBadgeText { get; private set; } = "";
     [ObservableProperty] public partial string RelaySwitchSubtitle { get; private set; } = "";
+    [ObservableProperty] public partial string CoWorkMenuLabel { get; private set; } = "CoWork";
+    [ObservableProperty] public partial string CoWorkMenuBadge { get; private set; } = "";
 
     public bool HasError => !string.IsNullOrEmpty(ErrorText);
     public bool ShowSignedOutCapsule => !IsSignedIn && !IsSigningIn && !SignInEnded;
@@ -334,6 +340,14 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void OpenCoWorkSettings()
+    {
+        MenuCloseRequested?.Invoke(this, EventArgs.Empty);
+        IsSignInDialogOpen = false;
+        _navigator.OpenSettings("providers");
+    }
+
+    [RelayCommand]
     private Task SignOutAsync() => AppliedTask = SignOutCoreAsync();
 
     private async Task SignOutCoreAsync()
@@ -352,9 +366,12 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
         CancelSignIn();
         _relay.Changed -= OnExternalChanged;
         _runtime.Changed -= OnExternalChanged;
+        _cowork?.Changed -= OnCoWorkChanged;
         _settings.Changed -= OnSettingsChanged;
         ArcLanguage.Changed -= OnLanguageChanged;
     }
+
+    private void OnCoWorkChanged(object? sender, EventArgs e) => OnExternalChanged();
 
     private async Task LoadAsync()
     {
@@ -463,6 +480,15 @@ public sealed partial class AccountViewModel : ObservableObject, IDisposable
             : AppLangResourceKind.AccountUseCustomServer);
         CustomServerHintText = AppLangResources.Format(AppLangResourceKind.AccountCustomServerHint, OfficialServerAddress);
         CodeConfirmHintText = AppLangResources.Format(AppLangResourceKind.AccountCodeConfirmHint, $"{effectiveHost}/device");
+
+        var isZh = ArcLanguage.Culture.TwoLetterISOLanguageName.Equals("zh", StringComparison.OrdinalIgnoreCase);
+        CoWorkMenuLabel = isZh ? "CoWork 模型额度" : "CoWork Model Quota";
+        var cw = _cowork?.Status;
+        CoWorkMenuBadge = cw is { Bound: true, Status: "active", Wallet: { } w }
+            ? $"${w.AvailableBalance:F2}"
+            : cw is { Bound: true }
+                ? (isZh ? "已绑定" : "Linked")
+                : (isZh ? "未绑定" : "Link");
     }
 
     private string EffectiveTargetUrl() =>

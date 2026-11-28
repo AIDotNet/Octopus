@@ -55,6 +55,11 @@ public sealed class RemoteHostClient : IAsyncDisposable
             });
             client._connection.DataReceived = (header, payload) =>
             {
+                if ((header.Channel & 0x8000_0000u) != 0)
+                {
+                    client.LlmTunnelFrameReceived?.Invoke(header, payload);
+                    return;
+                }
                 if (client._terminals.TryGetValue(header.Channel, out var terminal))
                 {
                     terminal.OnFrame(header.Type, payload);
@@ -192,6 +197,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public bool SupportsProjectIcons =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityProjectIcons);
 
+    /// <summary>Both sides support syncing and managing Desktop project groups (<see cref="RemoteMethods.CapabilityProjectGroups"/>).</summary>
+    public bool SupportsProjectGroups =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityProjectGroups);
+
     /// <summary>Both sides support Bots and Bot multi-chat session management (<c>bot/*</c>).</summary>
     public bool SupportsBots =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityBots);
@@ -199,6 +208,13 @@ public sealed class RemoteHostClient : IAsyncDisposable
     /// <summary>Both sides support multi-bot Group Rooms (<c>botGroup/*</c>).</summary>
     public bool SupportsBotGroups =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityBotGroups);
+
+    /// <summary>Both sides support encrypted reverse LLM API tunneling (<c>llm/proxy/*</c>).</summary>
+    public bool SupportsLlmTunnel =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityLlmTunnel);
+
+    /// <summary>Internal hook for <see cref="RemoteLlmProxyHandler"/> to receive high-bit LLM tunnel stream frames.</summary>
+    internal Action<FrameHeader, ReadOnlyMemory<byte>>? LlmTunnelFrameReceived { get; set; }
 
     /// <summary>Projects or their items changed on the host. Raised on the receiving thread.</summary>
     public event Action? WorkspaceChanged;
@@ -208,7 +224,22 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public event Action<string>? FolderChanged;
 
     public async Task<IReadOnlyList<ProjectMessage>> ListProjectsAsync(CancellationToken cancellationToken = default) =>
-        (await CallAsync(RemoteMethods.ProjectList, new Nothing(), RemoteJsonContext.Default.Nothing, RemoteJsonContext.Default.ProjectListMessage, cancellationToken).ConfigureAwait(false)).Projects;
+        (await ListProjectsWithGroupsAsync(cancellationToken).ConfigureAwait(false)).Projects;
+
+    public Task<ProjectListMessage> ListProjectsWithGroupsAsync(CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.ProjectList, new Nothing(), RemoteJsonContext.Default.Nothing, RemoteJsonContext.Default.ProjectListMessage, cancellationToken);
+
+    public Task<ProjectGroupMessage> CreateProjectGroupAsync(CreateProjectGroupMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.ProjectGroupCreate, request, RemoteJsonContext.Default.CreateProjectGroupMessage, RemoteJsonContext.Default.ProjectGroupMessage, cancellationToken);
+
+    public Task<ProjectGroupMessage> UpdateProjectGroupAsync(UpdateProjectGroupMessage request, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.ProjectGroupUpdate, request, RemoteJsonContext.Default.UpdateProjectGroupMessage, RemoteJsonContext.Default.ProjectGroupMessage, cancellationToken);
+
+    public Task DeleteProjectGroupAsync(string groupId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.ProjectGroupDelete, new ProjectGroupRefMessage { GroupId = groupId }, RemoteJsonContext.Default.ProjectGroupRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    public Task SetProjectGroupAsync(string projectId, string? groupId, CancellationToken cancellationToken = default) =>
+        CallAsync(RemoteMethods.ProjectSetGroup, new SetProjectGroupMessage { ProjectId = projectId, GroupId = groupId }, RemoteJsonContext.Default.SetProjectGroupMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
     public Task<ProjectMessage> CreateProjectAsync(string path, string? name = null, bool createFolder = false, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.ProjectCreate, new CreateProjectMessage { Path = path, Name = name, CreateFolder = createFolder },

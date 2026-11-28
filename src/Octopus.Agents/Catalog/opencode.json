@@ -65,6 +65,11 @@
     },
     "credentialFiles": ["auth.json"]
   },
+  "providerSupport": {
+    "protocols": ["anthropic", "openaiResponses", "openaiChat", "gemini", "geminiOfficialKey"],
+    "strategy": "opencodeConfigOverlay",
+    "modelPrefix": "octopus/"
+  },
   "acp": {
     "mode": "native",
     "args": [

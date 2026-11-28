@@ -480,9 +480,12 @@ public sealed class TerminalControl : Decorator
         base.OnAttachedToVisualTree(e);
         _topLevel = TopLevel.GetTopLevel(this);
         _topLevel?.ScalingChanged += OnScalingChanged;
+        TerminalPalettes.Changed += OnPaletteChanged;
         ApplyTheme();
+        ApplyColors();
         if (_session is not null)
         {
+            _session.SetPalette(TerminalPalettes.For(_dark), TerminalPalettes.SchemeFor(_dark));
             RecomputeGrid();
             _session.SetVisible(IsOnScreen());
             if (_view.Snapshot is null) _session.ForceFlush();
@@ -496,11 +499,18 @@ public sealed class TerminalControl : Decorator
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        TerminalPalettes.Changed -= OnPaletteChanged;
         _topLevel?.ScalingChanged -= OnScalingChanged;
         _topLevel = null;
         _dropOverlay.IsVisible = false;
         _session?.SetVisible(false);
         // The process is deliberately left alone: a tab that is switched away comes back.
+    }
+
+    private void OnPaletteChanged(object? sender, EventArgs e)
+    {
+        ApplyColors();
+        _session?.SetPalette(TerminalPalettes.For(_dark), TerminalPalettes.SchemeFor(_dark));
     }
 
     private void OnScalingChanged(object? sender, EventArgs e)

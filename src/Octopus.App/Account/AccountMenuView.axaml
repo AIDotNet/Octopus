@@ -57,6 +57,14 @@
                     <TextBlock Grid.Column="2" Classes="hint" Text="{Binding ServerHost}" VerticalAlignment="Center" />
                 </Grid>
             </Button>
+            <Button x:Name="MenuCoWorkButton" Classes="row" Padding="8,7"
+                    Command="{Binding OpenCoWorkSettingsCommand}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <lucide:LucideIcon Kind="Link2" Size="14" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="body" Text="{Binding CoWorkMenuLabel}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2" Classes="hint" Text="{Binding CoWorkMenuBadge}" VerticalAlignment="Center" />
+                </Grid>
+            </Button>
             <Button x:Name="MenuAccountDevicesButton" Classes="row" Padding="8,7"
                     Command="{Binding OpenAccountDevicesCommand}">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">

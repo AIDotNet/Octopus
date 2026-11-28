@@ -37,7 +37,43 @@ public sealed class ThemeDefinition
     /// <summary>Installed font family names; ignored when the system does not have them.</summary>
     public string? UiFont { get; init; }
     public string? MonoFont { get; init; }
+    /// <summary>Optional declarative visual effects (input glow, ambient grid, HUD corners) rendered safely by the host.</summary>
+    public ThemeEffects? Effects { get; init; }
 }
 
 /// <summary>Terminal colors. <see cref="Ansi"/> has exactly 16 entries when present; entries 16–255 stay xterm's cube and grey ramp.</summary>
 public sealed record TerminalColors(string? Foreground, string? Background, string? Cursor, string? Selection, IReadOnlyList<string>? Ansi);
+
+/// <summary>Animation/render style for the composer input border glow.</summary>
+public enum InputGlowStyle
+{
+    Orbit,
+    Pulse,
+    Static,
+    Focus,
+}
+
+/// <summary>Declarative glowing border around prompt/composer inputs.</summary>
+public sealed record InputGlowEffect(
+    InputGlowStyle Style,
+    IReadOnlyList<string> Colors,
+    double Intensity,
+    bool AccelerateOnAgentWorking);
+
+/// <summary>Optional chrome accent glow toggles.</summary>
+public sealed record ChromeGlowEffect(
+    bool TabBeam,
+    bool RailEnergyPillar,
+    bool TitlebarLaserLine,
+    bool SpecularCardTopEdge,
+    bool StatusBeaconPulse);
+
+/// <summary>Subtle background pattern rendered behind the workspace.</summary>
+public sealed record AmbientGridEffect(string Pattern, double Opacity);
+
+/// <summary>Optional declarative visual effects that themes may request; the host renders them natively and honours reduced motion.</summary>
+public sealed record ThemeEffects(
+    InputGlowEffect? InputGlow = null,
+    ChromeGlowEffect? ChromeGlow = null,
+    AmbientGridEffect? AmbientGrid = null,
+    bool HudCorners = false);

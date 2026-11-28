@@ -1,9 +1,11 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Octopus.Agents;
 using Octopus.App.Common;
 using Octopus.App.Localization;
 using Octopus.Core.Agents;
+using TKCode.Arc;
 
 namespace Octopus.App.Settings.Agents;
 
@@ -41,8 +43,11 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
             ? new AgentAccountsSectionViewModel(this, services, services.Accounts)
             : null;
         Fields = AgentFieldFactory.Create(this);
+        RebuildBackendOptions();
         Refresh();
         services.Settings.Changed += OnSettingsChanged;
+        services.Providers?.Changed += OnProvidersChanged;
+        services.Accounts?.Changed += OnProvidersChanged;
     }
 
     public AgentDefinition Definition { get; }
@@ -50,6 +55,98 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
     public AgentAccountsSectionViewModel? AccountsSection { get; }
 
     public bool HasAccountsSection => AccountsSection is not null;
+
+    public bool HasProviderSupport => Definition.SupportsManagedProviders && _services.Providers is not null;
+
+    public bool CanOpenProviders => _services.Navigator is not null;
+
+    public ObservableCollection<SelectOption> BackendOptions { get; } = [];
+
+    /// <summary>Selected default backend reference for this agent (empty = native default, account:&lt;id&gt;, or provider:&lt;id&gt;).</summary>
+    public string SelectedBackendRef
+    {
+        get
+        {
+            var profile = Profile;
+            if (!string.IsNullOrWhiteSpace(profile.DefaultBackend))
+            {
+                return profile.DefaultBackend!;
+            }
+            if (!string.IsNullOrWhiteSpace(profile.DefaultAccountId))
+            {
+                return AgentBackendRefs.Account(profile.DefaultAccountId!);
+            }
+            return "";
+        }
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (string.Equals(normalized, SelectedBackendRef, StringComparison.Ordinal))
+            {
+                return;
+            }
+            Mutate(p =>
+            {
+                p.DefaultBackend = normalized;
+                if (normalized is null)
+                {
+                    p.DefaultAccountId = null;
+                }
+                else if (AgentBackendRefs.TryParseAccount(normalized, out var accountId))
+                {
+                    p.DefaultAccountId = accountId;
+                }
+            });
+            OnPropertyChanged();
+        }
+    }
+
+    [RelayCommand]
+    private void OpenProvidersSettings() => _services.Navigator?.OpenSettings("providers");
+
+    private void RebuildBackendOptions()
+    {
+        BackendOptions.Clear();
+        if (!HasProviderSupport)
+        {
+            return;
+        }
+        BackendOptions.Add(new SelectOption("", AppLangResources.Get(AppLangResourceKind.BackendFollowGlobal)));
+        if (Definition.Accounts is not null && _services.Accounts is { } accounts)
+        {
+            foreach (var acc in accounts.GetAccounts(Definition))
+            {
+                var label = acc.IsDefaultOrigin && acc.Label == "Default"
+                    ? AppLangResources.Get(AppLangResourceKind.AccountDefaultName)
+                    : acc.Label;
+                if (!string.IsNullOrWhiteSpace(acc.Identity))
+                {
+                    label = $"{label} ({acc.Identity})";
+                }
+                BackendOptions.Add(new SelectOption(AgentBackendRefs.Account(acc.Id), label));
+            }
+        }
+        if (_services.Providers is { } providers)
+        {
+            foreach (var provider in providers.ListCompatibleProviders(Definition))
+            {
+                var tag = ProviderProtocolNames.DisplayLabel(provider.Protocol);
+                BackendOptions.Add(new SelectOption(
+                    AgentBackendRefs.Provider(provider.Id),
+                    $"{provider.Name} ({tag})"));
+            }
+        }
+        OnPropertyChanged(nameof(SelectedBackendRef));
+    }
+
+    private void OnProvidersChanged(object? sender, EventArgs e) => UiContext.PostToUi(() =>
+    {
+        if (!_disposed)
+        {
+            RebuildBackendOptions();
+            Refresh();
+        }
+    });
 
     /// <summary>"Custom" or "Modified" when the user has a definition file of this agent; null for a built-in one as shipped.</summary>
     public string? OriginBadge { get; init; }
@@ -230,6 +327,7 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsEnabled));
         OnPropertyChanged(nameof(SurfaceKey));
         OnPropertyChanged(nameof(AcpCommandPreview));
+        OnPropertyChanged(nameof(SelectedBackendRef));
     }
 
     /// <summary>Writes every edit that is still waiting for typing to pause.</summary>
@@ -363,6 +461,8 @@ public sealed partial class AgentRowViewModel : ObservableObject, IDisposable
         }
         _disposed = true;
         _services.Settings.Changed -= OnSettingsChanged;
+        _services.Providers?.Changed -= OnProvidersChanged;
+        _services.Accounts?.Changed -= OnProvidersChanged;
         AccountsSection?.Dispose();
         _discoveryCts?.Cancel();
         _discoveryCts?.Dispose();

@@ -21,18 +21,21 @@ internal sealed class HostConnection : IAsyncDisposable
     // Highest sequence sent on this connection for each item, so re-attaching never rewinds past an in-flight update.
     private readonly Dictionary<string, long> _conversationSequences = new(StringComparer.Ordinal);
     private readonly Func<HostConnection, P2pHandshakeMessage, CancellationToken, Task<P2pHandshakeMessage>>? _onP2pHandshake;
+    private readonly RemoteLlmLoopbackProxy? _llmProxy;
     private volatile HelloMessage? _theirs;
 
     public HostConnection(
         RemoteConnection connection,
         IHostWorkspace workspace,
         HelloMessage hello,
-        Func<HostConnection, P2pHandshakeMessage, CancellationToken, Task<P2pHandshakeMessage>>? onP2pHandshake = null)
+        Func<HostConnection, P2pHandshakeMessage, CancellationToken, Task<P2pHandshakeMessage>>? onP2pHandshake = null,
+        RemoteLlmLoopbackProxy? llmProxy = null)
     {
         _connection = connection;
         _workspace = workspace;
         _hello = hello;
         _onP2pHandshake = onP2pHandshake;
+        _llmProxy = llmProxy;
     }
 
     public RemoteConnection Connection => _connection;
@@ -48,14 +51,53 @@ internal sealed class HostConnection : IAsyncDisposable
         var json = RemoteJsonContext.Default;
         RemoteHello.Answer(_connection, _hello, theirs => _theirs = theirs);
         _connection.Handle(RemoteMethods.HostInfo, json.Nothing, json.HostInfoMessage, (_, _) => Task.FromResult(_workspace.Info));
-        _connection.Handle(RemoteMethods.ProjectList, json.Nothing, json.ProjectListMessage,
-            async (_, _) => new ProjectListMessage { Projects = [.. await _workspace.ListProjectsAsync().ConfigureAwait(false)] });
+        _connection.Handle(RemoteMethods.ProjectList, json.Nothing, json.ProjectListMessage, async (_, _) =>
+        {
+            var projects = await _workspace.ListProjectsAsync().ConfigureAwait(false);
+            var groups = await _workspace.ListProjectGroupsAsync().ConfigureAwait(false);
+            return new ProjectListMessage
+            {
+                Projects = [.. projects],
+                Groups = groups.Count > 0 ? [.. groups] : null,
+            };
+        });
         _connection.Handle(RemoteMethods.ProjectCreate, json.CreateProjectMessage, json.ProjectMessage, (request, _) => _workspace.CreateProjectAsync(request));
         _connection.Handle(RemoteMethods.ProjectIcon, json.ProjectRefMessage, json.ProjectIconMessage,
             async (request, _) => await _workspace.GetProjectIconAsync(request.ProjectId).ConfigureAwait(false) ?? new ProjectIconMessage());
+        _connection.Handle(RemoteMethods.ProjectSetGroup, json.SetProjectGroupMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.SetProjectGroupAsync(request.ProjectId, request.GroupId).ConfigureAwait(false);
+            return new Nothing();
+        });
+        _connection.Handle(RemoteMethods.ProjectGroupCreate, json.CreateProjectGroupMessage, json.ProjectGroupMessage,
+            (request, _) => _workspace.CreateProjectGroupAsync(request));
+        _connection.Handle(RemoteMethods.ProjectGroupUpdate, json.UpdateProjectGroupMessage, json.ProjectGroupMessage,
+            (request, _) => _workspace.UpdateProjectGroupAsync(request));
+        _connection.Handle(RemoteMethods.ProjectGroupDelete, json.ProjectGroupRefMessage, json.Nothing, async (request, _) =>
+        {
+            await _workspace.DeleteProjectGroupAsync(request.GroupId).ConfigureAwait(false);
+            return new Nothing();
+        });
         _connection.Handle(RemoteMethods.ItemList, json.ProjectRefMessage, json.ItemListMessage,
             async (request, _) => new ItemListMessage { Items = [.. await _workspace.ListItemsAsync(request.ProjectId).ConfigureAwait(false)] });
-        _connection.Handle(RemoteMethods.ItemCreate, json.CreateItemMessage, json.ItemMessage, (request, _) => _workspace.CreateItemAsync(request));
+        _connection.Handle(RemoteMethods.ItemCreate, json.CreateItemMessage, json.ItemMessage, (request, _) =>
+        {
+            if (request.TunnelProvider is { } tunnel && !string.IsNullOrWhiteSpace(tunnel.GrantToken) && _llmProxy is not null)
+            {
+                tunnel.LoopbackBaseUrl = _llmProxy.RegisterGrant(tunnel.GrantToken, _connection.Peer.DeviceId, _connection);
+            }
+            return _workspace.CreateItemAsync(request);
+        });
+        _connection.Handle(RemoteMethods.LlmProxyRebind, json.LlmProxyRebindMessage, json.Nothing, (request, _) =>
+        {
+            _llmProxy?.RebindGrants(_connection.Peer.DeviceId, _connection, request.GrantTokens);
+            return Task.FromResult(new Nothing());
+        });
+        _connection.Handle(RemoteMethods.LlmProxyRevoke, json.LlmProxyRevokeMessage, json.Nothing, (request, _) =>
+        {
+            _llmProxy?.RevokeGrant(_connection.Peer.DeviceId, request.GrantToken);
+            return Task.FromResult(new Nothing());
+        });
         _connection.Handle(RemoteMethods.ItemRemove, json.ItemRefMessage, json.Nothing, async (request, _) =>
         {
             await _workspace.RemoveItemAsync(request.ItemId).ConfigureAwait(false);
@@ -125,6 +167,7 @@ internal sealed class HostConnection : IAsyncDisposable
 
     private void Release()
     {
+        _llmProxy?.OnConnectionClosed(_connection);
         _workspace.Changed -= OnWorkspaceChanged;
         _workspace.ItemChanged -= OnItemChanged;
         foreach (var channel in _subscribers.Keys)
@@ -523,6 +566,11 @@ internal sealed class HostConnection : IAsyncDisposable
 
     private void OnData(FrameHeader header, ReadOnlyMemory<byte> payload)
     {
+        if ((header.Channel & RemoteLlmLoopbackProxy.HostChannelBit) != 0)
+        {
+            _llmProxy?.OnFrame(header, payload);
+            return;
+        }
         switch (header.Type)
         {
             case FrameType.Input when _subscribers.TryGetValue(header.Channel, out var subscriber):

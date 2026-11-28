@@ -117,6 +117,11 @@
       "kind": "codexAuthJwt"
     }
   },
+  "providerSupport": {
+    "protocols": ["openaiResponses", "openaiChat"],
+    "strategy": "codexHomeOverlay",
+    "unsetEnv": ["OPENAI_API_KEY", "OPENAI_BASE_URL"]
+  },
   "acp": {
     "mode": "adapter",
     "dialect": "codex-acp",

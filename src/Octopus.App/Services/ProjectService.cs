@@ -291,6 +291,50 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
         Raise(ProjectChangeKind.ProjectAccounts, project);
     }
 
+    public void SetProjectAgentBackend(string projectId, string agentId, string? backendRef)
+    {
+        var project = Find(projectId);
+        if (project is null || string.IsNullOrWhiteSpace(agentId))
+        {
+            return;
+        }
+        var key = agentId.Trim();
+        var value = string.IsNullOrWhiteSpace(backendRef) ? null : backendRef.Trim();
+        project.AgentBackends ??= [];
+        project.AgentAccounts ??= [];
+
+        var changed = false;
+        if (value is null)
+        {
+            changed |= project.AgentBackends.Remove(key);
+            changed |= project.AgentAccounts.Remove(key);
+        }
+        else
+        {
+            if (!project.AgentBackends.TryGetValue(key, out var existing) || existing != value)
+            {
+                project.AgentBackends[key] = value;
+                changed = true;
+            }
+            if (Octopus.Core.Agents.AgentBackendRefs.TryParseAccount(value, out var accId))
+            {
+                if (!project.AgentAccounts.TryGetValue(key, out var existingAcc) || existingAcc != accId)
+                {
+                    project.AgentAccounts[key] = accId;
+                    changed = true;
+                }
+            }
+            else
+            {
+                changed |= project.AgentAccounts.Remove(key);
+            }
+        }
+        if (changed)
+        {
+            Raise(ProjectChangeKind.ProjectAccounts, project);
+        }
+    }
+
     public void SetCurrent(string projectId)
     {
         var project = Find(projectId);
@@ -933,6 +977,7 @@ public sealed class ProjectService(IProjectStore store, PathComparer paths, ISet
             Workspaces = [.. project.Workspaces],
             Tunnels = [.. project.Tunnels],
             AgentAccounts = new Dictionary<string, string>(project.AgentAccounts, StringComparer.Ordinal),
+            AgentBackends = new Dictionary<string, string>(project.AgentBackends, StringComparer.Ordinal),
             CreatedAt = project.CreatedAt,
         };
     }

@@ -26,6 +26,13 @@
       "allowCustom": true
     }
   },
+  "providerSupport": {
+    "protocols": ["openaiChat", "openaiResponses"],
+    "strategy": "env",
+    "baseUrlEnv": "OPENAI_BASE_URL",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "modelEnv": "OPENAI_MODEL"
+  },
   "acp": {
     "mode": "native",
     "args": [
