@@ -33,6 +33,10 @@ public sealed class PluginRecord
     public DateTimeOffset? InstalledAt { get; set; }
     /// <summary>Permission key (see <see cref="PermissionRequest.Key"/>) → granted access, e.g. <c>"read"</c> or <c>"granted"</c>.</summary>
     public Dictionary<string, string> Grants { get; set; } = [];
+    /// <summary>Scope-bound permission grants accepted by the user (mode, paths/globs/hosts/programs, exclusions).</summary>
+    public List<PluginPermissionGrant> ScopedGrants { get; set; } = [];
+    /// <summary>Scope-bound permission requests the user declined (mode, paths/globs/hosts/programs, exclusions).</summary>
+    public List<PluginPermissionGrant> ScopedDenied { get; set; } = [];
     /// <summary>Granted locations: external paths, agent data directories, paths picked in a file dialog.</summary>
     public List<PluginPathGrant> PathGrants { get; set; } = [];
     /// <summary>Permission keys the user turned down; not asked again.</summary>
@@ -42,6 +46,13 @@ public sealed class PluginRecord
     /// <summary>Recent crash times, for the restart back-off.</summary>
     public List<DateTimeOffset> Crashes { get; set; } = [];
 }
+
+/// <summary>One accepted permission grant bound to its approved mode, scope details, and exclusions.</summary>
+public sealed record PluginPermissionGrant(
+    string Key,
+    string? Access = null,
+    IReadOnlyList<string>? Details = null,
+    IReadOnlyList<string>? Exclude = null);
 
 /// <param name="Scope"><c>external</c>, <c>agentData</c> or <c>picked</c>.</param>
 /// <param name="Agent">For <c>agentData</c>: the agent whose directory this is.</param>

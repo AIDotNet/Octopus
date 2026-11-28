@@ -6,6 +6,7 @@ using System.Net.Quic;
 using System.Net.Security;
 using System.Net.WebSockets;
 using System.Runtime.Versioning;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -182,6 +183,30 @@ internal static class RelaySockets
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("macos")]
+    internal static QuicClientConnectionOptions CreateQuicTunnelOptions(Uri quicEndpoint)
+    {
+        ArgumentNullException.ThrowIfNull(quicEndpoint);
+        var sslOptions = new SslClientAuthenticationOptions
+        {
+            ApplicationProtocols = [QuicRelayAlpn],
+            TargetHost = quicEndpoint.Host,
+        };
+        RelayHttp.ConfigureQuic(sslOptions);
+        return new QuicClientConnectionOptions
+        {
+            RemoteEndPoint = new DnsEndPoint(quicEndpoint.Host, quicEndpoint.Port),
+            DefaultStreamErrorCode = 0x0A,
+            DefaultCloseErrorCode = 0x0B,
+            MaxInboundBidirectionalStreams = 4,
+            MaxInboundUnidirectionalStreams = 1,
+            IdleTimeout = TimeSpan.FromSeconds(60),
+            ClientAuthenticationOptions = sslOptions,
+        };
+    }
+
+    [SupportedOSPlatform("linux")]
+    [SupportedOSPlatform("windows")]
+    [SupportedOSPlatform("macos")]
     private static async Task<IMessageTransport?> TryConnectQuicTunnelCoreAsync(
         Uri quicEndpoint,
         string tunnelId,
@@ -193,31 +218,14 @@ internal static class RelaySockets
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(QuicTunnelConnectTimeout);
 
-        var options = new QuicClientConnectionOptions
-        {
-            RemoteEndPoint = new DnsEndPoint(quicEndpoint.Host, quicEndpoint.Port),
-            DefaultStreamErrorCode = 0x0A,
-            DefaultCloseErrorCode = 0x0B,
-            MaxInboundBidirectionalStreams = 4,
-            MaxInboundUnidirectionalStreams = 1,
-            IdleTimeout = TimeSpan.FromSeconds(60),
-            ClientAuthenticationOptions = new SslClientAuthenticationOptions
-            {
-                ApplicationProtocols = [QuicRelayAlpn],
-                TargetHost = quicEndpoint.Host,
-                // End-to-end device identity and record encryption are enforced by SecureChannel inside the tunnel.
-#pragma warning disable CA5359
-                RemoteCertificateValidationCallback = static (_, _, _, _) => true,
-#pragma warning restore CA5359
-            },
-        };
+        var options = CreateQuicTunnelOptions(quicEndpoint);
 
         QuicConnection connection;
         try
         {
             connection = await QuicConnection.ConnectAsync(options, limit.Token).ConfigureAwait(false);
         }
-        catch (Exception e) when (e is QuicException or IOException or System.Net.Sockets.SocketException or OperationCanceledException)
+        catch (Exception e) when (e is QuicException or AuthenticationException or IOException or System.Net.Sockets.SocketException or OperationCanceledException)
         {
             if (cancellationToken.IsCancellationRequested) throw;
             return null;

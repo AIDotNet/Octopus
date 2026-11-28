@@ -21,10 +21,12 @@ public sealed class BotDockController : IDisposable
     private readonly IBotService _bots;
     private readonly ITabContentRegistry _registry;
     private readonly CloseConfirmation _confirmation;
+    private readonly Action<Action> _postBackground;
     private readonly Dictionary<string, DockPane> _panes = new(StringComparer.Ordinal);
     private readonly HashSet<string> _approvedClose = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _pendingRelease = new(StringComparer.Ordinal);
+    private readonly HashSet<Func<Task>> _pendingReleases = [];
     private bool _syncing;
+    private bool _resyncNeeded;
     private bool _active = true;
     private bool _disposed;
     private int _activateVersion;
@@ -35,12 +37,14 @@ public sealed class BotDockController : IDisposable
         IBotService bots,
         ITabContentRegistry registry,
         CloseConfirmation confirmation,
-        Control emptyContent)
+        Control emptyContent,
+        Action<Action>? postBackground = null)
     {
         _botId = bot.Id;
         _bots = bots;
         _registry = registry;
         _confirmation = confirmation;
+        _postBackground = postBackground ?? (static action => Dispatcher.UIThread.Post(action, DispatcherPriority.Background));
         _backing = bots.GetBackingProject(bot);
 
         Layout = new DockLayout
@@ -164,29 +168,32 @@ public sealed class BotDockController : IDisposable
         _bots.Changed -= OnBotsChanged;
         foreach (var id in _panes.Keys.ToList())
         {
-            _ = _registry.ReleaseAsync(id);
+            if (_registry.CaptureForRelease(id) is { } release)
+            {
+                _ = release();
+            }
         }
-        foreach (var id in _pendingRelease)
+        foreach (var release in _pendingReleases.ToList())
         {
-            _ = _registry.ReleaseAsync(id);
+            _ = release();
         }
         _panes.Clear();
-        _pendingRelease.Clear();
+        _pendingReleases.Clear();
     }
 
-    private void ScheduleRelease(string itemId)
+    private void ScheduleRelease(Func<Task>? release)
     {
-        if (!_pendingRelease.Add(itemId))
+        if (release is null || !_pendingReleases.Add(release))
         {
             return;
         }
-        Dispatcher.UIThread.Post(() =>
+        _postBackground(() =>
         {
-            if (_pendingRelease.Remove(itemId))
+            if (_pendingReleases.Remove(release))
             {
-                _ = _registry.ReleaseAsync(itemId);
+                _ = release();
             }
-        }, DispatcherPriority.Background);
+        });
     }
 
     private void OnLayoutChanged(object? sender, EventArgs e)
@@ -239,7 +246,18 @@ public sealed class BotDockController : IDisposable
 
     private async Task ConfirmCloseAsync(DockPane pane)
     {
+        var originalContent = pane.Content;
+        var concreteRegistry = _registry as TabContentRegistry;
+        using var confirmation = concreteRegistry?.BeginConfirmation(pane.Id);
         if (!await _confirmation.ConfirmCloseTabAsync(pane.Id)) return;
+        if (_disposed
+            || !_panes.TryGetValue(pane.Id, out var currentPane)
+            || !ReferenceEquals(currentPane, pane)
+            || !ReferenceEquals(pane.Content, originalContent)
+            || (confirmation is not null && !confirmation.IsStillCurrent()))
+        {
+            return;
+        }
         _approvedClose.Add(pane.Id);
         if (!Layout.Close(pane))
         {
@@ -255,31 +273,71 @@ public sealed class BotDockController : IDisposable
         e.Pane.Content = null;
         e.Pane.Icon = null;
         _syncing = true;
-        try { _bots.CloseBackingItem(_botId, id); }
-        finally { _syncing = false; }
-        ScheduleRelease(id);
+        _resyncNeeded = false;
+        try
+        {
+            BotOwnerRetirement.RetireAndMutate(
+                _registry,
+                id,
+                () => _bots.CloseBackingItem(_botId, id),
+                ScheduleRelease);
+        }
+        finally
+        {
+            _syncing = false;
+        }
+        if (_resyncNeeded && !_disposed)
+        {
+            SyncWithBacking();
+        }
     }
 
     private void OnBotsChanged(object? sender, BotChangedEventArgs e)
     {
-        if (_syncing || _disposed) return;
+        if (_disposed) return;
         if (e.Bot is not null && e.Bot.Id != _botId) return;
-        UiContext.Run(SyncWithBacking);
+        if (_syncing)
+        {
+            _resyncNeeded = true;
+            return;
+        }
+        UiContext.Run(() =>
+        {
+            if (_disposed) return;
+            if (e.Kind == BotChangeKind.Chats
+                && e.IsRemoved
+                && e.Chat is { } removedChat
+                && !BotOwnerRetirement.IsRetiring(removedChat.Id)
+                && _backing.Items.Any(i => i.Id == removedChat.Id)
+                && e.SupersededOwner is { } superseded
+                && _registry is TabContentRegistry concrete)
+            {
+                // An uncaptured close (e.g. from an optional-registry sidebar) was reopened by an earlier observer
+                // before this dock observed the close. Retire only the exact pre-close owner/generation captured
+                // before the event fired, never a restarted or newly attached successor.
+                ScheduleRelease(concrete.CaptureForReleaseIfMatches(removedChat.Id, superseded));
+            }
+            SyncWithBacking();
+        });
     }
 
     private void SyncWithBacking()
     {
-        // Sync titles and open new items
+        _resyncNeeded = false;
+
+        // Sync titles, reconcile replaced controls, and open new items
         foreach (var item in _backing.Items)
         {
+            var currentContent = _registry.GetOrCreate(_backing, item);
             if (_panes.TryGetValue(item.Id, out var existing))
             {
                 if (existing.Title != item.DisplayTitle) existing.Title = item.DisplayTitle;
+                if (!ReferenceEquals(existing.Content, currentContent)) existing.Content = currentContent;
                 if (existing.Group is null) OpenPane(existing);
             }
             else
             {
-                OpenPane(PaneOf(item));
+                OpenPane(PaneOf(item, currentContent));
             }
         }
 
@@ -287,16 +345,29 @@ public sealed class BotDockController : IDisposable
         var liveIds = _backing.Items.Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var staleId in _panes.Keys.Where(id => !liveIds.Contains(id)).ToList())
         {
-            if (_panes.TryGetValue(staleId, out var stale))
+            void CloseStalePane()
             {
-                _syncing = true;
-                try { Layout.Close(stale); }
-                finally { _syncing = false; }
-                stale.Content = null;
-                stale.Icon = null;
+                if (_panes.TryGetValue(staleId, out var stale))
+                {
+                    _syncing = true;
+                    try { Layout.Close(stale); }
+                    finally { _syncing = false; }
+                    stale.Content = null;
+                    stale.Icon = null;
+                }
+                _panes.Remove(staleId);
             }
-            _panes.Remove(staleId);
-            ScheduleRelease(staleId);
+
+            if (BotOwnerRetirement.IsRetiring(staleId))
+            {
+                // The initiating close/delete route already captured the original owner and owns its retirement;
+                // detach only the stale pane so a replacement attached during removal is never recaptured.
+                CloseStalePane();
+            }
+            else
+            {
+                BotOwnerRetirement.RetireAndMutate(_registry, staleId, CloseStalePane, ScheduleRelease);
+            }
         }
 
         // Activate active item
@@ -331,7 +402,7 @@ public sealed class BotDockController : IDisposable
         }
     }
 
-    private DockPane PaneOf(ProjectItem item)
+    private DockPane PaneOf(ProjectItem item, Control? content = null)
     {
         if (_panes.TryGetValue(item.Id, out var existing)) return existing;
         var pane = new DockPane
@@ -340,7 +411,7 @@ public sealed class BotDockController : IDisposable
             Title = item.DisplayTitle,
             Icon = item.Kind == ProjectItemKind.File ? ArcIcons.FileText : ArcIcons.Sparkles,
             CanFloat = false,
-            Content = _registry.GetOrCreate(_backing, item),
+            Content = content ?? _registry.GetOrCreate(_backing, item),
         };
         _panes[item.Id] = pane;
         return pane;

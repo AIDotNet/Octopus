@@ -162,6 +162,44 @@ public class TerminalLaunchPlannerTests
     }
 
     [Fact]
+    public void PlanAgent_with_unset_environment_keeps_session_tokens_out_of_shell_command_arguments()
+    {
+        var env = new DirtyEnvironment();
+        var planner = new TerminalLaunchPlanner(new FakeResolver(), new ShellCommandBuilder(), env);
+        const string syntheticCollabToken = "synthetic-collab-token-value";
+        const string syntheticSignalToken = "synthetic-signal-token-value";
+        var command = new AgentCommand(
+            "codex",
+            ["-c", "mcp_servers.octopus_collab.env_vars=[\"OCTOPUS_COLLAB_TOKEN\"]"],
+            new Dictionary<string, string>
+            {
+                ["CODEX_HOME"] = "/tmp/codex-account",
+                ["OCTOPUS_COLLAB_URL"] = "http://127.0.0.1:45678/mcp",
+                ["OCTOPUS_COLLAB_TOKEN"] = syntheticCollabToken,
+                ["OCTOPUS_SIGNAL_TOKEN"] = syntheticSignalToken,
+                ["OCTOPUS_ITEM_ID"] = "item-1",
+            },
+            ["OPENAI_API_KEY"]);
+
+        var spec = planner.PlanAgent(command, Path.GetTempPath());
+
+        // Per-process environment keeps the session tokens while stripping unset variables.
+        Assert.Equal(syntheticCollabToken, spec.Environment["OCTOPUS_COLLAB_TOKEN"]);
+        Assert.Equal(syntheticSignalToken, spec.Environment["OCTOPUS_SIGNAL_TOKEN"]);
+        Assert.Equal("/tmp/codex-account", spec.Environment["CODEX_HOME"]);
+        Assert.False(spec.Environment.ContainsKey("OPENAI_API_KEY"));
+
+        // Shell command-line arguments still unset/export non-secret overrides, but never inline session tokens.
+        var commandLine = spec.Arguments[^1];
+        Assert.Contains("unset OPENAI_API_KEY;", commandLine, StringComparison.Ordinal);
+        Assert.Contains("export CODEX_HOME=/tmp/codex-account;", commandLine, StringComparison.Ordinal);
+        Assert.DoesNotContain(syntheticCollabToken, commandLine, StringComparison.Ordinal);
+        Assert.DoesNotContain(syntheticSignalToken, commandLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("export OCTOPUS_COLLAB_TOKEN=", commandLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("export OCTOPUS_SIGNAL_TOKEN=", commandLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PlanAgent_wraps_working_directory_inside_shell_command_for_powershell()
     {
         var pwshResolver = new PowerShellFakeResolver();

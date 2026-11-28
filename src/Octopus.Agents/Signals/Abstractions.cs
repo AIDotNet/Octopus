@@ -22,7 +22,8 @@ public sealed record AgentSignal(
     string Account,
     long SentAt,
     long ReceivedAt,
-    string Payload);
+    string Payload,
+    string? LinkId = null);
 
 /// <summary>Where the forwarder delivers signals and the per-run secret it must present.</summary>
 /// <param name="Address">A Unix domain socket path, or <c>\\.\pipe\name</c> on Windows.</param>

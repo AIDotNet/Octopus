@@ -76,6 +76,10 @@ public sealed class JsonPluginStateStore(IAppPaths paths) : IPluginStateStore
         foreach (var record in document.Plugins.Values)
         {
             record.Grants ??= [];
+            record.ScopedGrants ??= [];
+            record.ScopedGrants.RemoveAll(g => g is null || string.IsNullOrWhiteSpace(g.Key));
+            record.ScopedDenied ??= [];
+            record.ScopedDenied.RemoveAll(g => g is null || string.IsNullOrWhiteSpace(g.Key));
             record.PathGrants ??= [];
             record.PathGrants.RemoveAll(g => g is null || string.IsNullOrWhiteSpace(g.Path) || string.IsNullOrWhiteSpace(g.Scope));
             record.Denied ??= [];

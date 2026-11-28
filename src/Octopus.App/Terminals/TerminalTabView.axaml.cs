@@ -21,7 +21,8 @@ public partial class TerminalTabView : UserControl, ITabContent
         Terminal.PasteConfirmer = (_, preview) => PasteConfirmation.ShowAsync(this, preview);
         Terminal.LinkActivated += (_, url) => AppHost.Get<IFileOpener>().OpenUrl(url);
         Terminal.PathActivated += OnPathActivated;
-        Terminal.Exited += OnExited;
+        Terminal.LinkExited += OnLinkExited;
+        Terminal.StartFailed += OnStartFailed;
         // Every run of the process (the first one and each restart) begins the connection's progress.
         Terminal.PropertyChanged += (_, e) =>
         {
@@ -81,19 +82,51 @@ public partial class TerminalTabView : UserControl, ITabContent
         EnsureStarted();
     }
 
-    internal void EnsureStarted()
+    internal void EnsureStarted(bool startWhenHidden = false)
     {
+        if (startWhenHidden) _startWhenHidden = true;
         if (Model is { Started: false } model)
         {
             model.Started = true;
             // The files of a terminal on another machine are not on this computer: its paths are not links.
             Terminal.PathLinksEnabled = model.Connect is null && !model.IsMirror;
             Terminal.IsMirror = model.IsMirror;
-            if (model.TryCreateSpec() is { } spec)
-            {
-                _startedAt = Environment.TickCount64;
-                Terminal.Start(spec, model.Factory, model.Sessions, model.Item.Id);
-            }
+            Terminal.Start(
+                leaseId =>
+                {
+                    var launch = model.TryCreateLaunch(leaseId: leaseId);
+                    if (launch is not null)
+                    {
+                        _startedAt = Environment.TickCount64;
+                    }
+                    else
+                    {
+                        var err = model.Error is { Length: > 0 } message
+                            ? $"Terminal failed to start: {message}"
+                            : "Terminal failed to start.";
+                        NotifyCollabAborted(model.Item.Id, err);
+                    }
+                    return launch;
+                },
+                model.Factory,
+                model.Sessions,
+                model.Item.Id,
+                _startWhenHidden);
+            return;
+        }
+        if (startWhenHidden && Model is { Started: true } existing && !Terminal.IsRunning && existing.Sessions?.Find(existing.Item.Id) is null)
+        {
+            Terminal.EnsureStartedWhenHidden();
+        }
+    }
+
+    private void OnStartFailed(object? sender, Exception ex)
+    {
+        if (Model is { } failed)
+        {
+            AppHost.Get<Activity.IItemActivityService>().ReportExit(failed.Item.Id);
+            AppHost.Get<Activity.ISubagentService>().ReportExit(failed.Item.Id);
+            NotifyCollabAborted(failed.Item.Id, $"Terminal failed to start: {ex.Message}");
         }
     }
 
@@ -101,36 +134,88 @@ public partial class TerminalTabView : UserControl, ITabContent
     public static readonly TimeSpan ResumeFailureWindow = TimeSpan.FromSeconds(15);
 
     private long _startedAt;
+    private bool _startWhenHidden;
 
     /// <summary>
     /// A restored agent is started with its "continue" argument. Where no session exists (the tab was opened and
     /// closed without a conversation) the agent exits at once with an error: it is then started fresh, once, instead
     /// of leaving a dead tab whose restart would fail the same way.
     /// </summary>
-    private void OnExited(object? sender, int? code)
+    private void OnLinkExited(object? sender, TerminalLinkExitedEventArgs e)
     {
+        var code = e.ExitCode;
+        var reason = code is { } exitCode
+            ? $"Terminal session exited unexpectedly (code {exitCode})."
+            : "Terminal session exited unexpectedly.";
+        if (!e.IsCurrentLink)
+        {
+            // A superseded link's delayed exit must only settle work accepted by that retired link,
+            // never affecting a restarted link's live state, retry logic, or pending work.
+            if (Model is { } staleModel && !string.IsNullOrWhiteSpace(e.LinkId))
+            {
+                NotifyCollabAborted(staleModel.Item.Id, reason, onlyOwnerLinkId: e.LinkId);
+            }
+            return;
+        }
         Model?.Connect?.Ended(code);
         if (Model is { } exited)
         {
             AppHost.Get<Activity.IItemActivityService>().ReportExit(exited.Item.Id);
             AppHost.Get<Activity.ISubagentService>().ReportExit(exited.Item.Id);
         }
-        if (Model is not { Resumed: true } model || code is null or 0)
+        if (Model is { Resumed: true } model
+            && code is not (null or 0)
+            && Environment.TickCount64 - _startedAt <= ResumeFailureWindow.TotalMilliseconds)
         {
+            // Any collaboration work already accepted by the exited resumed process cannot be answered by the fresh retry.
+            NotifyCollabAborted(model.Item.Id, reason);
+            // Clear any stale saved session id so the next restart does not hit the same dead session again.
+            if (!string.IsNullOrWhiteSpace(model.Item.Launch?.SessionId))
+            {
+                AppHost.Get<Services.IProjectService>().SetItemSessionId(model.Item.Id, null, isAcp: false);
+            }
+            Terminal.Start(
+                leaseId =>
+                {
+                    var launch = model.TryCreateLaunch(allowResume: false, leaseId: leaseId);
+                    if (launch is not null)
+                    {
+                        _startedAt = Environment.TickCount64;
+                    }
+                    else
+                    {
+                        var err = model.Error is { Length: > 0 } message
+                            ? $"Terminal failed to start: {message}"
+                            : "Terminal failed to start.";
+                        NotifyCollabAborted(model.Item.Id, err);
+                    }
+                    return launch;
+                },
+                model.Factory,
+                model.Sessions,
+                model.Item.Id,
+                _startWhenHidden);
             return;
         }
-        if (Environment.TickCount64 - _startedAt > ResumeFailureWindow.TotalMilliseconds)
+        if (Model is { } ended)
         {
-            return;
+            NotifyCollabAborted(ended.Item.Id, reason);
         }
-        // Clear any stale saved session id so the next restart does not hit the same dead session again.
-        if (!string.IsNullOrWhiteSpace(model.Item.Launch?.SessionId))
+    }
+
+    private static void NotifyCollabAborted(string itemId, string reason, string? onlyOwnerLinkId = null)
+    {
+        var collab = AppHost.Services.GetService(typeof(Collab.ICollabCoordinator)) as Collab.ICollabCoordinator;
+        if (collab is Collab.CollabCoordinator coordinator)
         {
-            AppHost.Get<Services.IProjectService>().SetItemSessionId(model.Item.Id, null, isAcp: false);
+            var ownerLinks = !string.IsNullOrWhiteSpace(onlyOwnerLinkId)
+                ? new HashSet<string>(StringComparer.Ordinal) { onlyOwnerLinkId }
+                : null;
+            coordinator.NotifySessionAbortedAllPending(itemId, reason, failed: true, onlyOwnerLinkIds: ownerLinks);
         }
-        if (model.TryCreateSpec(allowResume: false) is { } fresh)
+        else if (string.IsNullOrWhiteSpace(onlyOwnerLinkId))
         {
-            Terminal.Start(fresh, model.Factory, model.Sessions, model.Item.Id);
+            collab?.NotifyTurnAborted(itemId, reason, failed: true);
         }
     }
 

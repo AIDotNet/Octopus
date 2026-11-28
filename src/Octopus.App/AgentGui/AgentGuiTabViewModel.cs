@@ -61,12 +61,20 @@ public sealed partial class QueuedPrompt : ObservableObject
         Action<QueuedPrompt>? onMoveDown = null,
         Action<QueuedPrompt>? onRemove = null,
         string? collabThreadId = null,
-        string? collabTaskId = null)
+        string? collabTaskId = null,
+        bool expectCollabReply = false,
+        string? collabDeliveryId = null,
+        Octopus.Remote.Protocol.AcpCollabCorrelationMessage? mirrorCollab = null,
+        Func<bool>? shouldDispatch = null)
     {
         Text = text;
         Attachments = attachments;
         CollabThreadId = collabThreadId;
         CollabTaskId = collabTaskId;
+        CollabDeliveryId = collabDeliveryId;
+        ExpectCollabReply = expectCollabReply;
+        ShouldDispatch = shouldDispatch;
+        MirrorCollab = mirrorCollab;
         _onSendNow = onSendNow;
         _onEdit = onEdit;
         _onMoveUp = onMoveUp;
@@ -78,6 +86,11 @@ public sealed partial class QueuedPrompt : ObservableObject
     public IReadOnlyList<AcpPromptAttachment> Attachments { get; }
     public string? CollabThreadId { get; }
     public string? CollabTaskId { get; }
+    public string? CollabDeliveryId { get; }
+    public bool ExpectCollabReply { get; }
+    public Func<bool>? ShouldDispatch { get; }
+    public Octopus.Remote.Protocol.AcpCollabCorrelationMessage? MirrorCollab { get; }
+    internal long LegacyIngressToken { get; init; }
 
     [ObservableProperty] public partial int Position { get; set; } = 1;
     [ObservableProperty] public partial bool CanMoveUp { get; set; }
@@ -215,6 +228,13 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private readonly Action _onWorkspaceFilesRefreshed;
     private readonly Dictionary<string, UrlElicitationCardItem> _urlElicitations = new(StringComparer.Ordinal);
 
+    private readonly object _credentialGate = new();
+    private long _connectGeneration;
+    private long _activeCredentialGeneration;
+    private IDisposable? _activeCollabLease;
+    private IDisposable? _activeBotScheduleLease;
+    private Action<AcpRuntimeEvent>? _sessionEventHandler;
+    private readonly HashSet<string> _ownedCollabDeliveryIds = new(StringComparer.Ordinal);
     private IAcpSession? _session;
     private AssistantTurnItem? _activeTurn;
     private string? _desiredModelId;
@@ -263,7 +283,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private readonly object _streamGate = new();
     private readonly List<(string Channel, string? MessageId, StringBuilder Buffer)> _pendingDeltas = [];
     private bool _deltaFlushScheduled;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public AgentGuiTabViewModel(
         Project project,
@@ -352,10 +372,14 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         WeakReferenceMessenger.Default.Register(this);
         ScriptPreview.PropertyChanged += OnScriptPreviewPropertyChanged;
+        if (!string.IsNullOrWhiteSpace(_item.Launch?.CollabDeliveryId))
+        {
+            _ownedCollabDeliveryIds.Add(_item.Launch.CollabDeliveryId);
+        }
         if (_collab is not null)
         {
             _collab.RegisterGuiSession(this);
-            _collab.Changed += OnCollabChanged;
+            _collabSubscription = _collab.SubscribeItemChanges(_item.Id, OnCollabChanged);
             RefreshCollabTopology();
         }
     }
@@ -425,7 +449,30 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     bool ICollabSessionBridge.IsConnected => _session?.IsConnected == true;
     string? ICollabSessionBridge.CurrentStatusDetail => StatusDetail;
 
+    private sealed record CollabTurnIdentity(
+        string? ThreadId,
+        string? TaskId,
+        string? DeliveryId,
+        bool ExpectReply,
+        Octopus.Remote.Protocol.AcpCollabCorrelationMessage? MirrorCollab = null,
+        Func<bool>? ShouldDispatch = null,
+        string? ExternalTurnKey = null);
+
+    private sealed class PendingCollabDelivery(string? threadId, string? taskId, string? deliveryId, Func<bool>? shouldCommit)
+    {
+        public string? ThreadId { get; } = threadId;
+        public string? TaskId { get; } = taskId;
+        public string? DeliveryId { get; } = deliveryId;
+        public Func<bool>? ShouldCommit { get; } = shouldCommit;
+        public bool Cancelled;
+    }
+
     private string? _activeOperationId;
+    private volatile CollabTurnIdentity? _activeCollabTurn;
+    private CollabTurnIdentity? _draftCollabTurn;
+    private bool _activeCollabTransferred;
+    private readonly object _collabDeliveryGate = new();
+    private readonly List<PendingCollabDelivery> _pendingCollabDeliveries = [];
     private readonly List<AgentGuiPendingApproval> _pendingApprovals = [];
 
     /// <summary>Raised when a prompt turn begins executing: (itemId, operationId).</summary>
@@ -450,53 +497,217 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    public async Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId = null, string? taskId = null, CancellationToken cancellationToken = default)
+    private sealed class CollabDeliveryAttempt
     {
+        public const int Pending = 0;
+        public const int Committed = 1;
+        public const int Cancelled = 2;
+        public int State;
+    }
+
+    public Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId = null, string? taskId = null, CancellationToken cancellationToken = default) =>
+        DeliverCollabPromptAsync(promptText, threadId, taskId, expectReply: threadId is not null || taskId is not null, shouldCommit: null, cancellationToken);
+
+    public Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId, string? taskId, bool expectReply, CancellationToken cancellationToken) =>
+        DeliverCollabPromptAsync(promptText, threadId, taskId, expectReply, shouldCommit: null, cancellationToken);
+
+    public Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId, string? taskId, bool expectReply, Func<bool>? shouldCommit, CancellationToken cancellationToken) =>
+        DeliverCollabPromptAsync(promptText, threadId, taskId, expectReply, deliveryId: null, shouldCommit, cancellationToken);
+
+    public Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId, string? taskId, bool expectReply, string? deliveryId, CancellationToken cancellationToken) =>
+        DeliverCollabPromptAsync(promptText, threadId, taskId, expectReply, deliveryId, shouldCommit: null, cancellationToken);
+
+    public async Task<bool> DeliverCollabPromptAsync(
+        string promptText,
+        string? threadId,
+        string? taskId,
+        bool expectReply,
+        string? deliveryId,
+        Func<bool>? shouldCommit,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         if (_disposed || string.IsNullOrWhiteSpace(promptText)) return false;
+
+        long legacyIngressToken = 0;
+        if (string.IsNullOrWhiteSpace(deliveryId)
+            && shouldCommit is null
+            && _collab is CollabCoordinator coordinator)
+        {
+            legacyIngressToken = coordinator.TryCaptureLegacyIngressToken(_item.Id, promptText, threadId, taskId, expectReply, cancellationToken);
+        }
+
+        var pending = new PendingCollabDelivery(threadId, taskId, deliveryId, shouldCommit);
+        lock (_collabDeliveryGate)
+        {
+            if (_disposed) return false;
+            _pendingCollabDeliveries.Add(pending);
+        }
+
+        var attempt = new CollabDeliveryAttempt();
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancelRegistration = cancellationToken.Register(static state =>
+        {
+            var (self, localPending, localAttempt, localTcs, localToken) =
+                ((AgentGuiTabViewModel, PendingCollabDelivery, CollabDeliveryAttempt, TaskCompletionSource<bool>, CancellationToken))state!;
+            if (Interlocked.CompareExchange(ref localAttempt.State, CollabDeliveryAttempt.Cancelled, CollabDeliveryAttempt.Pending) == CollabDeliveryAttempt.Pending)
+            {
+                lock (self._collabDeliveryGate)
+                {
+                    localPending.Cancelled = true;
+                    self._pendingCollabDeliveries.Remove(localPending);
+                }
+                localTcs.TrySetCanceled(localToken);
+            }
+        }, (this, pending, attempt, tcs, cancellationToken));
+
+        if (Volatile.Read(ref attempt.State) != CollabDeliveryAttempt.Pending)
+        {
+            return await tcs.Task.ConfigureAwait(false);
+        }
+
         SetUi(() =>
         {
-            if (_disposed)
+            bool cancelledBeforeCommit;
+            lock (_collabDeliveryGate)
+            {
+                cancelledBeforeCommit = pending.Cancelled;
+                _pendingCollabDeliveries.Remove(pending);
+            }
+            // Atomically arbitrate acceptance vs cancellation before mutating queue/pump/session state:
+            // if cancellation already won, never enqueue or start work; if acceptance wins, cancellation cannot discard it.
+            if (Interlocked.CompareExchange(ref attempt.State, CollabDeliveryAttempt.Committed, CollabDeliveryAttempt.Pending) != CollabDeliveryAttempt.Pending)
+            {
+                return;
+            }
+            if (_disposed || cancelledBeforeCommit)
             {
                 tcs.TrySetResult(false);
                 return;
             }
-            if (!HasStarted)
+            var accepted = _collab is CollabCoordinator acceptCoordinator && legacyIngressToken != 0
+                ? acceptCoordinator.TryAcceptCollabDelivery(_item.Id, threadId, taskId, expectReply, deliveryId, shouldCommit, legacyIngressToken)
+                : _collab is not null
+                    ? _collab.TryAcceptCollabDelivery(_item.Id, threadId, taskId, expectReply, deliveryId, shouldCommit)
+                    : shouldCommit is null || shouldCommit();
+            if (!accepted)
             {
-                // State starts at Connecting even before the view is ever attached; kick off the first connection now.
-                EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
-                EnsureStarted();
-                tcs.TrySetResult(true);
+                tcs.TrySetResult(false);
                 return;
             }
-            if (State == AgentGuiState.Connecting)
+            try
             {
-                EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
+                if (!string.IsNullOrWhiteSpace(deliveryId))
+                {
+                    TrackOwnedCollabDelivery(deliveryId);
+                }
+                var trimmed = promptText.Trim();
+                if (!HasStarted)
+                {
+                    // State starts at Connecting even before the view is ever attached; kick off the first connection now.
+                    EnqueuePrompt(trimmed, [], threadId, taskId, expectReply, collabDeliveryId: deliveryId, shouldDispatch: shouldCommit, legacyIngressToken: legacyIngressToken);
+                    EnsureStarted();
+                    tcs.TrySetResult(true);
+                    return;
+                }
+                if (State == AgentGuiState.Connecting)
+                {
+                    EnqueuePrompt(trimmed, [], threadId, taskId, expectReply, collabDeliveryId: deliveryId, shouldDispatch: shouldCommit, legacyIngressToken: legacyIngressToken);
+                    tcs.TrySetResult(true);
+                    return;
+                }
+                if (_session is null || State is AgentGuiState.Disconnected or AgentGuiState.Error)
+                {
+                    EnqueuePrompt(trimmed, [], threadId, taskId, expectReply, collabDeliveryId: deliveryId, shouldDispatch: shouldCommit, legacyIngressToken: legacyIngressToken);
+                    _ = ConnectAsync();
+                    tcs.TrySetResult(true);
+                    return;
+                }
+                if (_isTurnActive || IsTurnActive)
+                {
+                    EnqueuePrompt(trimmed, [], threadId, taskId, expectReply, collabDeliveryId: deliveryId, shouldDispatch: shouldCommit, legacyIngressToken: legacyIngressToken);
+                    tcs.TrySetResult(true);
+                    return;
+                }
+                _ = StartPumpAsync(CreateQueuedPrompt(trimmed, [], threadId, taskId, expectReply, collabDeliveryId: deliveryId, shouldDispatch: shouldCommit, legacyIngressToken: legacyIngressToken));
                 tcs.TrySetResult(true);
-                return;
             }
-            if (_session is null || State is AgentGuiState.Disconnected or AgentGuiState.Error)
+            catch (Exception ex)
             {
-                EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
-                _ = ConnectAsync();
-                tcs.TrySetResult(true);
-                return;
+                tcs.TrySetException(ex);
             }
-            if (_isTurnActive || IsTurnActive)
-            {
-                EnqueuePrompt(promptText.Trim(), [], threadId, taskId);
-                tcs.TrySetResult(true);
-                return;
-            }
-            _ = StartPumpAsync(CreateQueuedPrompt(promptText.Trim(), [], threadId, taskId));
-            tcs.TrySetResult(true);
         });
-        return await tcs.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        return await tcs.Task.ConfigureAwait(false);
     }
 
-    public int CancelQueuedCollabPrompts(string? threadId = null, string? taskId = null)
+    public int CancelQueuedCollabPrompts(string? threadId = null, string? taskId = null) =>
+        CancelQueuedCollabPrompts(threadId, taskId, deliveryId: null);
+
+    public int CancelQueuedCollabPrompts(string? threadId, string? taskId, string? deliveryId)
     {
-        if (_disposed || (string.IsNullOrWhiteSpace(threadId) && string.IsNullOrWhiteSpace(taskId))) return 0;
+        if (_disposed
+            || (string.IsNullOrWhiteSpace(threadId) && string.IsNullOrWhiteSpace(taskId) && string.IsNullOrWhiteSpace(deliveryId)))
+        {
+            return 0;
+        }
+
+        var hasDelivery = !string.IsNullOrWhiteSpace(deliveryId);
+
+        bool MatchesCandidate(string? candidateThreadId, string? candidateTaskId, string? candidateDeliveryId)
+        {
+            if (hasDelivery)
+            {
+                return !string.IsNullOrWhiteSpace(candidateDeliveryId)
+                    && string.Equals(candidateDeliveryId, deliveryId, StringComparison.Ordinal);
+            }
+            return MatchesCollabIdentity(candidateThreadId, candidateTaskId, candidateDeliveryId, threadId, taskId, deliveryId: null);
+        }
+
+        bool ShouldCancel(string? candidateThreadId, string? candidateTaskId, string? candidateDeliveryId, Func<bool>? guard)
+        {
+            if (!MatchesCandidate(candidateThreadId, candidateTaskId, candidateDeliveryId))
+            {
+                return false;
+            }
+            // Broad thread/task cleanup without a specific deliveryId must respect each queued delivery's freshness
+            // guard so an older broad call cannot delete a newer unconsumed wakeup or active expects-reply turn.
+            if (!hasDelivery && guard is not null && guard())
+            {
+                return false;
+            }
+            return true;
+        }
+
+        List<PendingCollabDelivery>? pendingCandidates = null;
+        lock (_collabDeliveryGate)
+        {
+            foreach (var pending in _pendingCollabDeliveries)
+            {
+                if (MatchesCandidate(pending.ThreadId, pending.TaskId, pending.DeliveryId))
+                {
+                    (pendingCandidates ??= []).Add(pending);
+                }
+            }
+        }
+        var removedPending = 0;
+        if (pendingCandidates is not null)
+        {
+            foreach (var pending in pendingCandidates)
+            {
+                if (!hasDelivery && pending.ShouldCommit is not null && pending.ShouldCommit())
+                {
+                    continue;
+                }
+                lock (_collabDeliveryGate)
+                {
+                    if (_pendingCollabDeliveries.Remove(pending))
+                    {
+                        pending.Cancelled = true;
+                        removedPending++;
+                    }
+                }
+            }
+        }
 
         int RemoveMatching()
         {
@@ -504,13 +715,41 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             for (var i = QueuedPrompts.Count - 1; i >= 0; i--)
             {
                 var q = QueuedPrompts[i];
-                var matchesThread = !string.IsNullOrWhiteSpace(threadId)
-                    && string.Equals(q.CollabThreadId, threadId, StringComparison.Ordinal);
-                var matchesTask = !string.IsNullOrWhiteSpace(taskId)
-                    && string.Equals(q.CollabTaskId, taskId, StringComparison.Ordinal);
-                if (matchesThread || matchesTask)
+                if (ShouldCancel(q.CollabThreadId, q.CollabTaskId, q.CollabDeliveryId, q.ShouldDispatch))
                 {
                     QueuedPrompts.RemoveAt(i);
+                    ReleaseDiscardedQueuedPrompt(q);
+                    removed++;
+                }
+            }
+            if (_urgentPrompt is { } urgent
+                && ShouldCancel(urgent.CollabThreadId, urgent.CollabTaskId, urgent.CollabDeliveryId, urgent.ShouldDispatch))
+            {
+                _urgentPrompt = null;
+                ReleaseDiscardedQueuedPrompt(urgent);
+                removed++;
+            }
+            if (_draftCollabTurn is { } draft
+                && ShouldCancel(draft.ThreadId, draft.TaskId, draft.DeliveryId, draft.ShouldDispatch))
+            {
+                _draftCollabTurn = null;
+                ReleaseDiscardedCollabTurn(draft);
+                removed++;
+            }
+            if (!_initialPromptSent && _item.Launch is { Prompt.Length: > 0 } launch)
+            {
+                var launchThread = launch.CollabThreadId;
+                var launchTask = launch.CollabTaskId;
+                var launchDelivery = launch.CollabDeliveryId;
+                if (launchThread is null && launchTask is null
+                    && Octopus.Remote.Protocol.CollabEnvelope.TryExtractCorrelation(launch.Prompt) is { } parsed)
+                {
+                    launchThread = parsed.ThreadId;
+                    launchTask = parsed.TaskId;
+                }
+                if (MatchesCandidate(launchThread, launchTask, launchDelivery))
+                {
+                    _initialPromptSent = true;
                     removed++;
                 }
             }
@@ -521,11 +760,50 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             return removed;
         }
 
-        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+        var removedQueued = Application.Current is null || Dispatcher.UIThread.CheckAccess()
+            ? RemoveMatching()
+            : Dispatcher.UIThread.Invoke(RemoveMatching);
+        return removedPending + removedQueued;
+    }
+
+    private static bool MatchesCollabIdentity(
+        string? candidateThreadId,
+        string? candidateTaskId,
+        string? candidateDeliveryId,
+        string? threadId,
+        string? taskId,
+        string? deliveryId)
+    {
+        if (!string.IsNullOrWhiteSpace(deliveryId))
         {
-            return RemoveMatching();
+            // When a caller names an exact delivery ID, the active turn must actually carry and match that delivery ID;
+            // never fall through to thread/task matching when a newer round omitted its delivery ID.
+            return !string.IsNullOrWhiteSpace(candidateDeliveryId)
+                && string.Equals(candidateDeliveryId, deliveryId, StringComparison.Ordinal);
         }
-        return Dispatcher.UIThread.Invoke(RemoveMatching);
+        var hasThread = !string.IsNullOrWhiteSpace(threadId);
+        var hasTask = !string.IsNullOrWhiteSpace(taskId);
+        if (hasThread && hasTask)
+        {
+            var hasCandidateThread = !string.IsNullOrWhiteSpace(candidateThreadId);
+            var hasCandidateTask = !string.IsNullOrWhiteSpace(candidateTaskId);
+            if (hasCandidateThread && hasCandidateTask)
+            {
+                return string.Equals(candidateThreadId, threadId, StringComparison.Ordinal)
+                    && string.Equals(candidateTaskId, taskId, StringComparison.Ordinal);
+            }
+            return (hasCandidateTask && string.Equals(candidateTaskId, taskId, StringComparison.Ordinal))
+                || (hasCandidateThread && string.Equals(candidateThreadId, threadId, StringComparison.Ordinal));
+        }
+        if (hasTask)
+        {
+            return string.Equals(candidateTaskId, taskId, StringComparison.Ordinal);
+        }
+        if (hasThread)
+        {
+            return string.Equals(candidateThreadId, threadId, StringComparison.Ordinal);
+        }
+        return false;
     }
 
     public string ReadRecentSummary(int maxTurns = 5)
@@ -555,15 +833,105 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         return sb.Length > 0 ? sb.ToString().Trim() : "(No conversation turns recorded yet.)";
     }
 
-    private void OnCollabChanged(string? _) => SetUi(RefreshCollabTopology);
+    private IDisposable? _collabSubscription;
+    private int _collabRefreshScheduled;
+
+    private void OnCollabChanged(string? itemId, CollabChangeKind changeKind)
+    {
+        if (_disposed || _collab is null) return;
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            if (changeKind == CollabChangeKind.Activity && !string.IsNullOrEmpty(itemId))
+            {
+                RefreshRibbonActivityBadge(itemId);
+                return;
+            }
+            if (changeKind == CollabChangeKind.Title && !string.IsNullOrEmpty(itemId))
+            {
+                RefreshRibbonNodeLabel(itemId);
+                return;
+            }
+            RefreshCollabTopology();
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _collabRefreshScheduled, 1) == 0)
+        {
+            Dispatcher.UIThread.Post(FlushScheduledCollabRefresh);
+        }
+    }
+
+    private void RefreshRibbonNodeLabel(string changedItemId)
+    {
+        if (_disposed || _collab is null || CollabRibbonNodes.Count == 0) return;
+        var item = _projects.FindItem(changedItemId);
+        if (item is null) return;
+        var displayTitle = item.DisplayTitle;
+        for (var i = 0; i < CollabRibbonNodes.Count; i++)
+        {
+            var node = CollabRibbonNodes[i];
+            if (node.MatchesItem(changedItemId))
+            {
+                node.Label = displayTitle;
+            }
+        }
+    }
+
+    private void RefreshRibbonActivityBadge(string changedItemId)
+    {
+        if (_disposed || _collab is null || CollabRibbonNodes.Count == 0) return;
+
+        IReadOnlyList<CollabBubbledApproval>? bubbledApprovals = null;
+        for (var i = 0; i < CollabRibbonNodes.Count; i++)
+        {
+            var node = CollabRibbonNodes[i];
+            if (!node.MatchesItem(changedItemId)) continue;
+            if (node.Kind == "peer" && _collab.FindThread(node.Id)?.Status == CollabThreadStatus.PausedBudget)
+            {
+                node.Status = "waiting_approval";
+                continue;
+            }
+            bubbledApprovals ??= _collab.GetBubbledApprovalsForParent(_item.Id);
+            node.Status = DescribeRibbonStatus(changedItemId, bubbledApprovals);
+        }
+    }
+
+    private void SyncSelfRibbonNodeStatus()
+    {
+        var expected = IsBusy ? "working" : "idle";
+        for (var i = 0; i < CollabRibbonNodes.Count; i++)
+        {
+            var node = CollabRibbonNodes[i];
+            if (node.Kind == "self")
+            {
+                node.Status = expected;
+                break;
+            }
+        }
+    }
+
+    private void FlushScheduledCollabRefresh()
+    {
+        if (_disposed || _collab is null)
+        {
+            Interlocked.Exchange(ref _collabRefreshScheduled, 0);
+            return;
+        }
+
+        if (Volatile.Read(ref _collabRefreshScheduled) == 0) return;
+        RefreshCollabTopology();
+    }
 
     private void RefreshCollabTopology()
     {
+        Interlocked.Exchange(ref _collabRefreshScheduled, 0);
         if (_disposed || _collab is null) return;
 
         CollabRibbonNodes.Clear();
         var children = _collab.GetSpawnedChildren(_item.Id);
         var threads = _collab.GetThreadsForItem(_item.Id);
+        var bubbledApprovals = _collab.GetBubbledApprovalsForParent(_item.Id);
         var parentItem = !string.IsNullOrEmpty(_item.ParentItemId) ? _projects.FindItem(_item.ParentItemId) : null;
 
         // Only populate Scheme C's ribbon when this session participates in parent/child or peer collaboration.
@@ -576,7 +944,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     "parent",
                     parentItem.AgentId ?? "terminal",
                     parentItem.DisplayTitle,
-                    DescribeRibbonStatus(parentItem.Id),
+                    DescribeRibbonStatus(parentItem.Id, bubbledApprovals),
                     null,
                     isCurrent: false,
                     activate: () => _projects.ActivateItem(parentItem.Id)));
@@ -609,7 +977,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     "child",
                     child.AgentId ?? "terminal",
                     child.DisplayTitle,
-                    DescribeRibbonStatus(childId),
+                    DescribeRibbonStatus(childId, bubbledApprovals),
                     childMeta,
                     isCurrent: false,
                     activate: () => _projects.ActivateItem(childId)));
@@ -629,15 +997,16 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     "peer",
                     other.AgentId ?? "terminal",
                     other.DisplayTitle,
-                    thread.Status == CollabThreadStatus.PausedBudget ? "waiting_approval" : DescribeRibbonStatus(otherId),
+                    thread.Status == CollabThreadStatus.PausedBudget ? "waiting_approval" : DescribeRibbonStatus(otherId, bubbledApprovals),
                     _collab.HostNameOf(otherId) is { } peerHost ? $"@{peerHost} · {thread.Hops}/{thread.MaxHops}" : $"{thread.Hops}/{thread.MaxHops}",
                     isCurrent: ActiveCollabThread?.ThreadId == threadId,
-                    activate: () => ToggleCollabThread(threadId)));
+                    activate: () => ToggleCollabThread(threadId),
+                    peerItemId: otherId));
             }
         }
 
         BubbledApprovals.Clear();
-        foreach (var apr in _collab.GetBubbledApprovalsForParent(_item.Id))
+        foreach (var apr in bubbledApprovals)
         {
             BubbledApprovals.Add(new CollabBubbledApprovalViewModel(apr, childId => _projects.ActivateItem(childId)));
         }
@@ -645,7 +1014,14 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (ActiveCollabThread is { } openThread)
         {
             var refreshed = _collab.FindThread(openThread.ThreadId);
-            ActiveCollabThread = refreshed is null ? null : BuildThreadPanel(refreshed);
+            if (refreshed is null)
+            {
+                ActiveCollabThread = null;
+            }
+            else
+            {
+                openThread.UpdateFrom(refreshed);
+            }
         }
 
         OnPropertyChanged(nameof(HasCollabTopology));
@@ -677,11 +1053,14 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 RefreshCollabTopology();
             });
 
-    private string DescribeRibbonStatus(string itemId)
+    private string DescribeRibbonStatus(string itemId, IReadOnlyList<CollabBubbledApproval> bubbledApprovals)
     {
-        if (_collab?.GetBubbledApprovalsForParent(_item.Id).Any(a => a.ChildItemId == itemId) == true)
+        for (var i = 0; i < bubbledApprovals.Count; i++)
         {
-            return "waiting_approval";
+            if (string.Equals(bubbledApprovals[i].ChildItemId, itemId, StringComparison.Ordinal))
+            {
+                return "waiting_approval";
+            }
         }
         return (_activity?.Of(itemId) ?? ItemActivity.Idle) switch
         {
@@ -1016,6 +1395,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         ResumeQueueCommand.NotifyCanExecuteChanged();
         ForkSessionCommand.NotifyCanExecuteChanged();
         LogoutCommand.NotifyCanExecuteChanged();
+        SyncSelfRibbonNodeStatus();
 
         var mapped = value switch
         {
@@ -1073,6 +1453,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         if (_disposed) return;
         HasStarted = true;
+        var generation = Interlocked.Increment(ref _connectGeneration);
         SetUi(() =>
         {
             State = AgentGuiState.Connecting;
@@ -1083,11 +1464,22 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             OnPropertyChanged(nameof(ShowEmptyState));
         });
 
-        await DisconnectInternalAsync();
-        if (_disposed) return;
+        await DisconnectInternalAsync(advanceGeneration: false);
+        if (_disposed || Volatile.Read(ref _connectGeneration) != generation) return;
 
-        _connectCts = new CancellationTokenSource();
-        var ct = _connectCts.Token;
+        var connectCts = new CancellationTokenSource();
+        var previousCts = Interlocked.Exchange(ref _connectCts, connectCts);
+        if (previousCts is not null)
+        {
+            try { previousCts.Cancel(); } catch { }
+            previousCts.Dispose();
+        }
+        var ct = connectCts.Token;
+        IDisposable? collabLease = null;
+        IDisposable? botScheduleLease = null;
+        IAcpSession? createdSession = null;
+        Action<AcpRuntimeEvent>? createdHandler = null;
+        var leasesCommitted = false;
 
         try
         {
@@ -1134,6 +1526,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 initialModelId: effectiveInitialModel,
                 initialEffortId: _desiredEffortId).ConfigureAwait(false);
 
+            if (_disposed || ct.IsCancellationRequested || Volatile.Read(ref _connectGeneration) != generation)
+            {
+                return;
+            }
+
             SetUi(() => StatusDetail = null);
 
             var additionalDirectories = ResolveAdditionalDirectories();
@@ -1141,16 +1538,34 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             if (_bots?.FindBotByBackingProjectId(_project.Id) is { } ownerBot)
             {
                 var botMcpServers = await _bots.BuildAcpMcpServersAsync(ownerBot.Id, ct).ConfigureAwait(false);
+                if (_disposed || ct.IsCancellationRequested || Volatile.Read(ref _connectGeneration) != generation)
+                {
+                    return;
+                }
                 mcpServers = BotConnectorRuntime.MergeMcpServers(agentSettings.AcpMcpServers, botMcpServers);
                 // Bot chats only: the octopus-bot tools (schedules Octopus keeps and fires for any agent).
-                if (_botScheduleMcp?.BuildAcpServerConfig(_item.Id) is { } scheduleMcp)
+                if (_botScheduleMcp?.TryBuildAcpServerConfigLease(_item.Id, expectedBotId: ownerBot.Id) is { } scheduleLease)
                 {
-                    mcpServers = BotConnectorRuntime.MergeMcpServers(mcpServers, [scheduleMcp]);
+                    botScheduleLease = scheduleLease.Lease;
+                    mcpServers = BotConnectorRuntime.MergeMcpServers(mcpServers, [scheduleLease.Config]);
                 }
             }
-            if (_collab?.BuildAcpMcpServer(_item.Id) is { } collabMcp)
+            if (_collab is CollabCoordinator collabCoordinator)
+            {
+                if (collabCoordinator.TryBuildAcpMcpServerLease(_item.Id) is { } collabIssued)
+                {
+                    collabLease = collabIssued.Lease;
+                    mcpServers = BotConnectorRuntime.MergeMcpServers(mcpServers, [collabIssued.Config]);
+                }
+            }
+            else if (_collab?.BuildAcpMcpServer(_item.Id) is { } collabMcp)
             {
                 mcpServers = BotConnectorRuntime.MergeMcpServers(mcpServers, [collabMcp]);
+            }
+
+            if (_disposed || ct.IsCancellationRequested || Volatile.Read(ref _connectGeneration) != generation)
+            {
+                return;
             }
 
             var callbacks = new AcpSessionCallbacks
@@ -1162,20 +1577,35 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 McpServers = mcpServers,
                 AllowedFileSystemRoots = BuildAllowedFileSystemRoots(additionalDirectories),
                 GetActivePermissionMode = () => Composer.SelectedPermissionId ?? PermissionModes.Default,
-                OnPermissionRequest = HandlePermissionRequestAsync,
-                OnQuestionRequest = HandleQuestionRequestAsync,
-                OnFormElicitationRequest = HandleFormElicitationRequestAsync,
-                OnUrlElicitationRequest = HandleUrlElicitationRequestAsync,
+                OnPermissionRequest = (req, reqCt) => HandlePermissionRequestAsync(generation, req, reqCt),
+                OnQuestionRequest = (req, reqCt) => HandleQuestionRequestAsync(generation, req, reqCt),
+                OnFormElicitationRequest = (req, reqCt) => HandleFormElicitationRequestAsync(generation, req, reqCt),
+                OnUrlElicitationRequest = (req, reqCt) => HandleUrlElicitationRequestAsync(generation, req, reqCt),
             };
 
-            var session = _sessionFactory.Create(plan, callbacks);
-            session.EventReceived += OnSessionEvent;
-            _session = session;
+            createdSession = _sessionFactory.Create(plan, callbacks);
+            var session = createdSession;
+            createdHandler = evt => OnSessionEvent(evt, session, generation);
+            session.EventReceived += createdHandler;
+            lock (_credentialGate)
+            {
+                if (_disposed || ct.IsCancellationRequested || Volatile.Read(ref _connectGeneration) != generation)
+                {
+                    return;
+                }
+                _activeCredentialGeneration = generation;
+                _activeCollabLease = collabLease;
+                _activeBotScheduleLease = botScheduleLease;
+                _session = session;
+                _sessionEventHandler = createdHandler;
+                leasesCommitted = true;
+            }
 
             // Set the replay flag before StartAsync: the session emits session/load history synchronously, and a
             // fire-and-forget UI post can run after those events and drop them (empty timeline on reopen).
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                if (!IsCurrentSession(session, generation)) return;
                 SourceLabel = session.SourceLabel;
                 // Rebuild history from session/load replay only when nothing is on screen yet
                 // (reopened tab / app restart); a reconnect in a live tab already shows it.
@@ -1195,10 +1625,17 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 resumeSessionId: requestedResumeId,
                 cancellationToken: ct).ConfigureAwait(false);
 
+            if (_disposed || ct.IsCancellationRequested || Volatile.Read(ref _connectGeneration) != generation)
+            {
+                ReleaseActiveCredentialLeases(onlyGeneration: generation);
+                return;
+            }
+
             var desiredPermission = Composer.SelectedPermissionId ?? PermissionModes.Default;
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
+                if (!IsCurrentSession(session, generation)) return;
                 AuthMethods.Clear();
                 OnPropertyChanged(nameof(HasAuthMethods));
                 _projects.SetItemSessionId(_item.Id, started.SessionId, isAcp: true);
@@ -1270,74 +1707,120 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 await ApplyInitialLaunchPreferencesAsync(session, ct).ConfigureAwait(false);
             }
 
-            if (!_initialPromptSent && !string.IsNullOrWhiteSpace(_item.Launch?.Prompt))
+            Task? pump = null;
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Task? pump = null;
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                if (!IsCurrentSession(session, generation)) return;
+                if (_initialPromptSent || _item.Launch is not { Prompt: { } rawPrompt } launch || string.IsNullOrWhiteSpace(rawPrompt))
                 {
-                    if (_disposed || _session is null) return;
-                    if (!_initialPromptSent && _item.Launch?.Prompt is { } rawInitialPrompt && !string.IsNullOrWhiteSpace(rawInitialPrompt))
-                    {
-                        _initialPromptSent = true;
-                        var firstPrompt = rawInitialPrompt.Trim();
-                        if (_isTurnActive || IsTurnActive)
-                        {
-                            EnqueuePrompt(firstPrompt, []);
-                            return;
-                        }
-                        pump = StartPumpAsync(CreateQueuedPrompt(firstPrompt, []));
-                    }
-                    else if (QueuedPrompts.Count > 0 && !_isTurnActive && !IsTurnActive)
+                    DrainQueue();
+                    return;
+                }
+
+                _initialPromptSent = true;
+                var firstPrompt = rawPrompt.Trim();
+                var launchThreadId = launch.CollabThreadId;
+                var launchTaskId = launch.CollabTaskId;
+                var launchDeliveryId = launch.CollabDeliveryId;
+                var expectCollabReply = launchThreadId is not null || launchTaskId is not null;
+                var parsedLaunch = Octopus.Remote.Protocol.CollabEnvelope.TryExtractCorrelation(firstPrompt);
+                if (!expectCollabReply && parsedLaunch is { ExpectsReply: true })
+                {
+                    launchThreadId = parsedLaunch.Value.ThreadId;
+                    launchTaskId = parsedLaunch.Value.TaskId;
+                    expectCollabReply = true;
+                }
+                var mirrorCollab = BuildMirrorCollabCorrelation(
+                    launchThreadId ?? parsedLaunch?.ThreadId,
+                    launchTaskId ?? parsedLaunch?.TaskId,
+                    launchDeliveryId,
+                    parsedLaunch?.ExpectsReply ?? expectCollabReply);
+
+                if (expectCollabReply
+                    && _collab is CollabCoordinator coordinator
+                    && coordinator.IsInitialLaunchDeliveryCancelled(_item.Id, launchDeliveryId, launchThreadId, launchTaskId))
+                {
+                    DrainQueue();
+                    return;
+                }
+                if (_isTurnActive || IsTurnActive)
+                {
+                    EnqueuePrompt(firstPrompt, [], launchThreadId, launchTaskId, expectCollabReply, launchDeliveryId, mirrorCollab);
+                    return;
+                }
+                pump = StartPumpAsync(CreateQueuedPrompt(firstPrompt, [], launchThreadId, launchTaskId, expectCollabReply, launchDeliveryId, mirrorCollab));
+
+                void DrainQueue()
+                {
+                    if (QueuedPrompts.Count > 0 && !_isTurnActive && !IsTurnActive)
                     {
                         pump = StartPumpAsync();
                     }
-                });
-                if (pump is not null)
-                {
-                    await pump.ConfigureAwait(false);
                 }
-            }
-            else
+            });
+            if (pump is not null)
             {
-                Task? pump = null;
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    if (!_disposed && _session is not null && QueuedPrompts.Count > 0 && !_isTurnActive && !IsTurnActive)
-                    {
-                        pump = StartPumpAsync();
-                    }
-                });
-                if (pump is not null)
-                {
-                    await pump.ConfigureAwait(false);
-                }
+                await pump.ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             // Cancelled due to close/reconnect.
+            ReleaseActiveCredentialLeases(onlyGeneration: generation);
         }
         catch (AcpAuthRequiredException authEx)
         {
+            ReleaseActiveCredentialLeases(onlyGeneration: generation);
+            if (!IsCurrentGeneration(generation)) return;
             SetUi(() =>
             {
+                if (!IsCurrentGeneration(generation)) return;
                 PopulateAuthMethods(authEx.AuthMethods.Count > 0 ? authEx.AuthMethods : _session?.Initialized?.AuthMethods);
                 IsAuthRequired = true;
                 State = AgentGuiState.Disconnected;
+                DiscardQueuedCollabPrompts();
                 RefreshDiagnostics();
                 OnPropertyChanged(nameof(ShowEmptyState));
             });
+            if (IsCurrentGeneration(generation))
+            {
+                NotifyCollabSessionAborted($"{AgentName} needs to be signed in before it can start.");
+            }
         }
         catch (Exception ex)
         {
+            ReleaseActiveCredentialLeases(onlyGeneration: generation);
+            if (!IsCurrentGeneration(generation)) return;
             SetUi(() =>
             {
+                if (!IsCurrentGeneration(generation)) return;
                 ErrorBanner = ex.Message;
                 State = AgentGuiState.Error;
+                DiscardQueuedCollabPrompts();
                 RefreshDiagnostics();
                 OnPropertyChanged(nameof(HasErrorBanner));
                 OnPropertyChanged(nameof(ShowEmptyState));
             });
+            if (IsCurrentGeneration(generation))
+            {
+                NotifyCollabSessionAborted($"{AgentName} failed to start: {ex.Message}");
+            }
+        }
+        finally
+        {
+            if (!leasesCommitted)
+            {
+                collabLease?.Dispose();
+                botScheduleLease?.Dispose();
+                if (createdSession is not null)
+                {
+                    if (createdHandler is not null)
+                    {
+                        createdSession.EventReceived -= createdHandler;
+                    }
+                    _ = createdSession.DisposeAsync().AsTask();
+                }
+            }
         }
     }
 
@@ -1345,7 +1828,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         string text,
         IReadOnlyList<AcpPromptAttachment> attachments,
         string? collabThreadId = null,
-        string? collabTaskId = null) =>
+        string? collabTaskId = null,
+        bool expectCollabReply = false,
+        string? collabDeliveryId = null,
+        Octopus.Remote.Protocol.AcpCollabCorrelationMessage? mirrorCollab = null,
+        Func<bool>? shouldDispatch = null,
+        long legacyIngressToken = 0) =>
         new(
             text,
             attachments,
@@ -1355,24 +1843,85 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             onMoveDown: MoveQueuedPromptDown,
             onRemove: RemoveQueuedPrompt,
             collabThreadId: collabThreadId,
-            collabTaskId: collabTaskId);
+            collabTaskId: collabTaskId,
+            expectCollabReply: expectCollabReply,
+            collabDeliveryId: collabDeliveryId,
+            mirrorCollab: mirrorCollab,
+            shouldDispatch: shouldDispatch)
+        {
+            LegacyIngressToken = legacyIngressToken,
+        };
 
     private void EnqueuePrompt(
         string text,
         IReadOnlyList<AcpPromptAttachment> attachments,
         string? collabThreadId = null,
-        string? collabTaskId = null)
+        string? collabTaskId = null,
+        bool expectCollabReply = false,
+        string? collabDeliveryId = null,
+        Octopus.Remote.Protocol.AcpCollabCorrelationMessage? mirrorCollab = null,
+        Func<bool>? shouldDispatch = null,
+        long legacyIngressToken = 0)
     {
-        QueuedPrompts.Add(CreateQueuedPrompt(text, attachments, collabThreadId, collabTaskId));
+        QueuedPrompts.Add(CreateQueuedPrompt(text, attachments, collabThreadId, collabTaskId, expectCollabReply, collabDeliveryId, mirrorCollab, shouldDispatch, legacyIngressToken));
         RefreshQueueState();
     }
 
-    private (string Text, List<AcpPromptAttachment> Attachments)? CaptureComposerPrompt()
+    private static Octopus.Remote.Protocol.AcpCollabCorrelationMessage? BuildMirrorCollabCorrelation(
+        string? threadId,
+        string? taskId,
+        string? deliveryId,
+        bool expectsReply)
+    {
+        if (string.IsNullOrWhiteSpace(threadId) && string.IsNullOrWhiteSpace(taskId) && string.IsNullOrWhiteSpace(deliveryId))
+        {
+            return null;
+        }
+        return new Octopus.Remote.Protocol.AcpCollabCorrelationMessage
+        {
+            ThreadId = string.IsNullOrWhiteSpace(threadId) ? null : threadId,
+            TaskId = string.IsNullOrWhiteSpace(taskId) ? null : taskId,
+            DeliveryId = string.IsNullOrWhiteSpace(deliveryId) ? null : deliveryId,
+            ExpectsReply = expectsReply,
+        };
+    }
+
+    private QueuedPrompt CreateQueuedPrompt(
+        string text,
+        IReadOnlyList<AcpPromptAttachment> attachments,
+        CollabTurnIdentity? collabTurn) =>
+        CreateQueuedPrompt(
+            text,
+            attachments,
+            collabThreadId: collabTurn?.ThreadId,
+            collabTaskId: collabTurn?.TaskId,
+            expectCollabReply: collabTurn?.ExpectReply ?? false,
+            collabDeliveryId: collabTurn?.DeliveryId,
+            mirrorCollab: collabTurn?.MirrorCollab,
+            shouldDispatch: collabTurn?.ShouldDispatch);
+
+    private void EnqueuePrompt(
+        string text,
+        IReadOnlyList<AcpPromptAttachment> attachments,
+        CollabTurnIdentity? collabTurn)
+    {
+        QueuedPrompts.Add(CreateQueuedPrompt(text, attachments, collabTurn));
+        RefreshQueueState();
+    }
+
+    private (string Text, List<AcpPromptAttachment> Attachments, CollabTurnIdentity? CollabTurn)? CaptureComposerPrompt()
     {
         var text = InputText.Trim();
         if (text.Length == 0 && Attachments.Count == 0) return null;
 
         var attached = CurrentDraftAttachments();
+        var collabTurn = _draftCollabTurn;
+        _draftCollabTurn = null;
+        if (collabTurn?.ShouldDispatch is { } shouldDispatch && !shouldDispatch())
+        {
+            ReleaseDiscardedCollabTurn(collabTurn);
+            collabTurn = null;
+        }
         InputText = "";
         ClearDraftMentions();
         Attachments.Clear();
@@ -1386,7 +1935,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             _promptHistory.Add(text);
         }
         _historyCursor = -1;
-        return (text, attached);
+        return (text, attached, collabTurn);
     }
 
     [RelayCommand(CanExecute = nameof(CanExecuteComposerAction), AllowConcurrentExecutions = true)]
@@ -1413,6 +1962,20 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         var directTargets = captured.Attachments.Where(a => a.Kind == "session").Select(a => a.Path).Distinct(StringComparer.Ordinal).ToList();
         if (IsDirectRelayMode && _collab is not null && directTargets.Count > 0)
         {
+            if (captured.CollabTurn is { ExpectReply: true } redirectedCollab)
+            {
+                _collab.NotifyTurnAborted(
+                    _item.Id,
+                    "The edited collaboration prompt was redirected as a direct relay message.",
+                    failed: false,
+                    redirectedCollab.ThreadId,
+                    redirectedCollab.TaskId,
+                    redirectedCollab.DeliveryId);
+            }
+            else
+            {
+                ReleaseDiscardedCollabTurn(captured.CollabTurn);
+            }
             var body = string.IsNullOrWhiteSpace(captured.Text) ? "(ping)" : captured.Text;
             var thread = await _collab.SendUserBroadcastAsync(_item.Id, directTargets, body);
             SetUi(() =>
@@ -1429,18 +1992,18 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         if (_session is null)
         {
-            EnqueuePrompt(captured.Text, captured.Attachments);
+            EnqueuePrompt(captured.Text, captured.Attachments, captured.CollabTurn);
             return;
         }
 
         // If a turn is currently active (Working or Waiting for approval/question), queue this follow-up.
         if (_isTurnActive || IsTurnActive)
         {
-            EnqueuePrompt(captured.Text, captured.Attachments);
+            EnqueuePrompt(captured.Text, captured.Attachments, captured.CollabTurn);
             return;
         }
 
-        await StartPumpAsync(CreateQueuedPrompt(captured.Text, captured.Attachments));
+        await StartPumpAsync(CreateQueuedPrompt(captured.Text, captured.Attachments, captured.CollabTurn));
     }
 
     /// <summary>Interrupts any active turn gracefully and immediately sends the composer's message.</summary>
@@ -1450,7 +2013,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (_session is null) return;
         if (CaptureComposerPrompt() is not { } captured) return;
 
-        var prompt = CreateQueuedPrompt(captured.Text, captured.Attachments);
+        var prompt = CreateQueuedPrompt(captured.Text, captured.Attachments, captured.CollabTurn);
         if (_isTurnActive || IsTurnActive)
         {
             await InterruptAndSendAsync(prompt);
@@ -1466,6 +2029,11 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (_disposed || _session is null) return;
         if (!QueuedPrompts.Remove(item)) return;
         RefreshQueueState();
+        if (item.ShouldDispatch is not null && !item.ShouldDispatch())
+        {
+            ReleaseDiscardedQueuedPrompt(item);
+            return;
+        }
 
         if (_isTurnActive || IsTurnActive)
         {
@@ -1485,10 +2053,35 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         var existingText = InputText.Trim();
         var existingAttachments = CurrentDraftAttachments();
+        var existingCollabTurn = _draftCollabTurn;
+        _draftCollabTurn = null;
         if (existingText.Length > 0 || existingAttachments.Count > 0)
         {
-            QueuedPrompts.Add(CreateQueuedPrompt(existingText, existingAttachments));
+            QueuedPrompts.Add(CreateQueuedPrompt(existingText, existingAttachments, existingCollabTurn));
         }
+        else if (existingCollabTurn is { ExpectReply: true })
+        {
+            _collab?.NotifyTurnAborted(
+                _item.Id,
+                "The edited collaboration prompt was cleared by the user.",
+                failed: false,
+                existingCollabTurn.ThreadId,
+                existingCollabTurn.TaskId,
+                existingCollabTurn.DeliveryId);
+        }
+        else
+        {
+            ReleaseDiscardedCollabTurn(existingCollabTurn);
+        }
+
+        _draftCollabTurn = item.ExpectCollabReply
+            || !string.IsNullOrWhiteSpace(item.CollabThreadId)
+            || !string.IsNullOrWhiteSpace(item.CollabTaskId)
+            || !string.IsNullOrWhiteSpace(item.CollabDeliveryId)
+            || item.MirrorCollab is not null
+            || item.ShouldDispatch is not null
+            ? new CollabTurnIdentity(item.CollabThreadId, item.CollabTaskId, item.CollabDeliveryId, item.ExpectCollabReply, item.MirrorCollab, item.ShouldDispatch)
+            : null;
 
         Attachments.Clear();
         ClearDraftMentions();
@@ -1532,6 +2125,20 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         if (QueuedPrompts.Remove(item))
         {
             RefreshQueueState();
+            if (item.ExpectCollabReply)
+            {
+                _collab?.NotifyTurnAborted(
+                    _item.Id,
+                    "The queued collaboration prompt was removed by the user.",
+                    failed: false,
+                    item.CollabThreadId,
+                    item.CollabTaskId,
+                    item.CollabDeliveryId);
+            }
+            else
+            {
+                ReleaseDiscardedQueuedPrompt(item);
+            }
         }
     }
 
@@ -1548,9 +2155,31 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         await StartPumpAsync();
     }
 
+    private static bool IsCollaborationPrompt(QueuedPrompt prompt) =>
+        prompt.ExpectCollabReply
+        || !string.IsNullOrWhiteSpace(prompt.CollabThreadId)
+        || !string.IsNullOrWhiteSpace(prompt.CollabTaskId)
+        || !string.IsNullOrWhiteSpace(prompt.CollabDeliveryId)
+        || prompt.MirrorCollab is not null;
+
     private async Task InterruptAndSendAsync(QueuedPrompt urgent)
     {
         if (_disposed || _session is null) return;
+
+        if ((_isTurnActive || IsTurnActive) && !IsCollaborationPrompt(urgent) && _activeCollabTurn is { ExpectReply: true } activeCollab)
+        {
+            // Steering an active collaboration turn with "Send Now" keeps reporting that turn's job on completion.
+            _activeCollabTransferred = true;
+            urgent = CreateQueuedPrompt(
+                urgent.Text,
+                urgent.Attachments,
+                activeCollab.ThreadId,
+                activeCollab.TaskId,
+                expectCollabReply: true,
+                collabDeliveryId: activeCollab.DeliveryId,
+                mirrorCollab: activeCollab.MirrorCollab,
+                shouldDispatch: activeCollab.ShouldDispatch);
+        }
 
         // If another urgent prompt was already waiting for cancellation, keep it at the head of the queue.
         if (_urgentPrompt is { } previousUrgent)
@@ -1578,14 +2207,63 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
+    private bool TryClaimPromptDispatch(QueuedPrompt prompt)
+    {
+        if (_collab is CollabCoordinator claimCoordinator && prompt.LegacyIngressToken != 0)
+        {
+            return claimCoordinator.TryClaimCollabDelivery(
+                _item.Id,
+                prompt.CollabThreadId,
+                prompt.CollabTaskId,
+                prompt.CollabDeliveryId,
+                prompt.ShouldDispatch,
+                prompt.LegacyIngressToken);
+        }
+        if (_collab is not null)
+        {
+            return _collab.TryClaimCollabDelivery(
+                _item.Id,
+                prompt.CollabThreadId,
+                prompt.CollabTaskId,
+                prompt.CollabDeliveryId,
+                prompt.ShouldDispatch);
+        }
+        return prompt.ShouldDispatch is null || prompt.ShouldDispatch();
+    }
+
+    private void ReleaseDiscardedQueuedPrompt(QueuedPrompt prompt)
+    {
+        if (!prompt.ExpectCollabReply && !string.IsNullOrWhiteSpace(prompt.CollabDeliveryId))
+        {
+            ReleaseOwnedCollabDelivery(prompt.CollabDeliveryId);
+            _collab?.ReleaseCollabDelivery(_item.Id, prompt.CollabDeliveryId);
+        }
+    }
+
+    private void ReleaseDiscardedCollabTurn(CollabTurnIdentity? turn)
+    {
+        if (turn is { ExpectReply: false } && !string.IsNullOrWhiteSpace(turn.DeliveryId))
+        {
+            ReleaseOwnedCollabDelivery(turn.DeliveryId);
+            _collab?.ReleaseCollabDelivery(_item.Id, turn.DeliveryId);
+        }
+    }
+
     private Task StartPumpAsync(QueuedPrompt? initialPrompt = null)
     {
         if (_pumpTask is { IsCompleted: false })
         {
             if (initialPrompt is not null)
             {
-                QueuedPrompts.Insert(0, initialPrompt);
-                RefreshQueueState();
+                if (initialPrompt.ShouldDispatch is null || initialPrompt.ShouldDispatch())
+                {
+                    QueuedPrompts.Insert(0, initialPrompt);
+                    RefreshQueueState();
+                }
+                else
+                {
+                    ReleaseDiscardedQueuedPrompt(initialPrompt);
+                }
             }
             return _pumpTask;
         }
@@ -1608,9 +2286,23 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 }
                 else if (!_manualStopRequested && !IsQueuePaused && State == AgentGuiState.Ready && QueuedPrompts.Count > 0)
                 {
-                    next = QueuedPrompts[0];
-                    QueuedPrompts.RemoveAt(0);
-                    RefreshQueueState();
+                    while (QueuedPrompts.Count > 0)
+                    {
+                        var candidate = QueuedPrompts[0];
+                        QueuedPrompts.RemoveAt(0);
+                        RefreshQueueState();
+                        if (candidate.ShouldDispatch is not null && !candidate.ShouldDispatch())
+                        {
+                            ReleaseDiscardedQueuedPrompt(candidate);
+                            continue;
+                        }
+                        next = candidate;
+                        break;
+                    }
+                    if (next is null)
+                    {
+                        break;
+                    }
                 }
                 else
                 {
@@ -1618,8 +2310,15 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 }
             }
 
+            if (!TryClaimPromptDispatch(next))
+            {
+                ReleaseDiscardedQueuedPrompt(next);
+                next = null;
+                continue;
+            }
+
             _manualStopRequested = false;
-            await ExecutePromptAsync(activeSession, next.Text, next.Attachments, next.CollabTaskId);
+            await ExecutePromptAsync(activeSession, next.Text, next.Attachments, next.CollabTaskId, next.CollabThreadId, next.ExpectCollabReply, next.CollabDeliveryId, next.MirrorCollab);
             next = null;
 
             // 1. An urgent "Send Now" prompt always dispatches immediately after the cancelled turn settles.
@@ -1651,17 +2350,34 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    private async Task ExecutePromptAsync(IAcpSession session, string text, IReadOnlyList<AcpPromptAttachment> attached, string? operationId = null)
+    private async Task ExecutePromptAsync(
+        IAcpSession session,
+        string text,
+        IReadOnlyList<AcpPromptAttachment> attached,
+        string? operationId = null,
+        string? collabThreadId = null,
+        bool expectCollabReply = false,
+        string? collabDeliveryId = null,
+        Octopus.Remote.Protocol.AcpCollabCorrelationMessage? mirrorCollab = null)
     {
         var turnStartedAt = DateTimeOffset.UtcNow;
         var turnSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _activeTurnSettled = turnSettled;
-        _isTurnActive = true;
+        var turnCollab = mirrorCollab ?? BuildMirrorCollabCorrelation(collabThreadId, operationId, collabDeliveryId, expectCollabReply);
+        var externalTurnKey = turnCollab is { ExpectsReply: true } ? Guid.NewGuid().ToString("N") : null;
         _activeOperationId = operationId;
+        _activeCollabTurn = expectCollabReply || collabThreadId is not null || operationId is not null || collabDeliveryId is not null || mirrorCollab is not null
+            ? new CollabTurnIdentity(collabThreadId, operationId, collabDeliveryId, expectCollabReply, mirrorCollab, ExternalTurnKey: externalTurnKey)
+            : null;
+        _activeCollabTransferred = false;
+        Volatile.Write(ref _isTurnActive, true);
         TurnStarted?.Invoke(_item.Id, operationId);
 
-        var userTurn = new UserTurnItem(text, attached, ReusePrompt);
-        var assistantTurn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript, workingDirectory: WorkingDirectory);
+        var userTurn = new UserTurnItem(text, attached, ReusePrompt) { CollabCorrelation = turnCollab };
+        var assistantTurn = new AssistantTurnItem(AgentId, AgentName, OpenToolFile, _workspaceCommands is null ? null : OpenToolDiff, OpenToolScript, workingDirectory: WorkingDirectory)
+        {
+            CollabCorrelation = turnCollab,
+        };
         _activeTurn = assistantTurn;
         EnsureLiveTickTimer();
         PruneFinishedForegroundSubagents();
@@ -1684,6 +2400,15 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _turnCts?.Dispose();
         _turnCts = new CancellationTokenSource();
 
+        void ReleaseOneWayDeliveryIfNeeded()
+        {
+            if (!expectCollabReply && !string.IsNullOrWhiteSpace(collabDeliveryId))
+            {
+                ReleaseOwnedCollabDelivery(collabDeliveryId);
+                _collab?.ReleaseCollabDelivery(_item.Id, collabDeliveryId);
+            }
+        }
+
         try
         {
             var promptToSend = text;
@@ -1697,6 +2422,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             }
 
             var promptResult = await session.PromptAsync(promptToSend, acpAttachments, _turnCts.Token);
+            ReleaseOneWayDeliveryIfNeeded();
+            var isCancelled = string.Equals(promptResult.StopReason, "cancelled", StringComparison.Ordinal);
+            var deferredToChildren = !isCancelled
+                && turnCollab is { ExpectsReply: true }
+                && _collab is CollabCoordinator coordinator
+                && coordinator.HasUnfinishedDelegationsForTurn(_item.Id, externalTurnKey, collabThreadId, operationId);
             var stopNotice = FormatStopReasonNotice(promptResult.StopReason);
             string? finalMarkdown = null;
             await Dispatcher.UIThread.InvokeAsync(() =>
@@ -1709,10 +2440,26 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                     OnPropertyChanged(nameof(ContextUsageText));
                     OnPropertyChanged(nameof(ContextUsagePercent));
                 }
-                assistantTurn.Complete(stopReasonNotice: stopNotice);
+                if (deferredToChildren && turnCollab is not null)
+                {
+                    assistantTurn.CollabCorrelation = new Octopus.Remote.Protocol.AcpCollabCorrelationMessage
+                    {
+                        ThreadId = turnCollab.ThreadId,
+                        TaskId = turnCollab.TaskId,
+                        DeliveryId = turnCollab.DeliveryId,
+                        ExpectsReply = turnCollab.ExpectsReply,
+                        Deferred = true,
+                    };
+                }
+                assistantTurn.Complete(
+                    stopReasonNotice: stopNotice,
+                    stopReason: isCancelled ? "cancelled" : null);
                 finalMarkdown = assistantTurn.MarkdownText;
-                if (State is AgentGuiState.Working or AgentGuiState.Waiting) State = AgentGuiState.Ready;
-                RefreshDiagnostics();
+                if (ReferenceEquals(Volatile.Read(ref _session), session))
+                {
+                    if (State is AgentGuiState.Working or AgentGuiState.Waiting) State = AgentGuiState.Ready;
+                    RefreshDiagnostics();
+                }
                 if (Subagents.Any(s => s.IsRunning && s.RunsAsynchronously))
                 {
                     PollAgySubagents(finalizeMissingTranscript: true);
@@ -1720,80 +2467,108 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             });
             if (promptResult.StopReason == "cancelled")
             {
-                NotifyCollabTurnStopped(turnStartedAt, finalMarkdown);
+                ReleaseOwnedCollabDelivery(collabDeliveryId);
+                NotifyCollabTurnStopped(turnStartedAt, finalMarkdown, collabThreadId, operationId, collabDeliveryId, expectCollabReply);
                 TurnFinished?.Invoke(_item.Id, operationId, finalMarkdown, true, null);
             }
             else
             {
-                _collab?.NotifyTurnCompleted(_item.Id, finalMarkdown);
+                if (expectCollabReply)
+                {
+                    if (!deferredToChildren) ReleaseOwnedCollabDelivery(collabDeliveryId);
+                    _collab?.NotifyTurnCompleted(_item.Id, finalMarkdown, collabThreadId, operationId, collabDeliveryId);
+                }
                 TurnFinished?.Invoke(_item.Id, operationId, finalMarkdown, false, null);
             }
         }
         catch (OperationCanceledException)
         {
+            ReleaseOneWayDeliveryIfNeeded();
             SetUi(() =>
             {
                 FlushPendingTextDeltas();
-                assistantTurn.Complete();
+                assistantTurn.Complete(stopReason: "cancelled");
                 InterruptRunningAsyncSubagents();
-                if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
+                if (ReferenceEquals(Volatile.Read(ref _session), session) && State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
-            NotifyCollabTurnStopped(turnStartedAt, partialText: null);
+            ReleaseOwnedCollabDelivery(collabDeliveryId);
+            NotifyCollabTurnStopped(turnStartedAt, partialText: null, collabThreadId, operationId, collabDeliveryId, expectCollabReply);
             TurnFinished?.Invoke(_item.Id, operationId, null, true, null);
         }
         catch (AcpRpcException ex) when (ex.Code == -32800)
         {
+            ReleaseOneWayDeliveryIfNeeded();
             SetUi(() =>
             {
                 FlushPendingTextDeltas();
-                assistantTurn.Complete();
+                assistantTurn.Complete(stopReason: "cancelled");
                 InterruptRunningAsyncSubagents();
-                if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
+                if (ReferenceEquals(Volatile.Read(ref _session), session) && State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
             });
-            NotifyCollabTurnStopped(turnStartedAt, partialText: null);
+            ReleaseOwnedCollabDelivery(collabDeliveryId);
+            NotifyCollabTurnStopped(turnStartedAt, partialText: null, collabThreadId, operationId, collabDeliveryId, expectCollabReply);
             TurnFinished?.Invoke(_item.Id, operationId, null, true, null);
         }
         catch (AcpAuthRequiredException authEx)
         {
+            ReleaseOneWayDeliveryIfNeeded();
             SetUi(() =>
             {
                 FlushPendingTextDeltas();
-                PopulateAuthMethods(authEx.AuthMethods.Count > 0 ? authEx.AuthMethods : _session?.Initialized?.AuthMethods);
                 assistantTurn.Complete(AppLangResources.Get(AppLangResourceKind.AgentGuiAuthRequiredTitle));
-                IsAuthRequired = true;
-                State = AgentGuiState.Disconnected;
-                RefreshDiagnostics();
+                if (ReferenceEquals(Volatile.Read(ref _session), session))
+                {
+                    PopulateAuthMethods(authEx.AuthMethods.Count > 0 ? authEx.AuthMethods : _session?.Initialized?.AuthMethods);
+                    IsAuthRequired = true;
+                    State = AgentGuiState.Disconnected;
+                    RefreshDiagnostics();
+                }
             });
             var authMsg = $"{AgentName} needs to be signed in again before it can continue.";
-            _collab?.NotifyTurnAborted(_item.Id, authMsg, failed: true);
+            if (expectCollabReply)
+            {
+                ReleaseOwnedCollabDelivery(collabDeliveryId);
+                _collab?.NotifyTurnAborted(_item.Id, authMsg, failed: true, collabThreadId, operationId, collabDeliveryId);
+            }
             TurnFinished?.Invoke(_item.Id, operationId, null, false, authMsg);
         }
         catch (Exception ex)
         {
+            ReleaseOneWayDeliveryIfNeeded();
             SetUi(() =>
             {
                 FlushPendingTextDeltas();
                 assistantTurn.Complete(ex.Message);
-                State = AgentGuiState.Ready;
-                RefreshDiagnostics();
+                if (ReferenceEquals(Volatile.Read(ref _session), session))
+                {
+                    if (State != AgentGuiState.Disconnected) State = AgentGuiState.Ready;
+                    RefreshDiagnostics();
+                }
             });
             var errMsg = $"{AgentName} stopped with an error: {ex.Message}";
-            _collab?.NotifyTurnAborted(_item.Id, errMsg, failed: true);
+            if (expectCollabReply)
+            {
+                ReleaseOwnedCollabDelivery(collabDeliveryId);
+                _collab?.NotifyTurnAborted(_item.Id, errMsg, failed: true, collabThreadId, operationId, collabDeliveryId);
+            }
             TurnFinished?.Invoke(_item.Id, operationId, null, false, errMsg);
         }
         finally
         {
-            _activeOperationId = null;
+            ReleaseOneWayDeliveryIfNeeded();
+            if (ReferenceEquals(_activeTurnSettled, turnSettled))
+            {
+                Volatile.Write(ref _isTurnActive, false);
+                _activeOperationId = null;
+                _activeCollabTurn = null;
+                _activeCollabTransferred = false;
+                _activeTurnSettled = null;
+            }
             if (ReferenceEquals(_activeTurn, assistantTurn))
             {
                 _activeTurn = null;
             }
             SetUi(EnsureLiveTickTimer);
-            _isTurnActive = false;
-            if (ReferenceEquals(_activeTurnSettled, turnSettled))
-            {
-                _activeTurnSettled = null;
-            }
             if (ReferenceEquals(_cancellingTurn, turnSettled))
             {
                 _cancellingTurn = null;
@@ -1828,9 +2603,25 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     [RelayCommand]
     private void ClearQueuedPrompts()
     {
+        var clearedCollab = QueuedPrompts.Where(q => q.ExpectCollabReply).ToList();
+        var clearedOneWay = QueuedPrompts.Where(q => !q.ExpectCollabReply && !string.IsNullOrWhiteSpace(q.CollabDeliveryId)).ToList();
         QueuedPrompts.Clear();
         IsQueuePaused = false;
         RefreshQueueState();
+        foreach (var q in clearedCollab)
+        {
+            _collab?.NotifyTurnAborted(
+                _item.Id,
+                "The queued collaboration prompt was cleared by the user.",
+                failed: false,
+                q.CollabThreadId,
+                q.CollabTaskId,
+                q.CollabDeliveryId);
+        }
+        foreach (var q in clearedOneWay)
+        {
+            ReleaseDiscardedQueuedPrompt(q);
+        }
     }
 
     [RelayCommand]
@@ -1853,7 +2644,37 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _item.AcpSessionId = null;
         _item.Launch?.SessionId = null;
         _titledFromPrompt = false;
+        var droppedCollab = new List<CollabTurnIdentity>();
+        var droppedOneWayIds = new List<string>();
+        if (_urgentPrompt is { ExpectCollabReply: true } droppedUrgent)
+        {
+            droppedCollab.Add(new CollabTurnIdentity(droppedUrgent.CollabThreadId, droppedUrgent.CollabTaskId, droppedUrgent.CollabDeliveryId, true));
+        }
+        else if (_urgentPrompt is { ExpectCollabReply: false, CollabDeliveryId: { Length: > 0 } droppedUrgentId })
+        {
+            droppedOneWayIds.Add(droppedUrgentId);
+        }
+        foreach (var q in QueuedPrompts)
+        {
+            if (q.ExpectCollabReply)
+            {
+                droppedCollab.Add(new CollabTurnIdentity(q.CollabThreadId, q.CollabTaskId, q.CollabDeliveryId, true));
+            }
+            else if (!string.IsNullOrWhiteSpace(q.CollabDeliveryId))
+            {
+                droppedOneWayIds.Add(q.CollabDeliveryId);
+            }
+        }
+        if (_draftCollabTurn is { ExpectReply: true } droppedDraft)
+        {
+            droppedCollab.Add(droppedDraft);
+        }
+        else if (_draftCollabTurn is { ExpectReply: false, DeliveryId: { Length: > 0 } droppedDraftId })
+        {
+            droppedOneWayIds.Add(droppedDraftId);
+        }
         _urgentPrompt = null;
+        _draftCollabTurn = null;
         _cancellingTurn = null;
         _manualStopRequested = false;
         QueuedPrompts.Clear();
@@ -1872,12 +2693,44 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         OnPropertyChanged(nameof(ShowJumpToBottom));
         OnPropertyChanged(nameof(HasContextUsage));
         OnPropertyChanged(nameof(ContextUsageText));
+        foreach (var dropped in droppedCollab)
+        {
+            _collab?.NotifyTurnAborted(
+                _item.Id,
+                "A new session was started before this queued collaboration prompt ran.",
+                failed: false,
+                dropped.ThreadId,
+                dropped.TaskId,
+                dropped.DeliveryId);
+        }
+        foreach (var deliveryId in droppedOneWayIds)
+        {
+            ReleaseOwnedCollabDelivery(deliveryId);
+            _collab?.ReleaseCollabDelivery(_item.Id, deliveryId);
+        }
         await ConnectAsync();
     }
 
     public void ReusePrompt(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
+        if (_draftCollabTurn is { ExpectReply: true } replacedDraft)
+        {
+            _draftCollabTurn = null;
+            _collab?.NotifyTurnAborted(
+                _item.Id,
+                "The edited collaboration prompt was replaced by the user.",
+                failed: false,
+                replacedDraft.ThreadId,
+                replacedDraft.TaskId,
+                replacedDraft.DeliveryId);
+        }
+        else
+        {
+            var replacedOneWay = _draftCollabTurn;
+            _draftCollabTurn = null;
+            ReleaseDiscardedCollabTurn(replacedOneWay);
+        }
         InputText = text;
         FocusComposerRequested?.Invoke(this, EventArgs.Empty);
     }
@@ -1893,6 +2746,23 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     private async Task UseQuickPromptAsync(string? prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt)) return;
+        if (_draftCollabTurn is { ExpectReply: true } replacedDraft)
+        {
+            _draftCollabTurn = null;
+            _collab?.NotifyTurnAborted(
+                _item.Id,
+                "The edited collaboration prompt was replaced by a quick prompt.",
+                failed: false,
+                replacedDraft.ThreadId,
+                replacedDraft.TaskId,
+                replacedDraft.DeliveryId);
+        }
+        else
+        {
+            var replacedOneWay = _draftCollabTurn;
+            _draftCollabTurn = null;
+            ReleaseDiscardedCollabTurn(replacedOneWay);
+        }
         InputText = prompt;
         if (State == AgentGuiState.Ready)
         {
@@ -1902,6 +2772,30 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     [RelayCommand(CanExecute = nameof(IsTurnActive), AllowConcurrentExecutions = true)]
     public Task CancelTurnAsync() => RequestCancelActiveTurnAsync(isManualStop: true);
+
+    bool ICollabSessionBridge.TracksActiveTurn => true;
+    bool ICollabSessionBridge.SupportsExactDeliveryWithdrawal => true;
+    bool ICollabSessionBridge.HasActiveTurn => Volatile.Read(ref _isTurnActive);
+    string? ICollabSessionBridge.ActiveCollabThreadId => Volatile.Read(ref _isTurnActive) ? _activeCollabTurn?.ThreadId : null;
+    string? ICollabSessionBridge.ActiveCollabTaskId => Volatile.Read(ref _isTurnActive) ? _activeCollabTurn?.TaskId : null;
+    string? ICollabSessionBridge.ActiveCollabDeliveryId => Volatile.Read(ref _isTurnActive) ? _activeCollabTurn?.DeliveryId : null;
+    string? ICollabSessionBridge.ActiveExternalTurnKey => Volatile.Read(ref _isTurnActive) ? _activeCollabTurn?.ExternalTurnKey : null;
+
+    bool ICollabSessionBridge.TryGetActiveCollabTurn(out string? threadId, out string? taskId, out string? deliveryId)
+    {
+        if (!Volatile.Read(ref _isTurnActive))
+        {
+            threadId = null;
+            taskId = null;
+            deliveryId = null;
+            return true;
+        }
+        var active = _activeCollabTurn;
+        threadId = active?.ThreadId;
+        taskId = active?.TaskId;
+        deliveryId = active?.DeliveryId;
+        return true;
+    }
 
     Task ICollabSessionBridge.CancelActiveTurnAsync()
     {
@@ -1924,17 +2818,91 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         return Dispatcher.UIThread.InvokeAsync(CancelOnUi);
     }
 
+    Task ICollabSessionBridge.CancelActiveTurnAsync(string? threadId, string? taskId) =>
+        ((ICollabSessionBridge)this).CancelActiveTurnAsync(threadId, taskId, deliveryId: null);
+
+    Task ICollabSessionBridge.CancelActiveTurnAsync(string? threadId, string? taskId, string? deliveryId)
+    {
+        if (_disposed) return Task.CompletedTask;
+        Task CancelIfMatching()
+        {
+            var hasIdentity = !string.IsNullOrWhiteSpace(threadId)
+                || !string.IsNullOrWhiteSpace(taskId)
+                || !string.IsNullOrWhiteSpace(deliveryId);
+            if (hasIdentity)
+            {
+                if (!Volatile.Read(ref _isTurnActive))
+                {
+                    return Task.CompletedTask;
+                }
+                var active = _activeCollabTurn;
+                if (active is null)
+                {
+                    return Task.CompletedTask;
+                }
+                var expectsReply = active.ExpectReply || active.MirrorCollab?.ExpectsReply == true;
+                var activeThreadId = active.ThreadId ?? active.MirrorCollab?.ThreadId;
+                var activeTaskId = active.TaskId ?? active.MirrorCollab?.TaskId;
+                var activeDeliveryId = active.DeliveryId ?? active.MirrorCollab?.DeliveryId;
+                if (!expectsReply
+                    || !MatchesCollabIdentity(activeThreadId, activeTaskId, activeDeliveryId, threadId, taskId, deliveryId))
+                {
+                    return Task.CompletedTask;
+                }
+                return RequestCancelActiveTurnAsync(isManualStop: false);
+            }
+            return RequestCancelActiveTurnAsync(isManualStop: true);
+        }
+        if (Application.Current is null || Dispatcher.UIThread.CheckAccess())
+        {
+            return CancelIfMatching();
+        }
+        return Dispatcher.UIThread.InvokeAsync(CancelIfMatching);
+    }
+
     /// <summary>
     /// A cancelled turn means different things for collaboration. After Stop it ends the task this session owed (and
-    /// cancels what it delegated during the turn). After a "Send now" interrupt the session keeps working, so nothing is settled.
+    /// cancels what it delegated during the turn). After a steering "Send now" interrupt the session keeps working on
+    /// the same job, whereas interrupting for a different queued job settles the interrupted task.
     /// </summary>
-    private void NotifyCollabTurnStopped(DateTimeOffset turnStartedAt, string? partialText)
+    private void NotifyCollabTurnStopped(
+        DateTimeOffset turnStartedAt,
+        string? partialText,
+        string? collabThreadId,
+        string? collabTaskId,
+        string? collabDeliveryId,
+        bool expectCollabReply)
     {
-        if (_collab is null || !_manualStopRequested) return;
-        var reason = string.IsNullOrWhiteSpace(partialText)
-            ? "The user stopped this session before it finished."
-            : "The user stopped this session before it finished. Partial output:\n" + (partialText.Length > 1500 ? partialText[..1500] + "…" : partialText);
-        _collab.NotifyTurnAborted(_item.Id, reason, failed: false, cancelDelegationsSince: turnStartedAt);
+        if (_collab is null) return;
+        if (_manualStopRequested)
+        {
+            var reason = string.IsNullOrWhiteSpace(partialText)
+                ? "The user stopped this session before it finished."
+                : "The user stopped this session before it finished. Partial output:\n" + (partialText.Length > 1500 ? partialText[..1500] + "…" : partialText);
+            _collab.NotifyTurnAborted(
+                _item.Id,
+                reason,
+                failed: false,
+                threadId: expectCollabReply ? collabThreadId : null,
+                taskId: expectCollabReply ? collabTaskId : null,
+                deliveryId: expectCollabReply ? collabDeliveryId : null,
+                cancelDelegationsSince: turnStartedAt);
+            return;
+        }
+        if (expectCollabReply && !_activeCollabTransferred)
+        {
+            var reason = string.IsNullOrWhiteSpace(partialText)
+                ? "The active collaboration turn was interrupted before it finished."
+                : "The active collaboration turn was interrupted before it finished. Partial output:\n" + (partialText.Length > 1500 ? partialText[..1500] + "…" : partialText);
+            _collab.NotifyTurnAborted(
+                _item.Id,
+                reason,
+                failed: false,
+                threadId: collabThreadId,
+                taskId: collabTaskId,
+                deliveryId: collabDeliveryId,
+                cancelDelegationsSince: turnStartedAt);
+        }
     }
 
     private async Task RequestCancelActiveTurnAsync(bool isManualStop)
@@ -2057,7 +3025,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     /// queued like the composer's while a turn runs, and whatever the person here is typing stays where it is.
     /// Returns once the prompt is sent or queued, not when the turn ends; false when there is no session to send to.
     /// </summary>
-    internal async Task<bool> SendExternalPromptAsync(string text, IEnumerable<string> attachmentPaths, IReadOnlyList<MentionToken>? mentions = null, bool immediate = false)
+    internal async Task<bool> SendExternalPromptAsync(string text, IEnumerable<string> attachmentPaths, IReadOnlyList<MentionToken>? mentions = null, bool immediate = false, string? collabDeliveryId = null)
     {
         if (_disposed || _session is null) return false;
         var attached = await ReadAttachmentsAsync(attachmentPaths);
@@ -2079,7 +3047,14 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         {
             _promptHistory.Add(text);
         }
-        var prompt = CreateQueuedPrompt(text, attached);
+        // Extract collaboration attribution from the full untruncated prompt before remote timeline truncation runs.
+        var parsedCollab = Octopus.Remote.Protocol.CollabEnvelope.TryExtractCorrelation(text);
+        var mirrorCollab = BuildMirrorCollabCorrelation(
+            parsedCollab?.ThreadId,
+            parsedCollab?.TaskId,
+            collabDeliveryId,
+            parsedCollab?.ExpectsReply ?? !string.IsNullOrWhiteSpace(collabDeliveryId));
+        var prompt = CreateQueuedPrompt(text, attached, collabDeliveryId: collabDeliveryId, mirrorCollab: mirrorCollab);
         if (_isTurnActive || IsTurnActive)
         {
             if (immediate)
@@ -2087,7 +3062,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 _ = InterruptAndSendAsync(prompt);
                 return true;
             }
-            EnqueuePrompt(text, attached);
+            EnqueuePrompt(text, attached, collabDeliveryId: collabDeliveryId, mirrorCollab: mirrorCollab);
             return true;
         }
         // The turn runs on; the timeline shows the prompt before this returns.
@@ -2675,9 +3650,48 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         });
     }
 
-    private void OnSessionEvent(AcpRuntimeEvent evt)
+    private bool IsCurrentGeneration(long generation) =>
+        !_disposed && Volatile.Read(ref _connectGeneration) == generation;
+
+    private bool IsCurrentSession(IAcpSession session, long generation) =>
+        !_disposed
+        && ReferenceEquals(Volatile.Read(ref _session), session)
+        && Volatile.Read(ref _connectGeneration) == generation;
+
+    private void TrackOwnedCollabDelivery(string deliveryId)
     {
-        if (_disposed) return;
+        lock (_collabDeliveryGate)
+        {
+            _ownedCollabDeliveryIds.Add(deliveryId);
+        }
+    }
+
+    private void ReleaseOwnedCollabDelivery(string? deliveryId)
+    {
+        if (string.IsNullOrWhiteSpace(deliveryId)) return;
+        lock (_collabDeliveryGate)
+        {
+            _ownedCollabDeliveryIds.Remove(deliveryId);
+        }
+    }
+
+    private HashSet<string> TakeOwnedCollabDeliveries()
+    {
+        lock (_collabDeliveryGate)
+        {
+            var snapshot = new HashSet<string>(_ownedCollabDeliveryIds, StringComparer.Ordinal);
+            _ownedCollabDeliveryIds.Clear();
+            return snapshot;
+        }
+    }
+
+    private void OnSessionEvent(AcpRuntimeEvent evt, IAcpSession session, long generation)
+    {
+        if (evt is AcpClosedEvent)
+        {
+            ReleaseActiveCredentialLeases(onlyGeneration: generation);
+        }
+        if (!IsCurrentSession(session, generation)) return;
 
         // Buffer session/load history replay off the UI thread so reopening a long conversation
         // builds the timeline in a single batch instead of posting hundreds of UI mutations.
@@ -2686,7 +3700,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             if (!_acceptReplay) return;
             lock (_replayGate)
             {
-                if (_acceptReplay) _replayBuffer.Add(evt);
+                if (_acceptReplay && IsCurrentSession(session, generation)) _replayBuffer.Add(evt);
             }
             return;
         }
@@ -2695,13 +3709,13 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         // per-token Dispatcher hops and repeated Markdown re-layouts.
         if (evt is AcpTextDeltaEvent textDelta)
         {
-            EnqueueTextDelta(textDelta);
+            EnqueueTextDelta(session, generation, textDelta);
             return;
         }
 
         UiContext.Run(() =>
         {
-            if (_disposed) return;
+            if (!IsCurrentSession(session, generation)) return;
             // Flush any pending text before non-text events so chronological block ordering is exact.
             FlushPendingTextDeltas();
             switch (evt)
@@ -2784,6 +3798,7 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                 case AcpClosedEvent closed:
                     _activeTurn?.Complete();
                     _activeTurn = null;
+                    DiscardQueuedCollabPrompts();
                     State = AgentGuiState.Disconnected;
                     if (!string.IsNullOrWhiteSpace(closed.Reason.Message) && string.IsNullOrWhiteSpace(ErrorBanner))
                     {
@@ -2791,17 +3806,74 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
                         OnPropertyChanged(nameof(HasErrorBanner));
                     }
                     RefreshDiagnostics();
+                    if (IsCurrentSession(session, generation))
+                    {
+                        var closeReason = string.IsNullOrWhiteSpace(closed.Reason.Message)
+                            ? $"{AgentName} disconnected unexpectedly."
+                            : $"{AgentName} disconnected unexpectedly: {closed.Reason.Message}";
+                        NotifyCollabSessionAborted(closeReason);
+                    }
                     break;
             }
         });
     }
 
-    private void EnqueueTextDelta(AcpTextDeltaEvent delta)
+    private void NotifyCollabSessionAborted(string reason)
+    {
+        var ownedDeliveries = TakeOwnedCollabDeliveries();
+        if (_collab is CollabCoordinator coordinator)
+        {
+            coordinator.NotifySessionAbortedAllPending(_item.Id, reason, failed: true, ownedDeliveries);
+        }
+        else
+        {
+            _collab?.NotifyTurnAborted(_item.Id, reason, failed: true);
+        }
+    }
+
+    private void DiscardQueuedCollabPrompts()
+    {
+        var removed = false;
+        for (var i = QueuedPrompts.Count - 1; i >= 0; i--)
+        {
+            if (QueuedPrompts[i].ExpectCollabReply || !string.IsNullOrWhiteSpace(QueuedPrompts[i].CollabDeliveryId))
+            {
+                QueuedPrompts.RemoveAt(i);
+                removed = true;
+            }
+        }
+        if (_urgentPrompt is { } urgent && (urgent.ExpectCollabReply || !string.IsNullOrWhiteSpace(urgent.CollabDeliveryId)))
+        {
+            _urgentPrompt = null;
+            removed = true;
+        }
+        if (_draftCollabTurn is not null)
+        {
+            _draftCollabTurn = null;
+        }
+        if (!_initialPromptSent && _item.Launch is { Prompt.Length: > 0 } launch)
+        {
+            var isCollabInitial = launch.CollabThreadId is not null
+                || launch.CollabTaskId is not null
+                || Octopus.Remote.Protocol.CollabEnvelope.TryExtractCorrelation(launch.Prompt) is { ExpectsReply: true };
+            if (isCollabInitial)
+            {
+                _initialPromptSent = true;
+            }
+        }
+        if (removed)
+        {
+            RefreshQueueState();
+        }
+    }
+
+    private void EnqueueTextDelta(IAcpSession sourceSession, long generation, AcpTextDeltaEvent delta)
     {
         if (string.IsNullOrEmpty(delta.Text)) return;
         var shouldSchedule = false;
         lock (_streamGate)
         {
+            if (!IsCurrentSession(sourceSession, generation)) return;
             if (_pendingDeltas.Count > 0)
             {
                 var last = _pendingDeltas[^1];
@@ -3766,8 +4838,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    private Task<string?> HandlePermissionRequestAsync(AcpPermissionRequest request, CancellationToken ct)
+    private Task<string?> HandlePermissionRequestAsync(long generation, AcpPermissionRequest request, CancellationToken ct)
     {
+        if (!IsCurrentGeneration(generation)) return Task.FromResult<string?>(null);
         var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (request.IsPlanApproval)
         {
@@ -3783,6 +4856,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
             });
             SetUi(() =>
             {
+                if (!IsCurrentGeneration(generation))
+                {
+                    planReg.Dispose();
+                    tcs.TrySetResult(null);
+                    return;
+                }
                 FlushPendingTextDeltas();
                 var prev = State;
                 State = AgentGuiState.Waiting;
@@ -3824,6 +4903,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         SetUi(() =>
         {
+            if (!IsCurrentGeneration(generation))
+            {
+                reg.Dispose();
+                tcs.TrySetResult(null);
+                return;
+            }
             FlushPendingTextDeltas();
             var prev = State;
             State = AgentGuiState.Waiting;
@@ -3936,16 +5021,17 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         }
     }
 
-    private Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?> HandleQuestionRequestAsync(AcpQuestionRequest request, CancellationToken ct) =>
-        HandleFormElicitationRequestAsync(request, ct)
+    private Task<IReadOnlyDictionary<string, IReadOnlyList<string>>?> HandleQuestionRequestAsync(long generation, AcpQuestionRequest request, CancellationToken ct) =>
+        HandleFormElicitationRequestAsync(generation, request, ct)
             .ContinueWith(
                 t => t.Result.Action == AcpElicitationAction.Accept ? t.Result.Answers : null,
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
 
-    private Task<AcpFormElicitationResponse> HandleFormElicitationRequestAsync(AcpQuestionRequest request, CancellationToken ct)
+    private Task<AcpFormElicitationResponse> HandleFormElicitationRequestAsync(long generation, AcpQuestionRequest request, CancellationToken ct)
     {
+        if (!IsCurrentGeneration(generation)) return Task.FromResult(new AcpFormElicitationResponse(AcpElicitationAction.Cancel));
         var tcs = new TaskCompletionSource<AcpFormElicitationResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
         QuestionCardItem? card = null;
         CancellationTokenRegistration reg = default;
@@ -3960,6 +5046,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         SetUi(() =>
         {
+            if (!IsCurrentGeneration(generation))
+            {
+                reg.Dispose();
+                tcs.TrySetResult(new AcpFormElicitationResponse(AcpElicitationAction.Cancel));
+                return;
+            }
             FlushPendingTextDeltas();
             var prev = State;
             State = AgentGuiState.Waiting;
@@ -3977,8 +5069,9 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         return tcs.Task;
     }
 
-    private Task<AcpElicitationAction> HandleUrlElicitationRequestAsync(AcpUrlElicitationRequest request, CancellationToken ct)
+    private Task<AcpElicitationAction> HandleUrlElicitationRequestAsync(long generation, AcpUrlElicitationRequest request, CancellationToken ct)
     {
+        if (!IsCurrentGeneration(generation)) return Task.FromResult(AcpElicitationAction.Cancel);
         var tcs = new TaskCompletionSource<AcpElicitationAction>(TaskCreationOptions.RunContinuationsAsynchronously);
         UrlElicitationCardItem? card = null;
         CancellationTokenRegistration reg = default;
@@ -3997,6 +5090,12 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
         SetUi(() =>
         {
+            if (!IsCurrentGeneration(generation))
+            {
+                reg.Dispose();
+                tcs.TrySetResult(AcpElicitationAction.Cancel);
+                return;
+            }
             FlushPendingTextDeltas();
             var prev = State;
             State = AgentGuiState.Waiting;
@@ -4499,8 +5598,46 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
 
     public Task RestartAsync() => ConnectAsync();
 
-    private async Task DisconnectInternalAsync()
+    private void ReleaseActiveCredentialLeases(long? onlyGeneration = null)
     {
+        IDisposable? collabLease;
+        IDisposable? botLease;
+        lock (_credentialGate)
+        {
+            if (onlyGeneration is { } gen && _activeCredentialGeneration != gen)
+            {
+                return;
+            }
+            collabLease = _activeCollabLease;
+            botLease = _activeBotScheduleLease;
+            _activeCollabLease = null;
+            _activeBotScheduleLease = null;
+            _activeCredentialGeneration = 0;
+        }
+        collabLease?.Dispose();
+        botLease?.Dispose();
+    }
+
+    private async Task DisconnectInternalAsync(bool advanceGeneration = true)
+    {
+        if (advanceGeneration)
+        {
+            Interlocked.Increment(ref _connectGeneration);
+        }
+        ReleaseActiveCredentialLeases();
+        IAcpSession? old;
+        Action<AcpRuntimeEvent>? oldHandler;
+        lock (_credentialGate)
+        {
+            old = _session;
+            oldHandler = _sessionEventHandler;
+            _session = null;
+            _sessionEventHandler = null;
+        }
+        if (old is not null && oldHandler is not null)
+        {
+            old.EventReceived -= oldHandler;
+        }
         ClearPendingTextDeltas();
         ClearReplayBuffer();
         _activeTurn?.Complete();
@@ -4508,19 +5645,22 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
         _urgentPrompt = null;
         _cancellingTurn = null;
         _manualStopRequested = false;
-        _isTurnActive = false;
+        Volatile.Write(ref _isTurnActive, false);
+        _activeCollabTurn = null;
+        _activeCollabTransferred = false;
         SetUi(() => IsCancelling = false);
-        _connectCts?.Cancel();
-        _connectCts?.Dispose();
-        _connectCts = null;
+        var connectCts = Interlocked.Exchange(ref _connectCts, null);
+        if (connectCts is not null)
+        {
+            try { connectCts.Cancel(); } catch { }
+            connectCts.Dispose();
+        }
         _turnCts?.Cancel();
         _turnCts?.Dispose();
         _turnCts = null;
 
-        var old = Interlocked.Exchange(ref _session, null);
         if (old is not null)
         {
-            old.EventReceived -= OnSessionEvent;
             try { await old.DisposeAsync(); } catch { }
         }
     }
@@ -4529,24 +5669,63 @@ public sealed partial class AgentGuiTabViewModel : ObservableObject, IRecipient<
     {
         if (_disposed) return;
         _disposed = true;
+        Interlocked.Increment(ref _connectGeneration);
+        ReleaseActiveCredentialLeases();
+        HashSet<string> ownedDeliveries;
+        lock (_collabDeliveryGate)
+        {
+            foreach (var pending in _pendingCollabDeliveries)
+            {
+                pending.Cancelled = true;
+            }
+            _pendingCollabDeliveries.Clear();
+            ownedDeliveries = new HashSet<string>(_ownedCollabDeliveryIds, StringComparer.Ordinal);
+            _ownedCollabDeliveryIds.Clear();
+        }
+        _draftCollabTurn = null;
+        _activeCollabTurn = null;
+        _activeCollabTransferred = false;
         if (_collab is not null)
         {
-            _collab.Changed -= OnCollabChanged;
-            _collab.UnregisterGuiSession(_item.Id);
+            Interlocked.Exchange(ref _collabSubscription, null)?.Dispose();
+            if (_collab is CollabCoordinator coordinator)
+            {
+                coordinator.UnregisterGuiSession(this, ownedDeliveries);
+            }
+            else
+            {
+                _collab.UnregisterGuiSession(this);
+            }
         }
         WeakReferenceMessenger.Default.UnregisterAll(this);
         ScriptPreview.PropertyChanged -= OnScriptPreviewPropertyChanged;
         StopLiveTickTimer();
+        IAcpSession? old;
+        Action<AcpRuntimeEvent>? oldHandler;
+        lock (_credentialGate)
+        {
+            old = _session;
+            oldHandler = _sessionEventHandler;
+            _session = null;
+            _sessionEventHandler = null;
+        }
+        if (old is not null && oldHandler is not null)
+        {
+            old.EventReceived -= oldHandler;
+        }
         ClearPendingTextDeltas();
         ClearReplayBuffer();
         _activeTurn?.Complete();
         _activeTurn = null;
-        _connectCts?.Cancel();
+        var connectCts = Interlocked.Exchange(ref _connectCts, null);
+        if (connectCts is not null)
+        {
+            try { connectCts.Cancel(); } catch { }
+            connectCts.Dispose();
+        }
         _turnCts?.Cancel();
-        var old = Interlocked.Exchange(ref _session, null);
         if (old is not null)
         {
-            old.EventReceived -= OnSessionEvent;
             _ = old.DisposeAsync().AsTask();
         }
         // Release collections & transient buffers promptly when a tab closes.

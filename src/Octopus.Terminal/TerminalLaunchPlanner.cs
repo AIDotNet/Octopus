@@ -45,7 +45,8 @@ public sealed class TerminalLaunchPlanner(
                 }
             }
             builtEnv = filtered;
-            commandLine = commandBuilder.WrapEnvironment(commandLine, shell.Kind, unsets, command.Environment);
+            var shellSetEnv = FilterCommandLineSafeEnvironment(command.Environment);
+            commandLine = commandBuilder.WrapEnvironment(commandLine, shell.Kind, unsets, shellSetEnv);
         }
         // Re-apply the target folder inside the login/interactive shell so /etc/profile (Git Bash), $PROFILE
         // (PowerShell), ~/.bashrc / ~/.zshrc, or packaged shell launchers cannot leave the agent in C:\Users\...
@@ -122,6 +123,36 @@ public sealed class TerminalLaunchPlanner(
         : PosixQuote(path);
 
     private static string PosixQuote(string text) => "'" + text.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
+
+    private static IReadOnlyDictionary<string, string> FilterCommandLineSafeEnvironment(IReadOnlyDictionary<string, string> environment)
+    {
+        var hasSecret = false;
+        foreach (var key in environment.Keys)
+        {
+            if (IsProcessOnlySecretVariable(key))
+            {
+                hasSecret = true;
+                break;
+            }
+        }
+        if (!hasSecret)
+        {
+            return environment;
+        }
+        var filtered = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (key, value) in environment)
+        {
+            if (!IsProcessOnlySecretVariable(key))
+            {
+                filtered[key] = value;
+            }
+        }
+        return filtered;
+    }
+
+    private static bool IsProcessOnlySecretVariable(string name) =>
+        string.Equals(name, "OCTOPUS_COLLAB_TOKEN", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "OCTOPUS_SIGNAL_TOKEN", StringComparison.OrdinalIgnoreCase);
 
     private ShellInfo ResolveShell(string? shellPath) =>
         (string.IsNullOrWhiteSpace(shellPath) ? null : shells.Describe(shellPath)) ?? shells.GetDefaultShell();

@@ -261,6 +261,7 @@
                                                        Tone="{Binding RiskTone}" Content="{Binding Risk}"
                                                        arc:Tooltip.Tip="{Binding Key}" />
                                             <arc:Switch Grid.Column="2" VerticalAlignment="Center"
+                                                        IsEnabled="{Binding CanToggle}"
                                                         IsChecked="{Binding IsGranted, Mode=TwoWay}"
                                                         AutomationProperties.Name="{Binding Title}" />
                                         </Grid>

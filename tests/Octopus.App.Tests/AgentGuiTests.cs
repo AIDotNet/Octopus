@@ -83,6 +83,10 @@ public sealed class FakeAcpSession : IAcpSession
 
     /// <summary>Runs during <see cref="StartAsync"/> (e.g. to emit session/load history replay).</summary>
     public Action<FakeAcpSession, string?>? StartHandler { get; set; }
+    /// <summary>Optional async override for <see cref="StartAsync"/> (e.g. to simulate startup failure or pause).</summary>
+    public Func<FakeAcpSession, string?, CancellationToken, Task<AcpSessionStartResult>>? StartAsyncHandler { get; set; }
+    /// <summary>Optional async override for <see cref="DisposeAsync"/> (e.g. to pause close while a replacement starts).</summary>
+    public Func<FakeAcpSession, ValueTask>? DisposeHandler { get; set; }
 
     public Task<AcpSessionStartResult> StartAsync(
         string workingDirectory,
@@ -91,6 +95,10 @@ public sealed class FakeAcpSession : IAcpSession
         CancellationToken cancellationToken = default)
     {
         LastAdditionalDirectories = additionalDirectories;
+        if (StartAsyncHandler is not null)
+        {
+            return StartAsyncHandler(this, resumeSessionId, cancellationToken);
+        }
         StartHandler?.Invoke(this, resumeSessionId);
         return Task.FromResult(new AcpSessionStartResult
         {
@@ -179,7 +187,7 @@ public sealed class FakeAcpSession : IAcpSession
     public ValueTask DisposeAsync()
     {
         IsConnected = false;
-        return ValueTask.CompletedTask;
+        return DisposeHandler is not null ? DisposeHandler(this) : ValueTask.CompletedTask;
     }
 }
 

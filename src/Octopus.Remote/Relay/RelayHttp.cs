@@ -7,8 +7,8 @@ namespace Octopus.Remote.Relay;
 
 /// <summary>
 /// Creates the shared <see cref="HttpMessageHandler"/> for relay and mobile HTTP traffic, configures optional
-/// WebSocket TLS root validation, and formats nested transport exceptions so TLS/socket failures on mobile devices
-/// retain their root cause.
+/// WebSocket and QUIC relay TLS root validation, and formats nested transport exceptions so TLS/socket failures on
+/// mobile devices retain their root cause.
 /// </summary>
 public static class RelayHttp
 {
@@ -21,8 +21,9 @@ public static class RelayHttp
     public static Func<bool, HttpMessageHandler>? HandlerFactory { get; set; }
 
     /// <summary>
-    /// Optional TLS certificate validation callback applied to outbound <c>wss://</c> WebSocket connections (for
-    /// example, to trust bundled public roots missing from older Android / HarmonyOS system CA stores).
+    /// Optional TLS certificate validation callback applied to outbound <c>wss://</c> WebSocket and <c>quic://</c>
+    /// relay tunnel connections (for example, to trust bundled public roots missing from older Android / HarmonyOS
+    /// system CA stores).
     /// </summary>
     public static RemoteCertificateValidationCallback? WebSocketCertificateValidationCallback { get; set; }
 
@@ -109,6 +110,16 @@ public static class RelayHttp
         {
             options.RemoteCertificateValidationCallback = validator;
         }
+    }
+
+    /// <summary>
+    /// Applies <see cref="WebSocketCertificateValidationCallback"/> to <paramref name="options"/> for outbound
+    /// <c>quic://</c> relay tunnels, leaving standard OS TLS validation active when no custom callback is configured.
+    /// </summary>
+    internal static void ConfigureQuic(SslClientAuthenticationOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.RemoteCertificateValidationCallback = WebSocketCertificateValidationCallback;
     }
 
     private static bool ValidateWithCustomRoots(X509Certificate2 leaf, X509Chain? chain, X509Certificate2[] roots)

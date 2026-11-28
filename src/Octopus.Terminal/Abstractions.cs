@@ -20,6 +20,12 @@ public interface ITerminalConnection : IAsyncDisposable
 
     ValueTask SignalAsync(TerminalSignal signal);
 
+    /// <summary>
+    /// Completes as soon as the underlying process exits, independently of whether trailing PTY output has finished
+    /// draining. Defaults to <see cref="Exited"/> for connections that do not distinguish the two.
+    /// </summary>
+    Task ProcessExited => Exited;
+
     /// <summary>Completes after the process has exited and its output has been read to the end.</summary>
     Task<TerminalExit> Exited { get; }
 

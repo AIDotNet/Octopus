@@ -17,7 +17,15 @@ public enum BotChangeKind
     Schedules
 }
 
-public sealed record BotChangedEventArgs(BotChangeKind Kind, BotDefinition? Bot = null, BotChat? Chat = null, ProjectItem? Item = null);
+public sealed record BotChangedEventArgs(
+    BotChangeKind Kind,
+    BotDefinition? Bot = null,
+    BotChat? Chat = null,
+    ProjectItem? Item = null,
+    bool IsRemoved = false)
+{
+    internal Workspace.TabContentRegistry.OwnerSnapshot? SupersededOwner { get; init; }
+}
 
 public sealed record NewBotRequest(
     string Name,
@@ -105,6 +113,7 @@ public interface IBotService
     Project GetBackingProject(BotDefinition bot);
     BotDefinition? FindBotByBackingProjectId(string projectId);
     ProjectItem? FindItem(string itemId);
+    BotDefinition? FindItemOwner(string itemId);
     void ActivateBackingItem(string botId, string itemId);
     void CloseBackingItem(string botId, string itemId);
     void SetDockLayout(string botId, string? layout);

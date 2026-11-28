@@ -312,7 +312,7 @@ internal static class SignalAttachContent
         //
         // OpenCode loads it through OPENCODE_CONFIG_CONTENT for sessions Octopus starts, and nowhere else. For each
         // event listed in CHANNELS it sends one envelope to Octopus, the same format the octopus-signal executable
-        // writes: a single UTF-8 JSON object per connection { v, token, item, agent, channel, account, ts, payload },
+        // writes: a single UTF-8 JSON object per connection { v, token, item, agent, channel, account, link?, ts, payload },
         // with the event as the payload string. Endpoint and token come from the environment Octopus gave this
         // session. Every failure is silent: Octopus being closed must never disturb OpenCode.
         import net from "node:net";
@@ -331,7 +331,8 @@ internal static class SignalAttachContent
           if (previous && previous.payload === payload && now - previous.at < REPEAT_WINDOW_MS) return;
           lastSent.set(channel, { payload, at: now });
           const accountVar = process.env.OCTOPUS_SIGNAL_ACCOUNT_VAR;
-          const envelope = JSON.stringify({
+          const link = process.env.OCTOPUS_SIGNAL_LINK_ID;
+          const message = {
             v: 1,
             token: process.env.OCTOPUS_SIGNAL_TOKEN ?? "",
             item: process.env.OCTOPUS_ITEM_ID ?? "",
@@ -340,7 +341,9 @@ internal static class SignalAttachContent
             account: accountVar ? (process.env[accountVar] ?? "") : "",
             ts: now,
             payload,
-          });
+          };
+          if (link) message.link = link;
+          const envelope = JSON.stringify(message);
           try {
             // A Unix socket path or a Windows named pipe (\\.\pipe\name): node:net takes both as `path`.
             const socket = net.createConnection({ path: endpoint });

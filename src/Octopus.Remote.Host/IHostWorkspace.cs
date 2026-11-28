@@ -81,6 +81,8 @@ public interface IHostWorkspace
     Task PromptAsync(AcpPromptMessage prompt) => throw NoConversations();
     /// <summary>Stops the turn that runs, as the stop button does.</summary>
     Task CancelTurnAsync(string itemId) => throw NoConversations();
+    /// <summary>Stops the turn that runs, optionally restricted to a matching collaboration turn when identity fields are set.</summary>
+    Task CancelTurnAsync(AcpCancelMessage request) => CancelTurnAsync(request.ItemId);
     /// <summary>Answers a permission or question card; a card answered already (here or on another device) stays as it is.</summary>
     Task RespondAsync(AcpRespondMessage answer) => throw NoConversations();
     /// <summary>Chooses a model, mode or effort above the input.</summary>

@@ -18,7 +18,8 @@ public sealed partial class CollabRibbonNodeViewModel : ObservableObject
         string status,
         string? meta,
         bool isCurrent,
-        Action activate)
+        Action activate,
+        string? peerItemId = null)
     {
         Id = id;
         Kind = kind;
@@ -27,6 +28,7 @@ public sealed partial class CollabRibbonNodeViewModel : ObservableObject
         Status = status;
         Meta = meta;
         IsCurrent = isCurrent;
+        PeerItemId = peerItemId;
         _activate = activate;
     }
 
@@ -34,10 +36,21 @@ public sealed partial class CollabRibbonNodeViewModel : ObservableObject
     /// <summary><c>parent</c>, <c>self</c>, <c>child</c>, or <c>peer</c>.</summary>
     public string Kind { get; }
     public string AgentId { get; }
-    public string Label { get; }
-    public string Status { get; }
+    [ObservableProperty]
+    public partial string Label { get; set; } = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsWorking))]
+    [NotifyPropertyChangedFor(nameof(IsWaiting))]
+    [NotifyPropertyChangedFor(nameof(IsDone))]
+    public partial string Status { get; set; } = "";
     public string? Meta { get; }
     public bool IsCurrent { get; }
+    public string? PeerItemId { get; }
+
+    public bool MatchesItem(string itemId) =>
+        Kind == "peer"
+            ? string.Equals(PeerItemId, itemId, StringComparison.Ordinal)
+            : string.Equals(Id, itemId, StringComparison.Ordinal);
 
     public bool IsParent => Kind == "parent";
     public bool IsChild => Kind == "child";
@@ -93,6 +106,7 @@ public sealed partial class CollabBubbledApprovalViewModel : ObservableObject
 /// <summary>One message inside the collapsible negotiation thread strip.</summary>
 public sealed class CollabThreadMessageViewModel(CollabMessageRecord message)
 {
+    public string MessageId { get; } = message.MessageId;
     public string FromLabel { get; } = message.FromLabel;
     public string? FromAgentId { get; } = message.FromAgentId;
     public bool HasAgentIcon { get; } = !message.IsUserInterjection && !string.IsNullOrWhiteSpace(message.FromAgentId);
@@ -111,26 +125,58 @@ public sealed partial class CollabThreadPanelViewModel : ObservableObject
     public CollabThreadPanelViewModel(CollabThreadRecord thread, Func<string, string, bool, Task> interject, Action close)
     {
         ThreadId = thread.ThreadId;
+        _interject = interject;
+        _close = close;
+        UpdateFrom(thread);
+    }
+
+    public string ThreadId { get; }
+    [ObservableProperty] public partial string Title { get; private set; } = "";
+    [ObservableProperty] public partial string HopsText { get; private set; } = "";
+    [ObservableProperty] public partial string Status { get; private set; } = "";
+    [ObservableProperty] public partial bool IsBudgetPaused { get; private set; }
+    public ObservableCollection<CollabThreadMessageViewModel> Messages { get; } = [];
+
+    [ObservableProperty] public partial string InterjectText { get; set; } = "";
+
+    public void UpdateFrom(CollabThreadRecord thread)
+    {
         Title = thread.Title;
         HopsText = $"{thread.Hops}/{thread.MaxHops}";
         Status = thread.StatusKey;
         IsBudgetPaused = thread.Status == CollabThreadStatus.PausedBudget;
-        foreach (var msg in thread.Messages)
+
+        var incoming = thread.Messages;
+        var samePrefix = Messages.Count <= incoming.Count;
+        if (samePrefix)
         {
-            Messages.Add(new CollabThreadMessageViewModel(msg));
+            for (var i = 0; i < Messages.Count; i++)
+            {
+                if (!string.Equals(Messages[i].MessageId, incoming[i].MessageId, StringComparison.Ordinal)
+                    || !string.Equals(Messages[i].Text, incoming[i].Text, StringComparison.Ordinal))
+                {
+                    samePrefix = false;
+                    break;
+                }
+            }
         }
-        _interject = interject;
-        _close = close;
+
+        if (samePrefix)
+        {
+            for (var i = Messages.Count; i < incoming.Count; i++)
+            {
+                Messages.Add(new CollabThreadMessageViewModel(incoming[i]));
+            }
+        }
+        else
+        {
+            Messages.Clear();
+            foreach (var msg in incoming)
+            {
+                Messages.Add(new CollabThreadMessageViewModel(msg));
+            }
+        }
     }
-
-    public string ThreadId { get; }
-    public string Title { get; }
-    public string HopsText { get; }
-    public string Status { get; }
-    public bool IsBudgetPaused { get; }
-    public ObservableCollection<CollabThreadMessageViewModel> Messages { get; } = [];
-
-    [ObservableProperty] public partial string InterjectText { get; set; } = "";
 
     [RelayCommand]
     private async Task SendInterjectAsync()

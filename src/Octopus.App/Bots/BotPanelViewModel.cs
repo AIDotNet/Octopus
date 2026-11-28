@@ -273,6 +273,7 @@ public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
     private readonly IProjectIconStore? _icons;
     private readonly IItemActivityService? _activity;
     private readonly IBotGroupService? _botGroups;
+    private readonly Workspace.ITabContentRegistry? _tabs;
 
     public BotPanelViewModel(
         IBotService bots,
@@ -281,7 +282,8 @@ public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
         IAppKeymap keymap,
         IProjectIconStore? icons = null,
         IItemActivityService? activity = null,
-        IBotGroupService? botGroups = null)
+        IBotGroupService? botGroups = null,
+        Workspace.ITabContentRegistry? tabs = null)
     {
         _bots = bots;
         _dialogs = dialogs;
@@ -290,6 +292,7 @@ public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
         _icons = icons;
         _activity = activity;
         _botGroups = botGroups;
+        _tabs = tabs;
 
         _bots.Changed += (_, e) =>
         {
@@ -540,8 +543,8 @@ public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
                     needsInput: chatNeeds,
                     open: row => _bots.OpenChat(row.BotId, row.ChatId),
                     rename: RenameChatAsync,
-                    close: row => _bots.CloseChat(row.BotId, row.ChatId),
-                    delete: row => _bots.DeleteChat(row.BotId, row.ChatId)));
+                    close: row => Workspace.BotOwnerRetirement.RetireChatAndMutate(_bots, _tabs, row.BotId, row.ChatId, delete: false),
+                    delete: row => Workspace.BotOwnerRetirement.RetireChatAndMutate(_bots, _tabs, row.BotId, row.ChatId, delete: true)));
             }
 
             var expanded = query.Length > 0 || bot.IsExpanded;
@@ -754,7 +757,7 @@ public sealed partial class BotPanelViewModel : ObservableObject, IDisposable
             isDanger: true);
         if (ok)
         {
-            _bots.DeleteBot(node.BotId);
+            Workspace.BotOwnerRetirement.RetireBotAndDelete(_bots, _tabs, node.BotId);
         }
     }
 

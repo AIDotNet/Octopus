@@ -21,7 +21,8 @@ public sealed record PermissionRequest(
     bool Optional,
     IReadOnlyList<string> Details,
     string? Reason = null,
-    PluginLocalized? Localized = null);
+    PluginLocalized? Localized = null,
+    IReadOnlyList<string>? Exclude = null);
 
 /// <summary>
 /// The <c>permissions</c> block of a manifest. <see cref="Requests"/> lists everything flat; the file scopes are also

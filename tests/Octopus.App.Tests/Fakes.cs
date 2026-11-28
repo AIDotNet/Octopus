@@ -72,9 +72,24 @@ public sealed class FakeTerminalConnectionFactory : ITerminalConnectionFactory
     /// <summary>The foreground program the next connections report: null means just the shell (nothing to confirm).</summary>
     public string? Foreground { get; set; }
 
+    /// <summary>Optional one-shot exception thrown on the next <see cref="Start"/> call (cleared before throwing).</summary>
+    public Exception? NextStartFailure { get; set; }
+
+    /// <summary>Optional hook to inspect, customize, or fail a start (e.g. simulate spawn failure).</summary>
+    public Func<LaunchSpec, int, int, ITerminalConnection>? StartOverride { get; set; }
+
     public ITerminalConnection Start(LaunchSpec spec, int columns, int rows)
     {
         Started.Add(spec);
+        if (StartOverride is not null)
+        {
+            return StartOverride(spec, columns, rows);
+        }
+        if (NextStartFailure is { } failure)
+        {
+            NextStartFailure = null;
+            throw failure;
+        }
         var connection = new FakeTerminalConnection(Foreground);
         Connections.Add(connection);
         return connection;

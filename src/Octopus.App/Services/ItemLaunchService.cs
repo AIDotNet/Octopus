@@ -75,10 +75,16 @@ public sealed class ItemLaunchService(
     /// <summary>What a tab of a project on another computer is started with: the program runs there, nothing is launched here.</summary>
     public static LaunchSpec RemoteSession { get; } = new("octopus-remote-session", [], null, new Dictionary<string, string>());
 
-    public LaunchSpec Plan(Project project, ProjectItem item, bool allowResume = true)
+    public LaunchSpec Plan(Project project, ProjectItem item, bool allowResume = true) =>
+        PlanCore(project, item, allowResume, useLease: false, leaseId: null).Spec;
+
+    public TerminalLaunch PlanLaunch(Project project, ProjectItem item, bool allowResume = true, string? leaseId = null) =>
+        PlanCore(project, item, allowResume, useLease: true, leaseId: leaseId);
+
+    private TerminalLaunch PlanCore(Project project, ProjectItem item, bool allowResume, bool useLease, string? leaseId)
     {
         // The host plans and runs it (with its own agents, settings and hooks); this side only shows its terminal.
-        if (ProjectLocation.IsOnRemoteHost(project)) return RemoteSession;
+        if (ProjectLocation.IsOnRemoteHost(project)) return new TerminalLaunch(RemoteSession);
         var current = settings.Current;
         var cwd = EffectiveWorkingDirectory(project, item);
         if (item.Kind != ProjectItemKind.Agent)
@@ -87,15 +93,16 @@ public sealed class ItemLaunchService(
             // The debug log is what the terminal shows of the connection while it is made (see SshConnectProgress).
             if (project.SshHost is not { } host)
             {
-                return planner.PlanShell(cwd, current.Terminal.Shell);
+                return new TerminalLaunch(planner.PlanShell(cwd, current.Terminal.Shell));
             }
             var known = hosts?.Current.Hosts.FirstOrDefault(h => h.Alias == host);
-            return known?.Protocol switch
+            var shellSpec = known?.Protocol switch
             {
                 Octopus.Ssh.SshHostProtocol.Mosh => planner.PlanMoshShell(host, cwd),
                 Octopus.Ssh.SshHostProtocol.Telnet => planner.PlanTelnet(known.HostName, known.Port),
                 _ => WithAsciiAlias(planner.PlanRemoteShell(host, cwd, current.Terminal.Shell, remote is null ? null : [.. remote.TerminalOptions, .. remote.StartConnectLog(item.Id)])),
             };
+            return new TerminalLaunch(shellSpec);
         }
 
         if (!ProjectLocation.CanRunAgents(project))
@@ -167,25 +174,39 @@ public sealed class ItemLaunchService(
         // simply starts as before.
         var signal = Attach(definition, item, cwd, command);
         var collab = current.Agents.Collab is { Enabled: true, EnableTerminalBridge: true }
-            ? collabInjector?.Plan(definition, item, ResolveForwarderPath())
+            ? (useLease
+                ? collabInjector?.PlanLease(definition, item, ResolveForwarderPath(), leaseId)
+                : collabInjector?.Plan(definition, item, ResolveForwarderPath()))
             : null;
-        if (signal is not null || collab is not null)
+        try
         {
-            var mergedArgs = new List<string>();
-            var mergedEnv = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (signal is not null)
+            if (signal is not null || collab is not null)
             {
-                mergedArgs.AddRange(signal.Arguments);
-                foreach (var (k, v) in signal.Environment) mergedEnv[k] = v;
+                var mergedArgs = new List<string>();
+                var mergedEnv = new Dictionary<string, string>(StringComparer.Ordinal);
+                if (signal is not null)
+                {
+                    mergedArgs.AddRange(signal.Arguments);
+                    foreach (var (k, v) in signal.Environment) mergedEnv[k] = v;
+                }
+                if (collab is not null)
+                {
+                    mergedArgs.AddRange(collab.Arguments);
+                    foreach (var (k, v) in collab.Environment) mergedEnv[k] = v;
+                }
+                command = compiler.Compile(request with { Signals = new SignalAttachment(mergedArgs, mergedEnv) });
             }
-            if (collab is not null)
-            {
-                mergedArgs.AddRange(collab.Arguments);
-                foreach (var (k, v) in collab.Environment) mergedEnv[k] = v;
-            }
-            command = compiler.Compile(request with { Signals = new SignalAttachment(mergedArgs, mergedEnv) });
+            var spec = planner.PlanAgent(UseSystemProxy(command, current.Agents.UseSystemProxy), cwd, current.Terminal.Shell);
+            return new TerminalLaunch(spec, useLease ? collab?.Lease : null);
         }
-        return planner.PlanAgent(UseSystemProxy(command, current.Agents.UseSystemProxy), cwd, current.Terminal.Shell);
+        catch
+        {
+            if (useLease)
+            {
+                collab?.Lease?.Dispose();
+            }
+            throw;
+        }
     }
 
     private static string EffectiveWorkingDirectory(Project project, ProjectItem item)

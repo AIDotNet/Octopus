@@ -1,12 +1,17 @@
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Octopus.Acp.Dialects;
+using Octopus.Acp.Process;
 using Octopus.Agents;
 using Octopus.App.Appearance;
 using Octopus.App.Composition;
 using Octopus.App.Services;
+using Octopus.App.Workspace;
+using Octopus.Core.Agents;
 using Octopus.Platform;
 using Octopus.Storage;
 using Octopus.Terminal;
@@ -24,15 +29,45 @@ namespace Octopus.App.Tests;
 /// <summary>The headless test host: the real app with in-memory stores and a temporary data folder.</summary>
 public static class TestApp
 {
+    private static ITabContentRegistry? s_activeTabs;
+
     /// <summary>A new container (empty in-memory stores, a new data folder) for the test that is about to run.</summary>
     public static void Fresh()
     {
+        ReleaseActiveTabs();
         AppHost.Reset();
         AppHost.Get<ThemeService>().Track();
     }
 
-    /// <summary>Drops the container of the test that ran: watchers stop, the data folder goes.</summary>
-    public static void Dispose() => AppHost.Reset();
+    /// <summary>Drops the container of the test that ran: active tabs release, watchers stop, the data folder goes.</summary>
+    public static void Dispose()
+    {
+        ReleaseActiveTabs();
+        AppHost.Reset();
+    }
+
+    private static void ReleaseActiveTabs()
+    {
+        var tabs = Interlocked.Exchange(ref s_activeTabs, null);
+        if (tabs is null)
+        {
+            return;
+        }
+        var release = tabs.ReleaseAllAsync();
+        if (!release.IsCompleted)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            while (!release.IsCompleted && DateTime.UtcNow < deadline)
+            {
+                Dispatcher.UIThread.RunJobs();
+                if (!release.IsCompleted)
+                {
+                    Thread.Sleep(5);
+                }
+            }
+        }
+        Dispatcher.UIThread.RunJobs();
+    }
 
     public static AppBuilder BuildAvaloniaApp()
     {
@@ -62,8 +97,32 @@ public static class TestApp
             // No real process, no scan of the machine, no system dialogs.
             services.Replace(ServiceDescriptor.Singleton<ITerminalConnectionFactory, FakeTerminalConnectionFactory>());
             services.AddSingleton(p => (FakeTerminalConnectionFactory)p.GetRequiredService<ITerminalConnectionFactory>());
-            services.Replace(ServiceDescriptor.Singleton<Octopus.Acp.Process.IAcpSessionFactory, FakeAcpSessionFactory>());
-            services.AddSingleton(p => (FakeAcpSessionFactory)p.GetRequiredService<Octopus.Acp.Process.IAcpSessionFactory>());
+            services.Replace(ServiceDescriptor.Singleton<IAcpSessionFactory, FakeAcpSessionFactory>());
+            services.AddSingleton(p => (FakeAcpSessionFactory)p.GetRequiredService<IAcpSessionFactory>());
+            // ACP resolution stays offline and deterministic: never probe login shells, host npm/npx/uvx, or the public registry.
+            services.Replace(ServiceDescriptor.Singleton(p => new AcpRegistryClient(
+                p.GetRequiredService<IAppPaths>(),
+                new HttpClient(new OfflineHttpMessageHandler()))));
+            services.Replace(ServiceDescriptor.Singleton(p => new AcpAdapterInstaller(
+                p.GetRequiredService<IAppPaths>(),
+                p.GetRequiredService<AcpRegistryClient>(),
+                new HttpClient(new OfflineHttpMessageHandler()))));
+            services.Replace(ServiceDescriptor.Singleton(p => new AcpLaunchResolver(
+                new TestAcpExecutableLocator(
+                    p.GetRequiredService<IAppPaths>(),
+                    p.GetRequiredService<IAgentCatalog>(),
+                    p.GetRequiredService<AcpAdapterInstaller>()),
+                new TestAcpLoginEnvironment(p.GetRequiredService<IAppPaths>().CacheDirectory),
+                systemProxy: null,
+                adapterInstaller: p.GetRequiredService<AcpAdapterInstaller>(),
+                shellCommandBuilder: p.GetService<IShellCommandBuilder>(),
+                dialects: p.GetRequiredService<AcpDialectRegistry>())));
+            services.Replace(ServiceDescriptor.Singleton<ITabContentRegistry>(p =>
+            {
+                var registry = ActivatorUtilities.CreateInstance<TabContentRegistry>(p);
+                s_activeTabs = registry;
+                return registry;
+            }));
             services.Replace(ServiceDescriptor.Singleton<IAgentScanner>(new FakeAgentScanner("claude", "opencode", "codex")));
             services.Replace(ServiceDescriptor.Singleton<IAgentInstaller, FakeAgentInstaller>());
             services.AddSingleton(p => (FakeAgentInstaller)p.GetRequiredService<IAgentInstaller>());
@@ -104,6 +163,71 @@ public static class TestApp
         public void Dispose()
         {
             try { Directory.Delete(_root, true); } catch (IOException) { }
+        }
+    }
+
+    private sealed class OfflineHttpMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException($"External network access is disabled in Octopus.App.Tests ({request.RequestUri}).");
+    }
+
+    private sealed class TestAcpLoginEnvironment(string cacheDirectory) : ILoginEnvironment
+    {
+        private readonly IReadOnlyDictionary<string, string> _environment = new Dictionary<string, string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
+        {
+            ["PATH"] = Path.Combine(cacheDirectory, "test-acp-adapters"),
+        };
+
+        public Task<IReadOnlyDictionary<string, string>> GetAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(_environment);
+    }
+
+    private sealed class TestAcpExecutableLocator : IExecutableLocator
+    {
+        private readonly string _adapterDir;
+        private readonly AcpAdapterInstaller _installer;
+        private readonly Dictionary<string, (string AgentId, AgentAcpAdapterSpec Adapter)> _catalogAdapters;
+
+        public TestAcpExecutableLocator(IAppPaths paths, IAgentCatalog catalog, AcpAdapterInstaller installer)
+        {
+            _adapterDir = Path.Combine(paths.CacheDirectory, "test-acp-adapters");
+            _installer = installer;
+            _catalogAdapters = new Dictionary<string, (string, AgentAcpAdapterSpec)>(
+                OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+            foreach (var definition in catalog.Definitions)
+            {
+                if (definition.Acp is not { Adapter: { } adapter }
+                    || !string.Equals(definition.Acp.Mode, "adapter", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                foreach (var executable in adapter.Executables)
+                {
+                    if (!string.IsNullOrWhiteSpace(executable))
+                    {
+                        _catalogAdapters.TryAdd(executable, (definition.Id, adapter));
+                    }
+                }
+            }
+        }
+
+        public IReadOnlyList<string> FindAll(string name, string? pathOverride = null)
+        {
+            if (string.IsNullOrWhiteSpace(name) || !_catalogAdapters.TryGetValue(name, out var entry))
+            {
+                return [];
+            }
+            // If a test explicitly seeded a cached adapter executable in AcpAdapterInstaller, let FindCachedExecutable win.
+            if (_installer.FindCachedExecutable(entry.AgentId, entry.Adapter) is not null)
+            {
+                return [];
+            }
+            var fileName = OperatingSystem.IsWindows() && !name.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) && !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? $"{name}.cmd"
+                : name;
+            return [Path.Combine(_adapterDir, fileName)];
         }
     }
 }

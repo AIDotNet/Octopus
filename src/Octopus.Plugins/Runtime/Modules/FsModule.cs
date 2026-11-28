@@ -417,28 +417,25 @@ public sealed class FsModule : IPluginApiModule
         }
         var scopes = new List<FileScope>();
         var permissions = grants.Manifest.Permissions;
-        if (permissions.FsProject is { } fsProject && grants.Has("fs.project") && project is not null)
+        if (permissions.FsProject is { } fsProject && project is not null && grants.TryGetProjectScope(fsProject, out var projectAccess))
         {
-            var access = grants.Level("fs.project") == "readwrite" ? fsProject.Access : FileAccessKind.Read;
-            scopes.Add(new FileScope(FileScopeKind.Project, project, access) { Include = fsProject.Include, Exclude = fsProject.Exclude });
+            scopes.Add(new FileScope(FileScopeKind.Project, project, projectAccess) { Include = fsProject.Include, Exclude = fsProject.Exclude });
         }
-        if (grants.Has("fs.external"))
+        foreach (var external in permissions.FsExternal)
         {
-            foreach (var external in permissions.FsExternal)
+            if (!grants.IsExternalGranted(external)) continue;
+            try
             {
-                try
-                {
-                    scopes.Add(FileScope.FromPattern(FileScopeKind.External, external.Path, external.Access, _home));
-                }
-                catch (ArgumentException e)
-                {
-                    plugin.Write(PluginLogLevel.Warn, $"fs.external \"{external.Path}\": {e.Message}");
-                }
+                scopes.Add(FileScope.FromPattern(FileScopeKind.External, external.Path, external.Access, _home));
+            }
+            catch (ArgumentException e)
+            {
+                plugin.Write(PluginLogLevel.Warn, $"fs.external \"{external.Path}\": {e.Message}");
             }
         }
         foreach (var request in permissions.FsAgentData)
         {
-            if (!grants.Has($"fs.agentData.{request.Agent}")) continue;
+            if (!grants.IsAgentDataGranted(request)) continue;
             foreach (var (directory, key) in AgentDirectories(request.Agent))
             {
                 scopes.Add(new FileScope(FileScopeKind.AgentData, directory, request.Access) { Include = request.Include, Agent = request.Agent, Account = key });

@@ -20,6 +20,13 @@ internal static class McpStdioBridge
     public static bool IsMcpInvocation(IReadOnlyList<string> args) =>
         args.Count > 0 && string.Equals(args[0], "--mcp", StringComparison.Ordinal);
 
+    internal static SocketsHttpHandler CreateDefaultHandler() =>
+        new()
+        {
+            UseProxy = false,
+            AllowAutoRedirect = false,
+        };
+
     public static async Task<int> RunAsync(
         IReadOnlyList<string> args,
         IReadOnlyDictionary<string, string> environment,
@@ -28,17 +35,25 @@ internal static class McpStdioBridge
         HttpMessageHandler? handler = null,
         CancellationToken cancellationToken = default)
     {
-        var url = ResolveArgOrEnv(args, "--url", environment, UrlVariable);
-        var token = ResolveArgOrEnv(args, "--token", environment, TokenVariable);
+        if (HasDisallowedTokenArgument(args))
+        {
+            return 1;
+        }
 
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var endpoint)
-            || (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
+        var url = ResolveArgOrEnv(args, "--url", environment, UrlVariable);
+        var token = environment.TryGetValue(TokenVariable, out var envToken) ? envToken : null;
+
+        if (string.IsNullOrWhiteSpace(url)
+            || string.IsNullOrWhiteSpace(token)
+            || !Uri.TryCreate(url, UriKind.Absolute, out var endpoint)
+            || (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps)
+            || !endpoint.IsLoopback)
         {
             return 1;
         }
 
         using var http = handler is null
-            ? new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = RequestTimeout }
+            ? new HttpClient(CreateDefaultHandler()) { Timeout = RequestTimeout }
             : new HttpClient(handler, disposeHandler: false) { Timeout = RequestTimeout };
 
         using var reader = new StreamReader(stdin, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 16 * 1024, leaveOpen: true);
@@ -218,6 +233,19 @@ internal static class McpStdioBridge
         {
             return text.Replace("\r", "", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
         }
+    }
+
+    private static bool HasDisallowedTokenArgument(IReadOnlyList<string> args)
+    {
+        for (var i = 1; i < args.Count; i++)
+        {
+            if (string.Equals(args[i], "--token", StringComparison.OrdinalIgnoreCase)
+                || args[i].StartsWith("--token=", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static string? ResolveArgOrEnv(

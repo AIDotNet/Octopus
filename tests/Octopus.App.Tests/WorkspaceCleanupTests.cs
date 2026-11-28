@@ -55,7 +55,10 @@ public class WorkspaceCleanupTests
         public Control GetOrCreateDiff(Octopus.App.Files.DiffTabRequest request) => new Border();
         public ITabContent? Find(string itemId) => Tabs.GetValueOrDefault(itemId);
         public void Detach(string itemId) { }
-        public Task ReleaseAsync(string itemId) { Tabs.Remove(itemId); return Task.CompletedTask; }
+        public Func<Task>? CaptureForRelease(string itemId) =>
+            Tabs.Remove(itemId, out var tab) ? tab.CloseAsync : null;
+        public Task WaitForReleaseAsync(string itemId) => Task.CompletedTask;
+        public Task ReleaseAsync(string itemId) => CaptureForRelease(itemId)?.Invoke() ?? Task.CompletedTask;
         public Task ReleaseAllAsync() { Tabs.Clear(); return Task.CompletedTask; }
         public Task<bool> AnyRunningChildAsync() => Task.FromResult(false);
         public Task<bool> AnyUnsavedChangesAsync() => Task.FromResult(false);

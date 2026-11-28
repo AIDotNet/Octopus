@@ -291,7 +291,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
 
     internal async Task OpenExternalUrlAsync(string? url)
     {
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
+        if (!MarketplaceEndpointPolicy.TryValidateExternalUrl(url, out var uri) || uri is null) return;
         if (_window.Window is { } owner)
         {
             await owner.Launcher.LaunchUriAsync(uri);
@@ -380,6 +380,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
             Variant = ButtonVariant.Primary,
             Size = ControlSize.Small,
             IsVisible = row.ShowActionButton,
+            IsEnabled = row.CanInstall && !row.IsBusy,
             IsLoading = row.IsBusy,
         };
         var installedBadge = new TKCode.Arc.Badge
@@ -417,6 +418,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
             {
                 installBtn.Content = row.ActionLabel;
                 installBtn.IsVisible = row.ShowActionButton;
+                installBtn.IsEnabled = row.CanInstall && !row.IsBusy;
                 installBtn.IsLoading = row.IsBusy;
                 installedBadge.IsVisible = !row.ShowActionButton;
             });
@@ -449,7 +451,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
                 row.UpdateInstalledState(row.Entry.Latest.Version);
             }
         }
-        catch (Exception e) when (e is HttpRequestException or IOException or InvalidDataException or PluginPackageException or UnauthorizedAccessException)
+        catch (Exception e) when (e is HttpRequestException or IOException or InvalidDataException or InvalidOperationException or PluginPackageException or UnauthorizedAccessException)
         {
             Say(PluginText.Get($"从市场安装失败：{e.Message}", $"Marketplace install failed: {e.Message}"), AlertTone.Danger);
         }
@@ -725,16 +727,7 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
     internal void SetPermission(PluginRowViewModel row, PermissionRequest request, bool granted) => _state.Update(d =>
     {
         var record = d.Find(row.Id) ?? (d.Plugins[row.Id] = new PluginRecord { Enabled = row.IsEnabled, Source = row.Package.Source, Version = row.Package.Manifest?.Version });
-        if (granted)
-        {
-            record.Denied.Remove(request.Key);
-            record.Grants[request.Key] = request.Details.FirstOrDefault() ?? "granted";
-        }
-        else
-        {
-            record.Grants.Remove(request.Key);
-            if (!record.Denied.Contains(request.Key)) record.Denied.Add(request.Key);
-        }
+        PluginGrants.SetGrant(record, row.Package.Manifest, request, granted, row.Package.Source);
     });
 
     internal void SetIncludeSensitive(PluginRowViewModel row, bool include) => _state.Update(d =>
@@ -821,21 +814,15 @@ public sealed partial class PluginsSettingsViewModel : ObservableObject, IDispos
             Say(PluginText.Get("插件包无效：", "The package is not valid: ") + string.Join("; ", staged.Result.Errors.Select(i => i.ToString())), AlertTone.Danger);
             return false;
         }
-        var required = manifest.Permissions.Requests.Where(r => !r.Optional).ToList();
-        var lines = required.Count == 0
-            ? PluginText.Get("它不需要任何权限。", "It needs no permissions.")
-            : PluginText.Get("它需要：\n", "It needs:\n") + string.Join("\n", required.Select(r => $"• {PermissionText.Describe(r)}{(r.Risk == PermissionRisk.High ? PluginText.Get("（高风险）", " (high risk)") : "")}"));
         var verb = staged.IsUpgrade ? PluginText.Get("升级", "Upgrade") : PluginText.Get("安装", "Install");
-        var accepted = await Dialog.ConfirmAsync(owner,
-            $"{verb} {manifest.Name} {manifest.Version}？",
-            $"{manifest.Description}\n\n{lines}\n\n{PluginText.Get("只安装你信任的来源的插件。", "Only install plugins from sources you trust.")}",
-            verb, PluginText.Get("取消", "Cancel"), required.Any(r => r.Risk == PermissionRisk.High));
+        var consent = PluginGrants.PlanInstall(manifest, _state.Current.Find(manifest.Id), staged.IsUpgrade, staged.InstalledManifest);
+        var accepted = await PermissionText.ConfirmInstallAsync(owner, consent, staged.IsUpgrade);
         if (!accepted)
         {
             _installer.Discard(staged);
             return false;
         }
-        await PluginDeepLinkInstaller.CommitStagedInstallAsync(_manager, _installer, _state, staged);
+        await PluginDeepLinkInstaller.CommitStagedInstallAsync(_manager, _installer, _state, staged, consent);
         Say(PluginText.Get($"已{verb} {manifest.Name}。", $"{manifest.Name}: {verb.ToLowerInvariant()} done."));
         return true;
     }
@@ -967,7 +954,7 @@ public sealed partial class PluginRowViewModel : ObservableObject
             if (IsDevelopment && !ShowState) (State, StateTone, ShowState) = (PluginText.Get("开发", "Development"), BadgeTone.Info, true);
             LastError = host?.State is PluginHostState.Running ? null : host?.LastError;
             // From the saved state, not the running host: a disabled plugin shows its grants too.
-            var grants = Package.Manifest is { } manifest ? new PluginGrants(manifest, record, Package.Source == PluginSource.Builtin) : null;
+            var grants = Package.Manifest is { } manifest ? new PluginGrants(manifest, record, Package.Source == PluginSource.Builtin, Package.Source) : null;
             foreach (var permission in Permissions) permission.Refresh(grants);
             if (IsLogVisible) RefreshLog();
         }
@@ -1083,11 +1070,16 @@ public sealed partial class PermissionRowViewModel : ObservableObject
     public string Key => _request.Key;
 
     [ObservableProperty] public partial bool IsGranted { get; set; }
+    [ObservableProperty] public partial bool CanToggle { get; private set; } = true;
 
     internal void Refresh(PluginGrants? grants)
     {
         _refreshing = true;
-        try { IsGranted = grants?.Has(_request.Key) ?? false; }
+        try
+        {
+            IsGranted = grants?.IsGranted(_request) ?? false;
+            CanToggle = !(grants?.IsImpliedByAnotherGrant(_request) ?? false);
+        }
         finally { _refreshing = false; }
     }
 

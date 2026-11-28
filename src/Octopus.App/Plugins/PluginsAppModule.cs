@@ -181,6 +181,64 @@ public sealed class AppPluginConsent(IWindowAccessor window) : IPluginConsent
 /// <summary>Plain-language names of permissions for consent dialogs and the plugin settings page.</summary>
 internal static class PermissionText
 {
+    public static Task<bool> ConfirmInstallAsync(
+        Avalonia.Controls.TopLevel owner,
+        PluginManifest manifest,
+        bool isUpgrade,
+        PluginRecord? existingRecord = null,
+        PluginManifest? previousManifest = null) =>
+        ConfirmInstallAsync(
+            owner,
+            PluginGrants.PlanInstall(manifest, existingRecord, isUpgrade, previousManifest),
+            isUpgrade);
+
+    public static Task<bool> ConfirmInstallAsync(
+        Avalonia.Controls.TopLevel owner,
+        PluginInstallConsent consent,
+        bool isUpgrade)
+    {
+        var manifest = consent.Manifest;
+        var required = consent.Required;
+        var preservedOptional = consent.PreservedOptional;
+        var ungrantedOptional = consent.UngrantedOptional;
+
+        static string FormatLines(IEnumerable<PermissionRequest> items) =>
+            string.Join("\n", items.Select(r => $"• {Describe(r)}{(r.Risk == PermissionRisk.High ? PluginText.Get("（高风险）", " (high risk)") : "")}"));
+
+        var sections = new List<string>();
+        if (required.Count > 0)
+        {
+            sections.Add(PluginText.Get("它需要：\n", "It needs:\n") + FormatLines(required));
+        }
+        else if (preservedOptional.Count == 0 && ungrantedOptional.Count == 0)
+        {
+            sections.Add(PluginText.Get("它不需要任何权限。", "It needs no permissions."));
+        }
+        else
+        {
+            sections.Add(PluginText.Get("它不需要必选权限。", "It needs no required permissions."));
+        }
+
+        if (preservedOptional.Count > 0)
+        {
+            sections.Add(PluginText.Get("将保留之前授予的可选权限：\n", "Previously granted optional permissions kept:\n") + FormatLines(preservedOptional));
+        }
+        if (ungrantedOptional.Count > 0)
+        {
+            sections.Add(PluginText.Get("可选权限（暂不授予，仅在使用时请求）：\n", "Optional permissions (not granted yet; asked only when used):\n") + FormatLines(ungrantedOptional));
+        }
+
+        var lines = string.Join("\n\n", sections);
+        var verb = isUpgrade ? PluginText.Get("升级", "Upgrade") : PluginText.Get("安装", "Install");
+        return Dialog.ConfirmAsync(
+            owner,
+            $"{verb} {manifest.Name} {manifest.Version}？",
+            $"{manifest.Description}\n\n{lines}\n\n{PluginText.Get("只安装你信任的来源的插件。", "Only install plugins from sources you trust.")}",
+            verb,
+            PluginText.Get("取消", "Cancel"),
+            required.Any(r => r.Risk == PermissionRisk.High) || preservedOptional.Any(r => r.Risk == PermissionRisk.High));
+    }
+
     public static string Describe(PermissionRequest request)
     {
         var key = request.Key;
@@ -189,7 +247,40 @@ internal static class PermissionText
         if (key.StartsWith("fs.agentData.", StringComparison.Ordinal))
         {
             var agent = AgentName(key["fs.agentData.".Length..]);
-            return PluginText.Get($"读取 {agent} 的本地记录", $"Local records of {agent}");
+            var baseText = details.FirstOrDefault() == "readwrite"
+                ? PluginText.Get($"读写 {agent} 的本地记录", $"Read and change local records of {agent}")
+                : PluginText.Get($"读取 {agent} 的本地记录", $"Read local records of {agent}");
+            var includes = details.Skip(1).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+            return includes.Count > 0
+                ? PluginText.Get($"{baseText}（{List(includes)}）", $"{baseText} ({List(includes)})")
+                : baseText;
+        }
+        if (key == "fs.project")
+        {
+            var baseText = details.FirstOrDefault() == "readwrite"
+                ? PluginText.Get("读写当前项目的文件", "Read and change files of the open project")
+                : PluginText.Get("读取当前项目的文件", "Read files of the open project");
+            var includes = details.Skip(1).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+            var excludes = (request.Exclude ?? []).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+            if (includes.Count > 0 && excludes.Count > 0)
+            {
+                return PluginText.Get(
+                    $"{baseText}（仅限：{List(includes)}；排除：{List(excludes)}）",
+                    $"{baseText} (only: {List(includes)}; excluding: {List(excludes)})");
+            }
+            if (includes.Count > 0)
+            {
+                return PluginText.Get(
+                    $"{baseText}（仅限：{List(includes)}）",
+                    $"{baseText} (only: {List(includes)})");
+            }
+            if (excludes.Count > 0)
+            {
+                return PluginText.Get(
+                    $"{baseText}（排除：{List(excludes)}）",
+                    $"{baseText} (excluding: {List(excludes)})");
+            }
+            return baseText;
         }
         if (key.StartsWith("agents.signals.", StringComparison.Ordinal) && details.Count == 2)
         {
@@ -201,9 +292,8 @@ internal static class PermissionText
         }
         return key switch
         {
-            "fs.project" when details.FirstOrDefault() == "readwrite" => PluginText.Get("读写当前项目的文件", "Read and change files of the open project"),
-            "fs.project" => PluginText.Get("读取当前项目的文件", "Read files of the open project"),
-            "fs.external" => PluginText.Get($"访问 {details.FirstOrDefault()}", $"Access {details.FirstOrDefault()}"),
+            "fs.external" when details.ElementAtOrDefault(1) == "readwrite" => PluginText.Get($"读写 {details.FirstOrDefault()}", $"Read and change {details.FirstOrDefault()}"),
+            "fs.external" => PluginText.Get($"读取 {details.FirstOrDefault()}", $"Read {details.FirstOrDefault()}"),
             "git" => PluginText.Get("读取 Git 状态与历史", "Read Git status and history"),
             "projects" => PluginText.Get("查看项目和标签列表", "See projects and tabs"),
             "devices" => PluginText.Get("查看本机、远程与 SSH 设备列表", "See local, remote and SSH devices"),

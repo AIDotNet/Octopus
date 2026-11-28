@@ -7,7 +7,10 @@ public sealed class ReplyThreadTool : ICollabTool
 {
     public string Name => "reply_thread";
 
-    public string Description => "Reply explicitly to an active cross-session collaboration thread and notify the other participant(s).";
+    public string Description =>
+        "Reply explicitly to an active cross-session collaboration thread. Records the reply ('recorded': true) and reports wakeup delivery separately in 'delivery' "
+        + "('delivered', 'await_events_signaled', 'await_events_consumed', 'wakeup_disabled', 'no_recipient', or 'failed'). 'delivered_to' is included only when a wakeup prompt is accepted; "
+        + "otherwise 'recipient_session_id' (when applicable), 'delivery_error' (on failure), and 'note' report status (do not resend a duplicate).";
 
     public JsonObject InputSchema => new()
     {

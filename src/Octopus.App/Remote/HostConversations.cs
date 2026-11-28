@@ -53,7 +53,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
     }
 
     public async Task PromptAsync(Project project, ProjectItem item, string text, IReadOnlyList<string> attachments,
-        IReadOnlyList<AcpMentionMessage>? mentions = null, bool immediate = false)
+        IReadOnlyList<AcpMentionMessage>? mentions = null, bool immediate = false, string? collabDeliveryId = null)
     {
         var model = ModelOf(project, item);
         // Only sessions and agents, and only tokens the text really contains: the rest of the prompt path trusts them.
@@ -62,7 +62,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
                 && m.Text.StartsWith('@') && text.Contains(m.Text, StringComparison.Ordinal))
             .Select(m => new MentionToken(m.Kind, m.TargetId, m.Text, m.AgentId))
             .ToList();
-        if (!await model.SendExternalPromptAsync(text, attachments, tokens, immediate))
+        if (!await model.SendExternalPromptAsync(text, attachments, tokens, immediate, collabDeliveryId))
         {
             throw new RemoteException(RemoteMethods.NotAllowed, "The agent is not connected on the host yet.");
         }
@@ -87,9 +87,26 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
         return result;
     }
 
-    public Task CancelAsync(Project project, ProjectItem item)
+    public Task CancelAsync(Project project, ProjectItem item) =>
+        CancelAsync(project, item, collabThreadId: null, collabTaskId: null, collabDeliveryId: null);
+
+    public Task CancelAsync(
+        Project project,
+        ProjectItem item,
+        string? collabThreadId,
+        string? collabTaskId,
+        string? collabDeliveryId)
     {
         var model = ModelOf(project, item);
+        var hasIdentity = !string.IsNullOrWhiteSpace(collabThreadId)
+            || !string.IsNullOrWhiteSpace(collabTaskId)
+            || !string.IsNullOrWhiteSpace(collabDeliveryId);
+        if (hasIdentity)
+        {
+            // Collaboration cancellation checks the host's currently active turn identity before stopping it.
+            _ = ((Collab.ICollabSessionBridge)model).CancelActiveTurnAsync(collabThreadId, collabTaskId, collabDeliveryId);
+            return Task.CompletedTask;
+        }
         // Like the stop button: the turn settles in its own time; the device sees it in the updates.
         _ = model.CancelTurnAsync();
         return Task.CompletedTask;
@@ -622,6 +639,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             Thought = entry.Thought,
             IsStreaming = entry.IsStreaming,
             ErrorText = entry.ErrorText,
+            StopReason = entry.StopReason,
             Duration = entry.Duration,
             Attachments = entry.Attachments,
             Tools = entry.Tools,
@@ -629,6 +647,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
             Plan = entry.Plan,
             Permission = entry.Permission,
             Question = entry.Question,
+            Collab = entry.Collab,
         };
 
         // An update that would not fit one message goes as several, each with its own number.
@@ -797,6 +816,7 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
                 Kind = AcpEntryKinds.User,
                 Text = Tail(user.Text, AcpLimits.TextChars),
                 Attachments = user.Attachments.Count > 0 ? [.. user.Attachments.Select(a => a.Label)] : null,
+                Collab = user.CollabCorrelation,
             },
             AssistantTurnItem turn => new AcpEntryMessage
             {
@@ -805,10 +825,12 @@ internal sealed class HostConversations(ITabContentRegistry tabs)
                 Thought = Tail(Blank(turn.ThoughtText), AcpLimits.TextChars),
                 IsStreaming = turn.IsStreaming,
                 ErrorText = Blank(turn.ErrorText),
+                StopReason = Blank(turn.StopReason),
                 Duration = Blank(turn.DurationText),
                 Tools = turn.ToolCalls.Count > 0 ? [.. turn.ToolCalls.Select(ToTool)] : null,
                 Notes = ExtractWorkNotes(turn),
                 Plan = turn.PlanEntries.Count > 0 ? [.. turn.PlanEntries.Select(p => new AcpPlanEntryMessage { Content = p.Content, Status = p.Status })] : null,
+                Collab = turn.CollabCorrelation,
             },
             PermissionCardItem card => new AcpEntryMessage
             {

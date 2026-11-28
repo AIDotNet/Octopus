@@ -49,10 +49,10 @@ public static class PluginInstallLink
         string? serverUrl = null;
         if (query.TryGetValue("server", out var rawServer) && !string.IsNullOrWhiteSpace(rawServer))
         {
-            if (!Uri.TryCreate(rawServer.Trim(), UriKind.Absolute, out var serverUri)
-                || (serverUri.Scheme != Uri.UriSchemeHttp && serverUri.Scheme != Uri.UriSchemeHttps))
+            if (!MarketplaceEndpointPolicy.TryValidateServerUrl(rawServer, out var serverUri, out var serverError, allowLocalhostHttp: true)
+                || serverUri is null)
             {
-                error = "Invalid server URL.";
+                error = serverError ?? "Invalid server URL.";
                 return false;
             }
             serverUrl = serverUri.GetLeftPart(UriPartial.Authority).TrimEnd('/');

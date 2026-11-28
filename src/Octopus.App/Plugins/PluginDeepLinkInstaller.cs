@@ -111,7 +111,9 @@ public sealed class PluginDeepLinkInstaller(
         var detailView = new MarketplacePluginDetailView { DataContext = row };
         var statusAlert = new Alert
         {
-            IsVisible = false,
+            Tone = AlertTone.Danger,
+            Title = PluginStrings.MarketDetailMissingShaNote,
+            IsVisible = !row.CanInstall,
         };
         var body = new StackPanel
         {
@@ -140,6 +142,7 @@ public sealed class PluginDeepLinkInstaller(
             Content = installLabel,
             Variant = ButtonVariant.Primary,
             Size = ControlSize.Small,
+            IsEnabled = row.CanInstall,
         };
         var installedBadge = new TKCode.Arc.Badge
         {
@@ -203,7 +206,19 @@ public sealed class PluginDeepLinkInstaller(
                         $"Package id ({manifest.Id}) does not match requested plugin ({detail.Plugin.Id})."));
                 }
 
-                await CommitStagedInstallAsync(manager, installer, state, staged);
+                var consent = PluginGrants.PlanInstall(manifest, state.Current.Find(manifest.Id), staged.IsUpgrade, staged.InstalledManifest);
+                if (staged.IsUpgrade || manifest.Permissions.Requests.Count > 0)
+                {
+                    var accepted = await PermissionText.ConfirmInstallAsync(owner, consent, staged.IsUpgrade);
+                    if (!accepted)
+                    {
+                        installer.Discard(staged);
+                        installBtn.IsEnabled = row.CanInstall;
+                        return;
+                    }
+                }
+
+                await CommitStagedInstallAsync(manager, installer, state, staged, consent);
                 row.UpdateInstalledState(manifest.Version);
                 installBtn.IsVisible = false;
                 installedBadge.IsVisible = true;
@@ -214,7 +229,7 @@ public sealed class PluginDeepLinkInstaller(
                     $"Installed and enabled {row.Name} v{manifest.Version}");
                 statusAlert.IsVisible = true;
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or InvalidDataException or PluginPackageException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or InvalidDataException or InvalidOperationException or PluginPackageException or UnauthorizedAccessException)
             {
                 statusAlert.Tone = AlertTone.Danger;
                 statusAlert.Title = PluginText.Get($"安装失败：{ex.Message}", $"Install failed: {ex.Message}");
@@ -239,10 +254,15 @@ public sealed class PluginDeepLinkInstaller(
         PluginManager manager,
         PluginInstaller installer,
         IPluginStateStore state,
-        StagedPlugin staged)
+        StagedPlugin staged,
+        PluginInstallConsent? consent = null)
     {
         var manifest = staged.Manifest ?? throw new InvalidOperationException("Staged package has no manifest.");
-        var required = manifest.Permissions.Requests.Where(r => !r.Optional).ToList();
+        var resolvedConsent = consent ?? PluginGrants.PlanInstall(
+            manifest,
+            state.Current.Find(manifest.Id),
+            staged.IsUpgrade,
+            staged.InstalledManifest);
         await manager.SetEnabledAsync(manifest.Id, false);
         await Task.Run(() => installer.Install(staged));
         state.Update(d =>
@@ -250,10 +270,7 @@ public sealed class PluginDeepLinkInstaller(
             var record = d.Find(manifest.Id) ?? (d.Plugins[manifest.Id] = new PluginRecord { InstalledAt = DateTimeOffset.Now });
             record.Source = PluginSource.File;
             record.Version = manifest.Version;
-            foreach (var request in required)
-            {
-                record.Grants[request.Key] = request.Details.FirstOrDefault() ?? "granted";
-            }
+            PluginGrants.ApplyInstallGrants(record, resolvedConsent);
         });
         await manager.SetEnabledAsync(manifest.Id, true);
         return manifest;
@@ -277,7 +294,7 @@ public sealed class PluginDeepLinkInstaller(
 
     private static async Task OpenExternalUrlAsync(TopLevel owner, string? url)
     {
-        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var target)) return;
+        if (!MarketplaceEndpointPolicy.TryValidateExternalUrl(url, out var target) || target is null) return;
         await owner.Launcher.LaunchUriAsync(target);
     }
 }

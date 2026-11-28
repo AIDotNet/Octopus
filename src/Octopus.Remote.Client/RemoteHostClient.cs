@@ -157,6 +157,10 @@ public sealed class RemoteHostClient : IAsyncDisposable
     public bool SupportsAcpGui =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityAcpGui);
 
+    /// <summary>Both sides support host-checked collaboration turn cancellation (<see cref="RemoteMethods.CapabilityAcpCollabCancel"/>).</summary>
+    public bool SupportsAcpCollabCancel =>
+        RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityAcpCollabCancel);
+
     /// <summary>The host supports branch workspaces (<see cref="RemoteMethods.WorkspaceOptions"/> and <see cref="RemoteMethods.WorkspaceCreate"/>).</summary>
     public bool SupportsWorkspaces =>
         RemoteHello.Shared(OwnHello, HostHello).Contains(RemoteMethods.CapabilityWorkspaces);
@@ -367,6 +371,11 @@ public sealed class RemoteHostClient : IAsyncDisposable
     /// <summary>Sends a prompt with optional inline @mentions and immediate-interrupt delivery.</summary>
     public Task SendPromptAsync(string itemId, string text, IReadOnlyList<string>? attachments, IReadOnlyList<AcpMentionMessage>? mentions,
         bool immediate, CancellationToken cancellationToken = default) =>
+        SendPromptAsync(itemId, text, attachments, mentions, immediate, collabDeliveryId: null, cancellationToken);
+
+    /// <summary>Sends a prompt with optional inline @mentions, immediate-interrupt delivery, and collaboration delivery identity.</summary>
+    public Task SendPromptAsync(string itemId, string text, IReadOnlyList<string>? attachments, IReadOnlyList<AcpMentionMessage>? mentions,
+        bool immediate, string? collabDeliveryId, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.AcpPrompt, new AcpPromptMessage
         {
             ItemId = itemId,
@@ -374,6 +383,7 @@ public sealed class RemoteHostClient : IAsyncDisposable
             Attachments = attachments is { Count: > 0 } ? [.. attachments] : null,
             Mentions = mentions is { Count: > 0 } ? [.. mentions] : null,
             Immediate = immediate,
+            CollabDeliveryId = string.IsNullOrWhiteSpace(collabDeliveryId) ? null : collabDeliveryId,
         }, RemoteJsonContext.Default.AcpPromptMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
 
     /// <summary>Sessions and agents a prompt of the conversation may @-mention (<see cref="RemoteMethods.CapabilityAcpMentions"/>).</summary>
@@ -382,7 +392,30 @@ public sealed class RemoteHostClient : IAsyncDisposable
             RemoteJsonContext.Default.AcpMentionTargetsRequestMessage, RemoteJsonContext.Default.AcpMentionTargetsMessage, cancellationToken);
 
     public Task CancelTurnAsync(string itemId, CancellationToken cancellationToken = default) =>
-        CallAsync(RemoteMethods.AcpCancel, new AcpRefMessage { ItemId = itemId }, RemoteJsonContext.Default.AcpRefMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+        CallAsync(RemoteMethods.AcpCancel, new AcpCancelMessage { ItemId = itemId }, RemoteJsonContext.Default.AcpCancelMessage, RemoteJsonContext.Default.Nothing, cancellationToken);
+
+    /// <summary>
+    /// Cancels the active turn on <paramref name="itemId"/> only if it still matches the supplied collaboration identity
+    /// on hosts supporting <see cref="RemoteMethods.CapabilityAcpCollabCancel"/>.
+    /// </summary>
+    public Task CancelTurnAsync(
+        string itemId,
+        string? collabThreadId,
+        string? collabTaskId,
+        string? collabDeliveryId,
+        CancellationToken cancellationToken = default) =>
+        CallAsync(
+            RemoteMethods.AcpCancel,
+            new AcpCancelMessage
+            {
+                ItemId = itemId,
+                CollabThreadId = string.IsNullOrWhiteSpace(collabThreadId) ? null : collabThreadId,
+                CollabTaskId = string.IsNullOrWhiteSpace(collabTaskId) ? null : collabTaskId,
+                CollabDeliveryId = string.IsNullOrWhiteSpace(collabDeliveryId) ? null : collabDeliveryId,
+            },
+            RemoteJsonContext.Default.AcpCancelMessage,
+            RemoteJsonContext.Default.Nothing,
+            cancellationToken);
 
     public Task RespondAsync(AcpRespondMessage answer, CancellationToken cancellationToken = default) =>
         CallAsync(RemoteMethods.AcpRespond, answer, RemoteJsonContext.Default.AcpRespondMessage, RemoteJsonContext.Default.Nothing, cancellationToken);

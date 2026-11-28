@@ -17,6 +17,15 @@ public class PluginStateStoreTests
             Source = PluginSource.File,
             InstalledAt = new DateTimeOffset(2026, 11, 11, 12, 0, 0, TimeSpan.Zero),
             Grants = { ["fs.project"] = "read", ["agents.signals.claude.statusline"] = "granted" },
+            ScopedGrants =
+            {
+                new PluginPermissionGrant("fs.project", "read", ["src/**"], ["**/secrets/**"]),
+                new PluginPermissionGrant("fs.external", "read", ["~/docs/**"]),
+            },
+            ScopedDenied =
+            {
+                new PluginPermissionGrant("fs.external", "readwrite", ["~/docs/**"]),
+            },
             PathGrants = { new PluginPathGrant("agentData", "/Users/张三/.claude", FileAccessKind.Read, "claude") },
             Denied = { "net" },
         });
@@ -28,6 +37,15 @@ public class PluginStateStoreTests
         Assert.True(record.Enabled);
         Assert.Equal(PluginSource.File, record.Source);
         Assert.Equal("read", record.Grants["fs.project"]);
+        Assert.Equal(2, record.ScopedGrants.Count);
+        Assert.Equal("fs.project", record.ScopedGrants[0].Key);
+        Assert.Equal(["src/**"], record.ScopedGrants[0].Details);
+        Assert.Equal(["**/secrets/**"], record.ScopedGrants[0].Exclude);
+        Assert.Equal(["~/docs/**"], record.ScopedGrants[1].Details);
+        var denied = Assert.Single(record.ScopedDenied);
+        Assert.Equal("fs.external", denied.Key);
+        Assert.Equal("readwrite", denied.Access);
+        Assert.Equal(["~/docs/**"], denied.Details);
         Assert.Equal(new PluginPathGrant("agentData", "/Users/张三/.claude", FileAccessKind.Read, "claude"), Assert.Single(record.PathGrants));
         Assert.Equal(["net"], record.Denied);
         var text = File.ReadAllText(Path.Combine(paths.DataDirectory, "plugins.json"));

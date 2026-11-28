@@ -60,10 +60,11 @@ public sealed class TerminalInputRouter(
         }
 
         var modes = session.CachedInputModes;
+        var kind = ClassifyKey(input, out var charCount);
         if (input.Action == KeyAction.Press && Translate(input, modes) is { } text)
         {
             session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
-            session.Send(text);
+            session.TrySendManual(text, kind, charCount);
             e.Handled = true;
             return;
         }
@@ -76,7 +77,7 @@ public sealed class TerminalInputRouter(
         var n = _encoder.EncodeKey(input, buffer);
         if (n > 0)
         {
-            session.Send(buffer[..n]);
+            session.TrySendManual(buffer[..n], kind, charCount);
             e.Handled = true;
         }
     }
@@ -97,16 +98,17 @@ public sealed class TerminalInputRouter(
     {
         var input = WithCodepoint(new KeyInput(key, KeyAction.Press, mods));
         var modes = session.CachedInputModes;
+        var kind = ClassifyKey(input, out var charCount);
         session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
         if (Translate(input, modes) is { } text)
         {
-            session.Send(text);
+            session.TrySendManual(text, kind, charCount);
             return;
         }
         _encoder.Apply(modes);
         Span<byte> buffer = stackalloc byte[128];
         var n = _encoder.EncodeKey(input, buffer);
-        if (n > 0) session.Send(buffer[..n]);
+        if (n > 0) session.TrySendManual(buffer[..n], kind, charCount);
     }
 
     /// <summary>
@@ -177,7 +179,14 @@ public sealed class TerminalInputRouter(
             c.ScrollViewport(ViewportScroll.Bottom);
             if (c.HasSelection) c.ClearSelection();
         });
-        session.Send(text);
+        if (TryCountPlainPrintableRunes(text, out var runeCount))
+        {
+            session.TrySendManual(text, ManualInputKind.Printable, runeCount);
+        }
+        else
+        {
+            session.Send(text);
+        }
     }
 
     /// <summary>Focus in/out, reported to programs that asked for it (mode 1004).</summary>
@@ -186,7 +195,7 @@ public sealed class TerminalInputRouter(
         if (!session.CachedInputModes.FocusEvents) return;
         Span<byte> buffer = stackalloc byte[16];
         var n = InputEncoder.EncodeFocus(focused, buffer);
-        if (n > 0) session.Send(buffer[..n]);
+        if (n > 0) session.TrySendManual(buffer[..n], ManualInputKind.NonEditing);
     }
 
     /// <summary>Mouse and wheel.</summary>
@@ -208,7 +217,7 @@ public sealed class TerminalInputRouter(
             _encoder.Apply(modes);
             Span<byte> buffer = stackalloc byte[64];
             var n = _encoder.EncodeMouse(e.Mouse, e.Geometry, anyButtonPressed: _dragging, buffer);
-            if (n > 0) session.Send(buffer[..n]);
+            if (n > 0) session.TrySendManual(buffer[..n], ManualInputKind.NonEditing);
             return;
         }
 
@@ -272,7 +281,7 @@ public sealed class TerminalInputRouter(
             for (var i = 0; i < notches; i++)
             {
                 var n = _encoder.EncodeMouse(mouse, e.Geometry, anyButtonPressed: false, buffer);
-                if (n > 0) session.Send(buffer[..n]);
+                if (n > 0) session.TrySendManual(buffer[..n], ManualInputKind.NonEditing);
             }
             return;
         }
@@ -285,7 +294,7 @@ public sealed class TerminalInputRouter(
             for (var i = 0; i < notches * WheelLinesPerNotch; i++)
             {
                 var n = _encoder.EncodeKey(new KeyInput(key, KeyAction.Press, KeyMods.None), buffer);
-                if (n > 0) session.Send(buffer[..n]);
+                if (n > 0) session.TrySendManual(buffer[..n], ManualInputKind.NonEditing);
             }
             return;
         }
@@ -341,7 +350,7 @@ public sealed class TerminalInputRouter(
         if (outcome == PasteOutcome.Written)
         {
             session.Use(c => c.ScrollViewport(ViewportScroll.Bottom));
-            session.Send(writer.WrittenSpan);
+            SendEncodedPaste(writer.WrittenSpan);
         }
     }
 
@@ -358,8 +367,88 @@ public sealed class TerminalInputRouter(
                 c.ScrollViewport(ViewportScroll.Bottom);
                 if (c.HasSelection) c.ClearSelection();
             });
-            session.Send(writer.WrittenSpan);
+            SendEncodedPaste(writer.WrittenSpan);
         }
+    }
+
+    private void SendEncodedPaste(ReadOnlySpan<byte> encoded)
+    {
+        var bracketed = encoded.Length >= 6 && encoded[..6].SequenceEqual("\x1b[200~"u8);
+        if (bracketed || (encoded.IndexOf((byte)'\r') < 0 && encoded.IndexOf((byte)'\n') < 0))
+        {
+            session.TrySendManual(encoded, ManualInputKind.UnobservableEdit);
+        }
+        else
+        {
+            session.Send(encoded);
+        }
+    }
+
+    private static ManualInputKind ClassifyKey(in KeyInput input, out int charCount)
+    {
+        charCount = 0;
+        if (input.Action == KeyAction.Release || IsModifier(input.Key))
+        {
+            return ManualInputKind.NonEditing;
+        }
+        var mods = input.Mods & Relevant;
+        if (input.Key == TerminalKey.Escape && mods == KeyMods.None)
+        {
+            return ManualInputKind.NonEditing;
+        }
+        if (input.Key == TerminalKey.Enter)
+        {
+            if (mods == KeyMods.None) return ManualInputKind.Submit;
+            if (mods == KeyMods.Shift) return ManualInputKind.UnobservableEdit;
+            return ManualInputKind.CursorOrEdit;
+        }
+        if (input.Key == TerminalKey.Tab && (mods == KeyMods.None || mods == KeyMods.Shift))
+        {
+            return ManualInputKind.UnobservableEdit;
+        }
+        if (input.Key == TerminalKey.J && mods == KeyMods.Ctrl)
+        {
+            return ManualInputKind.UnobservableEdit;
+        }
+        if (input.Key == TerminalKey.Backspace)
+        {
+            if (mods == KeyMods.None) return ManualInputKind.Backspace;
+            if (mods == KeyMods.Super) return ManualInputKind.KillToStart;
+            return ManualInputKind.CursorOrEdit;
+        }
+        if (mods == KeyMods.Ctrl)
+        {
+            if (input.Key == TerminalKey.C) return ManualInputKind.CancelLine;
+            if (input.Key == TerminalKey.U) return ManualInputKind.KillToStart;
+        }
+        if ((mods & (KeyMods.Ctrl | KeyMods.Alt | KeyMods.Super)) == 0 && IsPrintableKey(input))
+        {
+            charCount = 1;
+            return ManualInputKind.Printable;
+        }
+        return ManualInputKind.CursorOrEdit;
+    }
+
+    private static bool IsPrintableKey(in KeyInput input) =>
+        (input.UnshiftedCodepoint >= 0x20 && input.UnshiftedCodepoint != 0x7F)
+        || input.Key is TerminalKey.Space
+            or (>= TerminalKey.A and <= TerminalKey.Z)
+            or (>= TerminalKey.Digit0 and <= TerminalKey.Digit9);
+
+    private static bool TryCountPlainPrintableRunes(string text, out int count)
+    {
+        count = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            var value = rune.Value;
+            if (value < 0x20 || value == 0x7F)
+            {
+                count = 0;
+                return false;
+            }
+            count++;
+        }
+        return count > 0;
     }
 
     public void Dispose() => _encoder.Dispose();

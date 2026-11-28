@@ -46,17 +46,40 @@ internal sealed class RemoteSessionProvider(
         string title,
         string? parentItemId,
         bool fresh,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? initialThreadId = null,
+        string? initialTaskId = null,
+        string? initialDeliveryId = null)
     {
         var session = new RemoteCollabSession(host, hostName, itemId, agentId, title, $"{hostName}:{project.Path}", parentItemId, fresh, coordinator, closed =>
         {
             if (sessions.Unregister(closed)) changed(closed.ItemId);
-        });
-        if (!ReferenceEquals(sessions.Adopt(session), session)) return true; // followed concurrently
+        }, initialThreadId, initialTaskId, initialDeliveryId);
+
+        var inUse = sessions.Adopt(session);
+        if (!ReferenceEquals(inUse, session))
+        {
+            if (inUse is RemoteCollabSession existing)
+            {
+                return fresh
+                    ? existing.TryAttachInitialLaunch(initialThreadId, initialTaskId, initialDeliveryId)
+                    : existing.IsAlive;
+            }
+            return true; // followed concurrently (Adopt disposes loser)
+        }
+
         try
         {
             await session.StartAsync(ct).ConfigureAwait(false);
             return true;
+        }
+        catch (OperationCanceledException)
+        {
+            if (!session.IsActivated)
+            {
+                sessions.Unregister(session);
+            }
+            throw;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Security;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
@@ -84,6 +85,112 @@ public class RelayHttpTests
         {
             RelayHttp.WebSocketCertificateValidationCallback = previous;
         }
+    }
+
+    [Fact]
+    public void Quic_relay_tls_configuration_uses_standard_verification_by_default_without_permissive_override()
+    {
+        var previous = RelayHttp.WebSocketCertificateValidationCallback;
+        try
+        {
+            RelayHttp.WebSocketCertificateValidationCallback = null;
+
+            var ssl = GetQuicRelaySslOptions(new Uri("quic://relay.example.com:8443"));
+            Assert.Equal("relay.example.com", ssl.TargetHost);
+            Assert.NotNull(ssl.ApplicationProtocols);
+            Assert.Contains(RelaySockets.QuicRelayAlpn, ssl.ApplicationProtocols!);
+
+            if (ssl.RemoteCertificateValidationCallback is { } callback)
+            {
+                using var certs = TestCertificateChain.Create("relay.example.com");
+                using var untrustedChain = BuildUntrustedChain(certs.Leaf, certs.Intermediate);
+                Assert.False(callback(new object(), certs.Leaf, untrustedChain, SslPolicyErrors.RemoteCertificateNameMismatch));
+                Assert.False(callback(new object(), certs.Leaf, untrustedChain, SslPolicyErrors.RemoteCertificateChainErrors));
+                Assert.False(callback(new object(), certs.Leaf, untrustedChain, SslPolicyErrors.RemoteCertificateNotAvailable));
+            }
+
+            Assert.Null(ssl.RemoteCertificateValidationCallback);
+        }
+        finally
+        {
+            RelayHttp.WebSocketCertificateValidationCallback = previous;
+        }
+    }
+
+    [Fact]
+    public void Quic_and_websocket_relay_tls_share_configured_custom_roots_trust_policy_and_enforce_hostname_and_chain_checks()
+    {
+        var previous = RelayHttp.WebSocketCertificateValidationCallback;
+        try
+        {
+            using var trusted = TestCertificateChain.Create("relay.example.com");
+            using var untrusted = TestCertificateChain.Create("other.example.com");
+            var roots = RelayHttp.LoadPemCertificates(trusted.Root.ExportCertificatePem());
+            var validator = RelayHttp.CreateCustomRootsValidator(roots);
+            RelayHttp.WebSocketCertificateValidationCallback = validator;
+
+            using var wssSocket = new ClientWebSocket();
+            RelayHttp.ConfigureWebSocket(wssSocket.Options, new Uri("wss://relay.example.com/v1/tunnel/abc"));
+            Assert.Same(validator, wssSocket.Options.RemoteCertificateValidationCallback);
+
+            var quicSsl = GetQuicRelaySslOptions(new Uri("quic://relay.example.com:8443"));
+            Assert.Equal("relay.example.com", quicSsl.TargetHost);
+            Assert.Same(validator, quicSsl.RemoteCertificateValidationCallback);
+
+            var quicValidator = quicSsl.RemoteCertificateValidationCallback!;
+            using var trustedChain = BuildUntrustedChain(trusted.Leaf, trusted.Intermediate);
+            using var untrustedChain = BuildUntrustedChain(untrusted.Leaf, untrusted.Intermediate);
+
+            Assert.True(quicValidator(new object(), trusted.Leaf, trustedChain, SslPolicyErrors.None));
+            Assert.True(quicValidator(new object(), trusted.Leaf, trustedChain, SslPolicyErrors.RemoteCertificateChainErrors));
+            Assert.False(quicValidator(new object(), untrusted.Leaf, untrustedChain, SslPolicyErrors.RemoteCertificateChainErrors));
+            Assert.False(quicValidator(new object(), trusted.Leaf, trustedChain, SslPolicyErrors.RemoteCertificateNameMismatch));
+            Assert.False(quicValidator(
+                new object(),
+                trusted.Leaf,
+                trustedChain,
+                SslPolicyErrors.RemoteCertificateNameMismatch | SslPolicyErrors.RemoteCertificateChainErrors));
+            Assert.False(quicValidator(new object(), trusted.Leaf, trustedChain, SslPolicyErrors.RemoteCertificateNotAvailable));
+            Assert.False(quicValidator(new object(), certificate: null, trustedChain, SslPolicyErrors.RemoteCertificateChainErrors));
+        }
+        finally
+        {
+            RelayHttp.WebSocketCertificateValidationCallback = previous;
+        }
+    }
+
+    [Fact]
+    public void Clearing_custom_trust_callback_restores_standard_tls_verification_for_both_websocket_and_quic()
+    {
+        var previous = RelayHttp.WebSocketCertificateValidationCallback;
+        try
+        {
+            RelayHttp.WebSocketCertificateValidationCallback = static (_, _, _, errors) => errors == SslPolicyErrors.None;
+            RelayHttp.WebSocketCertificateValidationCallback = null;
+
+            using var wssSocket = new ClientWebSocket();
+            RelayHttp.ConfigureWebSocket(wssSocket.Options, new Uri("wss://relay.example.com/v1/host"));
+            Assert.Null(wssSocket.Options.RemoteCertificateValidationCallback);
+
+            var quicSsl = GetQuicRelaySslOptions(new Uri("quic://relay.example.com:8443"));
+            Assert.Null(quicSsl.RemoteCertificateValidationCallback);
+        }
+        finally
+        {
+            RelayHttp.WebSocketCertificateValidationCallback = previous;
+        }
+    }
+
+    private static SslClientAuthenticationOptions GetQuicRelaySslOptions(Uri quicEndpoint)
+    {
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+        {
+            var options = RelaySockets.CreateQuicTunnelOptions(quicEndpoint);
+            Assert.Equal(new DnsEndPoint(quicEndpoint.Host, quicEndpoint.Port), options.RemoteEndPoint);
+            return options.ClientAuthenticationOptions;
+        }
+
+        throw new PlatformNotSupportedException("QUIC relay options require Linux, Windows, or macOS.");
     }
 
     private static X509Chain BuildUntrustedChain(X509Certificate2 leaf, X509Certificate2 intermediate)

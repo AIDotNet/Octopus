@@ -135,6 +135,8 @@ public static class RemoteMethods
     public const string CapabilityAcpGui = "acp.gui";
     /// <summary>The host answers <see cref="AcpMentionTargets"/> and reads <c>AcpPromptMessage.Mentions</c>.</summary>
     public const string CapabilityAcpMentions = "acp.mentions";
+    /// <summary>The host honors optional collaboration identity fields on <see cref="AcpCancel"/> and skips cancellation when another turn runs.</summary>
+    public const string CapabilityAcpCollabCancel = "acp.collabCancel";
     /// <summary>The host exposes branch workspaces (<see cref="WorkspaceOptions"/>, <see cref="WorkspaceCreate"/>, and workspace ids on items).</summary>
     public const string CapabilityWorkspaces = "workspaces";
     /// <summary>The host takes pictures for its sessions (<see cref="FsUpload"/>).</summary>
@@ -461,6 +463,8 @@ public sealed class CreateItemMessage
     public string? OriginSession { get; set; }
     /// <summary>Optional non-secret tunnel provider descriptor when forwarding local controller API keys into this remote session.</summary>
     public LlmTunnelProviderMessage? TunnelProvider { get; set; }
+    /// <summary>Optional per-delivery collaboration identifier for the initial delegated prompt; ignored by older hosts.</summary>
+    public string? CollabDeliveryId { get; set; }
 }
 
 public sealed class ItemRefMessage

@@ -47,10 +47,10 @@ internal static class PermissionReader
             Level(permissions, "settings", ["read"], PermissionRisk.Low, requests);
             Flag(permissions, "notifications", PermissionRisk.Low, requests);
             Flag(permissions, "theme", PermissionRisk.Low, requests);
-            Flag(permissions, "secrets", PermissionRisk.Low, requests);
+            Flag(permissions, "secrets", PermissionRisk.High, requests);
             Each(permissions, "clipboard", new() { ["read"] = PermissionRisk.Medium, ["write"] = PermissionRisk.Low }, requests);
             Each(permissions, "terminal", new() { ["read"] = PermissionRisk.High, ["write"] = PermissionRisk.High, ["create"] = PermissionRisk.High }, requests);
-            List(permissions, "net", "hosts", PermissionRisk.Medium, requests);
+            ReadNet(permissions, requests);
             List(permissions, "shell", "open", PermissionRisk.Medium, requests, key: "shell.open");
             ReadProcess(permissions, requests);
             ReadAgents(permissions, requests);
@@ -135,6 +135,30 @@ internal static class PermissionReader
         requests.Add(new PermissionRequest(key ?? name, risk, obj.Bool("optional"), items));
     }
 
+    private static void ReadNet(ManifestObject permissions, List<PermissionRequest> requests)
+    {
+        if (permissions.Object("net") is not { } obj) return;
+        obj.WarnUnknown("hosts", "optional");
+        var items = obj.Strings("hosts").Where(s => s.Trim().Length > 0).Distinct(StringComparer.Ordinal).ToList();
+        if (items.Count == 0)
+        {
+            obj.Log.Error(obj.At("hosts"), "must list at least one entry");
+            return;
+        }
+        var risk = items.Any(IsWildcardHostPattern) ? PermissionRisk.High : PermissionRisk.Medium;
+        requests.Add(new PermissionRequest("net", risk, obj.Bool("optional"), items));
+    }
+
+    internal static bool IsWildcardHostPattern(string? pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        var trimmed = pattern.Trim();
+        return trimmed.StartsWith("*.", StringComparison.Ordinal)
+            && trimmed.Length > 2
+            && trimmed[2] != '.'
+            && !trimmed[2..].Contains('*', StringComparison.Ordinal);
+    }
+
     // ---------------------------------------------------------------- files
 
     private static FsProjectRequest? ReadProject(ManifestObject fs, List<PermissionRequest> requests)
@@ -142,8 +166,9 @@ internal static class PermissionReader
         if (fs.Object("project") is not { } project) return null;
         project.WarnUnknown("access", "include", "exclude", "optional");
         var access = Access(project, "access", FileAccessKind.Read);
+        var risk = access == FileAccessKind.ReadWrite ? PermissionRisk.High : PermissionRisk.Medium;
         var request = new FsProjectRequest(access, project.Strings("include"), project.Strings("exclude"), project.Bool("optional"));
-        requests.Add(new PermissionRequest("fs.project", PermissionRisk.Medium, request.Optional, [AccessText(access), .. request.Include]));
+        requests.Add(new PermissionRequest("fs.project", risk, request.Optional, [AccessText(access), .. request.Include], Exclude: request.Exclude));
         return request;
     }
 
@@ -162,7 +187,7 @@ internal static class PermissionReader
             }
             var request = new FsPathRequest(path, Access(item, "access", FileAccessKind.Read), reason, item.Bool("optional"), item.Localized());
             external.Add(request);
-            requests.Add(new PermissionRequest("fs.external", PermissionRisk.Medium, request.Optional, [path, AccessText(request.Access)], reason, request.Localized));
+            requests.Add(new PermissionRequest("fs.external", PermissionRisk.High, request.Optional, [path, AccessText(request.Access)], reason, request.Localized));
         }
     }
 
@@ -306,4 +331,90 @@ internal static class PermissionReader
             }
         }
     }
+}
+
+/// <summary>
+/// Evaluates the minimum risk level implied by marketplace capability strings so UI risk displays never understate
+/// documented high- or medium-risk capabilities.
+/// </summary>
+public static class PermissionRiskCatalog
+{
+    public static PermissionRisk EffectiveRisk(string? serverRiskLevel, IReadOnlyList<string> permissions)
+    {
+        var risk = ParseRisk(serverRiskLevel);
+        foreach (var capability in permissions)
+        {
+            var implied = RiskOfDeclaredCapability(capability);
+            if (implied > risk) risk = implied;
+        }
+        return risk;
+    }
+
+    public static PermissionRisk RiskOfDeclaredCapability(string? capability)
+    {
+        if (string.IsNullOrWhiteSpace(capability)) return PermissionRisk.Low;
+        var token = capability.Trim().ToLowerInvariant();
+
+        if (token is "secrets" or "unsafeeval" or "fs.external" or "fs.agentdata" or "terminal" or "process.run" or "process.run.devices" or "system.process.signal" or "agents.launch" or "clipboard.read" or "clipboard:read"
+            || token.StartsWith("fs.external:", StringComparison.Ordinal)
+            || token.StartsWith("fs.external.", StringComparison.Ordinal)
+            || token.StartsWith("fs.agentdata:", StringComparison.Ordinal)
+            || token.StartsWith("fs.agentdata.", StringComparison.Ordinal)
+            || token.StartsWith("terminal.", StringComparison.Ordinal)
+            || token.StartsWith("terminal:", StringComparison.Ordinal)
+            || token.StartsWith("process.run.", StringComparison.Ordinal)
+            || token.StartsWith("process.run:", StringComparison.Ordinal))
+        {
+            return PermissionRisk.High;
+        }
+
+        if (token.StartsWith("fs.project", StringComparison.Ordinal))
+        {
+            return token.Contains("readwrite", StringComparison.Ordinal) || token.Contains("write", StringComparison.Ordinal)
+                ? PermissionRisk.High
+                : PermissionRisk.Medium;
+        }
+
+        if (token.StartsWith("agents.signals.", StringComparison.Ordinal)
+            && (token.EndsWith(".prompt-submit", StringComparison.Ordinal)
+                || token.EndsWith(".permission-request", StringComparison.Ordinal)
+                || token.EndsWith(".pre-tool-use", StringComparison.Ordinal)
+                || token.EndsWith(".post-tool-use", StringComparison.Ordinal)))
+        {
+            return PermissionRisk.High;
+        }
+
+        if (token is "net" or "net.hosts"
+            || token.StartsWith("net:", StringComparison.Ordinal)
+            || token.StartsWith("net.hosts:", StringComparison.Ordinal))
+        {
+            var colon = token.IndexOf(':');
+            if (colon >= 0)
+            {
+                var hosts = token[(colon + 1)..].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (hosts.Any(PermissionReader.IsWildcardHostPattern))
+                {
+                    return PermissionRisk.High;
+                }
+            }
+            return PermissionRisk.Medium;
+        }
+
+        if (token is "git" or "git:read" or "git.read" or "workspace" or "workspace:write" or "workspace.write" or "shell.open" or "system.metrics"
+            || token.StartsWith("shell.open:", StringComparison.Ordinal)
+            || token.StartsWith("agents.signals", StringComparison.Ordinal)
+            || token.StartsWith("agents.probes", StringComparison.Ordinal))
+        {
+            return PermissionRisk.Medium;
+        }
+
+        return PermissionRisk.Low;
+    }
+
+    private static PermissionRisk ParseRisk(string? serverRiskLevel) => serverRiskLevel?.Trim().ToLowerInvariant() switch
+    {
+        "high" => PermissionRisk.High,
+        "medium" => PermissionRisk.Medium,
+        _ => PermissionRisk.Low,
+    };
 }

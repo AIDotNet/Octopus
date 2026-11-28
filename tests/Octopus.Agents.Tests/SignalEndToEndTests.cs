@@ -220,6 +220,7 @@ public sealed class SignalEndToEndTests : IDisposable
         {
             start.Environment[key] = value;
         }
+        start.Environment["OCTOPUS_SIGNAL_LINK_ID"] = "link-oc-gen-2";
         using (var process = Process.Start(start)!)
         {
             var errors = await process.StandardError.ReadToEndAsync();
@@ -235,6 +236,8 @@ public sealed class SignalEndToEndTests : IDisposable
             var usage = received.Single(s => s.Channel == "session-usage");
             Assert.Equal("item-oc", usage.ItemId);
             Assert.Equal("", usage.Account);
+            Assert.Equal("link-oc-gen-2", usage.LinkId);
+            Assert.All(received, s => Assert.Equal("link-oc-gen-2", s.LinkId));
             using var payload = JsonDocument.Parse(usage.Payload);
             Assert.Equal("session.usage.updated", payload.RootElement.GetProperty("type").GetString());
             Assert.Equal(0.12, payload.RootElement.GetProperty("properties").GetProperty("cost").GetDouble());
