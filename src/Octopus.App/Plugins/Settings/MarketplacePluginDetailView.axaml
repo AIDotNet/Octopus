@@ -109,8 +109,17 @@
                     Background="{arc:ArcDesignTokenResource SurfaceMuted}"
                     BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
                     BorderThickness="1"
-                    IsVisible="{Binding HasNoPermissions}">
+                    IsVisible="{Binding ShowSandboxedNoPermissionsNote}">
                 <TextBlock Classes="hint" Foreground="{arc:ArcDesignTokenResource Success}" Text="{x:Static s:PluginStrings.MarketDetailNoPermissions}" TextWrapping="Wrap" />
+            </Border>
+
+            <Border Padding="11,9"
+                    CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
+                    Background="{arc:ArcDesignTokenResource SurfaceMuted}"
+                    BorderBrush="{arc:ArcDesignTokenResource BorderSubtle}"
+                    BorderThickness="1"
+                    IsVisible="{Binding ShowElevatedRiskNoPermissionsNote}">
+                <TextBlock Classes="hint" Foreground="{arc:ArcDesignTokenResource Warning}" Text="{x:Static s:PluginStrings.MarketDetailElevatedRiskNoPermissions}" TextWrapping="Wrap" />
             </Border>
 
             <Border CornerRadius="{arc:ArcDesignTokenResource RadiusControl}"
@@ -148,9 +157,13 @@
         </StackPanel>
 
         <!-- SHA-256 note -->
-        <StackPanel Orientation="Horizontal" Spacing="6" Opacity="0.82">
+        <StackPanel Orientation="Horizontal" Spacing="6" Opacity="0.82" IsVisible="{Binding HasValidSha256}">
             <lucide:LucideIcon Kind="ShieldCheck" Size="13" Foreground="{arc:ArcDesignTokenResource TextSecondary}" VerticalAlignment="Center" />
             <TextBlock Classes="hint" Text="{x:Static s:PluginStrings.MarketDetailShaNote}" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding MissingValidSha256}">
+            <lucide:LucideIcon Kind="ShieldAlert" Size="13" Foreground="{arc:ArcDesignTokenResource Danger}" VerticalAlignment="Center" />
+            <TextBlock Classes="hint" Foreground="{arc:ArcDesignTokenResource Danger}" Text="{x:Static s:PluginStrings.MarketDetailMissingShaNote}" TextWrapping="Wrap" VerticalAlignment="Center" />
         </StackPanel>
     </StackPanel>
 </UserControl>

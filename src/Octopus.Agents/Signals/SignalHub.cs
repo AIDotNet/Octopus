@@ -248,7 +248,8 @@ public sealed class SignalHub : ISignalHub
             key,
             envelope.Timestamp,
             _time.GetUtcNow().ToUnixTimeMilliseconds(),
-            envelope.Payload);
+            envelope.Payload,
+            envelope.Link);
     }
 
     private void Deliver(AgentSignal signal)

@@ -32,12 +32,198 @@ public sealed class TabContentRegistry(
     Octopus.App.Remote.RemoteProjects? remote = null) : ITabContentRegistry
 {
     private readonly Dictionary<string, Control> _controls = [];
-    private readonly Dictionary<string, Task> _releasing = [];
+    private readonly Dictionary<string, List<Task>> _releasing = [];
+    private readonly HashSet<Task> _activeReleases = [];
+    private readonly Dictionary<string, List<Func<Task>>> _pendingCapturedReleases = [];
+    private readonly Dictionary<string, List<PendingConfirmation>> _pendingConfirmations = new(StringComparer.Ordinal);
     /// <summary>
     /// Agent conversations whose tab was closed but which keep running: the view model (and its session) is kept, the
     /// view is let go. <see cref="GetOrCreate"/> puts a new view over it when the tab opens again.
     /// </summary>
     private readonly Dictionary<string, AgentGuiTabViewModel> _detached = [];
+
+    /// <summary>
+    /// Bounded tracking handle for an in-flight close confirmation. Registered only while the confirmation awaits and
+    /// removed on disposal or shutdown; invalidated immediately if the item's owner retires or its terminal session
+    /// restarts in place.
+    /// </summary>
+    internal sealed class PendingConfirmation : IDisposable
+    {
+        private readonly TabContentRegistry _owner;
+        private readonly string _itemId;
+        private readonly Control? _originalControl;
+        private readonly AgentGuiTabViewModel? _originalDetached;
+        private readonly Octopus.Terminal.Avalonia.TerminalSession? _originalSession;
+        private readonly long? _originalSessionGeneration;
+        private bool _invalidated;
+        private bool _disposed;
+
+        internal PendingConfirmation(
+            TabContentRegistry owner,
+            string itemId,
+            Control? originalControl,
+            AgentGuiTabViewModel? originalDetached,
+            Octopus.Terminal.Avalonia.TerminalSession? originalSession)
+        {
+            _owner = owner;
+            _itemId = itemId;
+            _originalControl = originalControl;
+            _originalDetached = originalDetached;
+            _originalSession = originalSession;
+            _originalSessionGeneration = originalSession?.Generation;
+        }
+
+        internal void Invalidate() => _invalidated = true;
+
+        internal bool IsStillCurrent()
+        {
+            if (_invalidated)
+            {
+                return false;
+            }
+            var currentControl = _owner._controls.GetValueOrDefault(_itemId);
+            var currentDetached = _owner._detached.GetValueOrDefault(_itemId);
+            var currentSession = _owner.FindSession(_itemId);
+            if (_originalControl is not null && !ReferenceEquals(currentControl, _originalControl))
+            {
+                if (_originalControl is AgentGuiTabView { DataContext: AgentGuiTabViewModel vm } && ReferenceEquals(currentDetached, vm))
+                {
+                    return true;
+                }
+                return false;
+            }
+            if (_originalDetached is not null
+                && !ReferenceEquals(currentDetached, _originalDetached)
+                && !(currentControl is AgentGuiTabView { DataContext: AgentGuiTabViewModel reattachedVm } && ReferenceEquals(reattachedVm, _originalDetached)))
+            {
+                return false;
+            }
+            if (_originalSession is not null
+                && (!ReferenceEquals(currentSession, _originalSession)
+                    || currentSession.Generation != _originalSessionGeneration))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            if (_owner._pendingConfirmations.TryGetValue(_itemId, out var list))
+            {
+                list.Remove(this);
+                if (list.Count == 0)
+                {
+                    _owner._pendingConfirmations.Remove(_itemId);
+                }
+            }
+        }
+    }
+
+    private Octopus.Terminal.Avalonia.TerminalSession? FindSession(string itemId) => sessions?.Find(itemId);
+
+    internal readonly record struct OwnerSnapshot(
+        Control? Control,
+        AgentGuiTabViewModel? Detached,
+        Octopus.Terminal.Avalonia.TerminalSession? Session,
+        long? SessionGeneration)
+    {
+        internal bool HasOwner => Control is not null || Detached is not null || Session is not null;
+    }
+
+    internal OwnerSnapshot SnapshotOwner(string itemId)
+    {
+        var session = FindSession(itemId);
+        return new(
+            _controls.GetValueOrDefault(itemId),
+            _detached.GetValueOrDefault(itemId),
+            session,
+            session?.Generation);
+    }
+
+    /// <summary>
+    /// Captures and retires <paramref name="itemId"/> only when the currently registered owner and terminal process
+    /// generation still match <paramref name="expected"/>, preventing an older close notification from retiring a
+    /// restarted or newly attached successor.
+    /// </summary>
+    internal Func<Task>? CaptureForReleaseIfMatches(string itemId, OwnerSnapshot expected)
+    {
+        if (!expected.HasOwner)
+        {
+            return null;
+        }
+        var currentControl = _controls.GetValueOrDefault(itemId);
+        var currentDetached = _detached.GetValueOrDefault(itemId);
+        var currentSession = FindSession(itemId);
+
+        if (expected.Detached is not null)
+        {
+            return ReferenceEquals(currentDetached, expected.Detached)
+                ? CaptureForRelease(itemId)
+                : null;
+        }
+
+        if (expected.Control is not null)
+        {
+            if (!ReferenceEquals(currentControl, expected.Control))
+            {
+                return null;
+            }
+            if (expected.Session is not null)
+            {
+                if (!ReferenceEquals(currentSession, expected.Session)
+                    || currentSession.Generation != expected.SessionGeneration)
+                {
+                    return null;
+                }
+            }
+            else if (currentSession is not null)
+            {
+                return null;
+            }
+            return CaptureForRelease(itemId);
+        }
+
+        if (currentControl is not null
+            || currentDetached is not null
+            || currentSession is null
+            || !ReferenceEquals(currentSession, expected.Session)
+            || currentSession.Generation != expected.SessionGeneration)
+        {
+            return null;
+        }
+        return CaptureForRelease(itemId);
+    }
+
+    internal PendingConfirmation BeginConfirmation(string itemId)
+    {
+        var confirmation = new PendingConfirmation(
+            this,
+            itemId,
+            _controls.GetValueOrDefault(itemId),
+            _detached.GetValueOrDefault(itemId),
+            sessions?.Find(itemId));
+        if (!_pendingConfirmations.TryGetValue(itemId, out var list))
+        {
+            list = [];
+            _pendingConfirmations[itemId] = list;
+        }
+        list.Add(confirmation);
+        return confirmation;
+    }
+
+    private void InvalidatePendingConfirmations(string itemId)
+    {
+        if (_pendingConfirmations.TryGetValue(itemId, out var list))
+        {
+            foreach (var confirmation in list)
+            {
+                confirmation.Invalidate();
+            }
+        }
+    }
 
     public Control GetOrCreate(Project project, ProjectItem item)
     {
@@ -159,43 +345,138 @@ public sealed class TabContentRegistry(
         _detached[itemId] = model;
     }
 
-    public Task ReleaseAsync(string itemId)
+    public Func<Task>? CaptureForRelease(string itemId)
     {
-        if (_releasing.TryGetValue(itemId, out var inProgress))
-        {
-            return inProgress;
-        }
         if (_detached.Remove(itemId, out var model))
         {
-            var ending = ReleaseDetachedAsync(itemId, model);
-            if (!ending.IsCompleted)
+            InvalidatePendingConfirmations(itemId);
+            return CreateCapturedRelease(itemId, () => StartTrackedRelease(itemId, () => ReleaseDetachedAsync(model)));
+        }
+        if (_controls.Remove(itemId, out var control))
+        {
+            InvalidatePendingConfirmations(itemId);
+            var isTerminalTab = control is TerminalTabView;
+            var retiredSession = isTerminalTab ? sessions?.TakeDetached(itemId) : null;
+            var handle = CreateCapturedRelease(itemId, () => StartTrackedRelease(itemId, () => ReleaseCoreAsync(itemId, control, retiredSession)));
+            if (retiredSession is not null)
             {
-                _releasing[itemId] = ending;
+                sessions!.NotifyChanged(itemId);
             }
-            return ending;
+            return handle;
         }
-        if (!_controls.Remove(itemId, out var control))
+        var headlessSession = sessions?.TakeDetached(itemId);
+        if (headlessSession is not null)
         {
-            // No tab was ever built for it, but its session may run (started for a view on another device).
-            return sessions?.CloseAsync(itemId) ?? Task.CompletedTask;
+            InvalidatePendingConfirmations(itemId);
+            var handle = CreateCapturedRelease(itemId, () => StartTrackedRelease(itemId, () => ReleaseHeadlessSessionAsync(itemId, headlessSession)));
+            sessions!.NotifyChanged(itemId);
+            return handle;
         }
-        var release = ReleaseCoreAsync(itemId, control);
-        if (!release.IsCompleted)
+        return null;
+    }
+
+    public Task WaitForReleaseAsync(string itemId)
+    {
+        List<Task>? waiting = null;
+        if (_pendingCapturedReleases.TryGetValue(itemId, out var pending))
         {
-            _releasing[itemId] = release;
+            foreach (var handle in pending.ToList())
+            {
+                var task = handle();
+                if (!task.IsCompletedSuccessfully)
+                {
+                    waiting ??= [];
+                    waiting.Add(task);
+                }
+            }
         }
-        return release;
+        if (_releasing.TryGetValue(itemId, out var active))
+        {
+            foreach (var task in active)
+            {
+                if (waiting is null || !waiting.Contains(task))
+                {
+                    waiting ??= [];
+                    waiting.Add(task);
+                }
+            }
+        }
+        return waiting switch
+        {
+            null or { Count: 0 } => Task.CompletedTask,
+            { Count: 1 } => waiting[0],
+            _ => Task.WhenAll(waiting),
+        };
+    }
+
+    public Task ReleaseAsync(string itemId)
+    {
+        if (CaptureForRelease(itemId) is { } captured)
+        {
+            var current = captured();
+            var all = WaitForReleaseAsync(itemId);
+            if (ReferenceEquals(all, current) || all.IsCompletedSuccessfully)
+            {
+                return current;
+            }
+            return current.IsCompletedSuccessfully ? all : Task.WhenAll(current, all);
+        }
+        if (_pendingCapturedReleases.ContainsKey(itemId) || _releasing.ContainsKey(itemId))
+        {
+            return WaitForReleaseAsync(itemId);
+        }
+        // No tab or session was found, but a legacy default CLI lease may still need cleanup.
+        return StartTrackedRelease(itemId, () => ReleaseHeadlessSessionAsync(itemId, retiredSession: null));
     }
 
     public async Task ReleaseAllAsync()
     {
+        foreach (var list in _pendingConfirmations.Values)
+        {
+            foreach (var confirmation in list)
+            {
+                confirmation.Invalidate();
+            }
+        }
+        _pendingConfirmations.Clear();
+        foreach (var pending in _pendingCapturedReleases.Values.SelectMany(list => list).ToList())
+        {
+            _ = pending();
+        }
         foreach (var id in _controls.Keys.Concat(_detached.Keys).ToList())
         {
             _ = ReleaseAsync(id);
         }
-        await Task.WhenAll(_releasing.Values.ToList());
+        await Task.WhenAll(_activeReleases.ToList());
         // Sessions that never had a tab.
         if (sessions is not null) await sessions.CloseAllAsync();
+    }
+
+    private Func<Task> CreateCapturedRelease(string itemId, Func<Task> run)
+    {
+        Task? started = null;
+        Func<Task>? handle = null;
+        handle = () =>
+        {
+            if (started is not null) return started;
+            if (_pendingCapturedReleases.TryGetValue(itemId, out var pending))
+            {
+                pending.Remove(handle!);
+                if (pending.Count == 0)
+                {
+                    _pendingCapturedReleases.Remove(itemId);
+                }
+            }
+            started = run();
+            return started;
+        };
+        if (!_pendingCapturedReleases.TryGetValue(itemId, out var list))
+        {
+            list = [];
+            _pendingCapturedReleases[itemId] = list;
+        }
+        list.Add(handle);
+        return handle;
     }
 
     public async Task<bool> AnyRunningChildAsync()
@@ -213,17 +494,49 @@ public sealed class TabContentRegistry(
         return (await Task.WhenAll(checks)).Any(unsaved => unsaved);
     }
 
-    private async Task ReleaseDetachedAsync(string itemId, AgentGuiTabViewModel model)
+    private Task StartTrackedRelease(string itemId, Func<Task> body)
     {
-        try
+        Task? tracked = null;
+        async Task RunAsync()
         {
-            await model.CloseAsync();
-            model.Dispose();
+            try
+            {
+                await body();
+            }
+            finally
+            {
+                if (tracked is not null)
+                {
+                    _activeReleases.Remove(tracked);
+                    if (_releasing.TryGetValue(itemId, out var list))
+                    {
+                        list.Remove(tracked);
+                        if (list.Count == 0)
+                        {
+                            _releasing.Remove(itemId);
+                        }
+                    }
+                }
+            }
         }
-        finally
+        tracked = RunAsync();
+        if (!tracked.IsCompleted)
         {
-            _releasing.Remove(itemId);
+            if (!_releasing.TryGetValue(itemId, out var list))
+            {
+                list = [];
+                _releasing[itemId] = list;
+            }
+            list.Add(tracked);
+            _activeReleases.Add(tracked);
         }
+        return tracked;
+    }
+
+    private static async Task ReleaseDetachedAsync(AgentGuiTabViewModel model)
+    {
+        await model.CloseAsync();
+        model.Dispose();
     }
 
     /// <summary>What a closed agent tab answers for while it has no view: it runs, ends and restarts like the open one.</summary>
@@ -235,23 +548,56 @@ public sealed class TabContentRegistry(
         public void FocusContent() { }
     }
 
-    private async Task ReleaseCoreAsync(string itemId, Control control)
+    private async Task ReleaseCoreAsync(string itemId, Control control, Octopus.Terminal.Avalonia.TerminalSession? retiredSession)
     {
+        var isTerminalTab = control is TerminalTabView;
         try
         {
             if (control is ITabContent content)
             {
                 await content.CloseAsync();
             }
-            var dataContext = control.DataContext;
-            control.DataContext = null;
-            (dataContext as IDisposable)?.Dispose();
-            // A terminal tab closed its session through the registry already; this covers a tab that never started it.
-            if (sessions is not null) await sessions.CloseAsync(itemId);
         }
         finally
         {
-            _releasing.Remove(itemId);
+            // The session was already retired from the registry at capture time so any reopen starts a distinct
+            // terminal immediately; dispose the captured instance directly without touching any replacement.
+            if (retiredSession is not null)
+            {
+                await retiredSession.DisposeAsync();
+            }
+            var dataContext = control.DataContext;
+            control.DataContext = null;
+            (dataContext as IDisposable)?.Dispose();
+            if (isTerminalTab && !_controls.ContainsKey(itemId) && sessions?.Find(itemId) is null)
+            {
+                services.GetService<Collab.CollabCliMcpInjector>()?.ReleaseDefaultLease(itemId);
+                (services.GetService<Collab.ICollabCoordinator>() as Collab.CollabCoordinator)?.NotifyTerminalSessionClosed(itemId, retiredSession);
+            }
+            else if (isTerminalTab && retiredSession is not null && !ReferenceEquals(sessions?.Find(itemId), retiredSession))
+            {
+                (services.GetService<Collab.ICollabCoordinator>() as Collab.CollabCoordinator)?.NotifyTerminalSessionRetired(itemId, retiredSession);
+            }
+        }
+    }
+
+    private async Task ReleaseHeadlessSessionAsync(string itemId, Octopus.Terminal.Avalonia.TerminalSession? retiredSession)
+    {
+        if (retiredSession is not null)
+        {
+            await retiredSession.DisposeAsync();
+        }
+        if (!_controls.ContainsKey(itemId) && !_detached.ContainsKey(itemId) && sessions?.Find(itemId) is null)
+        {
+            services.GetService<Collab.CollabCliMcpInjector>()?.ReleaseDefaultLease(itemId);
+            if (retiredSession is not null)
+            {
+                (services.GetService<Collab.ICollabCoordinator>() as Collab.CollabCoordinator)?.NotifyTerminalSessionClosed(itemId, retiredSession);
+            }
+        }
+        else if (retiredSession is not null && !ReferenceEquals(sessions?.Find(itemId), retiredSession))
+        {
+            (services.GetService<Collab.ICollabCoordinator>() as Collab.CollabCoordinator)?.NotifyTerminalSessionRetired(itemId, retiredSession);
         }
     }
 }

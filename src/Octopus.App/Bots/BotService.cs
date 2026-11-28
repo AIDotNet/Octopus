@@ -21,6 +21,7 @@ public sealed class BotService : IBotService
     private readonly ISettingsStore _settings;
     private readonly PathComparer _paths;
     private readonly IItemActivityService? _activity;
+    private readonly Func<Workspace.ITabContentRegistry?>? _tabs;
     private readonly Dictionary<string, Project> _backingProjects = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProjectItem> _groupMemberItems = new(StringComparer.Ordinal);
     private bool _loaded;
@@ -33,7 +34,8 @@ public sealed class BotService : IBotService
         PathComparer paths,
         BotHomeManager home,
         IItemActivityService? activity = null,
-        BotConnectorRuntime? connectorRuntime = null)
+        BotConnectorRuntime? connectorRuntime = null,
+        Func<Workspace.ITabContentRegistry?>? tabs = null)
     {
         _store = store;
         _catalog = catalog;
@@ -43,7 +45,11 @@ public sealed class BotService : IBotService
         Home = home;
         _activity = activity;
         ConnectorRuntime = connectorRuntime ?? new BotConnectorRuntime();
+        _tabs = tabs;
     }
+
+    private Workspace.TabContentRegistry.OwnerSnapshot? SnapshotOwner(string itemId) =>
+        (_tabs?.Invoke() as Workspace.TabContentRegistry)?.SnapshotOwner(itemId);
 
     public BotHomeManager Home { get; }
     public BotConnectorRuntime ConnectorRuntime { get; }
@@ -379,21 +385,30 @@ public sealed class BotService : IBotService
         EnsureLoaded();
         var removed = FindBot(botId);
         if (removed is null) return;
-        _backingProjects.Remove(botId);
-        foreach (var conn in removed.Connectors)
+        try
         {
-            _ = ConnectorRuntime.DeleteTokenAsync(removed.Id, conn.Id);
-        }
-        _store.Update(d =>
-        {
-            d.Bots.RemoveAll(b => b.Id == botId);
-            if (d.ActiveBotId == botId)
+            _store.Update(d =>
             {
-                d.ActiveBotId = d.Bots.FirstOrDefault()?.Id;
-                d.ActiveChatId = d.Bots.FirstOrDefault()?.ActiveChatId;
+                d.Bots.RemoveAll(b => b.Id == botId);
+                if (d.ActiveBotId == botId)
+                {
+                    d.ActiveBotId = d.Bots.FirstOrDefault()?.Id;
+                    d.ActiveChatId = d.Bots.FirstOrDefault()?.ActiveChatId;
+                }
+            });
+        }
+        finally
+        {
+            if (FindBot(botId) is null)
+            {
+                _backingProjects.Remove(botId);
+                foreach (var conn in removed.Connectors)
+                {
+                    _ = ConnectorRuntime.DeleteTokenAsync(removed.Id, conn.Id);
+                }
             }
-        });
-        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, removed));
+        }
+        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, removed, IsRemoved: true));
         Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.CurrentBot, CurrentBot, CurrentChat));
     }
 
@@ -440,9 +455,10 @@ public sealed class BotService : IBotService
 
         var updated = FindBot(botId)!;
         var backing = EnsureBackingProject(updated);
-        var backingItem = ToProjectItem(updated, chat);
-        if (backing.Items.All(i => i.Id != backingItem.Id))
+        var backingItem = backing.Items.FirstOrDefault(i => i.Id == chat.Id);
+        if (backingItem is null)
         {
+            backingItem = ToProjectItem(updated, chat);
             backing.Items.Add(backingItem);
         }
         if (activate)
@@ -534,8 +550,10 @@ public sealed class BotService : IBotService
             d.IsBotMode = true;
         });
 
-        var updated = FindBot(botId)!;
-        var updatedChat = updated.Chats.First(c => c.Id == chatId);
+        if (!TryGetOpenChat(botId, chatId, out var updated, out var updatedChat))
+        {
+            return;
+        }
         var backing = EnsureBackingProject(updated);
         var backingItem = backing.Items.FirstOrDefault(i => i.Id == chatId);
         if (backingItem is null)
@@ -545,11 +563,60 @@ public sealed class BotService : IBotService
         }
         backing.ActiveItemId = backingItem.Id;
 
-        if (modeChanged) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Mode, updated, updatedChat, backingItem));
-        if (botChanged) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.CurrentBot, updated, updatedChat, backingItem));
-        if (wasUnread) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, updated, updatedChat, backingItem));
-        if (wasClosed) Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Chats, updated, updatedChat, backingItem));
+        if (modeChanged)
+        {
+            Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Mode, updated, updatedChat, backingItem));
+            if (!TryGetOpenChatWithBackingItem(botId, chatId, out updated, out updatedChat, out backingItem)) return;
+        }
+        if (botChanged)
+        {
+            Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.CurrentBot, updated, updatedChat, backingItem));
+            if (!TryGetOpenChatWithBackingItem(botId, chatId, out updated, out updatedChat, out backingItem)) return;
+        }
+        if (wasUnread)
+        {
+            Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Bots, updated, updatedChat, backingItem));
+            if (!TryGetOpenChatWithBackingItem(botId, chatId, out updated, out updatedChat, out backingItem)) return;
+        }
+        if (wasClosed)
+        {
+            Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Chats, updated, updatedChat, backingItem));
+            if (!TryGetOpenChatWithBackingItem(botId, chatId, out updated, out updatedChat, out backingItem)) return;
+        }
         Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.ActiveChat, updated, updatedChat, backingItem));
+    }
+
+    private bool TryGetOpenChat(string botId, string chatId, out BotDefinition bot, out BotChat chat)
+    {
+        if (FindBot(botId) is { } currentBot
+            && currentBot.Chats.FirstOrDefault(c => c.Id == chatId) is { IsOpen: true } currentChat
+            && currentChat.Status != BotChatStatus.Closed)
+        {
+            bot = currentBot;
+            chat = currentChat;
+            return true;
+        }
+        bot = null!;
+        chat = null!;
+        return false;
+    }
+
+    private bool TryGetOpenChatWithBackingItem(
+        string botId,
+        string chatId,
+        out BotDefinition bot,
+        out BotChat chat,
+        out ProjectItem item)
+    {
+        if (TryGetOpenChat(botId, chatId, out bot, out chat)
+            && _backingProjects.TryGetValue(botId, out var currentBacking)
+            && currentBacking.Items.FirstOrDefault(i => i.Id == chatId) is { } currentItem)
+        {
+            item = currentItem;
+            return true;
+        }
+        item = null!;
+        return false;
     }
 
     public void CloseChat(string botId, string chatId)
@@ -559,33 +626,62 @@ public sealed class BotService : IBotService
         var chat = bot?.Chats.FirstOrDefault(c => c.Id == chatId);
         if (bot is null || chat is null) return;
 
+        var supersededOwner = SnapshotOwner(chatId);
+        var entryItem = _backingProjects.TryGetValue(botId, out var entryBacking)
+            ? entryBacking.Items.FirstOrDefault(i => i.Id == chatId)
+            : null;
+        var wasRemoved = chat.IsOpen
+            || chat.Status != BotChatStatus.Closed
+            || entryItem is not null
+            || supersededOwner is { HasOwner: true };
+
         ProjectItem? removedItem = null;
-        if (_backingProjects.TryGetValue(botId, out var backing))
+        try
         {
-            removedItem = backing.Items.FirstOrDefault(i => i.Id == chatId);
-            if (removedItem is not null) backing.Items.Remove(removedItem);
-        }
-
-        _store.Update(d =>
-        {
-            if (d.Bots.FirstOrDefault(b => b.Id == botId) is not { } target) return;
-            if (target.Chats.FirstOrDefault(c => c.Id == chatId) is not { } targetChat) return;
-            targetChat.IsOpen = false;
-            targetChat.Status = BotChatStatus.Closed;
-            targetChat.ClosedAt = DateTimeOffset.UtcNow;
-            if (target.ActiveChatId == chatId)
+            _store.Update(d =>
             {
-                target.ActiveChatId = target.Chats.FirstOrDefault(c => c.IsOpen)?.Id;
-                if (d.ActiveBotId == botId) d.ActiveChatId = target.ActiveChatId;
-            }
-        });
-
-        var updated = FindBot(botId)!;
-        if (_backingProjects.TryGetValue(botId, out backing))
-        {
-            backing.ActiveItemId = updated.ActiveChatId ?? backing.Items.FirstOrDefault()?.Id;
+                if (d.Bots.FirstOrDefault(b => b.Id == botId) is not { } target) return;
+                if (target.Chats.FirstOrDefault(c => c.Id == chatId) is not { } targetChat) return;
+                targetChat.IsOpen = false;
+                targetChat.Status = BotChatStatus.Closed;
+                targetChat.ClosedAt = DateTimeOffset.UtcNow;
+                if (target.ActiveChatId == chatId)
+                {
+                    target.ActiveChatId = target.Chats.FirstOrDefault(c => c.IsOpen)?.Id;
+                    if (d.ActiveBotId == botId) d.ActiveChatId = target.ActiveChatId;
+                }
+            });
         }
-        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Chats, updated, updated.Chats.FirstOrDefault(c => c.Id == chatId), removedItem));
+        finally
+        {
+            var currentBot = FindBot(botId);
+            var currentChat = currentBot?.Chats.FirstOrDefault(c => c.Id == chatId);
+            if ((currentChat is null || !currentChat.IsOpen)
+                && _backingProjects.TryGetValue(botId, out var backing))
+            {
+                removedItem = backing.Items.FirstOrDefault(i => i.Id == chatId);
+                if (removedItem is not null)
+                {
+                    backing.Items.Remove(removedItem);
+                }
+                if (removedItem is not null || backing.ActiveItemId == chatId)
+                {
+                    backing.ActiveItemId = currentBot?.ActiveChatId ?? backing.Items.FirstOrDefault()?.Id;
+                }
+            }
+        }
+
+        var updated = FindBot(botId);
+        var updatedChat = updated?.Chats.FirstOrDefault(c => c.Id == chatId);
+        Changed?.Invoke(this, new BotChangedEventArgs(
+            BotChangeKind.Chats,
+            updated,
+            updatedChat ?? chat,
+            wasRemoved ? (removedItem ?? entryItem) : null,
+            IsRemoved: wasRemoved)
+        {
+            SupersededOwner = wasRemoved && supersededOwner is { HasOwner: true } ? supersededOwner : null,
+        });
     }
 
     public void RenameChat(string botId, string chatId, string? customTitle)
@@ -615,26 +711,53 @@ public sealed class BotService : IBotService
         var chat = bot?.Chats.FirstOrDefault(c => c.Id == chatId);
         if (bot is null || chat is null || chat.Kind == BotChatKind.Home) return;
 
+        var supersededOwner = SnapshotOwner(chatId);
+        var entryItem = _backingProjects.TryGetValue(botId, out var entryBacking)
+            ? entryBacking.Items.FirstOrDefault(i => i.Id == chatId)
+            : null;
+
         ProjectItem? removedItem = null;
-        if (_backingProjects.TryGetValue(botId, out var backing))
+        try
         {
-            removedItem = backing.Items.FirstOrDefault(i => i.Id == chatId);
-            if (removedItem is not null) backing.Items.Remove(removedItem);
+            _store.Update(d =>
+            {
+                if (d.Bots.FirstOrDefault(b => b.Id == botId) is not { } target) return;
+                target.Chats.RemoveAll(c => c.Id == chatId);
+                if (target.ActiveChatId == chatId)
+                {
+                    target.ActiveChatId = target.HomeChatId ?? target.Chats.FirstOrDefault()?.Id;
+                    if (d.ActiveBotId == botId) d.ActiveChatId = target.ActiveChatId;
+                }
+            });
+        }
+        finally
+        {
+            var currentBot = FindBot(botId);
+            if ((currentBot is null || currentBot.Chats.All(c => c.Id != chatId))
+                && _backingProjects.TryGetValue(botId, out var backing))
+            {
+                removedItem = backing.Items.FirstOrDefault(i => i.Id == chatId);
+                if (removedItem is not null)
+                {
+                    backing.Items.Remove(removedItem);
+                }
+                if (removedItem is not null || backing.ActiveItemId == chatId)
+                {
+                    backing.ActiveItemId = currentBot?.ActiveChatId ?? backing.Items.FirstOrDefault()?.Id;
+                }
+            }
         }
 
-        _store.Update(d =>
+        var updated = FindBot(botId);
+        Changed?.Invoke(this, new BotChangedEventArgs(
+            BotChangeKind.Chats,
+            updated,
+            chat,
+            removedItem ?? entryItem,
+            IsRemoved: true)
         {
-            if (d.Bots.FirstOrDefault(b => b.Id == botId) is not { } target) return;
-            target.Chats.RemoveAll(c => c.Id == chatId);
-            if (target.ActiveChatId == chatId)
-            {
-                target.ActiveChatId = target.HomeChatId ?? target.Chats.FirstOrDefault()?.Id;
-                if (d.ActiveBotId == botId) d.ActiveChatId = target.ActiveChatId;
-            }
+            SupersededOwner = supersededOwner is { HasOwner: true } ? supersededOwner : null,
         });
-
-        var updated = FindBot(botId)!;
-        Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Chats, updated, chat, removedItem));
     }
 
     public BotConnectorBinding? AddConnector(string botId, string appId)
@@ -1216,6 +1339,19 @@ public sealed class BotService : IBotService
         return null;
     }
 
+    public BotDefinition? FindItemOwner(string itemId)
+    {
+        EnsureLoaded();
+        foreach (var (botId, project) in _backingProjects)
+        {
+            if (project.Items.Any(i => i.Id == itemId))
+            {
+                return FindBot(botId);
+            }
+        }
+        return _store.Current.Bots.FirstOrDefault(b => b.Chats.Any(c => c.Id == itemId && c.IsOpen));
+    }
+
     public void ActivateBackingItem(string botId, string itemId)
     {
         EnsureLoaded();
@@ -1258,7 +1394,7 @@ public sealed class BotService : IBotService
             {
                 backing.ActiveItemId = backing.Items.FirstOrDefault()?.Id;
             }
-            Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Files, bot, Item: fileItem));
+            Changed?.Invoke(this, new BotChangedEventArgs(BotChangeKind.Files, bot, Item: fileItem, IsRemoved: true));
         }
     }
 
@@ -1366,8 +1502,10 @@ public sealed class BotService : IBotService
             });
         }
 
-        var updated = FindBot(botId)!;
-        var updatedChat = updated.Chats.First(c => c.Id == chatId);
+        if (!TryGetOpenChat(botId, chatId, out var updated, out var updatedChat))
+        {
+            return null;
+        }
         var backing = EnsureBackingProject(updated);
         var item = backing.Items.FirstOrDefault(i => i.Id == chatId);
         if (item is null)

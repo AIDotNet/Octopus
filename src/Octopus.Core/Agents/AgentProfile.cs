@@ -44,6 +44,18 @@ public sealed class AgentLaunchOptions
     [JsonIgnore]
     public string? Prompt { get; set; }
 
+    /// <summary>Collaboration thread id for the initial delegated prompt. Never saved.</summary>
+    [JsonIgnore]
+    public string? CollabThreadId { get; set; }
+
+    /// <summary>Collaboration task id for the initial delegated prompt. Never saved.</summary>
+    [JsonIgnore]
+    public string? CollabTaskId { get; set; }
+
+    /// <summary>Collaboration per-delivery id for the initial delegated prompt. Never saved.</summary>
+    [JsonIgnore]
+    public string? CollabDeliveryId { get; set; }
+
     /// <summary>Continue the most recent session (used when a tab is restored after a restart).</summary>
     [JsonIgnore]
     public bool Resume { get; set; }

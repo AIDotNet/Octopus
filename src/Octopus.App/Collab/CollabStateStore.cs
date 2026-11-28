@@ -1,5 +1,6 @@
 using System.Text;
 using Octopus.App.Files;
+using Octopus.App.Services;
 using Octopus.Platform;
 
 namespace Octopus.App.Collab;
@@ -11,6 +12,7 @@ namespace Octopus.App.Collab;
 /// </summary>
 public sealed class CollabStateStore(IAppPaths paths)
 {
+    private static readonly UTF8Encoding Utf8NoBom = new(false);
     private readonly object _writeGate = new();
 
     public string FilePath => Path.Combine(paths.DataDirectory, "collab", "state.json");
@@ -29,7 +31,7 @@ public sealed class CollabStateStore(IAppPaths paths)
         }
     }
 
-    public void Save(string json)
+    public bool Save(string json)
     {
         lock (_writeGate)
         {
@@ -37,11 +39,13 @@ public sealed class CollabStateStore(IAppPaths paths)
             {
                 var path = FilePath;
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                AtomicFileWriter.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(json));
+                AtomicFileWriter.WriteAllBytes(path, Utf8NoBom.GetBytes(json));
+                return true;
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                // Best effort: losing one snapshot only means a restart reports slightly older task state.
+                StartupTrace.LogException("collab:state-save", e);
+                return false;
             }
         }
     }

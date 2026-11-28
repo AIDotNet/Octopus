@@ -23,6 +23,17 @@ public interface ITabContentRegistry
     /// </summary>
     void Detach(string itemId);
     /// <summary>
+    /// Captures and unregisters the current owner of <paramref name="itemId"/> so any later
+    /// <see cref="GetOrCreate"/> starts a replacement owner while disposal of the captured owner may be deferred
+    /// across a dispatcher or async boundary. Returns null when no active owner exists to capture.
+    /// </summary>
+    Func<Task>? CaptureForRelease(string itemId);
+    /// <summary>
+    /// Waits for any captured or in-flight release of <paramref name="itemId"/> to finish (starting any deferred
+    /// captured releases for <paramref name="itemId"/>) without disturbing a currently active owner.
+    /// </summary>
+    Task WaitForReleaseAsync(string itemId);
+    /// <summary>
     /// Closes the content of the item (ends its process) and forgets it. A second call while the first one is still
     /// ending the process waits for the same end.
     /// </summary>

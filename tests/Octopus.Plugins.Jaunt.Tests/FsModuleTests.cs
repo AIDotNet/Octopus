@@ -213,6 +213,320 @@ public sealed class FsModuleTests : IAsyncDisposable
         Assert.Equal(["other.txt"], result["named"]!.AsArray().Select(n => n!.GetValue<string>()));
     }
 
+    [Fact]
+    public async Task Declining_optional_write_at_runtime_keeps_required_read_and_remembers_denial()
+    {
+        var dirA = Path.Combine(_outside, "shared-target");
+        Directory.CreateDirectory(dirA);
+        var fileA = Path.Combine(dirA, "note.txt");
+        File.WriteAllText(fileA, "hello-read");
+
+        var consent = new FixedConsent(answer: false);
+        _harness.Consent = consent;
+        var catalog = new PluginCatalog(_harness.Paths, _harness.State, PluginHostInfo.Current(new SemanticVersion(1, 0, 0)),
+            new PluginCatalogOptions { BuiltinRoots = [_harness.BuiltinRoot] });
+        _harness.ExtraModules.Add(new FsModule(new FileAccessService(), new PluginAccessPolicy(), new NoTrashService(), _harness.Paths, _harness,
+            new FixedProject(_project), new NoAgents(), catalog));
+
+        var pattern = dirA.Replace("\\", "/") + "/**";
+        var manifestExtra = $$"""
+            "permissions": {
+              "fs": {
+                "external": [
+                  { "path": {{JsonValue.Create(pattern).ToJsonString()}}, "access": "read", "reason": "Read notes" },
+                  { "path": {{JsonValue.Create(pattern).ToJsonString()}}, "access": "readwrite", "reason": "Edit notes", "optional": true }
+                ]
+              }
+            },
+            {{Commands}}
+            """;
+
+        _harness.InstalledPlugin("test.fs", $$"""
+            import { commands, fs, permissions } from 'octopus';
+            export function activate(ctx) {
+              ctx.subscriptions.push(commands.register('test.fs.run', async () => {
+                const file = {{JsonValue.Create(fileA).ToJsonString()}};
+                const firstReq = await permissions.request('fs.external', 'need write');
+                const secondReq = await permissions.request('fs.external', 'ask again');
+                const readAfterDecline = await fs.readText(file);
+                let writeCode = 'written';
+                try { await fs.writeText(file, 'changed'); } catch (e) { writeCode = e.code; }
+                return { firstReq, secondReq, readAfterDecline, writeCode };
+              }));
+            }
+            """, manifestExtra, new Dictionary<string, string>());
+
+        // Seed exact post-install state: required read granted, optional readwrite not granted.
+        _harness.State.Update(d =>
+        {
+            var rec = d.Plugins["test.fs"];
+            rec.ScopedGrants.Add(new Octopus.Core.Plugins.PluginPermissionGrant("fs.external", "read", [pattern]));
+            rec.Grants["fs.external"] = pattern;
+        });
+
+        var manager = await _harness.StartAsync();
+        var plugin = (await manager.EnsureActiveAsync("test.fs", TestContext.Current.CancellationToken))!;
+        var result = (await CallAsync(plugin, "test.fs.run"))!;
+
+        Assert.False(result["firstReq"]!.GetValue<bool>());
+        Assert.False(result["secondReq"]!.GetValue<bool>());
+        Assert.Equal("hello-read", result["readAfterDecline"]!.GetValue<string>());
+        Assert.Equal("PermissionDenied", result["writeCode"]!.GetValue<string>());
+        // Must remember the declined optional write and not prompt a second time.
+        Assert.Single(consent.Asked);
+    }
+
+    [Fact]
+    public async Task Startup_migrates_old_format_multiple_required_external_paths_for_identified_installed_manifest()
+    {
+        var dirA = Path.Combine(_outside, "legacy-first");
+        var dirB = Path.Combine(_outside, "legacy-second");
+        var dirOpt = Path.Combine(_outside, "legacy-optional");
+        Directory.CreateDirectory(dirA);
+        Directory.CreateDirectory(dirB);
+        Directory.CreateDirectory(dirOpt);
+        var fileA = Path.Combine(dirA, "a.txt");
+        var fileB = Path.Combine(dirB, "b.txt");
+        var fileOpt = Path.Combine(dirOpt, "opt.txt");
+        File.WriteAllText(fileA, "from-a");
+        File.WriteAllText(fileB, "from-b");
+        File.WriteAllText(fileOpt, "from-opt");
+
+        var catalog = new PluginCatalog(_harness.Paths, _harness.State, PluginHostInfo.Current(new SemanticVersion(1, 0, 0)),
+            new PluginCatalogOptions { BuiltinRoots = [_harness.BuiltinRoot] });
+        _harness.ExtraModules.Add(new FsModule(new FileAccessService(), new PluginAccessPolicy(), new NoTrashService(), _harness.Paths, _harness,
+            new FixedProject(_project), new NoAgents(), catalog));
+
+        var patA = dirA.Replace("\\", "/") + "/**";
+        var patB = dirB.Replace("\\", "/") + "/**";
+        var patOpt = dirOpt.Replace("\\", "/") + "/**";
+        var manifestExtra = $$"""
+            "permissions": {
+              "fs": {
+                "external": [
+                  { "path": {{JsonValue.Create(patA).ToJsonString()}}, "access": "read", "reason": "Read A" },
+                  { "path": {{JsonValue.Create(patB).ToJsonString()}}, "access": "readwrite", "reason": "Write B" },
+                  { "path": {{JsonValue.Create(patOpt).ToJsonString()}}, "access": "read", "reason": "Optional C", "optional": true }
+                ]
+              }
+            },
+            {{Commands}}
+            """;
+
+        // Base installer wrote ONLY the last required path (patB) under the shared "fs.external" key with empty ScopedGrants.
+        _harness.InstalledPlugin("test.fs", $$"""
+            import { commands, fs } from 'octopus';
+            export function activate(ctx) {
+              ctx.subscriptions.push(commands.register('test.fs.run', async () => {
+                const a = await fs.readText({{JsonValue.Create(fileA).ToJsonString()}});
+                await fs.writeText({{JsonValue.Create(fileB).ToJsonString()}}, 'updated-b');
+                const b = await fs.readText({{JsonValue.Create(fileB).ToJsonString()}});
+                let optCode = 'read';
+                try { await fs.readText({{JsonValue.Create(fileOpt).ToJsonString()}}); } catch (e) { optCode = e.code; }
+                return { a, b, optCode };
+              }));
+            }
+            """, manifestExtra, new Dictionary<string, string> { ["fs.external"] = patB });
+
+        var manager = await _harness.StartAsync();
+        var plugin = (await manager.EnsureActiveAsync("test.fs", TestContext.Current.CancellationToken))!;
+        var result = (await CallAsync(plugin, "test.fs.run"))!;
+
+        Assert.Equal("from-a", result["a"]!.GetValue<string>());
+        Assert.Equal("updated-b", result["b"]!.GetValue<string>());
+        Assert.Equal("PermissionDenied", result["optCode"]!.GetValue<string>());
+        var migrated = _harness.State.Current.Find("test.fs")!;
+        Assert.Equal(2, migrated.ScopedGrants.Count(g => g.Key == "fs.external"));
+    }
+
+    [Fact]
+    public async Task Startup_with_uncertain_provenance_old_format_record_requires_confirmation()
+    {
+        var dirA = Path.Combine(_outside, "uncertain-first");
+        var dirB = Path.Combine(_outside, "uncertain-second");
+        Directory.CreateDirectory(dirA);
+        Directory.CreateDirectory(dirB);
+        var fileA = Path.Combine(dirA, "a.txt");
+        var fileB = Path.Combine(dirB, "b.txt");
+        File.WriteAllText(fileA, "from-a");
+        File.WriteAllText(fileB, "from-b");
+
+        var consent = new FixedConsent(answer: true);
+        _harness.Consent = consent;
+        var catalog = new PluginCatalog(_harness.Paths, _harness.State, PluginHostInfo.Current(new SemanticVersion(1, 0, 0)),
+            new PluginCatalogOptions { BuiltinRoots = [_harness.BuiltinRoot] });
+        _harness.ExtraModules.Add(new FsModule(new FileAccessService(), new PluginAccessPolicy(), new NoTrashService(), _harness.Paths, _harness,
+            new FixedProject(_project), new NoAgents(), catalog));
+
+        var patA = dirA.Replace("\\", "/") + "/**";
+        var patB = dirB.Replace("\\", "/") + "/**";
+        var manifestExtra = $$"""
+            "permissions": {
+              "fs": {
+                "external": [
+                  { "path": {{JsonValue.Create(patA).ToJsonString()}}, "access": "read", "reason": "Read A" },
+                  { "path": {{JsonValue.Create(patB).ToJsonString()}}, "access": "readwrite", "reason": "Write B" }
+                ]
+              }
+            },
+            {{Commands}}
+            """;
+
+        _harness.InstalledPlugin("test.fs", $$"""
+            import { commands, fs, permissions } from 'octopus';
+            export function activate(ctx) {
+              ctx.subscriptions.push(commands.register('test.fs.run', async () => {
+                let beforeA = 'read';
+                try { await fs.readText({{JsonValue.Create(fileA).ToJsonString()}}); } catch (e) { beforeA = e.code; }
+                let beforeB = 'read';
+                try { await fs.readText({{JsonValue.Create(fileB).ToJsonString()}}); } catch (e) { beforeB = e.code; }
+                const confirmed = await permissions.request('fs.external', 'confirm paths');
+                const afterA = await fs.readText({{JsonValue.Create(fileA).ToJsonString()}});
+                const afterB = await fs.readText({{JsonValue.Create(fileB).ToJsonString()}});
+                return { beforeA, beforeB, confirmed, afterA, afterB };
+              }));
+            }
+            """, manifestExtra, new Dictionary<string, string> { ["fs.external"] = patB });
+
+        // Make provenance uncertain: state record version does not match installed manifest version (0.9.0 vs 1.0.0).
+        _harness.State.Update(d => d.Plugins["test.fs"].Version = "0.9.0");
+
+        var manager = await _harness.StartAsync();
+        var plugin = (await manager.EnsureActiveAsync("test.fs", TestContext.Current.CancellationToken))!;
+        var result = (await CallAsync(plugin, "test.fs.run"))!;
+
+        Assert.Equal("PermissionDenied", result["beforeA"]!.GetValue<string>());
+        Assert.Equal("PermissionDenied", result["beforeB"]!.GetValue<string>());
+        Assert.True(result["confirmed"]!.GetValue<bool>());
+        Assert.Equal(2, consent.Asked.Count);
+        Assert.Equal("from-a", result["afterA"]!.GetValue<string>());
+        Assert.Equal("from-b", result["afterB"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Startup_with_dev_source_old_format_record_requires_confirmation()
+    {
+        var dirA = Path.Combine(_outside, "dev-first");
+        var dirB = Path.Combine(_outside, "dev-second");
+        Directory.CreateDirectory(dirA);
+        Directory.CreateDirectory(dirB);
+        var fileA = Path.Combine(dirA, "a.txt");
+        var fileB = Path.Combine(dirB, "b.txt");
+        File.WriteAllText(fileA, "dev-a");
+        File.WriteAllText(fileB, "dev-b");
+
+        var consent = new FixedConsent(answer: false);
+        _harness.Consent = consent;
+        var catalog = new PluginCatalog(_harness.Paths, _harness.State, PluginHostInfo.Current(new SemanticVersion(1, 0, 0)),
+            new PluginCatalogOptions { BuiltinRoots = [_harness.BuiltinRoot] });
+        _harness.ExtraModules.Add(new FsModule(new FileAccessService(), new PluginAccessPolicy(), new NoTrashService(), _harness.Paths, _harness,
+            new FixedProject(_project), new NoAgents(), catalog));
+
+        var patA = dirA.Replace("\\", "/") + "/**";
+        var patB = dirB.Replace("\\", "/") + "/**";
+        var manifestExtra = $$"""
+            "permissions": {
+              "fs": {
+                "external": [
+                  { "path": {{JsonValue.Create(patA).ToJsonString()}}, "access": "read", "reason": "Read A" },
+                  { "path": {{JsonValue.Create(patB).ToJsonString()}}, "access": "readwrite", "reason": "Write B" }
+                ]
+              }
+            },
+            {{Commands}}
+            """;
+
+        _harness.InstalledPlugin("test.fs", $$"""
+            import { commands, fs, permissions } from 'octopus';
+            export function activate(ctx) {
+              ctx.subscriptions.push(commands.register('test.fs.run', async () => {
+                let beforeA = 'read';
+                try { await fs.readText({{JsonValue.Create(fileA).ToJsonString()}}); } catch (e) { beforeA = e.code; }
+                let beforeB = 'read';
+                try { await fs.readText({{JsonValue.Create(fileB).ToJsonString()}}); } catch (e) { beforeB = e.code; }
+                const requested = await permissions.request('fs.external', 'confirm dev paths');
+                return { beforeA, beforeB, requested };
+              }));
+            }
+            """, manifestExtra, new Dictionary<string, string> { ["fs.external"] = patB });
+
+        // Dev-source record with same version must NOT auto-migrate old-format external paths.
+        _harness.State.Update(d => d.Plugins["test.fs"].Source = Octopus.Core.Plugins.PluginSource.Dev);
+
+        var manager = await _harness.StartAsync();
+        var plugin = (await manager.EnsureActiveAsync("test.fs", TestContext.Current.CancellationToken))!;
+        var result = (await CallAsync(plugin, "test.fs.run"))!;
+
+        Assert.Equal("PermissionDenied", result["beforeA"]!.GetValue<string>());
+        Assert.Equal("PermissionDenied", result["beforeB"]!.GetValue<string>());
+        Assert.False(result["requested"]!.GetValue<bool>());
+        Assert.Single(consent.Asked);
+        Assert.Empty(_harness.State.Current.Find("test.fs")!.ScopedGrants);
+    }
+
+    [Fact]
+    public async Task Reload_keeps_new_optional_siblings_requestable_after_declining_sole_prior_sibling()
+    {
+        var consent = new SelectiveReasonConsent(deniedReason: "A");
+        _harness.Consent = consent;
+        var package = _harness.InstalledPlugin("test.fs", """
+            import { commands, permissions } from 'octopus';
+            export function activate(ctx) {
+              ctx.subscriptions.push(commands.register('test.fs.run', () => permissions.request('fs.external', 'fixture')));
+            }
+            """, $$"""
+            "permissions": {
+              "fs": {
+                "external": [
+                  { "path": "~/fixtures/a/**", "access": "read", "reason": "A", "optional": true }
+                ]
+              }
+            },
+            {{Commands}}
+            """, new Dictionary<string, string>());
+
+        var manager = await _harness.StartAsync();
+        var first = await manager.ExecuteCommandAsync("test.fs.run", cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(first!.GetValue<bool>());
+        Assert.Equal(["A"], consent.Asked);
+
+        var manifestFile = Path.Combine(package, "plugin.json");
+        var json = JsonNode.Parse(await File.ReadAllTextAsync(manifestFile, TestContext.Current.CancellationToken))!;
+        var external = json["permissions"]!["fs"]!["external"]!.AsArray();
+        foreach (var name in new[] { "B", "C" })
+        {
+            external.Add(new JsonObject
+            {
+                ["path"] = $"~/fixtures/{name.ToLowerInvariant()}/**",
+                ["access"] = "read",
+                ["reason"] = name,
+                ["optional"] = true,
+            });
+        }
+        await File.WriteAllTextAsync(manifestFile, json.ToJsonString(), TestContext.Current.CancellationToken);
+        await manager.ReloadAsync("test.fs");
+
+        var second = await manager.ExecuteCommandAsync("test.fs.run", cancellationToken: TestContext.Current.CancellationToken);
+        Assert.False(second!.GetValue<bool>());
+        Assert.Equal(["A", "B", "C"], consent.Asked);
+
+        var grants = manager.Find("test.fs")!.Grants;
+        Assert.True(grants.IsDenied(grants.Manifest.Permissions.Requests[0]));
+        Assert.True(grants.IsGranted(grants.Manifest.Permissions.Requests[1]));
+        Assert.True(grants.IsGranted(grants.Manifest.Permissions.Requests[2]));
+    }
+
+    private sealed class SelectiveReasonConsent(string deniedReason) : IPluginConsent
+    {
+        public List<string> Asked { get; } = [];
+
+        public Task<bool> RequestPermissionAsync(PluginHost plugin, Octopus.Core.Plugins.PermissionRequest request, string? reason, CancellationToken cancellationToken)
+        {
+            Asked.Add(request.Reason ?? request.Key);
+            return Task.FromResult(!string.Equals(request.Reason, deniedReason, StringComparison.Ordinal));
+        }
+    }
+
     private sealed class FixedProject(string path) : IPluginProjectContext
     {
         public PluginProjectInfo? Current { get; } = new("p1", "Project", path, null);

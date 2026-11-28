@@ -8,6 +8,7 @@ namespace Octopus.Terminal.MiniPty;
 public sealed class MiniPtyConnection : ITerminalConnection
 {
     private readonly PtySession _session;
+    private readonly TaskCompletionSource _processExited = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _outputDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Task<TerminalExit> _exited;
     private int _disposed;
@@ -20,6 +21,9 @@ public sealed class MiniPtyConnection : ITerminalConnection
 
     /// <inheritdoc />
     public int ProcessId => _session.ProcessId;
+
+    /// <inheritdoc />
+    public Task ProcessExited => _processExited.Task;
 
     /// <inheritdoc />
     public Task<TerminalExit> Exited => _exited;
@@ -42,9 +46,11 @@ public sealed class MiniPtyConnection : ITerminalConnection
     /// <inheritdoc />
     public ValueTask WriteAsync(ReadOnlyMemory<byte> input, CancellationToken cancellationToken = default)
     {
-        if (_session.HasExited) return ValueTask.CompletedTask;
-        try { return new ValueTask(_session.WriteInputAsync(input, cancellationToken).AsTask()); }
-        catch (ObjectDisposedException) { return ValueTask.CompletedTask; }
+        if (Volatile.Read(ref _disposed) != 0)
+            return ValueTask.FromException(new ObjectDisposedException(nameof(MiniPtyConnection)));
+        if (_session.HasExited)
+            return ValueTask.FromException(new IOException("Terminal process has exited."));
+        return _session.WriteInputAsync(input, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -103,6 +109,7 @@ public sealed class MiniPtyConnection : ITerminalConnection
         finally
         {
             await _session.DisposeAsync().ConfigureAwait(false);
+            _processExited.TrySetResult();
             _outputDone.TrySetResult();
         }
     }
@@ -111,7 +118,12 @@ public sealed class MiniPtyConnection : ITerminalConnection
     {
         PtyExitStatus status;
         try { status = await _session.WaitForExitAsync().ConfigureAwait(false); }
-        catch (ObjectDisposedException) { return new TerminalExit(null, null); }
+        catch (ObjectDisposedException)
+        {
+            _processExited.TrySetResult();
+            return new TerminalExit(null, null);
+        }
+        _processExited.TrySetResult();
         // Output must be read to the end first, so the last bytes are on screen when the exit is announced.
         await _outputDone.Task.ConfigureAwait(false);
         return status.Signal is { } signal

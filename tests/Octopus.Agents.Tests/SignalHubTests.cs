@@ -219,6 +219,20 @@ public sealed class SignalHubTests : IDisposable
     }
 
     [Fact]
+    public async Task Optional_link_id_in_envelope_is_preserved_on_agent_signal()
+    {
+        var endpoint = Start();
+        var (sub, received) = Next(_hub, "claude", "stop");
+        using var _ = sub;
+
+        var json = $$"""{"v":1,"token":"{{endpoint.Token}}","item":"item-1","agent":"claude","channel":"stop","account":"","link":"link-gen-2","ts":1234,"payload":"{}"}""";
+        await SendAsync(endpoint.Address, json);
+        var signal = await received;
+
+        Assert.Equal("link-gen-2", signal.LinkId);
+    }
+
+    [Fact]
     public async Task Dispose_removes_the_socket_and_its_directory()
     {
         var endpoint = Start();

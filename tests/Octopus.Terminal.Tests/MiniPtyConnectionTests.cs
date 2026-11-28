@@ -106,6 +106,34 @@ public class MiniPtyConnectionTests
         Assert.Contains(Path.GetFileName(dir), sb.ToString());
     }
 
+    [UnixFact]
+    public async Task WriteAsync_rejects_after_child_exit_before_output_drain()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var c = new MiniPtyConnectionFactory().Start(Spec("/usr/bin/true", []), 80, 24);
+        var native = (global::MiniPty.PtySession)c.GetType()
+            .GetField("_session", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(c)!;
+        await native.WaitForExitAsync(ct);
+        Assert.True(native.HasExited);
+        Assert.False(c.Exited.IsCompleted);
+        await Assert.ThrowsAnyAsync<IOException>(() => c.WriteAsync("impossible"u8.ToArray(), ct).AsTask());
+    }
+
+    [UnixFact]
+    public async Task ProcessExited_completes_before_output_drain_while_Exited_waits()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var c = new MiniPtyConnectionFactory().Start(Spec("/usr/bin/true", []), 80, 24);
+        await c.ProcessExited.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        Assert.False(c.Exited.IsCompleted);
+
+        var sb = new StringBuilder();
+        await Collect(c, sb).WaitAsync(TimeSpan.FromSeconds(10), ct);
+        var exit = await c.Exited.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        Assert.Equal(0, exit.ExitCode);
+    }
+
     [Fact]
     public async Task Dispose_ends_running_process()
     {

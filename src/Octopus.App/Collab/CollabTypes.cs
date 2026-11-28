@@ -171,14 +171,100 @@ public interface ICollabSessionBridge
     bool IsConnected { get; }
     string? CurrentStatusDetail { get; }
 
+    /// <summary>True when this bridge tracks which turn is currently running (for example, a live ACP GUI tab).</summary>
+    bool TracksActiveTurn => false;
+
+    /// <summary>True when a bridge without active-turn tracking may safely infer delegation ownership from the head pending task.</summary>
+    bool CanInferPendingOwnership => true;
+
+    /// <summary>True while a turn is actively running on this bridge (when <see cref="TracksActiveTurn"/> is true).</summary>
+    bool HasActiveTurn => false;
+
+    /// <summary>The collaboration thread id of the currently active turn, or null when idle or running an ordinary user turn.</summary>
+    string? ActiveCollabThreadId => null;
+
+    /// <summary>The collaboration task id of the currently active turn, or null when idle or running an ordinary user turn.</summary>
+    string? ActiveCollabTaskId => null;
+
+    /// <summary>The collaboration delivery id of the currently active turn, or null when idle or running an ordinary user turn.</summary>
+    string? ActiveCollabDeliveryId => null;
+
+    /// <summary>Opaque per-turn token when this bridge is running an active collaboration turn whose parent task may live on another coordinator/host.</summary>
+    string? ActiveExternalTurnKey => null;
+
+    /// <summary>
+    /// Reads the active collaboration turn identity for this session when supported by the bridge.
+    /// Returns true when the bridge tracks active turns (even if currently idle, in which case all out values are null).
+    /// </summary>
+    bool TryGetActiveCollabTurn(out string? threadId, out string? taskId, out string? deliveryId)
+    {
+        if (TracksActiveTurn)
+        {
+            var active = HasActiveTurn;
+            threadId = active ? ActiveCollabThreadId : null;
+            taskId = active ? ActiveCollabTaskId : null;
+            deliveryId = active ? ActiveCollabDeliveryId : null;
+            return true;
+        }
+        threadId = null;
+        taskId = null;
+        deliveryId = null;
+        return false;
+    }
+
     /// <summary>Delivers a collaboration prompt or thread message into this session's prompt queue.</summary>
     Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId = null, string? taskId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Delivers a collaboration prompt or thread message while indicating whether this delivery expects a reply or implicit turn-end report.</summary>
+    Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId, string? taskId, bool expectReply, CancellationToken cancellationToken)
+        => DeliverCollabPromptAsync(promptText, threadId, taskId, cancellationToken);
+
+    /// <summary>Delivers a collaboration prompt with an optional freshness check evaluated right before committing to the session.</summary>
+    Task<bool> DeliverCollabPromptAsync(
+        string promptText,
+        string? threadId,
+        string? taskId,
+        bool expectReply,
+        Func<bool>? shouldCommit,
+        CancellationToken cancellationToken)
+        => DeliverCollabPromptAsync(promptText, threadId, taskId, expectReply, deliveryId: null, shouldCommit, cancellationToken);
+
+    Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId, string? taskId, bool expectReply, string? deliveryId, Func<bool>? shouldCommit, CancellationToken cancellationToken)
+        => shouldCommit is not null && !shouldCommit()
+            ? Task.FromResult(false)
+            : DeliverCollabPromptAsync(promptText, threadId, taskId, expectReply, deliveryId, cancellationToken);
+
+    /// <summary>Delivers a collaboration prompt or thread message with an optional per-delivery identifier shared with turn-end callbacks.</summary>
+    Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId, string? taskId, bool expectReply, string? deliveryId, CancellationToken cancellationToken)
+        => DeliverCollabPromptAsync(promptText, threadId, taskId, expectReply, cancellationToken);
+
+    /// <summary>
+    /// True when this bridge supports exact per-delivery queue withdrawal without falling back to broad
+    /// thread- or task-wide cancellation.
+    /// </summary>
+    bool SupportsExactDeliveryWithdrawal => false;
 
     /// <summary>Removes any still-queued (not yet dispatched) collaboration prompts matching the given thread or task.</summary>
     int CancelQueuedCollabPrompts(string? threadId = null, string? taskId = null) => 0;
 
+    /// <summary>
+    /// Removes any still-queued (not yet dispatched) collaboration prompts matching the given thread, task, or delivery id.
+    /// When <paramref name="deliveryId"/> is non-empty, bridges that only implement the two-argument overload do not fall
+    /// back to broad thread- or task-wide deletion.
+    /// </summary>
+    int CancelQueuedCollabPrompts(string? threadId, string? taskId, string? deliveryId) =>
+        string.IsNullOrWhiteSpace(deliveryId)
+            ? CancelQueuedCollabPrompts(threadId, taskId)
+            : 0;
+
     /// <summary>Stops the session's running turn, as if the user pressed Stop. Used when a delegated task is cancelled.</summary>
     Task CancelActiveTurnAsync() => Task.CompletedTask;
+
+    /// <summary>Stops the session's running turn only if it matches the given collaboration thread or task (or unconditionally when neither is specified).</summary>
+    Task CancelActiveTurnAsync(string? threadId, string? taskId) => CancelActiveTurnAsync();
+
+    /// <summary>Stops the session's running turn only if it matches the given collaboration thread, task, or delivery id (or unconditionally when none is specified).</summary>
+    Task CancelActiveTurnAsync(string? threadId, string? taskId, string? deliveryId) => CancelActiveTurnAsync(threadId, taskId);
 
     /// <summary>Produces a concise summary of recent conversation turns for peer inspection without waking the model.</summary>
     string ReadRecentSummary(int maxTurns = 5);

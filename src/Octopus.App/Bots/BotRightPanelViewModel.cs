@@ -405,6 +405,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
     private readonly IAgentScanner? _scanner;
     private readonly ISettingsStore? _settings;
     private readonly IModelDiscovery? _modelDiscovery;
+    private readonly Workspace.ITabContentRegistry? _tabs;
     private readonly Dictionary<string, IReadOnlyList<AgentOption>> _discoveredModels = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _modelDiscoveryCts;
     private string? _modelDiscoveryKey;
@@ -425,7 +426,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         IAgentScanner? scanner = null,
         ISettingsStore? settings = null,
         BotScheduler? scheduler = null,
-        IModelDiscovery? modelDiscovery = null)
+        IModelDiscovery? modelDiscovery = null,
+        Workspace.ITabContentRegistry? tabs = null)
     {
         _bots = bots;
         _scheduler = scheduler;
@@ -439,6 +441,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         _scanner = scanner;
         _settings = settings;
         _modelDiscovery = modelDiscovery;
+        _tabs = tabs;
 
         Files.OpenRequested += (_, path) => OpenBotFile(path);
         Search.OpenRequested += (_, path) => OpenBotFile(path);
@@ -1087,8 +1090,8 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
                 needsInput: chatNeeds,
                 open: row => _bots.OpenChat(row.BotId, row.ChatId),
                 rename: RenameChatAsync,
-                close: row => _bots.CloseChat(row.BotId, row.ChatId),
-                delete: row => _bots.DeleteChat(row.BotId, row.ChatId)));
+                close: row => Workspace.BotOwnerRetirement.RetireChatAndMutate(_bots, _tabs, row.BotId, row.ChatId, delete: false),
+                delete: row => Workspace.BotOwnerRetirement.RetireChatAndMutate(_bots, _tabs, row.BotId, row.ChatId, delete: true)));
         }
 
         HasNoFilteredChats = FilteredChats.Count == 0;
@@ -1302,7 +1305,7 @@ public sealed partial class BotRightPanelViewModel : ObservableObject, IDisposab
         if (ok)
         {
             IsSettingsOpen = false;
-            _bots.DeleteBot(bot.Id);
+            Workspace.BotOwnerRetirement.RetireBotAndDelete(_bots, _tabs, bot.Id);
         }
     }
 

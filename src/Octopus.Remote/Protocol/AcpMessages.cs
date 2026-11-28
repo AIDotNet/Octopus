@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Octopus.Remote.Protocol;
 
 // A host's agent that runs as an ACP conversation in a GUI tab, shown on a device (design/ui/移动端功能扩展方案.html, G-A).
@@ -8,7 +10,7 @@ namespace Octopus.Remote.Protocol;
 // acp/attach    device → host  AcpRefMessage           → AcpSnapshotMessage (the latest entries and the sequence number)
 // acp/detach    device → host  AcpRefMessage           → Nothing
 // acp/prompt    device → host  AcpPromptMessage        → Nothing (queued by the tab when a turn runs)
-// acp/cancel    device → host  AcpRefMessage           → Nothing
+// acp/cancel    device → host  AcpCancelMessage        → Nothing (unscoped Stop when collab fields are omitted)
 // acp/respond   device → host  AcpRespondMessage       → Nothing (a permission or question card)
 // acp/setOption device → host  AcpSetOptionMessage     → Nothing
 // acp/mentionTargets device → host  AcpMentionTargetsRequestMessage → AcpMentionTargetsMessage (sessions and agents
@@ -21,6 +23,19 @@ namespace Octopus.Remote.Protocol;
 public sealed class AcpRefMessage
 {
     public string ItemId { get; set; } = "";
+}
+
+/// <summary>
+/// Stops a GUI conversation's active turn. When collaboration identity fields are omitted (or null), acts as an
+/// unconditional Stop (wire-compatible with <see cref="AcpRefMessage"/>); when set on a host with
+/// <see cref="RemoteMethods.CapabilityAcpCollabCancel"/>, cancels only if the host's active turn still matches.
+/// </summary>
+public sealed class AcpCancelMessage
+{
+    public string ItemId { get; set; } = "";
+    public string? CollabThreadId { get; set; }
+    public string? CollabTaskId { get; set; }
+    public string? CollabDeliveryId { get; set; }
 }
 
 /// <summary>How a GUI conversation is doing, as a device shows it.</summary>
@@ -113,6 +128,8 @@ public sealed class AcpEntryMessage
     public bool IsStreaming { get; set; }
     /// <summary>Assistant: why the turn failed.</summary>
     public string? ErrorText { get; set; }
+    /// <summary>Assistant: why the turn stopped when it did not end normally (for example, <c>cancelled</c>). Null on normal completion or older hosts.</summary>
+    public string? StopReason { get; set; }
     /// <summary>Assistant: how long the turn took, as the host words it ("12s").</summary>
     public string? Duration { get; set; }
     /// <summary>User: the names of the attached files and images.</summary>
@@ -125,6 +142,20 @@ public sealed class AcpEntryMessage
     public List<AcpPlanEntryMessage>? Plan { get; set; }
     public AcpPermissionMessage? Permission { get; set; }
     public AcpQuestionMessage? Question { get; set; }
+    /// <summary>Optional structured collaboration attribution preserved across display text or snapshot truncation; null for ordinary turns or older hosts.</summary>
+    public AcpCollabCorrelationMessage? Collab { get; set; }
+}
+
+/// <summary>Structured collaboration attribution carried alongside a timeline entry independently of display text.</summary>
+public sealed class AcpCollabCorrelationMessage
+{
+    public string? ThreadId { get; set; }
+    public string? TaskId { get; set; }
+    public string? DeliveryId { get; set; }
+    public bool ExpectsReply { get; set; }
+    /// <summary>True when this turn ended normally while unfinished host-side child delegations owned by the turn remain active; omitted on older hosts or ordinary completions.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Deferred { get; set; }
 }
 
 /// <summary>One intermediate assistant text segment folded into the work area.</summary>
@@ -244,6 +275,8 @@ public sealed class AcpPromptMessage
     public List<AcpMentionMessage>? Mentions { get; set; }
     /// <summary>When true and a turn is active, interrupts the active turn gracefully and sends this prompt immediately instead of queueing it.</summary>
     public bool Immediate { get; set; }
+    /// <summary>Optional per-delivery collaboration identifier echoed on the resulting timeline turn entries; ignored by older hosts.</summary>
+    public string? CollabDeliveryId { get; set; }
 }
 
 /// <summary>One inline mention of a prompt: the token as written (<c>@Codex（重构登录）</c>) and what it points at.</summary>

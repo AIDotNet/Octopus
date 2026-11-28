@@ -10,11 +10,13 @@ internal sealed record SignalEnvironment(
     string? ItemId,
     string? AccountVariable,
     string? Chain,
-    IReadOnlyDictionary<string, string> All)
+    IReadOnlyDictionary<string, string> All,
+    string? LinkId = null)
 {
     public const string EndpointVariable = "OCTOPUS_SIGNAL_ENDPOINT";
     public const string TokenVariable = "OCTOPUS_SIGNAL_TOKEN";
     public const string ItemVariable = "OCTOPUS_ITEM_ID";
+    public const string LinkIdVariable = "OCTOPUS_SIGNAL_LINK_ID";
     /// <summary>The name of the variable that tells accounts apart, e.g. <c>CLAUDE_CONFIG_DIR</c>.</summary>
     public const string AccountVariableName = "OCTOPUS_SIGNAL_ACCOUNT_VAR";
     /// <summary>The user's own command for a single slot (status line, notify), resolved by Octopus at launch.</summary>
@@ -40,5 +42,6 @@ internal sealed record SignalEnvironment(
         all.GetValueOrDefault(ItemVariable),
         all.GetValueOrDefault(AccountVariableName),
         all.GetValueOrDefault(ChainVariable),
-        all);
+        all,
+        all.GetValueOrDefault(LinkIdVariable));
 }

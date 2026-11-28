@@ -70,6 +70,21 @@ public class SignalEnvelopeTests
         var environment = SignalEnvironment.From(new Dictionary<string, string> { [SignalEnvironment.AccountVariableName] = "CODEX_HOME" });
         Assert.Equal("", environment.Account);
     }
+
+    [Fact]
+    public void Carries_signal_link_id_when_present()
+    {
+        var environment = SignalEnvironment.From(new Dictionary<string, string>
+        {
+            [SignalEnvironment.TokenVariable] = "tok",
+            [SignalEnvironment.ItemVariable] = "item-1",
+            [SignalEnvironment.LinkIdVariable] = "link-abc-2",
+        });
+        var options = ForwarderOptions.Parse(["hook", "--agent", "claude", "--channel", "stop"])!;
+
+        using var envelope = JsonDocument.Parse(SignalEnvelope.Build(options, environment, "{}", 1794069588307));
+        Assert.Equal("link-abc-2", envelope.RootElement.GetProperty("link").GetString());
+    }
 }
 
 public sealed class SignalThrottleTests : IDisposable

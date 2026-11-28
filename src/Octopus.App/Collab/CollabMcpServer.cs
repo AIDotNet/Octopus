@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -23,9 +22,23 @@ public sealed class CollabMcpServer : IDisposable
     private const int MaxBodyBytes = 4 * 1024 * 1024;
     private const int MaxHeaderBytes = 32 * 1024;
 
+    internal const string DefaultLeaseId = "default";
+    internal const string AcpDefaultLeaseId = "acp";
+
+    private sealed record IssuedToken(string Value, byte[] Bytes);
+
+    private sealed class TokenLeaseHandle(CollabMcpServer server, string itemId, string leaseId) : IDisposable
+    {
+        private CollabMcpServer? _server = server;
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _server, null)?.RevokeLease(itemId, leaseId);
+        }
+    }
+
     private readonly object _gate = new();
-    private readonly ConcurrentDictionary<string, byte[]> _itemToTokenBytes = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, string> _itemToToken = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, IssuedToken>> _leases = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _stop = new();
     private TcpListener? _listener;
     private Task? _acceptLoop;
@@ -48,7 +61,15 @@ public sealed class CollabMcpServer : IDisposable
     }
 
     public string? EndpointUrl { get; private set; }
-    public bool IsRunning => _listener is not null && !_disposed;
+    public bool IsRunning
+    {
+        get
+        {
+            lock (_gate) return _listener is not null && !_disposed;
+        }
+    }
+
+    internal static string NewLeaseId() => Guid.NewGuid().ToString("N");
 
     public void AttachHandler(ICollabToolHandler handler)
     {
@@ -84,38 +105,127 @@ public sealed class CollabMcpServer : IDisposable
     public string IssueToken(string itemId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(itemId);
-        return _itemToToken.GetOrAdd(itemId, id =>
+        lock (_gate)
         {
-            var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
-            _itemToTokenBytes[id] = Encoding.UTF8.GetBytes(token);
-            return token;
-        });
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!_leases.TryGetValue(itemId, out var map))
+            {
+                map = new Dictionary<string, IssuedToken>(StringComparer.Ordinal);
+                _leases[itemId] = map;
+            }
+            if (!map.TryGetValue(DefaultLeaseId, out var existing))
+            {
+                existing = CreateToken();
+                map[DefaultLeaseId] = existing;
+            }
+            return existing.Value;
+        }
     }
 
+    /// <summary>Mints a fresh cryptographic bearer token bound to <paramref name="itemId"/>, immediately invalidating any prior default token.</summary>
+    public string RotateToken(string itemId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(itemId);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var fresh = CreateToken();
+            if (!_leases.TryGetValue(itemId, out var map))
+            {
+                map = new Dictionary<string, IssuedToken>(StringComparer.Ordinal);
+                _leases[itemId] = map;
+            }
+            map[DefaultLeaseId] = fresh;
+            return fresh.Value;
+        }
+    }
+
+    /// <summary>
+    /// Atomically verifies the server is running and not shutting down, then mints a fresh bearer token bound to
+    /// (<paramref name="itemId"/>, <paramref name="leaseId"/>).
+    /// </summary>
+    internal bool TryIssueLease(string itemId, string leaseId, out string token, out string endpointUrl)
+    {
+        token = "";
+        endpointUrl = "";
+        if (string.IsNullOrWhiteSpace(itemId) || string.IsNullOrWhiteSpace(leaseId))
+        {
+            return false;
+        }
+        lock (_gate)
+        {
+            if (_disposed || _listener is null || string.IsNullOrWhiteSpace(EndpointUrl))
+            {
+                return false;
+            }
+            var fresh = CreateToken();
+            if (!_leases.TryGetValue(itemId, out var map))
+            {
+                map = new Dictionary<string, IssuedToken>(StringComparer.Ordinal);
+                _leases[itemId] = map;
+            }
+            map[leaseId] = fresh;
+            token = fresh.Value;
+            endpointUrl = EndpointUrl;
+            return true;
+        }
+    }
+
+    /// <summary>Revokes only the specific credential lease bound to (<paramref name="itemId"/>, <paramref name="leaseId"/>).</summary>
+    internal void RevokeLease(string itemId, string? leaseId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId) || string.IsNullOrWhiteSpace(leaseId)) return;
+        lock (_gate)
+        {
+            if (!_leases.TryGetValue(itemId, out var map)) return;
+            map.Remove(leaseId);
+            if (map.Count == 0)
+            {
+                _leases.Remove(itemId);
+            }
+        }
+    }
+
+    /// <summary>Revokes every credential lease bound to <paramref name="itemId"/> (reserved for whole-item/project removal).</summary>
     public void RevokeToken(string itemId)
     {
         if (string.IsNullOrWhiteSpace(itemId)) return;
-        _itemToToken.TryRemove(itemId, out _);
-        _itemToTokenBytes.TryRemove(itemId, out _);
+        lock (_gate)
+        {
+            _leases.Remove(itemId);
+        }
+    }
+
+    private static IssuedToken CreateToken()
+    {
+        var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
+        return new IssuedToken(token, Encoding.UTF8.GetBytes(token));
     }
 
     /// <summary>
     /// Builds an <see cref="AcpMcpServerConfig"/> using <c>auto</c> transport: ACP agents supporting HTTP MCP connect
     /// directly without extra processes; stdio-only adapters automatically fall back to <c>octopus-signal --mcp</c>.
     /// </summary>
-    public AcpMcpServerConfig? BuildAcpServerConfig(string itemId, string? forwarderExecutable)
+    public AcpMcpServerConfig? BuildAcpServerConfig(string itemId, string? forwarderExecutable) =>
+        TryBuildAcpServerConfigLease(itemId, forwarderExecutable, AcpDefaultLeaseId)?.Config;
+
+    internal (AcpMcpServerConfig Config, IDisposable Lease)? TryBuildAcpServerConfigLease(
+        string itemId,
+        string? forwarderExecutable,
+        string? leaseId = null)
     {
-        if (!IsRunning || string.IsNullOrWhiteSpace(EndpointUrl))
+        if (string.IsNullOrWhiteSpace(itemId)) return null;
+        var effectiveLeaseId = string.IsNullOrWhiteSpace(leaseId) ? NewLeaseId() : leaseId;
+        var hasForwarder = !string.IsNullOrWhiteSpace(forwarderExecutable) && File.Exists(forwarderExecutable);
+        if (!TryIssueLease(itemId, effectiveLeaseId, out var token, out var endpointUrl))
         {
             return null;
         }
-        var token = IssueToken(itemId);
-        var hasForwarder = !string.IsNullOrWhiteSpace(forwarderExecutable) && File.Exists(forwarderExecutable);
-        return new AcpMcpServerConfig
+        var config = new AcpMcpServerConfig
         {
             Name = _serverName,
             Transport = hasForwarder ? "auto" : "http",
-            Url = EndpointUrl,
+            Url = endpointUrl,
             Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Authorization"] = $"Bearer {token}",
@@ -125,13 +235,14 @@ public sealed class CollabMcpServer : IDisposable
             Env = hasForwarder
                 ? new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    [UrlEnvVariable] = EndpointUrl,
+                    [UrlEnvVariable] = endpointUrl,
                     [TokenEnvVariable] = token,
                     [ItemIdEnvVariable] = itemId,
                 }
                 : [],
             Enabled = true,
         };
+        return (config, new TokenLeaseHandle(this, itemId, effectiveLeaseId));
     }
 
     public bool TryAuthenticateBearer(string? authorizationHeader, out string callerItemId)
@@ -143,13 +254,21 @@ public sealed class CollabMcpServer : IDisposable
         var candidate = authorizationHeader[prefix.Length..].Trim();
         if (candidate.Length == 0) return false;
         var candidateBytes = Encoding.UTF8.GetBytes(candidate);
-        foreach (var (itemId, expected) in _itemToTokenBytes)
+        lock (_gate)
         {
-            if (expected.Length == candidateBytes.Length
-                && CryptographicOperations.FixedTimeEquals(expected, candidateBytes))
+            if (_disposed) return false;
+            foreach (var (itemId, map) in _leases)
             {
-                callerItemId = itemId;
-                return true;
+                foreach (var issued in map.Values)
+                {
+                    var expected = issued.Bytes;
+                    if (expected.Length == candidateBytes.Length
+                        && CryptographicOperations.FixedTimeEquals(expected, candidateBytes))
+                    {
+                        callerItemId = itemId;
+                        return true;
+                    }
+                }
             }
         }
         return false;
@@ -263,14 +382,21 @@ public sealed class CollabMcpServer : IDisposable
 
     /// <summary>
     /// Completes when the client closes its side (a read returns 0 bytes or fails) and then cancels <paramref name="requestCts"/>.
-    /// Clients send one request per connection (we answer with Connection: close), so any read result means the request is over.
+    /// Non-EOF bytes on an open connection do not mean the client hung up, so they are drained while watching for EOF.
     /// </summary>
     private static async Task WatchForHangupAsync(NetworkStream stream, CancellationTokenSource requestCts)
     {
-        var probe = new byte[1];
+        var probe = new byte[256];
         try
         {
-            _ = await stream.ReadAsync(probe, requestCts.Token).ConfigureAwait(false);
+            while (true)
+            {
+                var read = await stream.ReadAsync(probe, requestCts.Token).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -577,9 +703,10 @@ public sealed class CollabMcpServer : IDisposable
         {
             if (_disposed) return;
             _disposed = true;
-            _stop.Cancel();
+            _leases.Clear();
             StopLocked();
         }
+        _stop.Cancel();
         _stop.Dispose();
     }
 }

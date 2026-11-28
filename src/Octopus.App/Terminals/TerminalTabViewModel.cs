@@ -124,6 +124,21 @@ public sealed partial class TerminalTabViewModel : ObservableObject, IDisposable
         }
     }
 
+    internal TerminalLaunch? TryCreateLaunch(bool allowResume = true, string? leaseId = null)
+    {
+        try
+        {
+            Error = null;
+            Resumed = allowResume && _launcher.Resumes(Item);
+            return _launcher.PlanLaunch(_project, Item, allowResume, leaseId);
+        }
+        catch (Exception e)
+        {
+            Error = e.Message;
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         _settings.Changed -= OnSettingsChanged;

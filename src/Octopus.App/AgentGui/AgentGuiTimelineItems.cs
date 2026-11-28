@@ -55,6 +55,8 @@ public sealed partial class UserTurnItem : AgentTimelineItem
     public bool IsCollabMessage { get; private set; }
     public bool IsRegularUserMessage => !IsCollabMessage;
     public string CollabHeader { get; private set; } = "";
+    /// <summary>Structured collaboration attribution preserved for remote mirrors independently of display text truncation.</summary>
+    public Octopus.Remote.Protocol.AcpCollabCorrelationMessage? CollabCorrelation { get; set; }
 
     /// <summary>Expanded state bound two-way to <see cref="ExpandableContent.IsExpanded"/> so it survives list recycling.</summary>
     [ObservableProperty]
@@ -2102,6 +2104,9 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem, IDisposable
     [ObservableProperty] public partial bool IsWorkExpanded { get; set; }
     [ObservableProperty] public partial string? ErrorText { get; set; }
     [ObservableProperty] public partial string? StopReasonNotice { get; set; }
+    public string? StopReason { get; private set; }
+    /// <summary>Structured collaboration attribution preserved for remote mirrors independently of display text or snapshot truncation.</summary>
+    public Octopus.Remote.Protocol.AcpCollabCorrelationMessage? CollabCorrelation { get; set; }
     [ObservableProperty] public partial string? CompactionNotice { get; set; }
     [ObservableProperty] public partial string DurationText { get; set; } = "";
     [ObservableProperty] public partial string LiveElapsedText { get; set; } = "";
@@ -2437,7 +2442,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem, IDisposable
         OnPropertyChanged(nameof(HasCompactionNotice));
     }
 
-    public void Complete(string? error = null, bool showDuration = true, string? stopReasonNotice = null)
+    public void Complete(string? error = null, bool showDuration = true, string? stopReasonNotice = null, string? stopReason = null)
     {
         _activeThoughtStep?.FinishThought();
         _activeThoughtStep = null;
@@ -2457,6 +2462,7 @@ public sealed partial class AssistantTurnItem : AgentTimelineItem, IDisposable
             PromoteLastTextStepToResponse();
         }
 
+        StopReason = string.IsNullOrWhiteSpace(stopReason) ? null : stopReason;
         IsStreaming = false;
         IsWaitingForInput = false;
         _isWritingReply = false;

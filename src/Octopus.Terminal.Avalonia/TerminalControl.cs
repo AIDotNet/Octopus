@@ -24,6 +24,7 @@ namespace Octopus.Terminal.Avalonia;
 public sealed class TerminalControl : Decorator
 {
     private static readonly FontFamily DefaultFont = new("Menlo, Cascadia Mono, Consolas, DejaVu Sans Mono, monospace");
+    private static readonly TerminalSize DefaultBackgroundGrid = new(80, 24, 0, 0);
 
     public static readonly StyledProperty<FontFamily> FontFamilyProperty =
         AvaloniaProperty.Register<TerminalControl, FontFamily>(nameof(FontFamily), DefaultFont);
@@ -76,10 +77,25 @@ public sealed class TerminalControl : Decorator
     };
     private readonly Border _messageBar;
     private readonly TextBlock _message = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly Border _recoveryBar;
+    private readonly TextBlock _recoveryText = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _sendHeldButton = new() { Name = "SendHeldInputButton", Content = "Send held", Padding = new Thickness(8, 3), Focusable = false };
+    private readonly Button _copyHeldButton = new() { Name = "CopyHeldInputButton", Content = "Copy held", Padding = new Thickness(8, 3), Focusable = false };
+    private readonly Button _discardHeldButton = new() { Name = "DiscardHeldInputButton", Content = "Discard held", Padding = new Thickness(8, 3), Focusable = false };
+    private readonly Button _markCleanButton = new() { Name = "MarkInputCleanButton", Content = "Input is clean", Padding = new Thickness(8, 3), Focusable = false };
+    private TerminalSession? _displayedRecoverySession;
+    private TerminalPendingInputRecovery? _displayedRecovery;
+    private Button? _gestureButton;
+    private TerminalSession? _gestureSession;
+    private long _gestureRecoveryId;
+    private bool _gestureExpired;
+    private bool _inPointerRelease;
 
     private LaunchSpec? _spec;
+    private Func<string, TerminalLaunch?>? _launchFactory;
     private ITerminalConnectionFactory? _factory;
     private TerminalSession? _session;
+    private Action<long, string, TerminalExit>? _linkExitedHandler;
     // With a registry the session belongs to it (under _key) and outlives this control; without one it is the control's own.
     private TerminalSessionRegistry? _registry;
     private string? _key;
@@ -104,6 +120,7 @@ public sealed class TerminalControl : Decorator
     private long? _searchPosition;
     private bool _dark = true;
     private bool _startFailed;
+    private bool _startWhenHidden;
     private string? _title;
     private bool _isRunning;
     private int? _exitCode;
@@ -120,7 +137,31 @@ public sealed class TerminalControl : Decorator
             IsHitTestVisible = false,
             Child = _message,
         };
-        var surface = new Grid { Children = { _view, _overlay, _dropOverlay, _messageBar, _searchHost } };
+        var recoveryButtons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _sendHeldButton, _copyHeldButton, _discardHeldButton, _markCleanButton },
+        };
+        var recoveryLayout = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(recoveryButtons, Dock.Right);
+        recoveryLayout.Children.Add(recoveryButtons);
+        recoveryLayout.Children.Add(_recoveryText);
+        _recoveryBar = new Border
+        {
+            Name = "PendingInputRecoveryBar",
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Padding = new Thickness(12, 6),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            IsVisible = false,
+            Child = recoveryLayout,
+        };
+        BindRecoveryButton(_sendHeldButton, OnSendHeldButtonClicked);
+        BindRecoveryButton(_copyHeldButton, b => _ = OnCopyHeldButtonClickedAsync(b));
+        BindRecoveryButton(_discardHeldButton, OnDiscardHeldButtonClicked);
+        BindRecoveryButton(_markCleanButton, OnMarkCleanButtonClicked);
+        var surface = new Grid { Children = { _view, _overlay, _dropOverlay, _recoveryBar, _messageBar, _searchHost } };
         Grid.SetColumn(_scrollBar, 1);
         Grid.SetColumnSpan(_background, 2);
         Child = new Grid
@@ -232,11 +273,72 @@ public sealed class TerminalControl : Decorator
     /// <summary>The process exited. The argument is the exit code.</summary>
     public event EventHandler<int?>? Exited;
 
+    /// <summary>A link owned by this control exited, carrying its originating generation and link identifier.</summary>
+    public event EventHandler<TerminalLinkExitedEventArgs>? LinkExited;
+
+    /// <summary>Starting the process failed. The argument is the failure.</summary>
+    public event EventHandler<Exception>? StartFailed;
+
     /// <summary>The program rang the bell.</summary>
     public event EventHandler? Bell;
 
     /// <summary>A new frame was rendered in the terminal viewport.</summary>
     public event EventHandler? FrameUpdated;
+
+    /// <summary>
+    /// Host-side recovery state when a bracketed collaboration paste was cancelled before submit on the active link,
+    /// or null when input is clean or no link is running.
+    /// </summary>
+    public TerminalPendingInputRecovery? PendingInputRecovery => _session?.GetPendingInputRecovery();
+
+    /// <summary>Pending input recovery state changed (entered, updated, or resolved).</summary>
+    public event EventHandler? PendingInputRecoveryChanged;
+
+    /// <summary>
+    /// Explicitly sends held manual input bytes for the active session's current recovery in original order.
+    /// </summary>
+    public bool SendHeldManualInput()
+    {
+        if (_session is not { } session) return false;
+        var sent = session.SendHeldManualInput();
+        if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+        return sent;
+    }
+
+    /// <summary>
+    /// Copies held manual input text for the active session's current recovery to the clipboard without sending or
+    /// discarding it.
+    /// </summary>
+    public async Task<bool> CopyHeldManualInputAsync()
+    {
+        if (_session?.GetPendingInputRecovery() is not { HasHeldInput: true } recovery) return false;
+        await SetClipboardTextAsync(recovery.HeldInputText).ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>
+    /// Discards held manual input bytes for the active session's current recovery without sending them while keeping
+    /// automated collaboration fenced.
+    /// </summary>
+    public bool DiscardHeldManualInput()
+    {
+        if (_session is not { } session) return false;
+        var discarded = session.DiscardHeldManualInput();
+        if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+        return discarded;
+    }
+
+    /// <summary>
+    /// Marks the terminal input clean for the active session's current recovery after held input has been sent or
+    /// discarded, unfencing collaboration.
+    /// </summary>
+    public bool MarkInputClean()
+    {
+        if (_session is not { } session) return false;
+        var cleared = session.MarkInputClean();
+        if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+        return cleared;
+    }
 
     /// <summary>
     /// Runs <paramref name="spec"/>. Safe to call before the control has been laid out: the process starts once the
@@ -250,7 +352,16 @@ public sealed class TerminalControl : Decorator
     /// on another device before this control existed) is shown as it is, and <paramref name="spec"/> is not started a
     /// second time. Calling this again on a control that shows a session replaces that session with a new run.
     /// </summary>
-    public void Start(LaunchSpec spec, ITerminalConnectionFactory factory, TerminalSessionRegistry? registry, string? key)
+    public void Start(LaunchSpec spec, ITerminalConnectionFactory factory, TerminalSessionRegistry? registry, string? key, bool startWhenHidden = false) =>
+        Start(_ => new TerminalLaunch(spec), factory, registry, key, startWhenHidden, initialSpec: spec);
+
+    /// <summary>
+    /// Starts or attaches to a terminal session using a lazy launch factory invoked only when a new process is actually created or restarted.
+    /// </summary>
+    public void Start(Func<string, TerminalLaunch?> launchFactory, ITerminalConnectionFactory factory, TerminalSessionRegistry? registry = null, string? key = null, bool startWhenHidden = false) =>
+        Start(launchFactory, factory, registry, key, startWhenHidden, initialSpec: null);
+
+    private void Start(Func<string, TerminalLaunch?> launchFactory, ITerminalConnectionFactory factory, TerminalSessionRegistry? registry, string? key, bool startWhenHidden, LaunchSpec? initialSpec)
     {
         var old = _session;
         var (oldRegistry, oldKey) = (_registry, _key);
@@ -260,9 +371,11 @@ public sealed class TerminalControl : Decorator
             _ = oldRegistry is not null && oldKey is not null ? oldRegistry.CloseAsync(oldKey, old) : old.DisposeAsync().AsTask();
         }
         (_registry, _key) = registry is not null && key is not null ? (registry, key) : (null, null);
-        _spec = spec;
+        _launchFactory = launchFactory;
+        _spec = initialSpec;
         _factory = factory;
         _startFailed = false;
+        _startWhenHidden = startWhenHidden;
         Title = null;
         ExitCode = null;
         IsRunning = false;
@@ -270,10 +383,17 @@ public sealed class TerminalControl : Decorator
         TryStartSession();
     }
 
-    /// <summary>Restarts the same command (after it exited, or replacing the running process).</summary>
+    /// <summary>Starts the configured session immediately with a default grid even before the control has layout bounds.</summary>
+    public void EnsureStartedWhenHidden()
+    {
+        _startWhenHidden = true;
+        TryStartSession();
+    }
+
+    /// <summary>Restarts the command (after it exited, or replacing the running process).</summary>
     public async Task RestartAsync()
     {
-        if (_spec is null || _factory is null) return;
+        if ((_spec is null && _launchFactory is null) || _factory is null) return;
         if (_session is null)
         {
             _startFailed = false;
@@ -286,6 +406,7 @@ public sealed class TerminalControl : Decorator
         try
         {
             await _session.RestartAsync();
+            _spec = _session.Spec;
             IsRunning = _session.IsRunning;
         }
         catch (Exception ex)
@@ -301,8 +422,10 @@ public sealed class TerminalControl : Decorator
         var session = _session;
         var (registry, key) = (_registry, _key);
         DetachSession();
+        _launchFactory = null;
         _spec = null;
         _factory = null;
+        _startWhenHidden = false;
         (_registry, _key) = (null, null);
         IsRunning = false;
         if (session is null) return;
@@ -538,29 +661,51 @@ public sealed class TerminalControl : Decorator
 
     private void TryStartSession()
     {
-        if (_session is not null || _startFailed || _spec is null || _factory is null) return;
-        if (_view.Bounds is not { Width: > 0, Height: > 0 } bounds || TopLevel.GetTopLevel(this) is null) return;
-        var grid = _view.GridSizeFor(bounds.Size);
-        if (grid.Columns < 2) return;
+        if (_session is not null || _startFailed || _launchFactory is null || _factory is null) return;
+        TerminalSize grid;
+        if (_view.Bounds is { Width: > 0, Height: > 0 } bounds && TopLevel.GetTopLevel(this) is not null)
+        {
+            grid = _view.GridSizeFor(bounds.Size);
+            if (grid.Columns < 2) return;
+        }
+        else if (_startWhenHidden)
+        {
+            grid = DefaultBackgroundGrid;
+        }
+        else
+        {
+            return;
+        }
 
-        TerminalSession session;
+        TerminalSession? session;
         var created = true;
         try
         {
             if (_registry is not null && _key is not null)
             {
-                session = _registry.GetOrStart(_key, _spec, _factory, grid, TerminalPalettes.For(_dark),
+                session = _registry.TryGetOrStart(_key, _launchFactory, _factory, grid, TerminalPalettes.For(_dark),
                     TerminalPalettes.SchemeFor(_dark), Math.Max(100, ScrollbackLines), out created);
             }
             else
             {
-                session = new TerminalSession(_spec, _factory, grid, TerminalPalettes.For(_dark),
+                var owned = new TerminalSession(_launchFactory, _factory, grid, TerminalPalettes.For(_dark),
                     TerminalPalettes.SchemeFor(_dark), Math.Max(100, ScrollbackLines), IsOnScreen)
                 { IsMirror = IsMirror };
-                try { session.Start(); }
+                try
+                {
+                    if (owned.TryStart())
+                    {
+                        session = owned;
+                    }
+                    else
+                    {
+                        _ = owned.DisposeAsync().AsTask();
+                        session = null;
+                    }
+                }
                 catch
                 {
-                    _ = session.DisposeAsync().AsTask();
+                    _ = owned.DisposeAsync().AsTask();
                     throw;
                 }
             }
@@ -570,16 +715,32 @@ public sealed class TerminalControl : Decorator
             _startFailed = true;
             IsRunning = false;
             ShowMessage(ex.Message);
+            StartFailed?.Invoke(this, ex);
             return;
         }
+        if (session is null)
+        {
+            _startFailed = true;
+            IsRunning = false;
+            return;
+        }
+        _spec = session.Spec;
         session.FrameReady += OnFrame;
         session.TitleChanged += OnTitle;
         session.Bell += OnBell;
-        session.Exited += OnExited;
+        Action<long, string, TerminalExit> linkExitedHandler = (generation, linkId, exit) =>
+        {
+            if (!ReferenceEquals(_session, session)) return;
+            OnLinkExited(session, generation, linkId, exit);
+        };
+        _linkExitedHandler = linkExitedHandler;
+        session.LinkExited += linkExitedHandler;
         session.SizeOwnerChanged += OnSizeOwnerChanged;
+        session.PendingInputRecoveryChanged += OnPendingInputRecoveryChanged;
         _session = session;
         _router = new TerminalInputRouter(session, () => Keymap, GetClipboardTextAsync, SaveClipboardImageAsync, SetClipboardTextAsync, AllowPasteAsync, OpenSearch);
         IsRunning = session.IsRunning;
+        UpdateRecoveryBar();
         if (!created)
         {
             // It ran before this control existed: take what it has (its program's title, how it ended) and give it this
@@ -600,13 +761,23 @@ public sealed class TerminalControl : Decorator
             session.FrameReady -= OnFrame;
             session.TitleChanged -= OnTitle;
             session.Bell -= OnBell;
-            session.Exited -= OnExited;
+            if (_linkExitedHandler is { } linkExitedHandler)
+            {
+                session.LinkExited -= linkExitedHandler;
+                _linkExitedHandler = null;
+            }
             session.SizeOwnerChanged -= OnSizeOwnerChanged;
+            session.PendingInputRecoveryChanged -= OnPendingInputRecoveryChanged;
             session.SetViewer(null);
         }
         _router?.Dispose();
         _router = null;
         _session = null;
+        _displayedRecoverySession = null;
+        _displayedRecovery = null;
+        ClearGestureState();
+        _inPointerRelease = false;
+        _recoveryBar.IsVisible = false;
         _view.Snapshot = null;
         _frame = null;
         _scrollBar.IsVisible = false;
@@ -666,7 +837,19 @@ public sealed class TerminalControl : Decorator
 
     private void OnBell() => Bell?.Invoke(this, EventArgs.Empty);
 
-    private void OnExited(TerminalExit exit) => Exited?.Invoke(this, ShowExit(exit));
+    private void OnLinkExited(TerminalSession session, long generation, string linkId, TerminalExit exit)
+    {
+        var isCurrentLink = ReferenceEquals(_session, session)
+            && session.Generation == generation
+            && string.Equals(session.CurrentLinkId, linkId, StringComparison.Ordinal);
+        var code = exit.ExitCode ?? (exit.Signal is { } s ? 128 + s : null);
+        if (isCurrentLink)
+        {
+            ShowExit(exit);
+            Exited?.Invoke(this, code);
+        }
+        LinkExited?.Invoke(this, new TerminalLinkExitedEventArgs(session, generation, linkId, code, isCurrentLink));
+    }
 
     private int? ShowExit(TerminalExit exit)
     {
@@ -682,6 +865,220 @@ public sealed class TerminalControl : Decorator
     {
         if (_session is { SizeOwner: null }) RecomputeGrid();
     });
+
+    private void OnPendingInputRecoveryChanged() => Dispatcher.UIThread.Post(() =>
+    {
+        UpdateRecoveryBar();
+        PendingInputRecoveryChanged?.Invoke(this, EventArgs.Empty);
+    });
+
+    private void BindRecoveryButton(Button button, Action<Button> onClick)
+    {
+        button.AddHandler(
+            global::Avalonia.Input.InputElement.PointerPressedEvent,
+            (_, e) =>
+            {
+                if (e.GetCurrentPoint(button).Properties.IsLeftButtonPressed)
+                {
+                    _gestureButton = button;
+                    _gestureSession = _displayedRecoverySession;
+                    _gestureRecoveryId = _displayedRecovery?.RecoveryId ?? 0;
+                    _gestureExpired = false;
+                }
+            },
+            global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        button.AddHandler(
+            global::Avalonia.Input.InputElement.PointerReleasedEvent,
+            (_, _) =>
+            {
+                if (ReferenceEquals(_gestureButton, button))
+                {
+                    _inPointerRelease = true;
+                }
+            },
+            global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        button.AddHandler(
+            global::Avalonia.Input.InputElement.PointerReleasedEvent,
+            (_, _) =>
+            {
+                if (ReferenceEquals(_gestureButton, button))
+                {
+                    ClearGestureState();
+                }
+                _inPointerRelease = false;
+            },
+            global::Avalonia.Interactivity.RoutingStrategies.Bubble,
+            handledEventsToo: true);
+        button.AddHandler(
+            global::Avalonia.Input.InputElement.PointerCaptureLostEvent,
+            (_, _) =>
+            {
+                if (!_inPointerRelease && ReferenceEquals(_gestureButton, button))
+                {
+                    ClearGestureState();
+                }
+            });
+        button.Click += (_, _) => onClick(button);
+    }
+
+    private void ClearGestureState()
+    {
+        _gestureButton = null;
+        _gestureSession = null;
+        _gestureRecoveryId = 0;
+        _gestureExpired = false;
+    }
+
+    private bool TryResolveButtonAction(
+        Button button,
+        out TerminalSession session,
+        out long expectedRecoveryId,
+        out TerminalPendingInputRecovery displayed)
+    {
+        if (ReferenceEquals(_gestureButton, button))
+        {
+            var expired = _gestureExpired;
+            var gestureSession = _gestureSession;
+            var gestureRecoveryId = _gestureRecoveryId;
+            ClearGestureState();
+            if (expired
+                || gestureSession is null
+                || gestureRecoveryId == 0
+                || !ReferenceEquals(gestureSession, _session)
+                || _displayedRecovery is not { } currentDisplayed
+                || !ReferenceEquals(_displayedRecoverySession, gestureSession)
+                || currentDisplayed.RecoveryId != gestureRecoveryId)
+            {
+                if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+                session = null!;
+                expectedRecoveryId = 0;
+                displayed = null!;
+                return false;
+            }
+            session = gestureSession;
+            expectedRecoveryId = gestureRecoveryId;
+            displayed = currentDisplayed;
+            return true;
+        }
+
+        if (_session is { } activeSession
+            && _displayedRecovery is { } shown
+            && ReferenceEquals(_displayedRecoverySession, activeSession)
+            && shown.RecoveryId != 0)
+        {
+            session = activeSession;
+            expectedRecoveryId = shown.RecoveryId;
+            displayed = shown;
+            return true;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+        session = null!;
+        expectedRecoveryId = 0;
+        displayed = null!;
+        return false;
+    }
+
+    private void OnSendHeldButtonClicked(Button button)
+    {
+        if (!TryResolveButtonAction(button, out var session, out var recoveryId, out var displayed) || !displayed.HasHeldInput)
+        {
+            return;
+        }
+        _ = session.SendHeldManualInput(recoveryId);
+        if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+    }
+
+    private async Task OnCopyHeldButtonClickedAsync(Button button)
+    {
+        if (!TryResolveButtonAction(button, out var session, out var recoveryId, out var displayed) || !displayed.HasHeldInput)
+        {
+            return;
+        }
+        var current = session.GetPendingInputRecovery();
+        if (current is not { HasHeldInput: true } || current.RecoveryId != recoveryId)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+            return;
+        }
+        await SetClipboardTextAsync(displayed.HeldInputText).ConfigureAwait(true);
+    }
+
+    private void OnDiscardHeldButtonClicked(Button button)
+    {
+        if (!TryResolveButtonAction(button, out var session, out var recoveryId, out var displayed) || !displayed.HasHeldInput)
+        {
+            return;
+        }
+        _ = session.DiscardHeldManualInput(recoveryId);
+        if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+    }
+
+    private void OnMarkCleanButtonClicked(Button button)
+    {
+        if (!TryResolveButtonAction(button, out var session, out var recoveryId, out var displayed)
+            || !displayed.HasUnresolvedCancelledPaste
+            || displayed.HasHeldInput)
+        {
+            return;
+        }
+        _ = session.MarkInputClean(recoveryId);
+        if (Dispatcher.UIThread.CheckAccess()) UpdateRecoveryBar();
+    }
+
+    private void UpdateRecoveryBar()
+    {
+        var session = _session;
+        var recovery = session?.GetPendingInputRecovery();
+        var previousSession = _displayedRecoverySession;
+        var previousRecoveryId = _displayedRecovery?.RecoveryId ?? 0;
+        var nextRecoveryId = recovery?.RecoveryId ?? 0;
+        if (_gestureButton is not null
+            && (!ReferenceEquals(previousSession, session) || previousRecoveryId != nextRecoveryId))
+        {
+            _gestureExpired = true;
+        }
+        if (recovery is null || session is null)
+        {
+            _displayedRecoverySession = null;
+            _displayedRecovery = null;
+            _recoveryBar.IsVisible = false;
+            return;
+        }
+        _displayedRecoverySession = session;
+        _displayedRecovery = recovery;
+        _recoveryBar.IsVisible = true;
+        if (recovery.HasHeldInput)
+        {
+            var isSending = session.IsHeldReplayInFlight;
+            var hasFailed = !isSending && session.HasUncertainHeldWrite;
+            var canSend = !isSending && !hasFailed && session.CanSendHeldManualInput;
+            if (isSending)
+            {
+                _recoveryText.Text = $"Sending held input: \"{recovery.HeldInputPreview}\"";
+            }
+            else if (hasFailed)
+            {
+                _recoveryText.Text = $"Held input write failed. Copy or discard remaining input (\"{recovery.HeldInputPreview}\") or restart.";
+            }
+            else
+            {
+                _recoveryText.Text = $"Collaboration paste was cancelled before submit. Held input: \"{recovery.HeldInputPreview}\"";
+            }
+            _sendHeldButton.IsVisible = canSend;
+            _copyHeldButton.IsVisible = true;
+            _discardHeldButton.IsVisible = !isSending;
+            _markCleanButton.IsVisible = false;
+        }
+        else
+        {
+            _recoveryText.Text = "Collaboration paste was cancelled before submit. Clear the terminal prompt or restart, then confirm when input is clean.";
+            _sendHeldButton.IsVisible = false;
+            _copyHeldButton.IsVisible = false;
+            _discardHeldButton.IsVisible = false;
+            _markCleanButton.IsVisible = true;
+        }
+    }
 
     /// <summary>
     /// The person is using this view: the terminal takes this view's size again if a view on another device had it
@@ -700,7 +1097,7 @@ public sealed class TerminalControl : Decorator
         if (!IsRunning)
         {
             // Nothing to type into: Enter starts the command again.
-            if (e.Input is { Key: TerminalKey.Enter, Action: KeyAction.Press } && _spec is not null)
+            if (e.Input is { Key: TerminalKey.Enter, Action: KeyAction.Press } && (_spec is not null || _launchFactory is not null))
             {
                 _ = RestartAsync();
                 e.Handled = true;
@@ -833,6 +1230,9 @@ public sealed class TerminalControl : Decorator
         _dropOverlay.BorderBrush = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg, 0.45);
         _messageBar.Background = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg, 0.14);
         _message.Foreground = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg);
+        _recoveryBar.Background = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(ToColor(palette.Background));
+        _recoveryBar.BorderBrush = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg, 0.35);
+        _recoveryText.Foreground = new global::Avalonia.Media.Immutable.ImmutableSolidColorBrush(fg);
     }
 
     private void OnDragOver(object? sender, DragEventArgs e)
@@ -901,4 +1301,14 @@ public sealed class TerminalPathActivatedEventArgs(string path, int? line, int? 
     public string Path { get; } = path;
     public int? Line { get; } = line;
     public int? Column { get; } = column;
+}
+
+/// <summary>Originating link identity for <see cref="TerminalControl.LinkExited"/>.</summary>
+public sealed class TerminalLinkExitedEventArgs(TerminalSession session, long generation, string linkId, int? exitCode, bool isCurrentLink) : EventArgs
+{
+    public TerminalSession Session { get; } = session;
+    public long Generation { get; } = generation;
+    public string LinkId { get; } = linkId;
+    public int? ExitCode { get; } = exitCode;
+    public bool IsCurrentLink { get; } = isCurrentLink;
 }

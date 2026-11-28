@@ -11,7 +11,8 @@ internal sealed record SignalEnvelope(
     string Channel,
     string Account,
     long Timestamp,
-    string Payload);
+    string Payload,
+    string? Link = null);
 
 /// <summary>
 /// Reads the forwarder's wire format (design/plugins/13-P0验证记录.md §2): one UTF-8 JSON object per connection with
@@ -33,7 +34,7 @@ internal static class SignalEnvelopeReader
                 return null;
             }
             int? version = null;
-            string? token = null, item = null, agent = null, channel = null, account = null, payload = null;
+            string? token = null, item = null, agent = null, channel = null, account = null, payload = null, link = null;
             long timestamp = 0;
             while (reader.Read())
             {
@@ -58,7 +59,7 @@ internal static class SignalEnvelopeReader
                     case "ts" when reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var ts):
                         timestamp = ts;
                         break;
-                    case "token" or "item" or "agent" or "channel" or "account" or "payload":
+                    case "token" or "item" or "agent" or "channel" or "account" or "payload" or "link":
                         if (reader.TokenType != JsonTokenType.String)
                         {
                             return null;
@@ -71,6 +72,7 @@ internal static class SignalEnvelopeReader
                             case "agent": agent = value; break;
                             case "channel": channel = value; break;
                             case "account": account = value; break;
+                            case "link": link = value; break;
                             default: payload = value; break;
                         }
                         break;
@@ -88,7 +90,7 @@ internal static class SignalEnvelopeReader
             {
                 return null;
             }
-            return new SignalEnvelope(version.Value, token, item ?? "", agent, channel, account ?? "", timestamp, payload);
+            return new SignalEnvelope(version.Value, token, item ?? "", agent, channel, account ?? "", timestamp, payload, link);
         }
         catch (JsonException)
         {

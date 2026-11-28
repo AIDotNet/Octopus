@@ -289,9 +289,9 @@ internal sealed class HostConnection : IAsyncDisposable
             await _workspace.PromptAsync(request).ConfigureAwait(false);
             return new Nothing();
         });
-        _connection.Handle(RemoteMethods.AcpCancel, json.AcpRefMessage, json.Nothing, async (request, _) =>
+        _connection.Handle(RemoteMethods.AcpCancel, json.AcpCancelMessage, json.Nothing, async (request, _) =>
         {
-            await _workspace.CancelTurnAsync(request.ItemId).ConfigureAwait(false);
+            await _workspace.CancelTurnAsync(request).ConfigureAwait(false);
             return new Nothing();
         });
         _connection.Handle(RemoteMethods.AcpRespond, json.AcpRespondMessage, json.Nothing, async (request, _) =>

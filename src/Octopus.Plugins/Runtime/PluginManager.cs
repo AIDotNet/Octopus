@@ -118,12 +118,33 @@ public sealed class PluginManager : IPluginHostOwner, IAsyncDisposable, IDisposa
                 }
             }
         }
+        MigrateLegacyRecords(wanted.Values);
         foreach (var (id, package) in wanted)
         {
             if (_hosts.ContainsKey(id)) continue;
             var host = new PluginHost(package, GrantsFor(package), this);
             if (_hosts.TryAdd(id, host)) HostChanged?.Invoke(this, host);
         }
+    }
+
+    private void MigrateLegacyRecords(IEnumerable<PluginPackage> packages)
+    {
+        var pending = packages
+            .Where(p => p.Manifest is not null
+                && PluginGrants.NeedsLegacyMigration(_state.Current.Find(p.Id), p.Manifest, p.Source))
+            .ToList();
+        if (pending.Count == 0) return;
+
+        _state.Update(d =>
+        {
+            foreach (var package in pending)
+            {
+                if (d.Find(package.Id) is { } record && package.Manifest is not null)
+                {
+                    PluginGrants.TryMigrateLegacyRecord(record, package.Manifest, package.Source);
+                }
+            }
+        });
     }
 
     private async Task RetireAsync(PluginHost host)
@@ -319,7 +340,7 @@ public sealed class PluginManager : IPluginHostOwner, IAsyncDisposable, IDisposa
     // ---------------------------------------------------------------- grants
 
     private PluginGrants GrantsFor(PluginPackage package) =>
-        new(package.Manifest!, _state.Current.Find(package.Id), package.Source == PluginSource.Builtin);
+        new(package.Manifest!, _state.Current.Find(package.Id), package.Source == PluginSource.Builtin, package.Source);
 
     private void RefreshGrants()
     {
@@ -401,17 +422,34 @@ public sealed class PluginManager : IPluginHostOwner, IAsyncDisposable, IDisposa
             {
                 var key = call.RequiredString("permission");
                 var grants = call.Plugin.Grants;
-                if (grants.Has(key)) return PluginReply.Of(true);
-                var request = grants.Manifest.Permissions.Requests.FirstOrDefault(r => r.Key == key);
-                if (request is null || (grants.Record?.Denied.Contains(key) ?? false)) return PluginReply.Of(false);
-                var granted = await manager._consent.RequestPermissionAsync(call.Plugin, request, call.String("reason"), ct).ConfigureAwait(false);
-                manager._state.Update(d =>
+                var matching = grants.Manifest.Permissions.Requests.Where(r => r.Key == key).ToList();
+                if (matching.Count == 0) return PluginReply.Of(false);
+                var ungranted = matching.Where(r => !grants.IsGranted(r)).ToList();
+                if (ungranted.Count == 0) return PluginReply.Of(true);
+
+                var reason = call.String("reason");
+                var allGranted = true;
+                foreach (var request in ungranted)
                 {
-                    var record = d.Find(call.Plugin.Id) ?? (d.Plugins[call.Plugin.Id] = new PluginRecord { Enabled = true, Source = call.Plugin.Package.Source, Version = call.Plugin.Manifest.Version });
-                    if (granted) record.Grants[key] = request.Details.FirstOrDefault() ?? "granted";
-                    else if (!record.Denied.Contains(key)) record.Denied.Add(key);
-                });
-                return PluginReply.Of(granted);
+                    if (call.Plugin.Grants.IsGranted(request)) continue;
+                    if (call.Plugin.Grants.IsDenied(request))
+                    {
+                        allGranted = false;
+                        continue;
+                    }
+                    var granted = await manager._consent.RequestPermissionAsync(call.Plugin, request, reason, ct).ConfigureAwait(false);
+                    manager._state.Update(d =>
+                    {
+                        var record = d.Find(call.Plugin.Id) ?? (d.Plugins[call.Plugin.Id] = new PluginRecord { Enabled = true, Source = call.Plugin.Package.Source, Version = call.Plugin.Manifest.Version });
+                        PluginGrants.SetGrant(record, call.Plugin.Manifest, request, granted, call.Plugin.Package.Source);
+                    });
+                    if (!granted)
+                    {
+                        allGranted = false;
+                        break;
+                    }
+                }
+                return PluginReply.Of(allGranted);
             });
         }
     }

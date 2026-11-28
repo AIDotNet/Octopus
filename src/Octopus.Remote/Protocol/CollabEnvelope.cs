@@ -2,6 +2,12 @@ using System.Text;
 
 namespace Octopus.Remote.Protocol;
 
+/// <summary>Correlation ids and reply expectation parsed from a <see cref="CollabEnvelope"/> prompt.</summary>
+/// <param name="ThreadId">The collaboration thread id, if present in the envelope header.</param>
+/// <param name="TaskId">The collaboration task id, if present in the envelope header or task body prefix.</param>
+/// <param name="ExpectsReply">True when this envelope expects a reply or implicit turn-end report.</param>
+public readonly record struct CollabEnvelopeCorrelation(string? ThreadId, string? TaskId, bool ExpectsReply);
+
 /// <summary>
 /// The envelope the multi-agent collaboration bus wraps around every prompt it injects into a session: a first line
 /// <c>[Octopus Collab … ]</c> saying what it is and who sent it, the body, and maybe an instruction footer for the agent.
@@ -170,6 +176,80 @@ public sealed record CollabEnvelope(string RawHeader, string Header, string Body
 
         var body = lineEnd >= 0 ? StripFooter(trimmed[(lineEnd + 1)..].Trim()) : "";
         return new CollabEnvelope(inner, string.Join(" · ", parts), body, fromDevice);
+    }
+
+    /// <summary>Extracts thread/task correlation metadata from a collaboration envelope, or null for an ordinary prompt.</summary>
+    public static CollabEnvelopeCorrelation? TryExtractCorrelation(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal).TrimStart();
+        if (!normalized.StartsWith(Prefix, StringComparison.Ordinal)) return null;
+        var lineEnd = normalized.IndexOf('\n');
+        var firstLine = (lineEnd >= 0 ? normalized[..lineEnd] : normalized).Trim();
+        if (firstLine.Length <= 2 || !firstLine.EndsWith(']')) return null;
+
+        var inner = firstLine[1..^1].Trim();
+        if (inner.StartsWith("Octopus ", StringComparison.Ordinal)) inner = inner["Octopus ".Length..];
+
+        string? threadId = null;
+        string? taskId = null;
+        string? replyStatus = null;
+        var isDelegation = false;
+        var isReply = false;
+        var isInterjection = false;
+
+        foreach (var raw in inner.Split(" · ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (raw.StartsWith("Collab Task #", StringComparison.Ordinal))
+            {
+                isDelegation = true;
+                taskId ??= ExtractToken(raw["Collab Task #".Length..]);
+            }
+            else if (raw.StartsWith("Collab Reply", StringComparison.Ordinal))
+            {
+                isReply = true;
+            }
+            else if (string.Equals(raw, "User Interjection", StringComparison.Ordinal))
+            {
+                isInterjection = true;
+            }
+            else if (raw.StartsWith("Thread #", StringComparison.Ordinal))
+            {
+                threadId ??= ExtractToken(raw["Thread #".Length..]);
+            }
+            else if (raw.StartsWith("Status: ", StringComparison.Ordinal))
+            {
+                replyStatus = ExtractToken(raw["Status: ".Length..]);
+            }
+        }
+
+        var body = lineEnd >= 0 ? normalized[(lineEnd + 1)..].TrimStart() : "";
+        if (taskId is null && body.StartsWith("[Task #", StringComparison.Ordinal))
+        {
+            var close = body.IndexOf(']');
+            if (close > "[Task #".Length)
+            {
+                taskId = ExtractToken(body["[Task #".Length..close]);
+            }
+        }
+
+        var expectsReply = isDelegation
+            || (!isInterjection && isReply && string.Equals(replyStatus, "continue", StringComparison.Ordinal))
+            || (!isInterjection && !isReply && (body.Contains(ReplyFooter, StringComparison.Ordinal) || body.Contains(RemoteMessageFooter, StringComparison.Ordinal)));
+
+        return new CollabEnvelopeCorrelation(threadId, taskId, expectsReply);
+    }
+
+    private static string? ExtractToken(string value)
+    {
+        var span = value.AsSpan().Trim();
+        if (span.IsEmpty) return null;
+        var end = 0;
+        while (end < span.Length && !char.IsWhiteSpace(span[end]) && span[end] is not ('(' or ')' or ']'))
+        {
+            end++;
+        }
+        return end > 0 ? span[..end].ToString() : null;
     }
 
     /// <summary>Drops the instruction footer for the agent, if any.</summary>

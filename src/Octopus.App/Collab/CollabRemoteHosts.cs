@@ -26,6 +26,9 @@ public interface ICollabRemoteHost
     /// <summary>The host shows its GUI conversations (<c>acp.gui</c>); without it a delegate cannot be followed.</summary>
     bool SupportsAcpGui { get; }
 
+    /// <summary>True when the host verifies collaboration identity before cancelling an active turn (<c>acp.collabCancel</c>).</summary>
+    bool SupportsScopedCancel => false;
+
     /// <summary>Completes when the connection ends.</summary>
     Task Completion { get; }
 
@@ -35,7 +38,11 @@ public interface ICollabRemoteHost
     Task<AcpSnapshotMessage> AttachConversationAsync(string itemId, CancellationToken ct);
     Task DetachConversationAsync(string itemId, CancellationToken ct);
     Task SendPromptAsync(string itemId, string text, CancellationToken ct);
+    Task SendPromptAsync(string itemId, string text, string? collabDeliveryId, CancellationToken ct) =>
+        SendPromptAsync(itemId, text, ct);
     Task CancelTurnAsync(string itemId, CancellationToken ct);
+    Task CancelTurnAsync(string itemId, string? collabThreadId, string? collabTaskId, string? collabDeliveryId, CancellationToken ct) =>
+        CancelTurnAsync(itemId, ct);
     Task RespondAsync(AcpRespondMessage answer, CancellationToken ct);
 }
 
@@ -74,6 +81,7 @@ public sealed class RuntimeCollabRemoteHosts(RemoteClientRuntime runtime, Remote
         }
 
         public bool SupportsAcpGui => _client.SupportsAcpGui;
+        public bool SupportsScopedCancel => _client.SupportsAcpCollabCancel;
         public Task Completion => _client.Completion;
         public event Action<AcpUpdateMessage>? AcpUpdated;
 
@@ -81,7 +89,11 @@ public sealed class RuntimeCollabRemoteHosts(RemoteClientRuntime runtime, Remote
         public Task<AcpSnapshotMessage> AttachConversationAsync(string itemId, CancellationToken ct) => _client.AttachConversationAsync(itemId, ct);
         public Task DetachConversationAsync(string itemId, CancellationToken ct) => _client.DetachConversationAsync(itemId, ct);
         public Task SendPromptAsync(string itemId, string text, CancellationToken ct) => _client.SendPromptAsync(itemId, text, null, ct);
+        public Task SendPromptAsync(string itemId, string text, string? collabDeliveryId, CancellationToken ct) =>
+            _client.SendPromptAsync(itemId, text, attachments: null, mentions: null, immediate: false, collabDeliveryId, ct);
         public Task CancelTurnAsync(string itemId, CancellationToken ct) => _client.CancelTurnAsync(itemId, ct);
+        public Task CancelTurnAsync(string itemId, string? collabThreadId, string? collabTaskId, string? collabDeliveryId, CancellationToken ct) =>
+            _client.CancelTurnAsync(itemId, collabThreadId, collabTaskId, collabDeliveryId, ct);
         public Task RespondAsync(AcpRespondMessage answer, CancellationToken ct) => _client.RespondAsync(answer, ct);
     }
 }

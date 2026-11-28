@@ -85,10 +85,12 @@ public static class PluginStrings
     public static string MarketDetailPermissions => PluginText.Get("所需权限", "Permissions");
     public static string MarketDetailPermissionsHint => PluginText.Get("安装后可在「已安装」随时开关", "Can be toggled individually after install");
     public static string MarketDetailNoPermissions => PluginText.Get("该插件不需要任何敏感权限，运行于纯沙盒模式。", "This plugin requires no sensitive permissions and runs purely sandboxed.");
+    public static string MarketDetailElevatedRiskNoPermissions => PluginText.Get("市场元数据未列出具体权限，但该插件的风险评级高于低风险。安装前请核对安装包实际请求的权限。", "No permissions are listed in marketplace metadata, but this plugin has an elevated risk rating. Review the package's actual permissions before installing.");
     public static string MarketDetailChangelog => PluginText.Get("更新说明", "Changelog");
     public static string MarketDetailTags => PluginText.Get("标签", "Tags");
     public static string MarketDetailHomepage => PluginText.Get("打开主页", "Open homepage");
     public static string MarketDetailShaNote => PluginText.Get("下载时自动执行 SHA-256 完整性校验", "SHA-256 checksum verified automatically on download");
+    public static string MarketDetailMissingShaNote => PluginText.Get("缺少有效的 SHA-256 校验元数据，已禁用安装", "Install disabled: marketplace metadata is missing a valid SHA-256 checksum");
     public static string Close => PluginText.Get("关闭", "Close");
     public static string SkillHeading => PluginText.Get("安装插件开发 Skill", "Install plugin authoring Skill");
     public static string SkillSubtitle => PluginText.Get(

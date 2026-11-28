@@ -3,13 +3,16 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
 using Avalonia.Headless.XUnit;
+using Octopus.Acp.Protocol;
 using Octopus.Agents;
 using Octopus.Agents.Signals;
+using Octopus.App.AgentGui;
 using Octopus.App.Collab;
 using Octopus.App.Composition;
 using Octopus.App.Services;
 using Octopus.App.Settings.Agents;
 using Octopus.App.Shell;
+using Octopus.App.Workspace;
 using Octopus.Core.Agents;
 using Octopus.Core.Projects;
 using Octopus.Storage;
@@ -31,7 +34,10 @@ public sealed class CollabTests
         private readonly object _promptGate = new();
         public List<string> DeliveredPrompts { get; } = [];
         public List<(string? ThreadId, string? TaskId)> CancelledLookups { get; } = [];
+        public List<string> CancelledDeliveryIds { get; } = [];
         public string Summary { get; set; } = "Recent summary from fake GUI bridge.";
+        public Func<string?, string?, CancellationToken, Task<bool>>? OnDeliver { get; set; }
+        public bool SupportsExactDeliveryWithdrawal => true;
 
         public Task<bool> DeliverCollabPromptAsync(string promptText, string? threadId = null, string? taskId = null, CancellationToken cancellationToken = default)
         {
@@ -39,7 +45,9 @@ public sealed class CollabTests
             {
                 DeliveredPrompts.Add(promptText);
             }
-            return Task.FromResult(true);
+            return OnDeliver is { } handler
+                ? handler(threadId, taskId, cancellationToken)
+                : Task.FromResult(true);
         }
 
         public bool HasPromptContaining(string value)
@@ -53,6 +61,16 @@ public sealed class CollabTests
         public int CancelQueuedCollabPrompts(string? threadId = null, string? taskId = null)
         {
             CancelledLookups.Add((threadId, taskId));
+            return 1;
+        }
+
+        public int CancelQueuedCollabPrompts(string? threadId, string? taskId, string? deliveryId)
+        {
+            CancelledLookups.Add((threadId, taskId));
+            if (!string.IsNullOrWhiteSpace(deliveryId))
+            {
+                CancelledDeliveryIds.Add(deliveryId);
+            }
             return 1;
         }
 
@@ -85,8 +103,26 @@ public sealed class CollabTests
         return (parent, bridge, coordinator, dir);
     }
 
+    /// <summary>
+    /// Keeps fake ACP turns for delegated GUI children in flight until the test explicitly settles them
+    /// (via <c>NotifyTurnCompleted</c>, <c>NotifyTurnAborted</c>, <c>reply_thread</c>, or <c>cancel_task</c>) or tears down.
+    /// </summary>
+    private static void HoldDelegatedGuiTurnsInFlight()
+    {
+        var fakeFactory = AppHost.Get<FakeAcpSessionFactory>();
+        fakeFactory.ConfigureNext = session =>
+        {
+            session.PromptHandler = async (_, _, _, token) =>
+            {
+                await Task.Delay(Timeout.Infinite, token);
+                return new Octopus.Acp.Protocol.AcpPromptResult { StopReason = "cancelled" };
+            };
+        };
+    }
+
     private static async Task<JsonObject> DelegateAsync(CollabCoordinator coordinator, string callerId, string title, CancellationToken ct)
     {
+        HoldDelegatedGuiTurnsInFlight();
         var res = await coordinator.CallToolAsync(
             callerId,
             "delegate_task",
@@ -339,6 +375,7 @@ public sealed class CollabTests
 
         public string Name => name;
         public bool SupportsAcpGui { get; set; } = true;
+        public bool SupportsScopedCancel { get; set; } = true;
         public Task Completion => _closed.Task;
         public event Action<Octopus.Remote.Protocol.AcpUpdateMessage>? AcpUpdated;
         public List<Octopus.Remote.Protocol.CreateItemMessage> Created { get; } = [];
@@ -378,6 +415,9 @@ public sealed class CollabTests
             Cancels.Enqueue(itemId);
             return Task.CompletedTask;
         }
+
+        public Task CancelTurnAsync(string itemId, string? collabThreadId, string? collabTaskId, string? collabDeliveryId, CancellationToken ct) =>
+            CancelTurnAsync(itemId, ct);
 
         public Task RespondAsync(Octopus.Remote.Protocol.AcpRespondMessage answer, CancellationToken ct)
         {
@@ -845,6 +885,8 @@ public sealed class CollabTests
         // Default global isolation must be Shared.
         Assert.Equal(CollabIsolationMode.Shared, settings.Current.Agents.Collab.DefaultIsolation);
 
+        HoldDelegatedGuiTurnsInFlight();
+
         // Delegate to "codex" with no isolation override -> uses default Shared & nests under parent.
         var res1 = await coordinator.CallToolAsync(
             parent.Id,
@@ -1159,6 +1201,7 @@ public sealed class CollabTests
         coordinator.RegisterGuiSession(parentBridge);
 
         // 1. Parent delegates task and immediately blocks in await_events.
+        HoldDelegatedGuiTurnsInFlight();
         var delegateRes = await coordinator.CallToolAsync(
             parent.Id,
             "delegate_task",
@@ -1205,18 +1248,33 @@ public sealed class CollabTests
         Assert.Equal("agreed", awaitBody["threads"]![0]!["status"]!.GetValue<string>());
         Assert.Equal("1 + 1 = 2", awaitBody["threads"]![0]!["latest_message"]!.GetValue<string>());
 
-        // Because await_events delivered the reply inline, no duplicate wakeup envelope was injected into parent.
+        // Because await_events delivered the reply inline, no duplicate wakeup envelope was injected into parent,
+        // and no unnecessary broad thread-wide cancellation ran when nothing was queued.
         Assert.Empty(parentBridge.DeliveredPrompts);
-        Assert.Contains(parentBridge.CancelledLookups, c => c.ThreadId == threadId);
+        Assert.Empty(parentBridge.CancelledLookups);
 
-        // 2. If a wakeup was queued while parent wasn't awaiting, consuming it via read_session cancels the stale queued prompt.
+        // 2. When a wakeup was queued while parent wasn't awaiting, consuming it via read_session cancels that exact stale queued wakeup.
+        var queuedReplyRes = await coordinator.CallToolAsync(
+            childId,
+            "reply_thread",
+            new JsonObject
+            {
+                ["thread_id"] = threadId,
+                ["message"] = "follow-up detail",
+                ["status"] = "agreed",
+            },
+            ct);
+        Assert.Null(queuedReplyRes["isError"]);
+        Assert.Single(parentBridge.DeliveredPrompts);
+
         var readRes = await coordinator.CallToolAsync(
             parent.Id,
             "read_session",
             new JsonObject { ["target_session_id"] = childId },
             ct);
         Assert.Null(readRes["isError"]);
-        Assert.True(parentBridge.CancelledLookups.Count(c => c.ThreadId == threadId) >= 2);
+        Assert.Single(parentBridge.CancelledDeliveryIds);
+        Assert.Contains(parentBridge.CancelledLookups, c => c.ThreadId == threadId);
     }
 
     [AvaloniaFact, FreshApp]
@@ -1312,6 +1370,713 @@ public sealed class CollabTests
         Assert.False(collab.CanReuse);
         Assert.StartsWith("Collab Reply · From @Claude Code", collab.CollabHeader, StringComparison.Ordinal);
         Assert.Equal("1 + 1 = 2", collab.DisplayText);
+    }
+
+    private static async Task<(ProjectItem Parent, FakeGuiBridge ParentBridge, ProjectItem Worker, FakeGuiBridge WorkerBridge, CollabCoordinator Coordinator)> SetUpParentAndWorkerAsync(string prefix)
+    {
+        var (parent, parentBridge, coordinator, dir) = await SetUpParentAsync(prefix);
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.FindProjectOf(parent.Id)!;
+        var worker = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "codex", Title = "Worker", Surface = AgentSurface.Gui };
+        projects.AddItem(project, worker, activate: false);
+        var workerBridge = new FakeGuiBridge(worker.Id, "codex", worker.Title, dir);
+        coordinator.RegisterGuiSession(workerBridge);
+        return (parent, parentBridge, worker, workerBridge, coordinator);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Delegating_to_existing_session_preserves_terminal_status_when_worker_replies_before_dispatch_returns()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (parent, _, worker, workerBridge, coordinator) = await SetUpParentAndWorkerAsync("octopus-collab-early-reply-");
+
+        string? deliveredTaskId = null;
+        workerBridge.OnDeliver = async (threadId, taskId, token) =>
+        {
+            deliveredTaskId = taskId;
+            var reply = await coordinator.CallToolAsync(
+                worker.Id,
+                "reply_thread",
+                new JsonObject { ["thread_id"] = threadId, ["message"] = "fixture complete", ["status"] = "agreed" },
+                token);
+            Assert.Null(reply["isError"]);
+            return true;
+        };
+
+        var dispatch = await coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Report the fixture result" },
+            ct);
+        Assert.Null(dispatch["isError"]);
+        var agreedTask = Assert.Single(coordinator.GetTasksForItem(parent.Id));
+        Assert.Equal(CollabTaskStatus.Completed, agreedTask.Status);
+
+        var body = Body(dispatch);
+        Assert.True(body["reused_existing_session"]!.GetValue<bool>());
+        Assert.Equal("completed", body["status"]!.GetValue<string>());
+        Assert.Equal(body["task_id"]!.GetValue<string>(), agreedTask.TaskId);
+        Assert.Equal(body["task_id"]!.GetValue<string>(), deliveredTaskId);
+        Assert.Equal(body["thread_id"]!.GetValue<string>(), agreedTask.ThreadId);
+        Assert.Equal("fixture complete", agreedTask.ResultSummary);
+
+        workerBridge.OnDeliver = async (threadId, _, token) =>
+        {
+            var reply = await coordinator.CallToolAsync(
+                worker.Id,
+                "reply_thread",
+                new JsonObject { ["thread_id"] = threadId, ["message"] = "missing spec", ["status"] = "blocked" },
+                token);
+            Assert.Null(reply["isError"]);
+            return true;
+        };
+
+        var blockedDispatch = await coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Blocked task" },
+            ct);
+        Assert.Null(blockedDispatch["isError"]);
+        var blockedBody = Body(blockedDispatch);
+        var blockedTask = Assert.Single(coordinator.GetTasksForItem(parent.Id), t => t.TaskId == blockedBody["task_id"]!.GetValue<string>());
+        Assert.Equal(CollabTaskStatus.Failed, blockedTask.Status);
+        Assert.Equal("failed", blockedBody["status"]!.GetValue<string>());
+        Assert.Equal("missing spec", blockedTask.ResultSummary);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Delegating_to_existing_session_cleans_up_undelivered_task_on_false_throw_and_cancellation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (parent, _, worker, workerBridge, coordinator) = await SetUpParentAndWorkerAsync("octopus-collab-early-fail-");
+
+        workerBridge.OnDeliver = (_, _, _) => Task.FromResult(false);
+        var rejected = await coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Rejected delivery" },
+            ct);
+        Assert.True(rejected["isError"]?.GetValue<bool>());
+        Assert.Empty(coordinator.GetTasksForItem(parent.Id));
+        Assert.Empty(coordinator.GetThreadsForItem(parent.Id));
+
+        workerBridge.OnDeliver = (_, _, _) => throw new InvalidOperationException("bridge failure");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Throwing delivery" },
+            ct));
+        Assert.Empty(coordinator.GetTasksForItem(parent.Id));
+        Assert.Empty(coordinator.GetThreadsForItem(parent.Id));
+
+        using var cts = new CancellationTokenSource();
+        workerBridge.OnDeliver = (_, _, token) =>
+        {
+            cts.Cancel();
+            token.ThrowIfCancellationRequested();
+            return Task.FromResult(true);
+        };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Cancelled delivery" },
+            cts.Token));
+        Assert.Empty(coordinator.GetTasksForItem(parent.Id));
+        Assert.Empty(coordinator.GetThreadsForItem(parent.Id));
+
+        var awaited = Body(await AwaitEventsAsync(coordinator, parent.Id, 5, ct));
+        Assert.Empty(awaited["tasks"]!.AsArray());
+        Assert.Empty(awaited["threads"]!.AsArray());
+        Assert.NotNull(awaited["note"]);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Delegating_to_existing_session_preserves_prior_reply_when_delivery_returns_false_throws_or_cancels()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (parent, _, worker, workerBridge, coordinator) = await SetUpParentAndWorkerAsync("octopus-collab-early-preserve-");
+
+        string? falseThread = null;
+        workerBridge.OnDeliver = async (threadId, _, token) =>
+        {
+            falseThread = threadId;
+            var reply = await coordinator.CallToolAsync(
+                worker.Id,
+                "reply_thread",
+                new JsonObject { ["thread_id"] = threadId, ["message"] = "reply before false", ["status"] = "agreed" },
+                token);
+            Assert.Null(reply["isError"]);
+            return false;
+        };
+        var falseDispatch = await coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Reply then return false" },
+            ct);
+        Assert.True(falseDispatch["isError"]?.GetValue<bool>());
+        var falseTask = Assert.Single(coordinator.GetTasksForItem(parent.Id), t => t.ThreadId == falseThread);
+        Assert.Equal(CollabTaskStatus.Completed, falseTask.Status);
+        Assert.Equal("reply before false", falseTask.ResultSummary);
+
+        string? throwThread = null;
+        workerBridge.OnDeliver = async (threadId, _, token) =>
+        {
+            throwThread = threadId;
+            var reply = await coordinator.CallToolAsync(
+                worker.Id,
+                "reply_thread",
+                new JsonObject { ["thread_id"] = threadId, ["message"] = "reply before throw", ["status"] = "agreed" },
+                token);
+            Assert.Null(reply["isError"]);
+            throw new InvalidOperationException("post-reply bridge failure");
+        };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Reply then throw" },
+            ct));
+        var throwTask = Assert.Single(coordinator.GetTasksForItem(parent.Id), t => t.ThreadId == throwThread);
+        Assert.Equal(CollabTaskStatus.Completed, throwTask.Status);
+        Assert.Equal("reply before throw", throwTask.ResultSummary);
+
+        string? cancelThread = null;
+        using var cts = new CancellationTokenSource();
+        workerBridge.OnDeliver = async (threadId, _, token) =>
+        {
+            cancelThread = threadId;
+            var reply = await coordinator.CallToolAsync(
+                worker.Id,
+                "reply_thread",
+                new JsonObject { ["thread_id"] = threadId, ["message"] = "reply before cancel", ["status"] = "agreed" },
+                token);
+            Assert.Null(reply["isError"]);
+            cts.Cancel();
+            token.ThrowIfCancellationRequested();
+            return true;
+        };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Reply then cancel" },
+            cts.Token));
+        var cancelTask = Assert.Single(coordinator.GetTasksForItem(parent.Id), t => t.ThreadId == cancelThread);
+        Assert.Equal(CollabTaskStatus.Completed, cancelTask.Status);
+        Assert.Equal("reply before cancel", cancelTask.ResultSummary);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Delegating_to_existing_gui_session_cancelled_before_acceptance_never_reaches_worker()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dir = Directory.CreateTempSubdirectory("octopus-collab-cancel-preaccept-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var parent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Lead", Surface = AgentSurface.Gui };
+        var worker = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Worker", Surface = AgentSurface.Gui };
+        projects.AddItem(project, parent);
+        projects.AddItem(project, worker, activate: false);
+
+        var coordinator = (CollabCoordinator)AppHost.Get<ICollabCoordinator>();
+        coordinator.Server.Start();
+        var parentBridge = new FakeGuiBridge(parent.Id, "opencode", parent.Title, dir);
+        coordinator.RegisterGuiSession(parentBridge);
+
+        FakeAcpSession? workerSession = null;
+        var factory = AppHost.Get<FakeAcpSessionFactory>();
+        factory.ConfigureNext = s =>
+        {
+            workerSession = s;
+            s.PromptHandler = (_, _, _, _) => Task.FromResult(new AcpPromptResult { StopReason = "end_turn" });
+        };
+
+        var tabRegistry = AppHost.Get<ITabContentRegistry>();
+        var control = tabRegistry.GetOrCreate(project, worker);
+        var workerVm = Assert.IsType<AgentGuiTabViewModel>(control.DataContext);
+        await workerVm.ConnectAsync();
+        Frames.Pump();
+        Assert.NotNull(workerSession);
+
+        // Hold the UI dispatcher while a background delegate_task publishes the task and posts GUI acceptance.
+        var dispatchTask = Task.Run(
+            () => coordinator.CallToolAsync(
+                parent.Id,
+                "delegate_task",
+                new JsonObject { ["target"] = worker.Id, ["goal"] = "Must not reach worker after cancel" },
+                ct),
+            ct);
+
+        Assert.True(SpinWait.SpinUntil(() => coordinator.GetTasksForItem(parent.Id).Count == 1, TimeSpan.FromSeconds(5)));
+        Thread.Sleep(30);
+
+        var visibleTask = Assert.Single(coordinator.GetTasksForItem(parent.Id));
+        Assert.Equal(CollabTaskStatus.Running, visibleTask.Status);
+        Assert.Empty(workerSession!.SentPrompts);
+
+        // Cancel on the UI thread before the posted acceptance lambda executes.
+        var cancelResult = coordinator.CallToolAsync(
+            parent.Id,
+            "cancel_task",
+            new JsonObject { ["task_id"] = visibleTask.TaskId, ["reason"] = "Cancelled before GUI acceptance" },
+            ct).GetAwaiter().GetResult();
+        Assert.Null(cancelResult["isError"]);
+        Assert.Equal(CollabTaskStatus.Cancelled, Assert.Single(coordinator.GetTasksForItem(parent.Id)).Status);
+        Assert.Empty(workerSession.SentPrompts);
+
+        // Resume the dispatcher so the posted delivery callback runs.
+        Frames.Pump();
+        var dispatchResult = await dispatchTask.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        Frames.Pump();
+
+        Assert.True(dispatchResult["isError"]?.GetValue<bool>());
+        Assert.Empty(workerSession.SentPrompts);
+        Assert.Empty(workerVm.QueuedPrompts);
+        var finalTask = Assert.Single(coordinator.GetTasksForItem(parent.Id));
+        Assert.Equal(visibleTask.TaskId, finalTask.TaskId);
+        Assert.Equal(CollabTaskStatus.Cancelled, finalTask.Status);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Delegating_to_busy_gui_session_cancelled_before_acceptance_leaves_active_turn_uninterrupted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dir = Directory.CreateTempSubdirectory("octopus-collab-cancel-busy-preaccept-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var parent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Lead", Surface = AgentSurface.Gui };
+        var worker = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Worker", Surface = AgentSurface.Gui };
+        projects.AddItem(project, parent);
+        projects.AddItem(project, worker, activate: false);
+
+        var coordinator = (CollabCoordinator)AppHost.Get<ICollabCoordinator>();
+        coordinator.Server.Start();
+        var parentBridge = new FakeGuiBridge(parent.Id, "opencode", parent.Title, dir);
+        coordinator.RegisterGuiSession(parentBridge);
+
+        var turn1Started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseTurn1 = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeAcpSession? workerSession = null;
+        var factory = AppHost.Get<FakeAcpSessionFactory>();
+        factory.ConfigureNext = s =>
+        {
+            workerSession = s;
+            s.PromptHandler = async (session, _, _, token) =>
+            {
+                turn1Started.TrySetResult();
+                var reply = await releaseTurn1.Task.WaitAsync(token);
+                session.Emit(new AcpTextDeltaEvent("assistant", reply, "busy-preaccept-1"));
+                return new AcpPromptResult { StopReason = "end_turn" };
+            };
+        };
+
+        var tabRegistry = AppHost.Get<ITabContentRegistry>();
+        var control = tabRegistry.GetOrCreate(project, worker);
+        var workerVm = Assert.IsType<AgentGuiTabViewModel>(control.DataContext);
+        await workerVm.ConnectAsync();
+        Frames.Pump();
+        Assert.NotNull(workerSession);
+
+        var task1Res = await coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "Active Turn 1" },
+            ct);
+        Assert.Null(task1Res["isError"]);
+        var task1Id = Body(task1Res)["task_id"]!.GetValue<string>();
+        await turn1Started.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+
+        // Hold the UI dispatcher while background delegate_task #2 publishes and posts GUI acceptance.
+        var dispatch2Task = Task.Run(
+            () => coordinator.CallToolAsync(
+                parent.Id,
+                "delegate_task",
+                new JsonObject { ["target"] = worker.Id, ["goal"] = "Cancelled Turn 2 before accept" },
+                ct),
+            ct);
+
+        Assert.True(SpinWait.SpinUntil(() => coordinator.GetTasksForItem(parent.Id).Count == 2, TimeSpan.FromSeconds(5)));
+        Thread.Sleep(30);
+
+        var task2 = Assert.Single(coordinator.GetTasksForItem(parent.Id), t => t.TaskId != task1Id);
+        Assert.Equal(CollabTaskStatus.Running, task2.Status);
+
+        var cancelResult = coordinator.CallToolAsync(
+            parent.Id,
+            "cancel_task",
+            new JsonObject { ["task_id"] = task2.TaskId, ["reason"] = "Cancelled while queued behind active turn" },
+            ct).GetAwaiter().GetResult();
+        Assert.Null(cancelResult["isError"]);
+
+        Frames.Pump();
+        var dispatch2Result = await dispatch2Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        Frames.Pump();
+
+        Assert.True(dispatch2Result["isError"]?.GetValue<bool>());
+        Assert.Empty(workerVm.QueuedPrompts);
+        Assert.Single(workerSession!.SentPrompts);
+        Assert.Equal(0, workerSession.CancelCount);
+        Assert.Equal(CollabTaskStatus.Cancelled, coordinator.GetTasksForItem(parent.Id).Single(t => t.TaskId == task2.TaskId).Status);
+
+        releaseTurn1.TrySetResult("Active Turn 1 finished cleanly");
+        var deadline = Environment.TickCount64 + 5000;
+        while (coordinator.GetTasksForItem(parent.Id).Single(t => t.TaskId == task1Id).Status != CollabTaskStatus.Completed
+            && Environment.TickCount64 < deadline)
+        {
+            Frames.Pump();
+            await Task.Delay(20, ct);
+        }
+        var task1Final = coordinator.GetTasksForItem(parent.Id).Single(t => t.TaskId == task1Id);
+        Assert.Equal(CollabTaskStatus.Completed, task1Final.Status);
+        Assert.Equal("Active Turn 1 finished cleanly", task1Final.ResultSummary);
+        Assert.Single(workerSession.SentPrompts);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Delegating_to_existing_session_preserves_reopened_task_when_original_bridge_fails()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (parent, _, worker, workerBridge, coordinator) = await SetUpParentAndWorkerAsync("octopus-collab-reopen-rollback-");
+
+        async Task RunReopenCaseAsync(string mode)
+        {
+            string? capturedThread = null;
+            string? capturedTask = null;
+            var reopenedFollowUp = false;
+            using var cts = new CancellationTokenSource();
+
+            workerBridge.OnDeliver = async (threadId, taskId, token) =>
+            {
+                if (reopenedFollowUp)
+                {
+                    return true;
+                }
+                capturedThread = threadId;
+                capturedTask = taskId;
+
+                var reply = await coordinator.CallToolAsync(
+                    worker.Id,
+                    "reply_thread",
+                    new JsonObject { ["thread_id"] = threadId, ["message"] = $"agreed before {mode}", ["status"] = "agreed" },
+                    token);
+                Assert.Null(reply["isError"]);
+
+                reopenedFollowUp = true;
+                var followUp = await coordinator.CallToolAsync(
+                    parent.Id,
+                    "send_message",
+                    new JsonObject { ["target_session_id"] = worker.Id, ["thread_id"] = threadId, ["message"] = $"follow-up during {mode}" },
+                    token);
+                Assert.Null(followUp["isError"]);
+
+                if (mode == "false") return false;
+                if (mode == "throw") throw new InvalidOperationException("original bridge failure after reopen");
+                cts.Cancel();
+                token.ThrowIfCancellationRequested();
+                return true;
+            };
+
+            if (mode == "false")
+            {
+                var outer = await coordinator.CallToolAsync(
+                    parent.Id,
+                    "delegate_task",
+                    new JsonObject { ["target"] = worker.Id, ["goal"] = "Reopen then return false" },
+                    ct);
+                Assert.True(outer["isError"]?.GetValue<bool>());
+            }
+            else if (mode == "throw")
+            {
+                await Assert.ThrowsAsync<InvalidOperationException>(() => coordinator.CallToolAsync(
+                    parent.Id,
+                    "delegate_task",
+                    new JsonObject { ["target"] = worker.Id, ["goal"] = "Reopen then throw" },
+                    ct));
+            }
+            else
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.CallToolAsync(
+                    parent.Id,
+                    "delegate_task",
+                    new JsonObject { ["target"] = worker.Id, ["goal"] = "Reopen then cancel" },
+                    cts.Token));
+            }
+
+            var retained = Assert.Single(coordinator.GetTasksForItem(parent.Id), t => t.TaskId == capturedTask);
+            Assert.Equal(CollabTaskStatus.Running, retained.Status);
+            Assert.Equal(capturedThread, retained.ThreadId);
+            var thread = coordinator.FindThread(capturedThread!);
+            Assert.NotNull(thread);
+            Assert.Equal(CollabThreadStatus.Active, thread!.Status);
+            Assert.Equal(3, thread.Messages.Count);
+        }
+
+        await RunReopenCaseAsync("false");
+        await RunReopenCaseAsync("throw");
+        await RunReopenCaseAsync("cancel");
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Approval_during_refused_delegation_does_not_keep_a_task()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (parent, _, worker, workerBridge, coordinator) = await SetUpParentAndWorkerAsync("octopus-collab-approval-refusal-");
+        workerBridge.OnDeliver = (_, _, _) =>
+        {
+            coordinator.ReportChildApproval(new CollabBubbledApproval("a", parent.Id, worker.Id, "codex", "Worker", "Tool", null, null, _ => { }));
+            coordinator.ClearChildApproval(worker.Id, "a");
+            return Task.FromResult(false);
+        };
+
+        var result = await coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "undelivered" },
+            ct);
+
+        Assert.True(result["isError"]?.GetValue<bool>());
+        Assert.Empty(coordinator.GetTasksForItem(parent.Id));
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Owned_nested_followup_before_original_gui_acceptance_survives_original_cancellation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var originalToken = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var hold = new TaskCompletionSource<AcpPromptResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var dir = Directory.CreateTempSubdirectory("octopus-collab-live-owner-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var parent = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Lead", Surface = AgentSurface.Gui };
+        var middle = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Worker", Surface = AgentSurface.Gui };
+        var leaf = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Leaf", Surface = AgentSurface.Gui };
+        projects.AddItem(project, parent);
+        projects.AddItem(project, middle, activate: false);
+        projects.AddItem(project, leaf, activate: false);
+
+        var host = (CollabCoordinator)AppHost.Get<ICollabCoordinator>();
+        host.Server.Start();
+        host.RegisterGuiSession(new FakeGuiBridge(parent.Id, "opencode", parent.Title, dir));
+        host.RegisterGuiSession(new FakeGuiBridge(leaf.Id, "opencode", leaf.Title, dir));
+
+        FakeAcpSession? acp = null;
+        var factory = AppHost.Get<FakeAcpSessionFactory>();
+        factory.ConfigureNext = s =>
+        {
+            acp = s;
+            s.PromptHandler = (_, _, _, t) => hold.Task.WaitAsync(t);
+        };
+        var tabRegistry = AppHost.Get<ITabContentRegistry>();
+        var control = tabRegistry.GetOrCreate(project, middle);
+        var vm = Assert.IsType<AgentGuiTabViewModel>(control.DataContext);
+        await vm.ConnectAsync();
+        Frames.Pump();
+        Assert.NotNull(acp);
+
+        var ledger = (Octopus.App.Collab.Ledger.CollabLedger)typeof(CollabCoordinator)
+            .GetField("_ledger", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(host)!;
+
+        // The GUI thread is occupied here, so the original background delivery cannot commit.
+        var original = Task.Run(() => host.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = middle.Id, ["goal"] = "original before acceptance" },
+            originalToken.Token));
+        Assert.True(SpinWait.SpinUntil(() => { lock (ledger.Gate) return ledger.Pending.TryGetValue(middle.Id, out var p) && p.Count == 1; }, TimeSpan.FromSeconds(3)));
+        var advertised = Assert.Single(host.GetTasksForItem(parent.Id));
+        Assert.Empty(acp!.SentPrompts);
+
+        // A later send is accepted inline on the UI thread. It runs and acquires a real child.
+        var follow = host.CallToolAsync(
+            parent.Id,
+            "send_message",
+            new JsonObject { ["thread_id"] = advertised.ThreadId, ["target_session_id"] = middle.Id, ["message"] = "follow-up with a child" },
+            ct);
+        Assert.True(follow.IsCompletedSuccessfully);
+        Assert.Null(follow.Result["isError"]);
+        Assert.Contains("follow-up with a child", Assert.Single(acp.SentPrompts).Text);
+        var live = (ICollabSessionBridge)vm;
+        Assert.Equal(advertised.ThreadId, live.ActiveCollabThreadId);
+
+        var nested = host.CallToolAsync(
+            middle.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = leaf.Id, ["goal"] = "nested child" },
+            ct);
+        Assert.True(nested.IsCompletedSuccessfully);
+        Assert.Null(nested.Result["isError"]);
+        var child = Body(nested.Result)["task_id"]!.GetValue<string>();
+        lock (ledger.Gate) Assert.Equal(advertised.TaskId, ledger.GetParentTaskId(child));
+
+        lock (ledger.Gate)
+        {
+            // Prevent the original background call from rolling back until the accepted GUI turn
+            // has ended and the coordinator has recorded that it is waiting for its own child.
+            originalToken.Cancel();
+            hold.SetResult(new AcpPromptResult { StopReason = "end_turn" });
+            Assert.True(Frames.Until(() => !vm.IsTurnActive));
+            Assert.Equal("Waiting for delegated work", host.GetTasksForItem(parent.Id).Single().LatestActivity);
+        }
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => original.WaitAsync(TimeSpan.FromSeconds(4), ct));
+        Assert.True(
+            host.GetTasksForItem(parent.Id).Any(t => t.TaskId == advertised.TaskId),
+            $"accepted follow-up lost parent {advertised.TaskId}; nested child is {host.GetTasksForItem(middle.Id).Single(t => t.TaskId == child).Status}");
+        var cancel = await host.CancelDelegatedTaskAsync(parent.Id, advertised.TaskId, "stop child", ct);
+        Assert.Null(cancel["isError"]);
+        Assert.Equal(CollabTaskStatus.Cancelled, host.GetTasksForItem(middle.Id).Single(t => t.TaskId == child).Status);
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Accepted_followup_without_nested_child_survives_original_refusal_while_unrelated_refusal_rolls_back()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (parent, _, worker, workerBridge, coordinator) = await SetUpParentAndWorkerAsync("octopus-collab-accepted-successor-");
+
+        var firstDelivery = true;
+        string? capturedTaskId = null;
+        string? capturedThreadId = null;
+        workerBridge.OnDeliver = async (threadId, taskId, token) =>
+        {
+            if (firstDelivery)
+            {
+                firstDelivery = false;
+                capturedThreadId = threadId;
+                capturedTaskId = taskId;
+                // A follow-up on the same thread is accepted while the original dispatch is still in flight.
+                var follow = await coordinator.CallToolAsync(
+                    parent.Id,
+                    "send_message",
+                    new JsonObject { ["thread_id"] = threadId, ["target_session_id"] = worker.Id, ["message"] = "accepted successor" },
+                    token);
+                Assert.Null(follow["isError"]);
+                return false;
+            }
+            return true;
+        };
+
+        var outer = await coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "original refused after successor accepted" },
+            ct);
+        Assert.True(outer["isError"]?.GetValue<bool>());
+
+        var retained = Assert.Single(coordinator.GetTasksForItem(parent.Id), t => t.TaskId == capturedTaskId);
+        Assert.Equal(CollabTaskStatus.Running, retained.Status);
+        Assert.Equal(capturedThreadId, retained.ThreadId);
+
+        // An unrelated refused delegation with approval churn on the same busy worker still rolls back cleanly.
+        workerBridge.OnDeliver = (_, _, _) =>
+        {
+            coordinator.ReportChildApproval(new CollabBubbledApproval("ap-unrelated", parent.Id, worker.Id, "codex", "Worker", "Tool", null, null, _ => { }));
+            coordinator.ClearChildApproval(worker.Id, "ap-unrelated");
+            return Task.FromResult(false);
+        };
+        var unrelatedRefusal = await coordinator.CallToolAsync(
+            parent.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "unrelated undelivered" },
+            ct);
+        Assert.True(unrelatedRefusal["isError"]?.GetValue<bool>());
+        Assert.Single(coordinator.GetTasksForItem(parent.Id));
+    }
+
+    [AvaloniaFact, FreshApp]
+    public async Task Rollback_during_successor_execution_preserves_parent_task_and_cancelled_delivery_cannot_accept()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var originalToken = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var hold = new TaskCompletionSource<AcpPromptResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<JsonObject>? original = null;
+        var originalReturnedDuringSuccessor = false;
+
+        var dir = Directory.CreateTempSubdirectory("octopus-collab-rollback-during-accept-").FullName;
+        var projects = AppHost.Get<IProjectService>();
+        var project = projects.AddProject(dir);
+        var caller = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Lead", Surface = AgentSurface.Gui };
+        var worker = new ProjectItem { Kind = ProjectItemKind.Agent, AgentId = "opencode", Title = "Worker", Surface = AgentSurface.Gui };
+        projects.AddItem(project, caller);
+        projects.AddItem(project, worker, activate: false);
+
+        var host = (CollabCoordinator)AppHost.Get<ICollabCoordinator>();
+        host.Server.Start();
+        host.RegisterGuiSession(new FakeGuiBridge(caller.Id, "opencode", caller.Title, dir));
+
+        FakeAcpSession? acp = null;
+        var factory = AppHost.Get<FakeAcpSessionFactory>();
+        factory.ConfigureNext = s =>
+        {
+            acp = s;
+            s.PromptHandler = (_, _, _, _) =>
+            {
+                // Original cancellation and rollback finish before the successor's GUI bridge returns.
+                originalToken.Cancel();
+                originalReturnedDuringSuccessor = SpinWait.SpinUntil(() => original!.IsCompleted, TimeSpan.FromSeconds(4));
+                return hold.Task;
+            };
+        };
+        var tabRegistry = AppHost.Get<ITabContentRegistry>();
+        var control = tabRegistry.GetOrCreate(project, worker);
+        var vm = Assert.IsType<AgentGuiTabViewModel>(control.DataContext);
+        await vm.ConnectAsync();
+        Frames.Pump();
+        Assert.NotNull(acp);
+
+        var ledger = (Octopus.App.Collab.Ledger.CollabLedger)typeof(CollabCoordinator)
+            .GetField("_ledger", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(host)!;
+
+        original = Task.Run(() => host.CallToolAsync(
+            caller.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "never accepted" },
+            originalToken.Token));
+        Assert.True(SpinWait.SpinUntil(() => { lock (ledger.Gate) return ledger.Pending.ContainsKey(worker.Id); }, TimeSpan.FromSeconds(4)));
+        var task = Assert.Single(host.GetTasksForItem(caller.Id));
+
+        var follow = await host.CallToolAsync(
+            caller.Id,
+            "send_message",
+            new JsonObject
+            {
+                ["thread_id"] = task.ThreadId,
+                ["target_session_id"] = worker.Id,
+                ["message"] = "second message",
+                ["expect_reply"] = true,
+            },
+            ct);
+        Assert.Null(follow["isError"]);
+        Assert.True(originalReturnedDuringSuccessor);
+        Assert.True(vm.IsTurnActive);
+        Assert.Contains("second message", Assert.Single(acp!.SentPrompts).Text);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => original);
+
+        acp.Emit(new AcpTextDeltaEvent("assistant", "successor finished", "msg-succ"));
+        hold.SetResult(new AcpPromptResult { StopReason = "end_turn" });
+        Assert.True(Frames.Until(() => !vm.IsTurnActive));
+        Assert.True(SpinWait.SpinUntil(
+            () => host.GetTasksForItem(caller.Id).Any(t => t.TaskId == task.TaskId && t.Status == CollabTaskStatus.Completed),
+            TimeSpan.FromSeconds(4)));
+        var completed = Assert.Single(host.GetTasksForItem(caller.Id), t => t.TaskId == task.TaskId);
+        Assert.Equal("successor finished", completed.ResultSummary);
+
+        // Acceptance-after-cancellation control: a delivery parked off-UI whose task is explicitly cancelled before
+        // GUI acceptance must be refused without executing or resurrecting the task.
+        var parked = Task.Run(() => host.CallToolAsync(
+            caller.Id,
+            "delegate_task",
+            new JsonObject { ["target"] = worker.Id, ["goal"] = "cancelled before acceptance" },
+            ct), ct);
+        Assert.True(SpinWait.SpinUntil(() => host.GetTasksForItem(caller.Id).Count == 2, TimeSpan.FromSeconds(4)));
+        var cancelledTask = host.GetTasksForItem(caller.Id).Single(t => t.TaskId != task.TaskId);
+        var cancelRes = await host.CancelDelegatedTaskAsync(caller.Id, cancelledTask.TaskId, "stop before accept", ct);
+        Assert.Null(cancelRes["isError"]);
+        Frames.Pump();
+        var parkedRes = await parked.WaitAsync(TimeSpan.FromSeconds(4), ct);
+        Assert.True(parkedRes["isError"]?.GetValue<bool>());
+        Assert.Equal(CollabTaskStatus.Cancelled, host.GetTasksForItem(caller.Id).Single(t => t.TaskId == cancelledTask.TaskId).Status);
+        Assert.Single(acp.SentPrompts);
     }
 
     private static async Task<JsonObject> PostMcpAsync(HttpClient http, string url, string token, string json, CancellationToken ct)

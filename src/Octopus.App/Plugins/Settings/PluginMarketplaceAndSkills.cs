@@ -87,24 +87,24 @@ public sealed partial class MarketplacePluginRowViewModel : ObservableObject
         Icon = Rendering.UiIcons.Parse(entry.Plugin.Icon) ?? DefaultIconForCategory(Category);
         IconBitmap = localIconBitmap;
 
-        var riskLevel = entry.Latest.RiskLevel?.ToLowerInvariant() ?? "low";
-        IsHighRisk = riskLevel == "high";
-        IsMediumRisk = riskLevel == "medium";
-        IsLowRisk = !IsHighRisk && !IsMediumRisk;
+        var effectiveRisk = Octopus.Plugins.Manifests.PermissionRiskCatalog.EffectiveRisk(entry.Latest.RiskLevel, entry.Latest.Permissions);
+        IsHighRisk = effectiveRisk == Octopus.Core.Plugins.PermissionRisk.High;
+        IsMediumRisk = effectiveRisk == Octopus.Core.Plugins.PermissionRisk.Medium;
+        IsLowRisk = effectiveRisk == Octopus.Core.Plugins.PermissionRisk.Low;
 
-        RiskLabel = riskLevel switch
+        RiskLabel = effectiveRisk switch
         {
-            "high" => PluginText.Get("高风险", "High risk"),
-            "medium" => PluginText.Get("中风险", "Medium risk"),
+            Octopus.Core.Plugins.PermissionRisk.High => PluginText.Get("高风险", "High risk"),
+            Octopus.Core.Plugins.PermissionRisk.Medium => PluginText.Get("中风险", "Medium risk"),
             _ => PluginText.Get("低风险", "Low risk"),
         };
-        RiskShortLabel = entry.Latest.Permissions.Count == 0
+        RiskShortLabel = entry.Latest.Permissions.Count == 0 && IsLowRisk
             ? PluginText.Get("零权限", "0 perms")
             : RiskLabel;
-        RiskTone = riskLevel switch
+        RiskTone = effectiveRisk switch
         {
-            "high" => BadgeTone.Danger,
-            "medium" => BadgeTone.Warning,
+            Octopus.Core.Plugins.PermissionRisk.High => BadgeTone.Danger,
+            Octopus.Core.Plugins.PermissionRisk.Medium => BadgeTone.Warning,
             _ => BadgeTone.Success,
         };
         Permissions = entry.Latest.Permissions;
@@ -118,6 +118,7 @@ public sealed partial class MarketplacePluginRowViewModel : ObservableObject
         Changelog = string.IsNullOrWhiteSpace(entry.Latest.Changelog) ? null : entry.Latest.Changelog.Trim();
         Homepage = string.IsNullOrWhiteSpace(entry.Plugin.Homepage) ? null : entry.Plugin.Homepage.Trim();
         IdentitySummary = $"{entry.Plugin.Id} · {entry.Plugin.PublisherSlug} · v{entry.Latest.Version}";
+        HasValidSha256 = MarketplaceEndpointPolicy.IsValidSha256(entry.Latest.Sha256);
 
         UpdateInstalledState(installedVersion);
     }
@@ -146,6 +147,8 @@ public sealed partial class MarketplacePluginRowViewModel : ObservableObject
     public IReadOnlyList<string> Permissions { get; }
     public bool HasPermissions => Permissions.Count > 0;
     public bool HasNoPermissions => Permissions.Count == 0;
+    public bool ShowSandboxedNoPermissionsNote => HasNoPermissions && IsLowRisk;
+    public bool ShowElevatedRiskNoPermissionsNote => HasNoPermissions && !IsLowRisk;
     public string PermissionsSummary { get; }
     public string PermissionsHeading { get; }
     public string StatsSummary { get; }
@@ -157,6 +160,9 @@ public sealed partial class MarketplacePluginRowViewModel : ObservableObject
     public string? Homepage { get; }
     public bool HasHomepage => !string.IsNullOrWhiteSpace(Homepage);
     public string IdentitySummary { get; }
+    public bool HasValidSha256 { get; }
+    public bool MissingValidSha256 => !HasValidSha256;
+    public bool CanInstall => HasValidSha256;
     public int RiskOrder => IsHighRisk ? 2 : IsMediumRisk ? 1 : 0;
 
     [ObservableProperty] public partial bool IsBusy { get; set; }

@@ -342,6 +342,7 @@
                                         <arc:Button Variant="Primary"
                                                     Size="Small"
                                                     IsLoading="{Binding IsBusy}"
+                                                    IsEnabled="{Binding CanInstall}"
                                                     IsVisible="{Binding ShowActionButton}"
                                                     Content="{Binding ActionLabel}"
                                                     Command="{Binding InstallOrUpgradeCommand}" />
@@ -452,6 +453,7 @@
                                                 <arc:Button Variant="Primary"
                                                             Size="Small"
                                                             IsLoading="{Binding IsBusy}"
+                                                            IsEnabled="{Binding CanInstall}"
                                                             IsVisible="{Binding ShowActionButton}"
                                                             Content="{Binding ActionLabel}"
                                                             Command="{Binding InstallOrUpgradeCommand}" />

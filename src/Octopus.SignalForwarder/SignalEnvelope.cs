@@ -23,6 +23,10 @@ internal static class SignalEnvelope
             writer.WriteString("agent", options.Agent);
             writer.WriteString("channel", options.Channel);
             writer.WriteString("account", environment.Account);
+            if (!string.IsNullOrWhiteSpace(environment.LinkId))
+            {
+                writer.WriteString("link", environment.LinkId);
+            }
             writer.WriteNumber("ts", timestampMs);
             writer.WriteString("payload", payload);
             writer.WriteEndObject();

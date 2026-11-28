@@ -24,10 +24,13 @@ public sealed class BotScheduleMcpServer : ICollabToolHandler, IDisposable
         "so they survive closing the chat and restarting. Prefer these over any built-in, session-only cron tool. " +
         "Use schedule_list to see schedules and schedule_delete to cancel one.";
 
+    private readonly object _gate = new();
+    private readonly Dictionary<string, long> _chatCloseEpochs = new(StringComparer.Ordinal);
     private readonly CollabMcpServer _server;
     private readonly IBotService _bots;
     private readonly BotScheduler _scheduler;
     private readonly TimeProvider _time;
+    private bool _disposed;
 
     public BotScheduleMcpServer(IBotService bots, BotScheduler scheduler, TimeProvider? time = null)
     {
@@ -36,15 +39,93 @@ public sealed class BotScheduleMcpServer : ICollabToolHandler, IDisposable
         _time = time ?? TimeProvider.System;
         _server = new CollabMcpServer(ServerName, Instructions, BuildToolSchemas);
         _server.AttachHandler(this);
+        _bots.Changed += OnBotsChanged;
     }
 
     public bool Start() => _server.Start();
 
-    /// <summary>The MCP server entry for one bot chat's ACP session, or null when the chat is not a bot's.</summary>
-    public AcpMcpServerConfig? BuildAcpServerConfig(string chatId)
+    /// <summary>The MCP server entry for one open bot chat's ACP session, or null when the chat is closed, unowned, or shutting down.</summary>
+    public AcpMcpServerConfig? BuildAcpServerConfig(string chatId) =>
+        BuildAcpServerConfigInternal(chatId, expectedBotId: null, CollabMcpServer.AcpDefaultLeaseId)?.Config;
+
+    internal (AcpMcpServerConfig Config, IDisposable Lease)? TryBuildAcpServerConfigLease(string chatId, string? expectedBotId = null) =>
+        BuildAcpServerConfigInternal(chatId, expectedBotId, leaseId: null);
+
+    private (AcpMcpServerConfig Config, IDisposable Lease)? BuildAcpServerConfigInternal(
+        string chatId,
+        string? expectedBotId,
+        string? leaseId)
     {
-        if (_bots.FindBotByChatId(chatId) is null) return null;
-        return _server.BuildAcpServerConfig(chatId, ItemLaunchService.ResolveForwarderPath());
+        if (string.IsNullOrWhiteSpace(chatId)) return null;
+        var forwarder = ItemLaunchService.ResolveForwarderPath();
+        lock (_gate)
+        {
+            if (_disposed) return null;
+            if (FindOpenBotByChatId(chatId, expectedBotId) is null) return null;
+            var epochBefore = _chatCloseEpochs.GetValueOrDefault(chatId);
+            var issued = _server.TryBuildAcpServerConfigLease(chatId, forwarder, leaseId);
+            if (issued is null) return null;
+            if (_disposed
+                || _chatCloseEpochs.GetValueOrDefault(chatId) != epochBefore
+                || FindOpenBotByChatId(chatId, expectedBotId) is null)
+            {
+                issued.Value.Lease.Dispose();
+                return null;
+            }
+            return issued;
+        }
+    }
+
+    /// <summary>Revokes all schedule MCP bearer tokens bound to <paramref name="chatId"/>.</summary>
+    public void RevokeToken(string chatId)
+    {
+        if (string.IsNullOrWhiteSpace(chatId)) return;
+        lock (_gate)
+        {
+            _server.RevokeToken(chatId);
+        }
+    }
+
+    private BotDefinition? FindOpenBotByChatId(string chatId, string? expectedBotId = null)
+    {
+        if (string.IsNullOrWhiteSpace(chatId)) return null;
+        var bot = _bots.FindBotByChatId(chatId);
+        if (bot is null) return null;
+        if (!string.IsNullOrWhiteSpace(expectedBotId) && !string.Equals(bot.Id, expectedBotId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+        var chat = bot.Chats.FirstOrDefault(c => string.Equals(c.Id, chatId, StringComparison.Ordinal));
+        if (chat is null || !chat.IsOpen || chat.Status == BotChatStatus.Closed)
+        {
+            return null;
+        }
+        return bot;
+    }
+
+    private void OnBotsChanged(object? sender, BotChangedEventArgs e)
+    {
+        if (e.Kind == BotChangeKind.Chats && e.Chat is { } chat
+            && (!chat.IsOpen || chat.Status == BotChatStatus.Closed || FindOpenBotByChatId(chat.Id) is null))
+        {
+            lock (_gate)
+            {
+                _chatCloseEpochs[chat.Id] = _chatCloseEpochs.GetValueOrDefault(chat.Id) + 1;
+                _server.RevokeToken(chat.Id);
+            }
+        }
+        else if (e.Kind == BotChangeKind.Bots && e.Bot is { } removedBot
+            && _bots.Bots.All(b => b.Id != removedBot.Id))
+        {
+            lock (_gate)
+            {
+                foreach (var c in removedBot.Chats)
+                {
+                    _chatCloseEpochs[c.Id] = _chatCloseEpochs.GetValueOrDefault(c.Id) + 1;
+                    _server.RevokeToken(c.Id);
+                }
+            }
+        }
     }
 
     public async Task<JsonObject> CallToolAsync(string callerItemId, string toolName, JsonObject? arguments, CancellationToken cancellationToken)
@@ -58,10 +139,10 @@ public sealed class BotScheduleMcpServer : ICollabToolHandler, IDisposable
 
     internal Task<JsonObject> CallOnUiAsync(string callerItemId, string toolName, JsonObject? args)
     {
-        var bot = _bots.FindBotByChatId(callerItemId);
+        var bot = FindOpenBotByChatId(callerItemId);
         if (bot is null)
         {
-            return Task.FromResult(Error("These tools are only available inside an Octopus bot chat."));
+            return Task.FromResult(Error("These tools are only available inside an open Octopus bot chat."));
         }
 
         try
@@ -211,5 +292,14 @@ public sealed class BotScheduleMcpServer : ICollabToolHandler, IDisposable
         ["inputSchema"] = inputSchema,
     };
 
-    public void Dispose() => _server.Dispose();
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _server.Dispose();
+        }
+        _bots.Changed -= OnBotsChanged;
+    }
 }

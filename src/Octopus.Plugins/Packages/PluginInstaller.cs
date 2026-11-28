@@ -7,7 +7,12 @@ namespace Octopus.Plugins.Packages;
 /// <summary>A package unpacked into the staging area, waiting for the user to confirm (design/plugins/03 §5).</summary>
 /// <param name="Root">The package directory inside the staging area (where plugin.json is).</param>
 /// <param name="InstalledVersion">The version already installed under the same id; null for a new plugin.</param>
-public sealed record StagedPlugin(string StagingDirectory, string Root, ManifestReadResult Result, string? InstalledVersion)
+public sealed record StagedPlugin(
+    string StagingDirectory,
+    string Root,
+    ManifestReadResult Result,
+    string? InstalledVersion,
+    PluginManifest? InstalledManifest = null)
 {
     public PluginManifest? Manifest => Result.Manifest;
     public bool CanInstall => Result.IsValid;
@@ -49,15 +54,18 @@ public sealed class PluginInstaller(PluginPaths paths)
             var root = FindRoot(staging);
             var result = PluginManifestReader.ReadPackage(root, PluginSource.File, requireDirectoryName: false);
             string? installed = null;
+            PluginManifest? installedManifest = null;
             if (result.Manifest is { } manifest)
             {
                 var existing = paths.PackageDirectoryOf(manifest.Id);
                 if (Directory.Exists(existing))
                 {
-                    installed = PluginManifestReader.ReadPackage(existing, PluginSource.File, requireDirectoryName: false).Manifest?.Version ?? "?";
+                    var existingRead = PluginManifestReader.ReadPackage(existing, PluginSource.File, requireDirectoryName: false);
+                    installedManifest = existingRead.IsValid ? existingRead.Manifest : null;
+                    installed = installedManifest?.Version ?? "?";
                 }
             }
-            return new StagedPlugin(staging, root, result, installed);
+            return new StagedPlugin(staging, root, result, installed, installedManifest);
         }
         catch
         {

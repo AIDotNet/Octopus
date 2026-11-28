@@ -94,6 +94,43 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
 
     private void OnBotsChanged(object? sender, BotChangedEventArgs e)
     {
+        if (e.Kind == BotChangeKind.Chats && e.Chat is { } chat
+            && !BotOwnerRetirement.IsRetiring(chat.Id)
+            && _bots?.Bots.FirstOrDefault(b => b.Id == e.Bot?.Id)?.Chats.FirstOrDefault(c => c.Id == chat.Id)?.IsOpen != true
+            && _bots?.FindItem(chat.Id) is null
+            && (e.Bot is null || !_botControllers.ContainsKey(e.Bot.Id)))
+        {
+            // A session started in a bot never shown in a dock has no controller: retire it directly.
+            if (_registry.CaptureForRelease(chat.Id) is { } release)
+            {
+                _ = release();
+            }
+            return;
+        }
+        if (e.Kind == BotChangeKind.Files && e.Item is { } removedFile
+            && !BotOwnerRetirement.IsRetiring(removedFile.Id)
+            && _bots?.FindItem(removedFile.Id) is null
+            && (e.Bot is null || !_botControllers.ContainsKey(e.Bot.Id)))
+        {
+            if (_registry.CaptureForRelease(removedFile.Id) is { } release)
+            {
+                _ = release();
+            }
+            return;
+        }
+        if (e.Kind == BotChangeKind.Bots && e.Bot is { } goneBot
+            && _bots is not null && _bots.Bots.All(b => b.Id != goneBot.Id)
+            && !_botControllers.ContainsKey(goneBot.Id))
+        {
+            foreach (var goneChat in goneBot.Chats)
+            {
+                if (!BotOwnerRetirement.IsRetiring(goneChat.Id)
+                    && _registry.CaptureForRelease(goneChat.Id) is { } release)
+                {
+                    _ = release();
+                }
+            }
+        }
         if (e.Kind is BotChangeKind.Mode or BotChangeKind.Bots or BotChangeKind.CurrentBot)
         {
             UiContext.Run(Refresh);
@@ -293,16 +330,53 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IWorkspaceCom
 
     public async Task CloseItemAsync(string itemId)
     {
-        if (await _confirmation.ConfirmCloseTabAsync(itemId))
+        var originalBot = _bots?.FindItemOwner(itemId);
+        var originalBotItem = originalBot is not null ? _bots!.FindItem(itemId) : null;
+        var originalProjectItem = originalBot is null ? _projects.FindItem(itemId) : null;
+        var concreteRegistry = _registry as TabContentRegistry;
+        using var confirmation = concreteRegistry?.BeginConfirmation(itemId);
+        var originalTabContent = concreteRegistry is null ? _registry.Find(itemId) : null;
+
+        if (!await _confirmation.ConfirmCloseTabAsync(itemId))
         {
-            if (_bots?.CurrentBot is { } bot && _bots.FindItem(itemId) is not null)
+            return;
+        }
+
+        if (originalBot is not null)
+        {
+            if (_bots?.FindItemOwner(itemId)?.Id != originalBot.Id)
             {
-                _bots.CloseBackingItem(bot.Id, itemId);
+                return;
             }
-            else
+            if (originalBotItem is not null && !ReferenceEquals(_bots.FindItem(itemId), originalBotItem))
             {
-                _projects.RemoveItem(itemId);
+                return;
             }
+            if (confirmation is not null && !confirmation.IsStillCurrent())
+            {
+                return;
+            }
+            if (concreteRegistry is null && originalTabContent is not null && !ReferenceEquals(_registry.Find(itemId), originalTabContent))
+            {
+                return;
+            }
+
+            confirmation?.Dispose();
+            await BotOwnerRetirement.RetireAndMutateAsync(
+                _registry,
+                itemId,
+                () => _bots.CloseBackingItem(originalBot.Id, itemId));
+            return;
+        }
+
+        if (originalProjectItem is not null && ReferenceEquals(_projects.FindItem(itemId), originalProjectItem))
+        {
+            if (confirmation is not null && !confirmation.IsStillCurrent())
+            {
+                return;
+            }
+            confirmation?.Dispose();
+            _projects.RemoveItem(itemId);
         }
     }
 

@@ -262,6 +262,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                     Surface = requestedSurface,
                     TunnelProvider = tunnelSpec,
                     TunnelLoopbackBaseUrl = tunnelLoopback,
+                    CollabDeliveryId = Blank(request.CollabDeliveryId),
                 },
             };
         }
@@ -480,16 +481,21 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
 
     public Task<ISessionAttachment> AttachAsync(string itemId, int columns, int rows, bool nativeSnapshot, bool claimSize, ISessionSink sink, ulong? resumeFrom) => OnUi<ISessionAttachment>(() =>
     {
-        var (project, item) = FindItem(itemId);
-        // Planning it as a terminal would start a second copy of the agent beside the GUI tab's own.
-        if (IsGui(item)) throw NoTerminal();
+        var (project, item) = FindItem(itemId, reopenClosedBotChat: true, requireGui: false);
         var size = new TerminalSize(columns, rows, 0, 0);
         TerminalSession session;
         try
         {
             var dark = IsDark();
-            session = _sessions.GetOrStart(item.Id, _launcher.Plan(project, item), _factory, size, TerminalPalettes.For(dark),
-                TerminalPalettes.SchemeFor(dark), Math.Max(100, _settings.Current.Terminal.ScrollbackLines), out var created);
+            session = _sessions.GetOrStart(
+                item.Id,
+                leaseId => _launcher.PlanLaunch(project, item, leaseId: leaseId),
+                _factory,
+                size,
+                TerminalPalettes.For(dark),
+                TerminalPalettes.SchemeFor(dark),
+                Math.Max(100, _settings.Current.Terminal.ScrollbackLines),
+                out var created);
             if (created)
             {
                 // No tab reports for it yet: its title and its end feed the activity of the item from here.
@@ -509,7 +515,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     {
         var session = await OnUi(() =>
         {
-            if (IsGui(FindItem(itemId).Item)) throw NoTerminal();
+            FindItem(itemId, reopenClosedBotChat: false, requireGui: false);
             return _sessions.Find(itemId) ?? throw new RemoteException(RemoteMethods.NotFound, "The item has no terminal yet.");
         }).ConfigureAwait(false);
         await OnUiAsync(session.RestartAsync).ConfigureAwait(false);
@@ -519,7 +525,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
 
     public Task<IAcpAttachment> AttachConversationAsync(string itemId, Action<AcpUpdateMessage> updated) => OnUi(() =>
     {
-        var (project, item) = FindConversation(itemId);
+        var (project, item) = FindConversation(itemId, reopenClosedBotChat: true);
         return _conversations.Attach(project, item, updated);
     });
 
@@ -527,7 +533,7 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     {
         var (project, item, roots) = await OnUi(() =>
         {
-            var (project, item) = FindConversation(prompt.ItemId);
+            var (project, item) = FindConversation(prompt.ItemId, reopenClosedBotChat: true);
             return (project, item, project.Workspaces.Select(w => w.Path).Prepend(project.Path).ToList());
         }).ConfigureAwait(false);
         // What is attached must be inside the conversation's project or the host's session upload folder.
@@ -543,7 +549,11 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
             if (!File.Exists(full)) throw new RemoteException(RemoteMethods.NotFound, $"The file '{full}' does not exist on the host.");
             paths.Add(full);
         }
-        await OnUiAsync(() => _conversations.PromptAsync(project, item, prompt.Text, paths, prompt.Mentions, prompt.Immediate)).ConfigureAwait(false);
+        await OnUiAsync(() =>
+        {
+            var (currentProject, currentItem) = ResolveLiveConversationWithoutReopen(prompt.ItemId);
+            return _conversations.PromptAsync(currentProject, currentItem, prompt.Text, paths, prompt.Mentions, prompt.Immediate, prompt.CollabDeliveryId);
+        }).ConfigureAwait(false);
     }
 
     public Task<AcpMentionTargetsMessage> ListMentionTargetsAsync(AcpMentionTargetsRequestMessage request) => OnUi(() =>
@@ -556,6 +566,17 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     {
         var (project, item) = await OnUi(() => FindConversation(itemId)).ConfigureAwait(false);
         await OnUiAsync(() => _conversations.CancelAsync(project, item)).ConfigureAwait(false);
+    }
+
+    public async Task CancelTurnAsync(AcpCancelMessage request)
+    {
+        var (project, item) = await OnUi(() => FindConversation(request.ItemId)).ConfigureAwait(false);
+        await OnUiAsync(() => _conversations.CancelAsync(
+            project,
+            item,
+            request.CollabThreadId,
+            request.CollabTaskId,
+            request.CollabDeliveryId)).ConfigureAwait(false);
     }
 
     public Task RespondAsync(AcpRespondMessage answer) => OnUi(() =>
@@ -572,11 +593,8 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         return true;
     });
 
-    private (Project Project, ProjectItem Item) FindConversation(string itemId)
-    {
-        var found = FindItem(itemId);
-        return IsGui(found.Item) ? found : throw new RemoteException(RemoteMethods.NotAllowed, "This item runs in a terminal on the host; it has no GUI conversation to show.");
-    }
+    private (Project Project, ProjectItem Item) FindConversation(string itemId, bool reopenClosedBotChat = false) =>
+        FindItem(itemId, reopenClosedBotChat, requireGui: true);
 
     // ---- files and git of the projects' folders ----
 
@@ -884,14 +902,112 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
     private static RemoteException NoTerminal() =>
         new(RemoteMethods.NotAllowed, "This agent runs as a GUI conversation on the host; it has no terminal to show.");
 
+    private static RemoteException NoConversation() =>
+        new(RemoteMethods.NotAllowed, "This item runs in a terminal on the host; it has no GUI conversation to show.");
+
+    private static void ValidateSurface(bool isGui, bool? requireGui)
+    {
+        if (requireGui is { } expectedGui && isGui != expectedGui)
+        {
+            throw expectedGui ? NoConversation() : NoTerminal();
+        }
+    }
+
+    private bool IsBotChatGui(BotDefinition bot, BotChat chat, ProjectItem? backingItem)
+    {
+        if (backingItem is not null)
+        {
+            return IsGui(backingItem);
+        }
+        if (chat.Surface is { } surface)
+        {
+            return surface == AgentSurface.Gui;
+        }
+        var agentId = ResolveBotAgentId(chat.AgentId ?? bot.AgentId);
+        var definition = _catalog.Find(agentId);
+        return definition is not null
+            && AgentSurfaceResolver.Resolve(definition, _settings.Current.Agents, null, acpAvailable: true) == AgentSurface.Gui;
+    }
+
+    private string ResolveBotAgentId(string? requested)
+    {
+        if (!string.IsNullOrWhiteSpace(requested) && _catalog.Find(requested) is not null)
+        {
+            return requested;
+        }
+        var def = _settings.Current.Agents.DefaultAgentId;
+        if (!string.IsNullOrWhiteSpace(def) && _catalog.Find(def) is not null)
+        {
+            return def;
+        }
+        var installed = _scanner.Current.Installations
+            .Select(i => i.AgentId)
+            .FirstOrDefault(id => _catalog.Find(id) is not null);
+        return installed ?? _catalog.Definitions.FirstOrDefault()?.Id ?? "claude";
+    }
+
+    private bool TryFindProjectSessionItem(string itemId, out Project project, out ProjectItem item)
+    {
+        if (_projects.FindProjectOf(itemId) is { } foundProject
+            && ProjectLocation.IsOnThisComputer(foundProject)
+            && _projects.FindItem(itemId) is { } foundItem
+            && IsSession(foundItem))
+        {
+            project = foundProject;
+            item = foundItem;
+            return true;
+        }
+        project = null!;
+        item = null!;
+        return false;
+    }
+
+    private (BotDefinition? Bot, BotChat? Chat) FindOpenBotChat(string itemId)
+    {
+        if (_bots is null) return (null, null);
+        foreach (var bot in _bots.Bots)
+        {
+            if (bot.Chats.FirstOrDefault(c => c.Id == itemId) is { IsOpen: true } chat
+                && chat.Status != BotChatStatus.Closed)
+            {
+                return (bot, chat);
+            }
+        }
+        return (null, null);
+    }
+
+    private (Project Project, ProjectItem Item) ResolveLiveConversationWithoutReopen(string itemId)
+    {
+        if (TryFindProjectSessionItem(itemId, out var project, out var item))
+        {
+            ValidateSurface(IsGui(item), requireGui: true);
+            return (project, item);
+        }
+        if (_bots is not null)
+        {
+            var (bot, chat) = FindOpenBotChat(itemId);
+            if (bot is not null && chat is not null)
+            {
+                var backing = _bots.GetBackingProject(bot);
+                if (backing.Items.FirstOrDefault(i => i.Id == itemId) is { } backingItem)
+                {
+                    ValidateSurface(IsGui(backingItem), requireGui: true);
+                    return (backing, backingItem);
+                }
+            }
+        }
+        throw new RemoteException(RemoteMethods.NotFound, "The item does not exist on the host.");
+    }
+
     private Project FindProject(string projectId) =>
         _projects.Projects.FirstOrDefault(p => p.Id == projectId && ProjectLocation.IsOnThisComputer(p))
         ?? throw new RemoteException(RemoteMethods.NotFound, "The project does not exist on the host.");
 
-    private (Project Project, ProjectItem Item) FindItem(string itemId)
+    private (Project Project, ProjectItem Item) FindItem(string itemId, bool reopenClosedBotChat = false, bool? requireGui = null)
     {
-        if (_projects.FindProjectOf(itemId) is { } project && ProjectLocation.IsOnThisComputer(project) && _projects.FindItem(itemId) is { } item && IsSession(item))
+        if (TryFindProjectSessionItem(itemId, out var project, out var item))
         {
+            ValidateSurface(IsGui(item), requireGui);
             return (project, item);
         }
         if (_bots is not null)
@@ -902,16 +1018,35 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
                 if (chat is null) continue;
                 var backing = _bots.GetBackingProject(bot);
                 var backingItem = backing.Items.FirstOrDefault(i => i.Id == itemId);
-                if (backingItem is null)
+                var isClosed = !chat.IsOpen || chat.Status == BotChatStatus.Closed;
+                // Validate the requested surface BEFORE any state-mutating reopen so wrong-surface requests
+                // cannot reopen a closed chat before failing with NotAllowed.
+                ValidateSurface(IsBotChatGui(bot, chat, backingItem), requireGui);
+                if (backingItem is null || (reopenClosedBotChat && isClosed))
                 {
                     _bots.OpenChat(bot.Id, chat.Id);
-                    backing = _bots.GetBackingProject(bot);
+                    // Re-resolve the latest authoritative owner, open state, and backing item after OpenChat,
+                    // honoring any re-entrant close, delete, or owner change committed during callbacks.
+                    if (TryFindProjectSessionItem(itemId, out var currentProject, out var currentItem))
+                    {
+                        ValidateSurface(IsGui(currentItem), requireGui);
+                        return (currentProject, currentItem);
+                    }
+                    var (updatedBot, updatedChat) = FindOpenBotChat(itemId);
+                    if (updatedBot is null || updatedChat is null)
+                    {
+                        break;
+                    }
+                    backing = _bots.GetBackingProject(updatedBot);
                     backingItem = backing.Items.FirstOrDefault(i => i.Id == itemId);
-                }
-                if (backingItem is not null)
-                {
+                    if (backingItem is null)
+                    {
+                        break;
+                    }
+                    ValidateSurface(IsGui(backingItem), requireGui);
                     return (backing, backingItem);
                 }
+                return (backing, backingItem);
             }
         }
         throw new RemoteException(RemoteMethods.NotFound, "The item does not exist on the host.");
@@ -970,13 +1105,22 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         return ToBotMessage(FindBot(bots, bot.Id));
     });
 
-    public Task DeleteBotAsync(string botId) => OnUi(() =>
+    public Task DeleteBotAsync(string botId)
     {
-        var bots = RequireBots();
-        FindBot(bots, botId);
-        bots.DeleteBot(botId);
-        return true;
-    });
+        IBotService? bots = null;
+        return BotOwnerRetirement.RetireMutateAndAwaitAsync(
+            OnUi,
+            _tabs,
+            _sessions,
+            prepareIds: () =>
+            {
+                bots = RequireBots();
+                var bot = FindBot(bots, botId);
+                return BotOwnerRetirement.CollectBotItemIds(bots, bot);
+            },
+            mutate: () => bots!.DeleteBot(botId),
+            isDeleted: _ => BotOwnerRetirement.IsBotDeleted(bots!, botId));
+    }
 
     public Task<BotChatMessage> CreateBotChatAsync(CreateBotChatMessage request) => OnUi(() =>
     {
@@ -1000,22 +1144,8 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         return ToBotChatMessage(updated, updated.Chats.First(c => c.Id == chatId));
     });
 
-    public async Task CloseBotChatAsync(string botId, string chatId)
-    {
-        await OnUi(() =>
-        {
-            var bots = RequireBots();
-            var bot = FindBot(bots, botId);
-            if (bot.Chats.All(c => c.Id != chatId))
-            {
-                throw new RemoteException(RemoteMethods.NotFound, "The bot chat does not exist on the host.");
-            }
-            bots.CloseChat(bot.Id, chatId);
-            return true;
-        }).ConfigureAwait(false);
-        await _tabs.ReleaseAsync(chatId).ConfigureAwait(false);
-        await _sessions.CloseAsync(chatId).ConfigureAwait(false);
-    }
+    public Task CloseBotChatAsync(string botId, string chatId) =>
+        CloseOrDeleteBotChatAsync(botId, chatId, delete: false);
 
     public Task RenameBotChatAsync(string botId, string chatId, string? title) => OnUi(() =>
     {
@@ -1029,23 +1159,40 @@ public sealed class HostWorkspace : IHostWorkspace, IDisposable
         return true;
     });
 
-    public async Task DeleteBotChatAsync(string botId, string chatId)
+    public Task DeleteBotChatAsync(string botId, string chatId) =>
+        CloseOrDeleteBotChatAsync(botId, chatId, delete: true);
+
+    private Task CloseOrDeleteBotChatAsync(string botId, string chatId, bool delete)
     {
-        await OnUi(() =>
-        {
-            var bots = RequireBots();
-            var bot = FindBot(bots, botId);
-            var chat = bot.Chats.FirstOrDefault(c => c.Id == chatId)
-                ?? throw new RemoteException(RemoteMethods.NotFound, "The bot chat does not exist on the host.");
-            if (chat.Kind == BotChatKind.Home)
+        IBotService? bots = null;
+        return BotOwnerRetirement.RetireMutateAndAwaitAsync(
+            OnUi,
+            _tabs,
+            _sessions,
+            prepareIds: () =>
             {
-                throw new RemoteException(RemoteMethods.NotAllowed, "Home Chat cannot be deleted.");
-            }
-            bots.DeleteChat(bot.Id, chatId);
-            return true;
-        }).ConfigureAwait(false);
-        await _tabs.ReleaseAsync(chatId).ConfigureAwait(false);
-        await _sessions.CloseAsync(chatId).ConfigureAwait(false);
+                bots = RequireBots();
+                var bot = FindBot(bots, botId);
+                var chat = bot.Chats.FirstOrDefault(c => c.Id == chatId)
+                    ?? throw new RemoteException(RemoteMethods.NotFound, "The bot chat does not exist on the host.");
+                if (delete && chat.Kind == BotChatKind.Home)
+                {
+                    throw new RemoteException(RemoteMethods.NotAllowed, "Home Chat cannot be deleted.");
+                }
+                return [chatId];
+            },
+            mutate: () =>
+            {
+                if (delete)
+                {
+                    bots!.DeleteChat(botId, chatId);
+                }
+                else
+                {
+                    bots!.CloseChat(botId, chatId);
+                }
+            },
+            isDeleted: delete ? id => BotOwnerRetirement.IsChatDeleted(bots!, botId, id) : null);
     }
 
     public Task ResolveBotItemAsync(ResolveBotItemMessage request) => OnUi(() =>
