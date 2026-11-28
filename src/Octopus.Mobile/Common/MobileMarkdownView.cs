@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using TKCode.Arc;
 using TKCode.Arc.DesignTokens;
 
@@ -17,12 +18,20 @@ namespace Octopus.Mobile.Common;
 /// tappable web &amp; local file links, nested bullet/numbered/task lists, blockquotes, dividers and scrollable fenced code blocks.
 /// Uses pure <see cref="Run"/> inlines (with <see cref="TextBlock.TextLayout"/> hit-testing for links) and live
 /// <see cref="ArcTokens"/> bindings so inline code and links stay baseline-aligned, wrap cleanly, and follow theme changes.
+/// Throttles high-frequency updates while <see cref="IsStreaming"/> is true and reuses unchanged leading block controls
+/// incrementally so live agent responses never stall the mobile UI thread.
 /// Zero reflection and zero desktop-only package dependencies so it stays safe under NativeAOT and Android trimming.
 /// </summary>
 public sealed class MobileMarkdownView : ContentControl
 {
+    private const long StreamingThrottleMs = 120;
+
     public static readonly StyledProperty<string?> MarkdownProperty =
         AvaloniaProperty.Register<MobileMarkdownView, string?>(nameof(Markdown));
+
+    /// <summary>True while the underlying agent turn is actively streaming tokens; coalesces rapid updates to avoid UI freezes.</summary>
+    public static readonly StyledProperty<bool> IsStreamingProperty =
+        AvaloniaProperty.Register<MobileMarkdownView, bool>(nameof(IsStreaming));
 
     /// <summary>Opens an HTTP(S) <see cref="Uri"/> (e.g. release notes links).</summary>
     public static readonly StyledProperty<ICommand?> LinkCommandProperty =
@@ -33,13 +42,16 @@ public sealed class MobileMarkdownView : ContentControl
         AvaloniaProperty.Register<MobileMarkdownView, ICommand?>(nameof(LinkTargetCommand));
 
     private readonly StackPanel _root = new() { Spacing = 8 };
+    private DispatcherTimer? _throttleTimer;
     private string? _lastMarkdown;
+    private long _lastRebuildTick;
 
     static MobileMarkdownView()
     {
-        MarkdownProperty.Changed.AddClassHandler<MobileMarkdownView>((view, _) => view.RebuildIfChanged());
-        LinkCommandProperty.Changed.AddClassHandler<MobileMarkdownView>((view, _) => view.Rebuild());
-        LinkTargetCommandProperty.Changed.AddClassHandler<MobileMarkdownView>((view, _) => view.Rebuild());
+        MarkdownProperty.Changed.AddClassHandler<MobileMarkdownView>((view, _) => view.OnMarkdownChanged());
+        IsStreamingProperty.Changed.AddClassHandler<MobileMarkdownView>((view, _) => view.OnStreamingChanged());
+        LinkCommandProperty.Changed.AddClassHandler<MobileMarkdownView>((view, _) => view.Rebuild(incremental: false));
+        LinkTargetCommandProperty.Changed.AddClassHandler<MobileMarkdownView>((view, _) => view.Rebuild(incremental: false));
     }
 
     public MobileMarkdownView()
@@ -53,6 +65,12 @@ public sealed class MobileMarkdownView : ContentControl
     {
         get => GetValue(MarkdownProperty);
         set => SetValue(MarkdownProperty, value);
+    }
+
+    public bool IsStreaming
+    {
+        get => GetValue(IsStreamingProperty);
+        set => SetValue(IsStreamingProperty, value);
     }
 
     public ICommand? LinkCommand
@@ -70,25 +88,177 @@ public sealed class MobileMarkdownView : ContentControl
     /// <summary>The parsed blocks currently displayed, exposed for tests.</summary>
     public IReadOnlyList<MarkdownBlock> Blocks { get; private set; } = [];
 
-    private void RebuildIfChanged()
+    /// <summary>Number of visual rebuilds executed, exposed for anti-freeze throttling tests.</summary>
+    internal int RebuildCount { get; private set; }
+
+    /// <summary>Number of leading block controls reused in-place on the latest rebuild, exposed for tests.</summary>
+    internal int LastReusedBlockCount { get; private set; }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (string.Equals(_lastMarkdown, Markdown, StringComparison.Ordinal)) return;
-        Rebuild();
+        base.OnAttachedToVisualTree(e);
+        if (!string.Equals(_lastMarkdown, Markdown, StringComparison.Ordinal))
+        {
+            StopThrottleTimer();
+            Rebuild(incremental: true);
+        }
     }
 
-    private void Rebuild()
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        StopThrottleTimer();
+    }
+
+    private void OnMarkdownChanged()
+    {
+        if (string.Equals(_lastMarkdown, Markdown, StringComparison.Ordinal)) return;
+
+        // While the mobile app is backgrounded, avoid spinning up UI timers or laying out off-screen Markdown;
+        // foreground resume flushes the latest snapshot cleanly.
+        if (IsStreaming && MobileHost.IsBackgrounded && MobilePreferences.Current.SuspendStreamInBackground)
+        {
+            StopThrottleTimer();
+            return;
+        }
+
+        var now = Environment.TickCount64;
+        if (!IsStreaming || _lastRebuildTick == 0 || now - _lastRebuildTick >= StreamingThrottleMs)
+        {
+            StopThrottleTimer();
+            Rebuild(incremental: true);
+            return;
+        }
+
+        ScheduleThrottledRebuild();
+    }
+
+    private void OnStreamingChanged()
+    {
+        if (!IsStreaming)
+        {
+            StopThrottleTimer();
+            if (!string.Equals(_lastMarkdown, Markdown, StringComparison.Ordinal))
+            {
+                Rebuild(incremental: true);
+            }
+        }
+    }
+
+    private void ScheduleThrottledRebuild()
+    {
+        if (_throttleTimer is null)
+        {
+            _throttleTimer = new DispatcherTimer(
+                TimeSpan.FromMilliseconds(StreamingThrottleMs),
+                DispatcherPriority.Background,
+                OnThrottleTick);
+            _throttleTimer.Start();
+        }
+        else if (!_throttleTimer.IsEnabled)
+        {
+            _throttleTimer.Start();
+        }
+    }
+
+    private void OnThrottleTick(object? sender, EventArgs e)
+    {
+        StopThrottleTimer();
+        if (!string.Equals(_lastMarkdown, Markdown, StringComparison.Ordinal))
+        {
+            Rebuild(incremental: true);
+        }
+    }
+
+    private void StopThrottleTimer()
+    {
+        if (_throttleTimer is null) return;
+        _throttleTimer.Stop();
+        _throttleTimer.Tick -= OnThrottleTick;
+        _throttleTimer = null;
+    }
+
+    private void Rebuild(bool incremental)
     {
         _lastMarkdown = Markdown;
-        _root.Children.Clear();
+        _lastRebuildTick = Environment.TickCount64;
+        RebuildCount++;
+
+        var previous = Blocks;
         var blocks = MobileMarkdownParser.Parse(Markdown);
         Blocks = blocks;
 
-        for (var i = 0; i < blocks.Count; i++)
+        var shared = 0;
+        if (incremental && _root.Children.Count == previous.Count && previous.Count > 0 && blocks.Count > 0)
+        {
+            var limit = Math.Min(previous.Count, blocks.Count);
+            while (shared < limit && BlocksEqual(previous[shared], blocks[shared]))
+            {
+                shared++;
+            }
+        }
+
+        LastReusedBlockCount = shared;
+        if (shared == 0)
+        {
+            _root.Children.Clear();
+        }
+        else
+        {
+            for (var i = _root.Children.Count - 1; i >= shared; i--)
+            {
+                _root.Children.RemoveAt(i);
+            }
+        }
+
+        for (var i = shared; i < blocks.Count; i++)
         {
             var block = blocks[i];
             var control = BuildBlock(block, isFirst: i == 0);
             if (control is not null) _root.Children.Add(control);
         }
+    }
+
+    private static bool BlocksEqual(MarkdownBlock a, MarkdownBlock b)
+    {
+        if (a.Kind != b.Kind
+            || a.Level != b.Level
+            || !string.Equals(a.Marker, b.Marker, StringComparison.Ordinal)
+            || !string.Equals(a.RawText, b.RawText, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (a.Inlines.Count != b.Inlines.Count) return false;
+        for (var i = 0; i < a.Inlines.Count; i++)
+        {
+            if (a.Inlines[i] != b.Inlines[i]) return false;
+        }
+        if (a.Table is null && b.Table is null) return true;
+        if (a.Table is null || b.Table is null) return false;
+        return TablesEqual(a.Table, b.Table);
+    }
+
+    private static bool TablesEqual(MarkdownTable a, MarkdownTable b)
+    {
+        if (a.Headers.Count != b.Headers.Count || a.Rows.Count != b.Rows.Count || a.Alignments.Count != b.Alignments.Count)
+            return false;
+        for (var i = 0; i < a.Alignments.Count; i++)
+        {
+            if (a.Alignments[i] != b.Alignments[i]) return false;
+        }
+        for (var i = 0; i < a.Headers.Count; i++)
+        {
+            if (!string.Equals(a.Headers[i].RawText, b.Headers[i].RawText, StringComparison.Ordinal)) return false;
+        }
+        for (var r = 0; r < a.Rows.Count; r++)
+        {
+            if (a.Rows[r].Count != b.Rows[r].Count) return false;
+            for (var c = 0; c < a.Rows[r].Count; c++)
+            {
+                if (!string.Equals(a.Rows[r][c].RawText, b.Rows[r][c].RawText, StringComparison.Ordinal)) return false;
+            }
+        }
+        return true;
     }
 
     private Control? BuildBlock(MarkdownBlock block, bool isFirst) => block.Kind switch
@@ -335,7 +505,7 @@ public sealed class MobileMarkdownView : ContentControl
         row.Children.Add(textStack);
         row.Children.Add(chevron);
 
-        var button = new Button
+        var button = new Avalonia.Controls.Button
         {
             Classes = { "mdImageCard" },
             Content = row,

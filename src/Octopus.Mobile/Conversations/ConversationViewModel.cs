@@ -72,12 +72,17 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         Voice = new VoiceComposerViewModel(MobileHost.Voice, InsertDictation, SendDictationAsync, navigator.ShowVoiceSettings, Actions.ShowNotice, CollectHotwords);
         PendingAttachments.CollectionChanged += OnPendingAttachmentsChanged;
         session.PropertyChanged += OnSessionChanged;
+        _workspace.ResumingChanged += OnWorkspaceResumingChanged;
+        IsResuming = _workspace.IsResuming;
         MobileHost.Backgrounded += OnAppBackgrounded;
         MobileHost.Foregrounded += OnAppForegrounded;
         _ = OpenAsync();
     }
 
     public RemoteSession Session { get; }
+
+    /// <summary>True while the workspace is reconnecting / resyncing snapshots after returning from background.</summary>
+    [ObservableProperty] public partial bool IsResuming { get; private set; }
 
     /// <summary>The rename sheet, close confirmation, and toast notices.</summary>
     public SessionActionsViewModel Actions { get; }
@@ -739,6 +744,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _disposed = true;
         MobileHost.Backgrounded -= OnAppBackgrounded;
         MobileHost.Foregrounded -= OnAppForegrounded;
+        _workspace.ResumingChanged -= OnWorkspaceResumingChanged;
         Voice.Dispose();
         StopStatusPhraseTimer();
         _lifetime.Cancel();
@@ -933,6 +939,11 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     });
 
     private void OnAppForegrounded() => Dispatcher.UIThread.Post(EnsureStatusPhraseTimer);
+
+    private void OnWorkspaceResumingChanged(bool resuming) => Dispatcher.UIThread.Post(() =>
+    {
+        if (!_disposed) IsResuming = resuming;
+    });
 
     private void EnsureStatusPhraseTimer()
     {

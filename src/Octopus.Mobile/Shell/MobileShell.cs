@@ -6,9 +6,11 @@ using Octopus.Mobile.Account;
 using Octopus.Mobile.Bots;
 using Octopus.Mobile.Common;
 using Octopus.Mobile.Conversations;
+using Octopus.Mobile.Diagnostics;
 using Octopus.Mobile.Files;
 using Octopus.Mobile.Hosts;
 using Octopus.Mobile.Sessions;
+using Octopus.Mobile.Settings;
 using Octopus.Mobile.Terminals;
 using Octopus.Mobile.Updates;
 using Octopus.Mobile.Voice;
@@ -43,6 +45,7 @@ public sealed class MobileShell : ContentControl, INavigator
         // would also pad the top level's content by the same safe area, and every page would sit twice as far from the
         // edges: on Android 15+ (edge to edge) about a status bar's height of empty space above every header.
         TopLevel.SetAutoSafeAreaPadding(this, false);
+        ApplyDensityClass();
         account.Changed += OnAccountChanged;
         Show();
     }
@@ -58,6 +61,8 @@ public sealed class MobileShell : ContentControl, INavigator
             _topLevel.ScalingChanged += OnScalingChanged;
             _topLevel.BackRequested += OnBackRequested;
         }
+        MobilePreferences.Current.Changed += OnPreferencesChanged;
+        ApplyDensityClass();
         MobileHost.DeepLinkReceived += OnDeepLinkReceived;
         if (MobileHost.TakePendingDeepLink() is { } pending) HandleDeepLink(pending);
     }
@@ -65,6 +70,7 @@ public sealed class MobileShell : ContentControl, INavigator
     protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        MobilePreferences.Current.Changed -= OnPreferencesChanged;
         MobileHost.DeepLinkReceived -= OnDeepLinkReceived;
         if (_topLevel is not null)
         {
@@ -73,6 +79,14 @@ public sealed class MobileShell : ContentControl, INavigator
             _topLevel = null;
         }
     }
+
+    private void OnPreferencesChanged()
+    {
+        if (Dispatcher.UIThread.CheckAccess()) ApplyDensityClass();
+        else Dispatcher.UIThread.Post(ApplyDensityClass);
+    }
+
+    private void ApplyDensityClass() => Classes.Set("compact", MobilePreferences.Current.CompactDensity);
 
     private void OnDeepLinkReceived(Uri uri)
     {
@@ -248,6 +262,10 @@ public sealed class MobileShell : ContentControl, INavigator
 
     public void ShowVoiceSettings() => Push(new VoiceSettingsPage(new VoiceSettingsViewModel(MobileHost.Voice, this)));
 
+    public void ShowSettings() => Push(new SettingsPage(new SettingsViewModel(_workspace, _account, this, _openBrowser, _updater)));
+
+    public void ShowDiagnostics() => Push(new DiagnosticsPage(_workspace, _account, this, _openBrowser));
+
     public void ShowFirst() => _stack?.PopToRoot();
 
     public void Back() => _stack?.Pop();
@@ -255,8 +273,17 @@ public sealed class MobileShell : ContentControl, INavigator
     private void Push(Control page)
     {
         if (_stack is null) return;
-        _pages.Add(page);
-        _stack.Push(page);
+        try
+        {
+            _pages.Add(page);
+            _stack.Push(page);
+            MobileDiagnostics.NotePage(page.GetType().Name);
+        }
+        catch (Exception ex)
+        {
+            _pages.Remove(page);
+            MobileDiagnostics.RecordCrash($"MobileShell.Push({page.GetType().Name})", ex, isTerminating: false, isRecovered: true);
+        }
     }
 
     // Signing in or out, and choosing or leaving the use without an account, replace everything: no page of one
@@ -270,6 +297,7 @@ public sealed class MobileShell : ContentControl, INavigator
         _stack = new NavigationStack { Root = first };
         _stack.Navigated += OnNavigated;
         Content = _stack;
+        MobileDiagnostics.NotePage(first.GetType().Name);
     }
 
     private void CloseAll()
@@ -292,6 +320,10 @@ public sealed class MobileShell : ContentControl, INavigator
                 _pages.RemoveAt(_pages.Count - 1);
                 (page as IClosablePage)?.OnClosed();
             }
+        }
+        if (_stack?.Top is { } top)
+        {
+            MobileDiagnostics.NotePage(top.GetType().Name);
         }
         if (_stack?.Top is ConversationPage conversation)
         {

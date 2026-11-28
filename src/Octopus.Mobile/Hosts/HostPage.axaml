@@ -10,6 +10,9 @@
            IsScrollable="True">
     <arcm:Page.Resources>
         <StreamGeometry x:Key="GitBranchGlyph">M6 3v12 M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M18 9a9 9 0 0 1-9 9</StreamGeometry>
+        <StreamGeometry x:Key="LinkGlyph">M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71</StreamGeometry>
+        <StreamGeometry x:Key="FolderOpenGlyph">M6 14l1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2</StreamGeometry>
+        <StreamGeometry x:Key="MoreGlyph">M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z M5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z</StreamGeometry>
 
         <!-- One session: its square, title, optional GUI/worktree tags, detail, preview, and live state. -->
         <DataTemplate x:Key="SessionRow" x:DataType="common:SessionRowViewModel">
@@ -54,6 +57,209 @@
                     </StackPanel>
                 </Grid>
             </arcm:ListItem>
+        </DataTemplate>
+
+        <!-- Shared smart accordion project card used in flat view, ungrouped view, and inside expanded Desktop project groups. -->
+        <DataTemplate x:Key="ProjectCardTemplate" x:DataType="vm:ProjectSectionViewModel">
+            <Border Classes="projectCard"
+                    Classes.attention="{Binding HasAttention}"
+                    Classes.error="{Binding HasErrorTone}">
+                <StackPanel>
+                    <!-- Project card header: badge + title/branch/path + summary pill + quick "+" + chevron -->
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                        <Button Grid.Column="0"
+                                Classes="cardHeaderBtn"
+                                Command="{Binding ToggleExpandedCommand}">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
+                                <Panel Grid.Column="0" Width="38" Height="38" VerticalAlignment="Center">
+                                    <common:ProjectBadgeView Project="{Binding Project}"
+                                                             BadgeSize="38"
+                                                             BadgeCornerRadius="10"
+                                                             IconSize="18"
+                                                             PixelSize="22"
+                                                             InitialFontSize="15" />
+                                    <Border Classes="cornerBadge"
+                                            Classes.waiting="{Binding CornerIsWaiting}"
+                                            Classes.error="{Binding CornerIsError}"
+                                            Classes.working="{Binding CornerIsWorking}"
+                                            IsVisible="{Binding HasCornerBadge}">
+                                        <TextBlock Text="{Binding CornerBadgeText}" />
+                                    </Border>
+                                </Panel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
+                                        <TextBlock Grid.Column="0"
+                                                   Classes="projectCardTitle"
+                                                   Text="{Binding Name}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <Border Grid.Column="1" Classes="branchTag" IsVisible="{Binding HasDefaultBranch}">
+                                            <StackPanel Orientation="Horizontal" Spacing="3">
+                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="10"
+                                                              Foreground="{arc:ArcDesignTokenResource TextSecondary}"
+                                                              VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding DefaultBranch}" MaxWidth="84" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                    <TextBlock Classes="projectCardPath" Text="{Binding SubtitleText}" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,10,0">
+                            <Border Classes="pill"
+                                    Classes.waiting="{Binding SummaryIsWaiting}"
+                                    Classes.working="{Binding SummaryIsWorking}"
+                                    Classes.error="{Binding SummaryIsError}"
+                                    IsVisible="{Binding !IsExpanded}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <arc:ArcSpinner IsVisible="{Binding SummaryIsWorking}" />
+                                    <TextBlock Text="{Binding SummaryPillText}" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Classes="muted monoCount"
+                                       Text="{Binding ExpandedCountText}"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding IsExpanded}" />
+                            <Button Classes="projectPlusBtn"
+                                    Command="{Binding AddSessionCommand}"
+                                    AutomationProperties.Name="{l:MobileLangResource NewSession}">
+                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="14"
+                                              Foreground="{arc:ArcDesignTokenResource Accent}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Button>
+                            <Button Classes="projectChevronBtn"
+                                    Command="{Binding ToggleExpandedCommand}">
+                                <Panel>
+                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronRight}" Size="15"
+                                                  Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                  IsVisible="{Binding !IsExpanded}" />
+                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronDown}" Size="15"
+                                                  Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                  IsVisible="{Binding IsExpanded}" />
+                                </Panel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Collapsible body: inline workspace tabs, session list, and project footer actions -->
+                    <StackPanel IsVisible="{Binding IsExpanded}">
+                        <Border Classes="projectWsBar" IsVisible="{Binding HasWorkspaces}">
+                            <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <ItemsControl ItemsSource="{Binding WorkspaceTabs}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
+                                                <Button Classes="wsTabBtn"
+                                                        Classes.active="{Binding IsSelected}"
+                                                        Classes.worktree="{Binding IsWorktree}"
+                                                        Command="{Binding SelectCommand}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Folder}" Size="11"
+                                                                      IsVisible="{Binding IsDefault}"
+                                                                      VerticalAlignment="Center" />
+                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="11"
+                                                                      IsVisible="{Binding IsWorktree}"
+                                                                      VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding Label}" MaxWidth="136" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button Classes="wsTabBtn newBranch" Command="{Binding NewBranchCommand}">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="11" VerticalAlignment="Center" />
+                                            <TextBlock Text="{l:MobileLangResource WorkspaceNewBranchShort}" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+
+                        <Border Classes="projectSessionList">
+                            <Panel>
+                                <ItemsControl ItemsSource="{Binding DisplayedSessions}"
+                                              ItemTemplate="{StaticResource SessionRow}"
+                                              IsVisible="{Binding HasDisplayedSessions}" />
+                                <Grid ColumnDefinitions="*,Auto" Margin="14,11" IsVisible="{Binding IsDisplayedEmpty}">
+                                    <TextBlock Grid.Column="0"
+                                               Classes="muted"
+                                               Text="{l:MobileLangResource WorkspaceEmpty}"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"
+                                            Classes="inlineLinkBtn"
+                                            Command="{Binding AddSessionCommand}"
+                                            Content="{l:MobileLangResource ProjectStartSession}" />
+                                </Grid>
+                            </Panel>
+                        </Border>
+
+                        <Border Classes="projectCardFooter">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                                <ScrollViewer Grid.Column="0"
+                                              HorizontalScrollBarVisibility="Hidden"
+                                              VerticalScrollBarVisibility="Disabled">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Button Classes="projectFooterBtn"
+                                                Command="{Binding BrowseFilesCommand}"
+                                                IsVisible="{Binding CanBrowseFiles}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Folder}" Size="12" VerticalAlignment="Center" />
+                                                <TextBlock Text="{l:MobileLangResource ProjectActionFiles}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="projectFooterBtn"
+                                                Command="{Binding ViewChangesCommand}"
+                                                IsVisible="{Binding CanViewChanges}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.FileText}" Size="12" VerticalAlignment="Center" />
+                                                <TextBlock Text="{l:MobileLangResource ProjectActionChanges}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="projectFooterBtn"
+                                                Command="{Binding NewBranchCommand}"
+                                                IsVisible="{Binding IsGitRepository}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="12" VerticalAlignment="Center" />
+                                                <TextBlock Text="{l:MobileLangResource WorkspaceNewBranchShort}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Classes="projectFooterBtn"
+                                                Command="{Binding MoveToGroupCommand}"
+                                                IsVisible="{Binding CanMoveToGroup}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <Border Width="7" Height="7" CornerRadius="3.5"
+                                                        Background="{Binding GroupDotBrush}"
+                                                        VerticalAlignment="Center"
+                                                        IsVisible="{Binding HasGroupDot}" />
+                                                <arc:ArcGlyph Data="{StaticResource FolderOpenGlyph}" Size="12"
+                                                              VerticalAlignment="Center"
+                                                              IsVisible="{Binding !HasGroupDot}" />
+                                                <TextBlock Text="{Binding GroupActionLabel}" MaxWidth="86" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </ScrollViewer>
+                                <Button Grid.Column="1"
+                                        Classes="projectFooterBtn primary"
+                                        Command="{Binding AddSessionCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="12" VerticalAlignment="Center" />
+                                        <TextBlock Text="{l:MobileLangResource ProjectActionSession}" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </DataTemplate>
     </arcm:Page.Resources>
 
@@ -124,6 +330,51 @@
                 </StackPanel>
             </ScrollViewer>
 
+            <!-- Desktop Project Groups quick filter strip (auto-hidden when Desktop has 0 groups) -->
+            <ScrollViewer Name="ProjectGroupsFilterBar"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled"
+                          Margin="16,0"
+                          IsVisible="{Binding HasProjectGroups}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <ItemsControl ItemsSource="{Binding GroupFilterChips}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ProjectGroupFilterChipViewModel">
+                                <Button Classes="chipBtn"
+                                        Classes.active="{Binding IsSelected}"
+                                        Command="{Binding SelectCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <Border Width="7" Height="7" CornerRadius="3.5"
+                                                Background="{Binding ColorBrush}"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding HasColorDot}" />
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                        <arc:ArcGlyph Data="{StaticResource LinkGlyph}" Size="10"
+                                                      VerticalAlignment="Center"
+                                                      IsVisible="{Binding IsMerged}" />
+                                        <TextBlock Classes="monoCount" Text="{Binding CountText}" Opacity="0.72" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Name="NewProjectGroupChip"
+                            Classes="chipBtn"
+                            Command="{Binding OpenNewProjectGroupCommand}"
+                            IsVisible="{Binding CanManageProjectGroups}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="11" VerticalAlignment="Center" />
+                            <TextBlock Text="{l:MobileLangResource ProjectGroupNewShort}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </ScrollViewer>
+
             <!-- Live host status summary + Expand/Collapse all toggle -->
             <Border Classes="hostSummaryBar" Margin="16,0">
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -153,206 +404,214 @@
                 </Grid>
             </Border>
 
-            <!-- Smart accordion project cards -->
-            <ItemsControl Name="Sections" ItemsSource="{Binding VisibleSections}">
+            <!-- Single-group focused banner (when a specific Desktop group chip is selected) -->
+            <Border Name="SingleGroupBanner"
+                    Classes="groupBanner"
+                    Margin="16,0"
+                    Background="{Binding ActiveGroupBannerBg}"
+                    BorderBrush="{Binding ActiveGroupBannerBorder}"
+                    IsVisible="{Binding ShowSingleGroupBanner}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="10"
+                            Background="{Binding ActiveGroupOpenBg}" VerticalAlignment="Center">
+                        <arc:ArcGlyph Data="{StaticResource FolderOpenGlyph}" Size="18"
+                                      Foreground="{Binding ActiveGroupTintBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="projectCardTitle" Text="{Binding ActiveGroupName}" VerticalAlignment="Center" />
+                            <Border Classes="branchTag">
+                                <TextBlock Text="{Binding ActiveGroupCountText}" />
+                            </Border>
+                            <Border Classes="groupMergeTag" Background="{Binding ActiveGroupOpenBg}" IsVisible="{Binding ActiveGroupIsMerged}">
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <arc:ArcGlyph Data="{StaticResource LinkGlyph}" Size="10" Foreground="{Binding ActiveGroupTintBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{l:MobileLangResource ProjectGroupMergeBadge}" Foreground="{Binding ActiveGroupTintBrush}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Classes="secondary" Text="{Binding ActiveGroupSubtitle}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Name="ManageActiveGroupButton"
+                            Grid.Column="2"
+                            Classes="chipBtn"
+                            VerticalAlignment="Center"
+                            Command="{Binding OpenManageActiveGroupCommand}"
+                            IsVisible="{Binding CanManageProjectGroups}">
+                        <TextBlock Text="{l:MobileLangResource ProjectGroupManageButton}" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Desktop-Faithful Grouped View: Ungrouped Projects first, then Collapsible Tinted Group Capsules -->
+            <StackPanel Name="GroupedProjectsPanel" Spacing="12" IsVisible="{Binding ShowGroupedLayout}">
+                <!-- Ungrouped projects first (matching Desktop rail order) -->
+                <StackPanel Spacing="8" IsVisible="{Binding HasUngroupedSections}">
+                    <TextBlock Classes="sectionHeader" Margin="18,0" Text="{l:MobileLangResource ProjectGroupUngroupedHeader}" />
+                    <ItemsControl Name="UngroupedSectionsList"
+                                  Margin="16,0"
+                                  ItemsSource="{Binding UngroupedSections}"
+                                  ItemTemplate="{StaticResource ProjectCardTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="12" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Collapsible Desktop Project Groups -->
+                <StackPanel Spacing="8" IsVisible="{Binding HasVisibleProjectGroups}">
+                    <Grid ColumnDefinitions="*,Auto" Margin="18,0">
+                        <TextBlock Classes="sectionHeader" Text="{l:MobileLangResource ProjectGroupsHeader}" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="inlineLinkBtn"
+                                Command="{Binding OpenNewProjectGroupCommand}"
+                                IsVisible="{Binding CanManageProjectGroups}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="11" Foreground="{arc:ArcDesignTokenResource Accent}" VerticalAlignment="Center" />
+                                <TextBlock Text="{l:MobileLangResource ProjectGroupNewShort}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <ItemsControl Name="ProjectGroupsList" Margin="16,0" ItemsSource="{Binding VisibleProjectGroups}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="12" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ProjectGroupCardViewModel">
+                                <Border Classes="groupCapsule"
+                                        Classes.open="{Binding IsExpanded}"
+                                        BorderBrush="{Binding ActiveBorderBrush}">
+                                    <Panel>
+                                        <!-- Subtle group-tinted wash when expanded (matches Desktop ProjectGroupView) -->
+                                        <Border Background="{Binding ExpandedCapsuleBg}" IsVisible="{Binding IsExpanded}" />
+                                        <StackPanel>
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                                <Button Grid.Column="0" Classes="cardHeaderBtn" Command="{Binding ToggleExpandedCommand}">
+                                                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
+                                                        <!-- Collapsed: Desktop 2x2 preview square; Expanded: Open folder in group color -->
+                                                        <Panel Grid.Column="0" Width="38" Height="38" VerticalAlignment="Center">
+                                                            <common:ProjectGroup2x2View GroupColor="{Binding GroupColor}"
+                                                                                        Members="{Binding MemberProjects}"
+                                                                                        HasWaiting="{Binding HasWaiting}"
+                                                                                        HasError="{Binding HasError}"
+                                                                                        HasWorking="{Binding HasWorking}"
+                                                                                        IsVisible="{Binding !IsExpanded}" />
+                                                            <Border Width="38" Height="38" CornerRadius="10"
+                                                                    Background="{Binding OpenFolderBg}"
+                                                                    IsVisible="{Binding IsExpanded}">
+                                                                <arc:ArcGlyph Data="{StaticResource FolderOpenGlyph}" Size="19"
+                                                                              Foreground="{Binding TintBrush}"
+                                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </Panel>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Classes="projectCardTitle" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                                <TextBlock Classes="muted monoCount" Text="{Binding CountText}" VerticalAlignment="Center" />
+                                                                <Border Classes="groupMergeTag" Background="{Binding OpenFolderBg}" IsVisible="{Binding IsMerged}">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="3">
+                                                                        <arc:ArcGlyph Data="{StaticResource LinkGlyph}" Size="10" Foreground="{Binding TintBrush}" VerticalAlignment="Center" />
+                                                                        <TextBlock Text="{l:MobileLangResource ProjectGroupMergeBadge}" Foreground="{Binding TintBrush}" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <TextBlock Classes="projectCardPath" Text="{Binding MemberPreviewText}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Button>
+
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                    <Border Classes="pill"
+                                                            Classes.waiting="{Binding StatusIsWaiting}"
+                                                            Classes.working="{Binding StatusIsWorking}"
+                                                            Classes.error="{Binding StatusIsError}"
+                                                            IsVisible="{Binding !IsExpanded}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                            <arc:ArcSpinner IsVisible="{Binding StatusIsWorking}" />
+                                                            <TextBlock Text="{Binding StatusPillText}" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Button Classes="projectChevronBtn"
+                                                            Command="{Binding ManageCommand}"
+                                                            IsVisible="{Binding CanManage}"
+                                                            AutomationProperties.Name="{l:MobileLangResource ProjectGroupManageTitle}">
+                                                        <arc:ArcGlyph Data="{StaticResource MoreGlyph}" Size="15"
+                                                                      Foreground="{arc:ArcDesignTokenResource TextSecondary}" />
+                                                    </Button>
+                                                    <Button Classes="projectChevronBtn" Command="{Binding ToggleExpandedCommand}">
+                                                        <Panel>
+                                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronRight}" Size="15"
+                                                                          Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                                          IsVisible="{Binding !IsExpanded}" />
+                                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronDown}" Size="15"
+                                                                          Foreground="{arc:ArcDesignTokenResource TextMuted}"
+                                                                          IsVisible="{Binding IsExpanded}" />
+                                                        </Panel>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- Expanded body: MergeWorkspaces bar + lazily mounted member project cards (0 controls while collapsed) -->
+                                            <StackPanel Spacing="9" Margin="10,0,10,10" IsVisible="{Binding IsExpanded}">
+                                                <Button Classes="cardHeaderBtn"
+                                                        Padding="0"
+                                                        Command="{Binding ManageCommand}"
+                                                        IsVisible="{Binding IsMerged}">
+                                                    <Border CornerRadius="10"
+                                                            Padding="10,7"
+                                                            Background="{Binding MergeBarBg}"
+                                                            BorderBrush="{Binding MergeBarBorder}"
+                                                            BorderThickness="1">
+                                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                                                            <arc:ArcGlyph Grid.Column="0" Data="{StaticResource LinkGlyph}" Size="12"
+                                                                          Foreground="{Binding TintBrush}" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="1" Classes="secondary" Text="{Binding MergeBarText}"
+                                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                            <arc:ArcGlyph Grid.Column="2" Data="{x:Static arc:ArcIcons.ChevronRight}" Size="12"
+                                                                          Foreground="{arc:ArcDesignTokenResource TextMuted}" VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </Border>
+                                                </Button>
+
+                                                <ItemsControl ItemsSource="{Binding MountedSections}"
+                                                              ItemTemplate="{StaticResource ProjectCardTemplate}"
+                                                              IsVisible="{Binding HasMembers}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Spacing="10" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                </ItemsControl>
+
+                                                <Border Classes="emptyCard" IsVisible="{Binding IsEmptyGroup}">
+                                                    <TextBlock Classes="muted" Text="{l:MobileLangResource ProjectGroupEmptyHint}" TextWrapping="Wrap" />
+                                                </Border>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Panel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Flat project cards (used in zero-group degradation mode OR single-group/ungrouped focused view) -->
+            <ItemsControl Name="Sections"
+                          Margin="16,0"
+                          ItemsSource="{Binding FlatDisplayedSections}"
+                          ItemTemplate="{StaticResource ProjectCardTemplate}"
+                          IsVisible="{Binding ShowFlatSections}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Spacing="12" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ProjectSectionViewModel">
-                        <Border Classes="projectCard"
-                                Classes.attention="{Binding HasAttention}"
-                                Classes.error="{Binding HasErrorTone}"
-                                Margin="16,0">
-                            <StackPanel>
-                                <!-- Project card header: badge + title/branch/path + summary pill + quick "+" + chevron -->
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                    <Button Grid.Column="0"
-                                            Classes="cardHeaderBtn"
-                                            Command="{Binding ToggleExpandedCommand}">
-                                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="11">
-                                            <Panel Grid.Column="0" Width="38" Height="38" VerticalAlignment="Center">
-                                                <common:ProjectBadgeView Project="{Binding Project}"
-                                                                         BadgeSize="38"
-                                                                         BadgeCornerRadius="10"
-                                                                         IconSize="18"
-                                                                         PixelSize="22"
-                                                                         InitialFontSize="15" />
-                                                <Border Classes="cornerBadge"
-                                                        Classes.waiting="{Binding CornerIsWaiting}"
-                                                        Classes.error="{Binding CornerIsError}"
-                                                        Classes.working="{Binding CornerIsWorking}"
-                                                        IsVisible="{Binding HasCornerBadge}">
-                                                    <TextBlock Text="{Binding CornerBadgeText}" />
-                                                </Border>
-                                            </Panel>
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" HorizontalAlignment="Left">
-                                                    <TextBlock Grid.Column="0"
-                                                               Classes="projectCardTitle"
-                                                               Text="{Binding Name}"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               VerticalAlignment="Center" />
-                                                    <Border Grid.Column="1" Classes="branchTag" IsVisible="{Binding HasDefaultBranch}">
-                                                        <StackPanel Orientation="Horizontal" Spacing="3">
-                                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="10"
-                                                                          Foreground="{arc:ArcDesignTokenResource TextSecondary}"
-                                                                          VerticalAlignment="Center" />
-                                                            <TextBlock Text="{Binding DefaultBranch}" MaxWidth="84" TextTrimming="CharacterEllipsis" />
-                                                        </StackPanel>
-                                                    </Border>
-                                                </Grid>
-                                                <TextBlock Classes="projectCardPath" Text="{Binding SubtitleText}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </Button>
-
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,10,0">
-                                        <!-- Status summary pill while collapsed -->
-                                        <Border Classes="pill"
-                                                Classes.waiting="{Binding SummaryIsWaiting}"
-                                                Classes.working="{Binding SummaryIsWorking}"
-                                                Classes.error="{Binding SummaryIsError}"
-                                                IsVisible="{Binding !IsExpanded}">
-                                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                                <arc:ArcSpinner IsVisible="{Binding SummaryIsWorking}" />
-                                                <TextBlock Text="{Binding SummaryPillText}" />
-                                            </StackPanel>
-                                        </Border>
-                                        <!-- Compact count while expanded -->
-                                        <TextBlock Classes="muted monoCount"
-                                                   Text="{Binding ExpandedCountText}"
-                                                   VerticalAlignment="Center"
-                                                   IsVisible="{Binding IsExpanded}" />
-                                        <!-- Quick "+" to start a session in this project -->
-                                        <Button Classes="projectPlusBtn"
-                                                Command="{Binding AddSessionCommand}"
-                                                AutomationProperties.Name="{l:MobileLangResource NewSession}">
-                                            <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="14"
-                                                          Foreground="{arc:ArcDesignTokenResource Accent}"
-                                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Button>
-                                        <!-- Expand / collapse chevron -->
-                                        <Button Classes="projectChevronBtn"
-                                                Command="{Binding ToggleExpandedCommand}">
-                                            <Panel>
-                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronRight}" Size="15"
-                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                              IsVisible="{Binding !IsExpanded}" />
-                                                <arc:ArcGlyph Data="{x:Static arc:ArcIcons.ChevronDown}" Size="15"
-                                                              Foreground="{arc:ArcDesignTokenResource TextMuted}"
-                                                              IsVisible="{Binding IsExpanded}" />
-                                            </Panel>
-                                        </Button>
-                                    </StackPanel>
-                                </Grid>
-
-                                <!-- Collapsible body: inline workspace tabs, session list, and project footer actions -->
-                                <StackPanel IsVisible="{Binding IsExpanded}">
-                                    <!-- Inline branch workspace filter tabs when worktrees exist -->
-                                    <Border Classes="projectWsBar" IsVisible="{Binding HasWorkspaces}">
-                                        <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <ItemsControl ItemsSource="{Binding WorkspaceTabs}">
-                                                    <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate>
-                                                            <StackPanel Orientation="Horizontal" Spacing="6" />
-                                                        </ItemsPanelTemplate>
-                                                    </ItemsControl.ItemsPanel>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
-                                                            <Button Classes="wsTabBtn"
-                                                                    Classes.active="{Binding IsSelected}"
-                                                                    Classes.worktree="{Binding IsWorktree}"
-                                                                    Command="{Binding SelectCommand}">
-                                                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Folder}" Size="11"
-                                                                                  IsVisible="{Binding IsDefault}"
-                                                                                  VerticalAlignment="Center" />
-                                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="11"
-                                                                                  IsVisible="{Binding IsWorktree}"
-                                                                                  VerticalAlignment="Center" />
-                                                                    <TextBlock Text="{Binding Label}" MaxWidth="136" TextTrimming="CharacterEllipsis" />
-                                                                </StackPanel>
-                                                            </Button>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                                <Button Classes="wsTabBtn newBranch" Command="{Binding NewBranchCommand}">
-                                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="11" VerticalAlignment="Center" />
-                                                        <TextBlock Text="{l:MobileLangResource WorkspaceNewBranchShort}" />
-                                                    </StackPanel>
-                                                </Button>
-                                            </StackPanel>
-                                        </ScrollViewer>
-                                    </Border>
-
-                                    <!-- Session rows inside the card -->
-                                    <Border Classes="projectSessionList">
-                                        <Panel>
-                                            <ItemsControl ItemsSource="{Binding DisplayedSessions}"
-                                                          ItemTemplate="{StaticResource SessionRow}"
-                                                          IsVisible="{Binding HasDisplayedSessions}" />
-                                            <Grid ColumnDefinitions="*,Auto" Margin="14,11" IsVisible="{Binding IsDisplayedEmpty}">
-                                                <TextBlock Grid.Column="0"
-                                                           Classes="muted"
-                                                           Text="{l:MobileLangResource WorkspaceEmpty}"
-                                                           VerticalAlignment="Center" />
-                                                <Button Grid.Column="1"
-                                                        Classes="inlineLinkBtn"
-                                                        Command="{Binding AddSessionCommand}"
-                                                        Content="{l:MobileLangResource ProjectStartSession}" />
-                                            </Grid>
-                                        </Panel>
-                                    </Border>
-
-                                    <!-- Project quick actions footer: Files, Changes, New branch, New session -->
-                                    <Border Classes="projectCardFooter">
-                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                                                <Button Classes="projectFooterBtn"
-                                                        Command="{Binding BrowseFilesCommand}"
-                                                        IsVisible="{Binding CanBrowseFiles}">
-                                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Folder}" Size="12" VerticalAlignment="Center" />
-                                                        <TextBlock Text="{l:MobileLangResource ProjectActionFiles}" />
-                                                    </StackPanel>
-                                                </Button>
-                                                <Button Classes="projectFooterBtn"
-                                                        Command="{Binding ViewChangesCommand}"
-                                                        IsVisible="{Binding CanViewChanges}">
-                                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.FileText}" Size="12" VerticalAlignment="Center" />
-                                                        <TextBlock Text="{l:MobileLangResource ProjectActionChanges}" />
-                                                    </StackPanel>
-                                                </Button>
-                                                <Button Classes="projectFooterBtn"
-                                                        Command="{Binding NewBranchCommand}"
-                                                        IsVisible="{Binding IsGitRepository}">
-                                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.GitBranch}" Size="12" VerticalAlignment="Center" />
-                                                        <TextBlock Text="{l:MobileLangResource WorkspaceNewBranchShort}" />
-                                                    </StackPanel>
-                                                </Button>
-                                            </StackPanel>
-                                            <Button Grid.Column="1"
-                                                    Classes="projectFooterBtn primary"
-                                                    Command="{Binding AddSessionCommand}">
-                                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                                    <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Plus}" Size="12" VerticalAlignment="Center" />
-                                                    <TextBlock Text="{l:MobileLangResource ProjectActionSession}" />
-                                                </StackPanel>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
             </ItemsControl>
 
             <!-- Empty state when search/filter hides all projects -->
@@ -389,13 +648,14 @@
 
     <arcm:Page.Overlay>
         <Panel>
-            <!-- "+": a session in a project, or a new project. -->
+            <!-- "+": a session in a project, a new project, or a new Desktop project group. -->
             <arcm:ActionSheet Name="AddMenu"
                               IsOpen="{Binding IsAddMenuOpen, Mode=TwoWay}"
                               CancelText="{l:MobileLangResource Cancel}">
                 <arcm:ActionSheet.Actions>
                     <arcm:ActionSheetItem Name="AddSessionAction" Content="{l:MobileLangResource NewSessionAction}" Command="{Binding OpenNewSessionCommand}" />
                     <arcm:ActionSheetItem Name="AddProjectAction" Content="{l:MobileLangResource NewProject}" Command="{Binding NewProjectCommand}" />
+                    <arcm:ActionSheetItem Name="AddProjectGroupAction" Content="{l:MobileLangResource ProjectGroupNewShort}" Command="{Binding OpenNewProjectGroupCommand}" IsVisible="{Binding CanManageProjectGroups}" />
                 </arcm:ActionSheet.Actions>
             </arcm:ActionSheet>
 
@@ -650,6 +910,221 @@
                               IsOpen="{Binding IsTaskMenuOpen, Mode=TwoWay}"
                               Title="{l:MobileLangResource WorkspaceTaskPicker}"
                               CancelText="{l:MobileLangResource Cancel}" />
+
+            <!-- Manage Desktop Project Group Sheet (Rename, Color, MergeWorkspaces, Members, Dissolve) -->
+            <arcm:Sheet Name="ManageProjectGroupSheet"
+                        DataContext="{Binding GroupEditor}"
+                        x:DataType="vm:ProjectGroupEditorViewModel"
+                        IsOpen="{Binding IsManageOpen, Mode=TwoWay}"
+                        MaxHeightFraction="0.88"
+                        Title="{Binding ManageTitle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="16,4,16,24" Spacing="12">
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource ProjectGroupNameLabel}" />
+                        <arcm:TextField Name="ManageGroupNameField"
+                                        Text="{Binding EditName, Mode=TwoWay}"
+                                        PlaceholderText="{l:MobileLangResource ProjectGroupNamePlaceholder}" />
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource ProjectGroupColorLabel}" />
+                        <ItemsControl ItemsSource="{Binding EditSwatches}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" ItemSpacing="10" LineSpacing="10" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ProjectGroupColorSwatchViewModel">
+                                    <Button Classes="groupSwatchBtn"
+                                            Classes.selected="{Binding IsSelected}"
+                                            Background="{Binding Brush}"
+                                            Command="{Binding SelectCommand}">
+                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Check}" Size="13"
+                                                      Foreground="White"
+                                                      IsVisible="{Binding IsSelected}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <arcm:ListGroup>
+                            <arcm:ListItem Content="{l:MobileLangResource ProjectGroupMergeTitle}"
+                                           Subtitle="{l:MobileLangResource ProjectGroupMergeHint}">
+                                <arcm:ListItem.Trailing>
+                                    <arcm:Switch Name="ManageGroupMergeSwitch" IsChecked="{Binding EditMergeWorkspaces, Mode=TwoWay}" />
+                                </arcm:ListItem.Trailing>
+                            </arcm:ListItem>
+                        </arcm:ListGroup>
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource ProjectGroupMembersLabel}" />
+                        <arcm:ListGroup ItemsSource="{Binding MemberToggles}">
+                            <arcm:ListGroup.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ProjectGroupMemberToggleViewModel">
+                                    <arcm:ListItem Content="{Binding Name}" Subtitle="{Binding Subtitle}" Command="{Binding ToggleCommand}">
+                                        <arcm:ListItem.Leading>
+                                            <common:ProjectBadgeView Project="{Binding Project}"
+                                                                     BadgeSize="28"
+                                                                     BadgeCornerRadius="7"
+                                                                     IconSize="14"
+                                                                     PixelSize="16"
+                                                                     InitialFontSize="12"
+                                                                     VerticalAlignment="Center" />
+                                        </arcm:ListItem.Leading>
+                                        <arcm:ListItem.Trailing>
+                                            <Border Classes="pill" Classes.action="{Binding IsInGroup}">
+                                                <TextBlock Text="{Binding ActionLabel}" />
+                                            </Border>
+                                        </arcm:ListItem.Trailing>
+                                    </arcm:ListItem>
+                                </DataTemplate>
+                            </arcm:ListGroup.ItemTemplate>
+                        </arcm:ListGroup>
+
+                        <TextBlock Text="{Binding ErrorMessage}"
+                                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                                   IsVisible="{Binding HasError}"
+                                   TextWrapping="Wrap"
+                                   FontSize="{arc:ArcDesignTokenResource TypeSM}" />
+
+                        <arcm:Button Name="SaveGroupButton"
+                                     Variant="Filled"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource ProjectGroupSaveConfirm}"
+                                     Command="{Binding SaveCommand}" />
+                        <arcm:Button Name="DissolveGroupButton"
+                                     Variant="Tinted"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Foreground="{arc:ArcDesignTokenResource Danger}"
+                                     Content="{l:MobileLangResource ProjectGroupDissolve}"
+                                     Command="{Binding RequestDissolveCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </arcm:Sheet>
+
+            <!-- Dissolve group confirmation dialog (projects stay intact on host) -->
+            <arcm:Dialog Name="DissolveGroupDialog"
+                         DataContext="{Binding GroupEditor}"
+                         x:DataType="vm:ProjectGroupEditorViewModel"
+                         IsOpen="{Binding IsDissolveConfirmOpen, Mode=TwoWay}"
+                         Title="{l:MobileLangResource ProjectGroupDissolveTitle}">
+                <StackPanel Spacing="16">
+                    <TextBlock Classes="secondary"
+                               Text="{Binding DissolveConfirmBody}"
+                               TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <arcm:Button Name="CancelDissolveButton"
+                                     Grid.Column="0"
+                                     Variant="Tinted"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource Cancel}"
+                                     Command="{Binding CancelDissolveCommand}" />
+                        <arcm:Button Name="ConfirmDissolveButton"
+                                     Grid.Column="1"
+                                     Variant="Filled"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Background="{arc:ArcDesignTokenResource Danger}"
+                                     Content="{l:MobileLangResource ProjectGroupDissolveConfirm}"
+                                     Command="{Binding DissolveCommand}" />
+                    </Grid>
+                </StackPanel>
+            </arcm:Dialog>
+
+            <!-- Quick per-project "Move to group" action sheet -->
+            <arcm:ActionSheet Name="MoveProjectGroupSheet"
+                              DataContext="{Binding GroupEditor}"
+                              x:DataType="vm:ProjectGroupEditorViewModel"
+                              IsOpen="{Binding IsMoveSheetOpen, Mode=TwoWay}"
+                              Title="{Binding MoveSheetTitle}"
+                              CancelText="{l:MobileLangResource Cancel}" />
+
+            <!-- New Desktop Project Group Sheet (with optional initial member project picks) -->
+            <arcm:Sheet Name="NewProjectGroupSheet"
+                        DataContext="{Binding GroupEditor}"
+                        x:DataType="vm:ProjectGroupEditorViewModel"
+                        IsOpen="{Binding IsNewOpen, Mode=TwoWay}"
+                        MaxHeightFraction="0.88"
+                        Title="{l:MobileLangResource ProjectGroupNewTitle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="16,4,16,24" Spacing="12">
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource ProjectGroupNameLabel}" />
+                        <arcm:TextField Name="NewGroupNameField"
+                                        Text="{Binding NewName, Mode=TwoWay}"
+                                        PlaceholderText="{l:MobileLangResource ProjectGroupNamePlaceholder}" />
+
+                        <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource ProjectGroupColorLabel}" />
+                        <ItemsControl ItemsSource="{Binding NewSwatches}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" ItemSpacing="10" LineSpacing="10" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ProjectGroupColorSwatchViewModel">
+                                    <Button Classes="groupSwatchBtn"
+                                            Classes.selected="{Binding IsSelected}"
+                                            Background="{Binding Brush}"
+                                            Command="{Binding SelectCommand}">
+                                        <arc:ArcGlyph Data="{x:Static arc:ArcIcons.Check}" Size="13"
+                                                      Foreground="White"
+                                                      IsVisible="{Binding IsSelected}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <arcm:ListGroup>
+                            <arcm:ListItem Content="{l:MobileLangResource ProjectGroupMergeTitle}"
+                                           Subtitle="{l:MobileLangResource ProjectGroupMergeHint}">
+                                <arcm:ListItem.Trailing>
+                                    <arcm:Switch Name="NewGroupMergeSwitch" IsChecked="{Binding NewMergeWorkspaces, Mode=TwoWay}" />
+                                </arcm:ListItem.Trailing>
+                            </arcm:ListItem>
+                        </arcm:ListGroup>
+
+                        <StackPanel Spacing="8" IsVisible="{Binding HasNewMemberChoices}">
+                            <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource ProjectGroupInitialMembersLabel}" />
+                            <arcm:ListGroup ItemsSource="{Binding NewMemberToggles}">
+                                <arcm:ListGroup.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ProjectGroupMemberToggleViewModel">
+                                        <arcm:ListItem Content="{Binding Name}" Subtitle="{Binding Subtitle}" Command="{Binding ToggleCommand}">
+                                            <arcm:ListItem.Leading>
+                                                <common:ProjectBadgeView Project="{Binding Project}"
+                                                                         BadgeSize="28"
+                                                                         BadgeCornerRadius="7"
+                                                                         IconSize="14"
+                                                                         PixelSize="16"
+                                                                         InitialFontSize="12"
+                                                                         VerticalAlignment="Center" />
+                                            </arcm:ListItem.Leading>
+                                            <arcm:ListItem.Trailing>
+                                                <Border Classes="pill" Classes.action="{Binding IsInGroup}">
+                                                    <TextBlock Text="{Binding ActionLabel}" />
+                                                </Border>
+                                            </arcm:ListItem.Trailing>
+                                        </arcm:ListItem>
+                                    </DataTemplate>
+                                </arcm:ListGroup.ItemTemplate>
+                            </arcm:ListGroup>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding ErrorMessage}"
+                                   Foreground="{arc:ArcDesignTokenResource Danger}"
+                                   IsVisible="{Binding HasError}"
+                                   TextWrapping="Wrap"
+                                   FontSize="{arc:ArcDesignTokenResource TypeSM}" />
+
+                        <arcm:Button Name="CreateGroupButton"
+                                     Variant="Filled"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource ProjectGroupCreateConfirm}"
+                                     Command="{Binding CreateCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </arcm:Sheet>
         </Panel>
     </arcm:Page.Overlay>
 </arcm:Page>

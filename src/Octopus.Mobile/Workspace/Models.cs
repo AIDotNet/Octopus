@@ -75,6 +75,8 @@ public sealed partial class RemoteHost : ObservableObject
     /// <summary>The system it runs ("macOS", "Windows"…), when the account's list says.</summary>
     public string? Platform { get; set; }
     public ObservableCollection<RemoteProject> Projects { get; } = [];
+    /// <summary>Desktop project groups in rail order (synced when the host advertises <c>project.groups</c>).</summary>
+    public ObservableCollection<RemoteProjectGroup> ProjectGroups { get; } = [];
     public ObservableCollection<RemoteBot> Bots { get; } = [];
     public ObservableCollection<RemoteBotGroup> BotGroups { get; } = [];
     public IReadOnlyList<AgentOption> Agents { get; set; } = [];
@@ -137,6 +139,18 @@ public sealed record CreateBranchWorkspaceRequest(
     string? TaskUrl = null,
     string? TaskBody = null);
 
+/// <summary>A Desktop project group on a host: name, accent color, and optional merged working-directory sharing.</summary>
+public sealed partial class RemoteProjectGroup(RemoteHost host, string id, string name) : ObservableObject
+{
+    public RemoteHost Host { get; } = host;
+    public string Id { get; } = id;
+    [ObservableProperty] public partial string Name { get; set; } = name;
+    /// <summary>Optional <c>#RRGGBB</c> tint color synced from Desktop.</summary>
+    [ObservableProperty] public partial string? Color { get; set; }
+    /// <summary>When true, agents launched in a local project of this group share sibling local project directories.</summary>
+    [ObservableProperty] public partial bool MergeWorkspaces { get; set; }
+}
+
 /// <summary>A project on a host: a folder there, with its branch workspaces, terminals and agents.</summary>
 public sealed partial class RemoteProject(RemoteHost host, string id, string name, string path) : ObservableObject
 {
@@ -145,6 +159,8 @@ public sealed partial class RemoteProject(RemoteHost host, string id, string nam
     public string Name { get; } = name;
     /// <summary>The folder on the host, as the host shows it.</summary>
     public string Path { get; } = path;
+    /// <summary>Optional Desktop <see cref="RemoteProjectGroup.Id"/>; null when ungrouped.</summary>
+    [ObservableProperty] public partial string? GroupId { get; set; }
     /// <summary>Project accent color as <c>#RRGGBB</c>, synced from the desktop rail when set.</summary>
     [ObservableProperty] public partial string? Color { get; set; }
     /// <summary>Optional Lucide or pixel icon name (<c>pixel:&lt;id&gt;</c>) synced from the desktop rail.</summary>

@@ -10,12 +10,16 @@ public partial class AppDelegate : AvaloniaAppDelegate<MobileApp>
 {
     private NSObject? _didEnterBackgroundObserver;
     private NSObject? _willEnterForegroundObserver;
+    private NSObject? _memoryWarningObserver;
 
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
     {
         _didEnterBackgroundObserver ??= UIApplication.Notifications.ObserveDidEnterBackground((_, _) => MobileHost.NotifyBackgrounded());
         _willEnterForegroundObserver ??= UIApplication.Notifications.ObserveWillEnterForeground((_, _) => MobileHost.NotifyForegrounded());
-        return base.CustomizeAppBuilder(builder).UseOctopusMobile();
+        _memoryWarningObserver ??= UIApplication.Notifications.ObserveDidReceiveMemoryWarning((_, _) => Diagnostics.MobileDiagnostics.NoteMemoryWarning("iOS.DidReceiveMemoryWarning"));
+        return base.CustomizeAppBuilder(builder)
+            .UseOctopusMobile()
+            .AfterSetup(_ => Diagnostics.MobileDiagnostics.AttachDispatcher());
     }
 }
 
@@ -23,6 +27,7 @@ public static class Program
 {
     private static void Main(string[] args)
     {
+        IosDiagnosticsPlatform.Install();
         UseRealHosts();
         UIApplication.Main(args, null, typeof(AppDelegate));
     }

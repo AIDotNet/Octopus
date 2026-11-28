@@ -27,10 +27,17 @@ public enum HostProjectFilter
 /// </summary>
 public sealed partial class HostViewModel : ObservableObject, IDisposable
 {
+    public const string UngroupedGroupKey = "__ungrouped__";
+
     private readonly IRemoteWorkspace _workspace;
     private readonly INavigator _navigator;
     private readonly Dictionary<string, bool> _expandedOverrides = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> _groupExpandedOverrides = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string?> _workspaceSelections = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProjectGroupCardViewModel> _groupCardsById = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProjectGroupFilterChipViewModel> _groupChipsByKey = new(StringComparer.Ordinal);
+    private readonly List<RemoteProjectGroup> _watchedGroups = [];
+    private readonly List<RemoteProject> _watchedProjectProps = [];
 
     public HostViewModel(RemoteHost host, IRemoteWorkspace workspace, INavigator navigator)
     {
@@ -39,7 +46,10 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
         _navigator = navigator;
         NewSession = new NewSessionViewModel(host, workspace, navigator.ShowSession);
         Actions = new SessionActionsViewModel(workspace, navigator);
+        GroupEditor = new ProjectGroupEditorViewModel(host, workspace, ApplyFilters);
         host.Projects.CollectionChanged += OnProjectsChanged;
+        host.ProjectGroups.CollectionChanged += OnProjectGroupsChanged;
+        WatchGroups();
         Rebuild();
     }
 
@@ -47,20 +57,93 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
     public string Title => Host.Name;
     /// <summary>All projects of this host in order.</summary>
     public ObservableCollection<ProjectSectionViewModel> Sections { get; } = [];
-    /// <summary>Projects currently shown after applying <see cref="SearchQuery"/> and <see cref="ActiveFilter"/>.</summary>
+    /// <summary>Projects currently matching <see cref="SearchQuery"/>, <see cref="ActiveFilter"/>, and <see cref="SelectedProjectGroupKey"/>.</summary>
     public ObservableCollection<ProjectSectionViewModel> VisibleSections { get; } = [];
+    /// <summary>Projects rendered in flat layout (populated when there are 0 Desktop groups or when a single group / Ungrouped filter is active).</summary>
+    public ObservableCollection<ProjectSectionViewModel> FlatDisplayedSections { get; } = [];
+    /// <summary>Ungrouped projects rendered first in Desktop rail order when <see cref="ShowGroupedLayout"/> is true.</summary>
+    public ObservableCollection<ProjectSectionViewModel> UngroupedSections { get; } = [];
+    /// <summary>Collapsible Desktop project group capsules rendered below ungrouped projects when <see cref="ShowGroupedLayout"/> is true.</summary>
+    public ObservableCollection<ProjectGroupCardViewModel> VisibleProjectGroups { get; } = [];
+    /// <summary>Horizontal Desktop Project Group quick filter chips (All, each group with tint dot, Ungrouped).</summary>
+    public ObservableCollection<ProjectGroupFilterChipViewModel> GroupFilterChips { get; } = [];
     public NewSessionViewModel NewSession { get; }
     /// <summary>The long-press menu of a session row, and what it opens.</summary>
     public SessionActionsViewModel Actions { get; }
+    /// <summary>Drives the Manage Project Group and New Project Group bottom sheets.</summary>
+    public ProjectGroupEditorViewModel GroupEditor { get; }
     [ObservableProperty] public partial bool IsEmpty { get; private set; }
-    /// <summary>The "+" menu: a new session in a project, or a new project.</summary>
+    /// <summary>The "+" menu: a new session in a project, a new project, or a new project group.</summary>
     [ObservableProperty] public partial bool IsAddMenuOpen { get; set; }
     [ObservableProperty] public partial string SearchQuery { get; set; } = "";
     [ObservableProperty] public partial HostProjectFilter ActiveFilter { get; set; } = HostProjectFilter.All;
+    /// <summary>Null shows All (Desktop grouped view when groups exist); <see cref="UngroupedGroupKey"/> shows ungrouped only; otherwise a Desktop group id.</summary>
+    [ObservableProperty] public partial string? SelectedProjectGroupKey { get; set; }
+
+    public bool CanManageProjectGroups => _workspace.SupportsProjectGroups(Host);
+    public bool HasProjectGroups => Host.ProjectGroups.Count > 0;
+    public RemoteProjectGroup? ActiveProjectGroup =>
+        SelectedProjectGroupKey is { Length: > 0 } key && key != UngroupedGroupKey
+            ? Host.ProjectGroups.FirstOrDefault(g => string.Equals(g.Id, key, StringComparison.Ordinal))
+            : null;
+    public bool ShowGroupedLayout => HasProjectGroups && SelectedProjectGroupKey is null;
+    public bool ShowFlatSections => !ShowGroupedLayout;
+    public bool ShowSingleGroupBanner => ActiveProjectGroup is not null;
+    public bool HasUngroupedSections => UngroupedSections.Count > 0;
+    public bool HasVisibleProjectGroups => VisibleProjectGroups.Count > 0;
+
+    public string ActiveGroupName => ActiveProjectGroup?.Name ?? "";
+    public bool ActiveGroupIsMerged => ActiveProjectGroup?.MergeWorkspaces == true;
+    public IBrush ActiveGroupTintBrush => ActiveProjectGroup is { } g
+        ? new SolidColorBrush(ProjectGroup2x2View.ParseGroupColor(g.Color))
+        : Brushes.Transparent;
+    public IBrush ActiveGroupOpenBg
+    {
+        get
+        {
+            if (ActiveProjectGroup is not { } g) return Brushes.Transparent;
+            var c = ProjectGroup2x2View.ParseGroupColor(g.Color);
+            return new SolidColorBrush(Color.FromArgb(46, c.R, c.G, c.B));
+        }
+    }
+    public IBrush ActiveGroupBannerBg
+    {
+        get
+        {
+            if (ActiveProjectGroup is not { } g) return Brushes.Transparent;
+            var c = ProjectGroup2x2View.ParseGroupColor(g.Color);
+            return new SolidColorBrush(Color.FromArgb(26, c.R, c.G, c.B));
+        }
+    }
+    public IBrush ActiveGroupBannerBorder
+    {
+        get
+        {
+            if (ActiveProjectGroup is not { } g) return Brushes.Transparent;
+            var c = ProjectGroup2x2View.ParseGroupColor(g.Color);
+            return new SolidColorBrush(Color.FromArgb(96, c.R, c.G, c.B));
+        }
+    }
+    public string ActiveGroupCountText => ActiveProjectGroup is { } g
+        ? MobileLangResources.Format(MobileLangResourceKind.ProjectCount, Host.Projects.Count(p => string.Equals(p.GroupId, g.Id, StringComparison.Ordinal)))
+        : "";
+    public string ActiveGroupSubtitle
+    {
+        get
+        {
+            if (ActiveProjectGroup is not { } g) return "";
+            if (!g.MergeWorkspaces) return MobileLangResources.Get(MobileLangResourceKind.ProjectGroupMergeOffHint);
+            var members = Host.Projects.Where(p => string.Equals(p.GroupId, g.Id, StringComparison.Ordinal)).Select(p => p.Name).ToList();
+            return MobileLangResources.Format(
+                MobileLangResourceKind.ProjectGroupMergeActiveBar,
+                members.Count,
+                members.Count > 0 ? string.Join(" + ", members) : "—");
+        }
+    }
 
     public bool ShowControls => !IsEmpty;
     public bool HasSearchQuery => !string.IsNullOrWhiteSpace(SearchQuery);
-    public bool IsFilteredEmpty => !IsEmpty && VisibleSections.Count == 0;
+    public bool IsFilteredEmpty => !IsEmpty && VisibleSections.Count == 0 && !HasVisibleProjectGroups;
     public bool IsFilterAll => ActiveFilter == HostProjectFilter.All;
     public bool IsFilterAttention => ActiveFilter == HostProjectFilter.Attention;
     public bool IsFilterWorking => ActiveFilter == HostProjectFilter.Working;
@@ -113,6 +196,12 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
         ApplyFilters();
     }
 
+    partial void OnSelectedProjectGroupKeyChanged(string? value)
+    {
+        NotifyProjectGroupPresentation();
+        ApplyFilters();
+    }
+
     [RelayCommand]
     private void Back() => _navigator.Back();
 
@@ -130,6 +219,17 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
     /// <summary>Picks a folder of the host for a new project; once made, the "New" sheet opens on it.</summary>
     [RelayCommand]
     private void NewProject() => _navigator.ShowFolderPicker(Host, project => NewSession.Open(project));
+
+    [RelayCommand]
+    private void OpenNewProjectGroup() => GroupEditor.OpenNew();
+
+    [RelayCommand]
+    private void OpenManageActiveGroup()
+    {
+        if (ActiveProjectGroup is { } group) GroupEditor.OpenManage(group);
+    }
+
+    public void SelectProjectGroup(string? key) => SelectedProjectGroupKey = key;
 
     [RelayCommand]
     private void SelectFilterAll() => ActiveFilter = HostProjectFilter.All;
@@ -151,12 +251,18 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
     {
         SearchQuery = "";
         ActiveFilter = HostProjectFilter.All;
+        SelectedProjectGroupKey = null;
     }
 
     [RelayCommand]
     private void ToggleAllExpanded()
     {
         var target = !AnyExpanded;
+        foreach (var group in VisibleProjectGroups)
+        {
+            _groupExpandedOverrides[group.Group.Id] = target;
+            group.SetExpandedSilently(target);
+        }
         foreach (var section in VisibleSections)
         {
             _expandedOverrides[section.Project.Id] = target;
@@ -171,18 +277,79 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         Host.Projects.CollectionChanged -= OnProjectsChanged;
+        Host.ProjectGroups.CollectionChanged -= OnProjectGroupsChanged;
+        UnwatchGroups();
+        UnwatchProjectProps();
         NewSession.Dispose();
         foreach (var section in Sections) section.Dispose();
     }
 
     private void OnProjectsChanged(object? sender, NotifyCollectionChangedEventArgs e) => Rebuild();
 
+    private void OnProjectGroupsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        UnwatchGroups();
+        WatchGroups();
+        if (SelectedProjectGroupKey is { Length: > 0 } key && key != UngroupedGroupKey
+            && Host.ProjectGroups.All(g => !string.Equals(g.Id, key, StringComparison.Ordinal)))
+        {
+            SelectedProjectGroupKey = null;
+        }
+        foreach (var section in Sections) section.NotifyGroupChanged();
+        NotifyProjectGroupPresentation();
+        ApplyFilters();
+    }
+
+    private void OnProjectGroupPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        foreach (var section in Sections) section.NotifyGroupChanged();
+        NotifyProjectGroupPresentation();
+        ApplyFilters();
+    }
+
+    private void OnProjectPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(RemoteProject.GroupId))
+        {
+            if (sender is RemoteProject changed && Sections.FirstOrDefault(s => ReferenceEquals(s.Project, changed)) is { } section)
+            {
+                section.NotifyGroupChanged();
+            }
+            NotifyProjectGroupPresentation();
+            ApplyFilters();
+        }
+    }
+
+    private void WatchGroups()
+    {
+        foreach (var group in Host.ProjectGroups)
+        {
+            group.PropertyChanged += OnProjectGroupPropertyChanged;
+            _watchedGroups.Add(group);
+        }
+    }
+
+    private void UnwatchGroups()
+    {
+        foreach (var group in _watchedGroups) group.PropertyChanged -= OnProjectGroupPropertyChanged;
+        _watchedGroups.Clear();
+    }
+
+    private void UnwatchProjectProps()
+    {
+        foreach (var project in _watchedProjectProps) project.PropertyChanged -= OnProjectPropertyChanged;
+        _watchedProjectProps.Clear();
+    }
+
     private void Rebuild()
     {
+        UnwatchProjectProps();
         foreach (var section in Sections) section.Dispose();
         Sections.Clear();
         foreach (var project in Host.Projects)
         {
+            project.PropertyChanged += OnProjectPropertyChanged;
+            _watchedProjectProps.Add(project);
             var initialExpanded = DefaultExpandedFor(project);
             _workspaceSelections.TryGetValue(project.Id, out var savedWorkspace);
             var section = new ProjectSectionViewModel(
@@ -195,10 +362,12 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
                 savedWorkspace,
                 OnSectionExpandedChanged,
                 OnSectionWorkspaceSelected,
-                OnSectionStateChanged);
+                OnSectionStateChanged,
+                p => GroupEditor.OpenMoveProject(p));
             Sections.Add(section);
         }
         IsEmpty = Sections.Count == 0;
+        NotifyProjectGroupPresentation();
         ApplyFilters();
         NotifySummaryProperties();
     }
@@ -209,6 +378,19 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
         if (project.Sessions.Count == 0) return false;
         var hasActive = project.Sessions.Any(session => session.Activity != SessionActivity.Idle);
         return hasActive || Host.Projects.Count <= 2;
+    }
+
+    private bool DefaultGroupExpandedFor(RemoteProjectGroup group, IReadOnlyList<ProjectSectionViewModel> members, bool filtering)
+    {
+        if (filtering && members.Count > 0) return true;
+        if (_groupExpandedOverrides.TryGetValue(group.Id, out var saved)) return saved;
+        return members.Any(s => s.HasAttention || s.HasWorking || s.HasError);
+    }
+
+    private void OnGroupExpandedChanged(string groupId, bool expanded)
+    {
+        _groupExpandedOverrides[groupId] = expanded;
+        NotifyExpansionSummary();
     }
 
     private void OnSectionExpandedChanged(string projectId, bool expanded)
@@ -230,9 +412,21 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
     {
         var query = SearchQuery.Trim();
         var filtering = query.Length > 0;
+        var knownGroupIds = Host.ProjectGroups.Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
         var matched = new List<ProjectSectionViewModel>(Sections.Count);
         foreach (var section in Sections)
         {
+            if (SelectedProjectGroupKey == UngroupedGroupKey)
+            {
+                if (!string.IsNullOrWhiteSpace(section.Project.GroupId) && knownGroupIds.Contains(section.Project.GroupId))
+                    continue;
+            }
+            else if (SelectedProjectGroupKey is { Length: > 0 } groupKey)
+            {
+                if (!string.Equals(section.Project.GroupId, groupKey, StringComparison.Ordinal))
+                    continue;
+            }
+
             if (!MatchesFilter(section, ActiveFilter)) continue;
             if (filtering)
             {
@@ -248,13 +442,148 @@ public sealed partial class HostViewModel : ObservableObject, IDisposable
             matched.Add(section);
         }
 
-        if (!VisibleSections.SequenceEqual(matched, ReferenceEqualityComparer.Instance))
+        MobileCollectionSync.SyncByReference(VisibleSections, matched);
+        RebuildGroupFilterChips(knownGroupIds);
+
+        if (ShowGroupedLayout)
         {
-            VisibleSections.Clear();
-            foreach (var section in matched) VisibleSections.Add(section);
+            var ungrouped = matched
+                .Where(s => string.IsNullOrWhiteSpace(s.Project.GroupId) || !knownGroupIds.Contains(s.Project.GroupId))
+                .ToList();
+            MobileCollectionSync.SyncByReference(UngroupedSections, ungrouped);
+
+            var byGroup = matched
+                .Where(s => !string.IsNullOrWhiteSpace(s.Project.GroupId) && knownGroupIds.Contains(s.Project.GroupId))
+                .GroupBy(s => s.Project.GroupId!, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+            var nextCards = new List<ProjectGroupCardViewModel>(Host.ProjectGroups.Count);
+            foreach (var group in Host.ProjectGroups)
+            {
+                var members = byGroup.GetValueOrDefault(group.Id, []);
+                // Hide empty/non-matching groups when actively filtering or searching, unless no filter is active.
+                if (members.Count == 0 && (filtering || ActiveFilter != HostProjectFilter.All)) continue;
+                var expanded = DefaultGroupExpandedFor(group, members, filtering);
+                if (_groupCardsById.TryGetValue(group.Id, out var existing) && ReferenceEquals(existing.Group, group))
+                {
+                    existing.Update(members, CanManageProjectGroups, expanded);
+                    nextCards.Add(existing);
+                }
+                else
+                {
+                    var card = new ProjectGroupCardViewModel(
+                        group,
+                        members,
+                        expanded,
+                        CanManageProjectGroups,
+                        OnGroupExpandedChanged,
+                        g => GroupEditor.OpenManage(g),
+                        SelectProjectGroup);
+                    _groupCardsById[group.Id] = card;
+                    nextCards.Add(card);
+                }
+            }
+            // Prune cards for deleted groups so memory stays bounded.
+            foreach (var staleId in _groupCardsById.Keys.Where(id => !knownGroupIds.Contains(id)).ToList())
+            {
+                _groupCardsById.Remove(staleId);
+            }
+            MobileCollectionSync.SyncByReference(VisibleProjectGroups, nextCards);
+
+            if (FlatDisplayedSections.Count > 0) FlatDisplayedSections.Clear();
         }
+        else
+        {
+            if (UngroupedSections.Count > 0) UngroupedSections.Clear();
+            if (VisibleProjectGroups.Count > 0) VisibleProjectGroups.Clear();
+            MobileCollectionSync.SyncByReference(FlatDisplayedSections, matched);
+        }
+
+        OnPropertyChanged(nameof(HasUngroupedSections));
+        OnPropertyChanged(nameof(HasVisibleProjectGroups));
         OnPropertyChanged(nameof(IsFilteredEmpty));
         NotifyExpansionSummary();
+    }
+
+    private void RebuildGroupFilterChips(HashSet<string> knownGroupIds)
+    {
+        if (!HasProjectGroups)
+        {
+            if (GroupFilterChips.Count > 0) GroupFilterChips.Clear();
+            _groupChipsByKey.Clear();
+            return;
+        }
+
+        var nextChips = new List<ProjectGroupFilterChipViewModel>(Host.ProjectGroups.Count + 2);
+        ProjectGroupFilterChipViewModel UpsertChip(string? key, string label, int count, string? colorHex, bool isMerged, bool isSelected)
+        {
+            var dictKey = key ?? "__all__";
+            if (_groupChipsByKey.TryGetValue(dictKey, out var existing))
+            {
+                existing.Update(label, count, colorHex, isMerged, isSelected);
+                return existing;
+            }
+            var created = new ProjectGroupFilterChipViewModel(key, label, count, colorHex, isMerged, isSelected, SelectProjectGroup);
+            _groupChipsByKey[dictKey] = created;
+            return created;
+        }
+
+        nextChips.Add(UpsertChip(
+            key: null,
+            label: MobileLangResources.Get(MobileLangResourceKind.ProjectGroupAll),
+            count: Sections.Count,
+            colorHex: null,
+            isMerged: false,
+            isSelected: SelectedProjectGroupKey is null));
+
+        foreach (var group in Host.ProjectGroups)
+        {
+            var count = Sections.Count(s => string.Equals(s.Project.GroupId, group.Id, StringComparison.Ordinal));
+            nextChips.Add(UpsertChip(
+                key: group.Id,
+                label: group.Name,
+                count: count,
+                colorHex: string.IsNullOrWhiteSpace(group.Color) ? ProjectGroupEditorViewModel.Palette[0] : group.Color,
+                isMerged: group.MergeWorkspaces,
+                isSelected: string.Equals(SelectedProjectGroupKey, group.Id, StringComparison.Ordinal)));
+        }
+
+        var ungroupedCount = Sections.Count(s => string.IsNullOrWhiteSpace(s.Project.GroupId) || !knownGroupIds.Contains(s.Project.GroupId));
+        if (ungroupedCount > 0)
+        {
+            nextChips.Add(UpsertChip(
+                key: UngroupedGroupKey,
+                label: MobileLangResources.Get(MobileLangResourceKind.ProjectGroupUngrouped),
+                count: ungroupedCount,
+                colorHex: null,
+                isMerged: false,
+                isSelected: SelectedProjectGroupKey == UngroupedGroupKey));
+        }
+
+        var activeKeys = nextChips.Select(c => c.Key ?? "__all__").ToHashSet(StringComparer.Ordinal);
+        foreach (var staleKey in _groupChipsByKey.Keys.Where(k => !activeKeys.Contains(k)).ToList())
+        {
+            _groupChipsByKey.Remove(staleKey);
+        }
+        MobileCollectionSync.SyncByReference(GroupFilterChips, nextChips);
+    }
+
+    private void NotifyProjectGroupPresentation()
+    {
+        OnPropertyChanged(nameof(CanManageProjectGroups));
+        OnPropertyChanged(nameof(HasProjectGroups));
+        OnPropertyChanged(nameof(ActiveProjectGroup));
+        OnPropertyChanged(nameof(ShowGroupedLayout));
+        OnPropertyChanged(nameof(ShowFlatSections));
+        OnPropertyChanged(nameof(ShowSingleGroupBanner));
+        OnPropertyChanged(nameof(ActiveGroupName));
+        OnPropertyChanged(nameof(ActiveGroupIsMerged));
+        OnPropertyChanged(nameof(ActiveGroupTintBrush));
+        OnPropertyChanged(nameof(ActiveGroupOpenBg));
+        OnPropertyChanged(nameof(ActiveGroupBannerBg));
+        OnPropertyChanged(nameof(ActiveGroupBannerBorder));
+        OnPropertyChanged(nameof(ActiveGroupCountText));
+        OnPropertyChanged(nameof(ActiveGroupSubtitle));
     }
 
     private static bool MatchesFilter(ProjectSectionViewModel section, HostProjectFilter filter) => filter switch
@@ -313,6 +642,7 @@ public sealed partial class ProjectSectionViewModel : ObservableObject, IDisposa
     private readonly Action<string, bool> _onExpandedChanged;
     private readonly Action<string, string?> _onWorkspaceSelected;
     private readonly Action _onStateChanged;
+    private readonly Action<RemoteProject>? _moveToGroup;
     private readonly List<RemoteSession> _watchedSessions = [];
 
     public ProjectSectionViewModel(
@@ -325,7 +655,8 @@ public sealed partial class ProjectSectionViewModel : ObservableObject, IDisposa
         string? initialWorkspaceKey,
         Action<string, bool> onExpandedChanged,
         Action<string, string?> onWorkspaceSelected,
-        Action onStateChanged)
+        Action onStateChanged,
+        Action<RemoteProject>? moveToGroup = null)
     {
         Project = project;
         _workspace = workspace;
@@ -335,6 +666,7 @@ public sealed partial class ProjectSectionViewModel : ObservableObject, IDisposa
         _onExpandedChanged = onExpandedChanged;
         _onWorkspaceSelected = onWorkspaceSelected;
         _onStateChanged = onStateChanged;
+        _moveToGroup = moveToGroup;
         IsExpanded = initialExpanded;
         SelectedWorkspaceKey = initialWorkspaceKey;
         Initial = InitialOf(project.Name);
@@ -417,6 +749,24 @@ public sealed partial class ProjectSectionViewModel : ObservableObject, IDisposa
 
     public bool CanBrowseFiles => _workspace.SupportsFiles(Project.Host);
     public bool CanViewChanges => Project.IsGitRepository && _workspace.SupportsGit(Project.Host);
+    public bool CanMoveToGroup => _moveToGroup is not null && _workspace.SupportsProjectGroups(Project.Host);
+    public RemoteProjectGroup? CurrentGroup => string.IsNullOrWhiteSpace(Project.GroupId)
+        ? null
+        : Project.Host.ProjectGroups.FirstOrDefault(g => string.Equals(g.Id, Project.GroupId, StringComparison.Ordinal));
+    public bool HasGroupDot => CurrentGroup is not null;
+    public IBrush GroupDotBrush => CurrentGroup is { } g
+        ? new SolidColorBrush(ProjectGroup2x2View.ParseGroupColor(g.Color))
+        : Brushes.Transparent;
+    public string GroupActionLabel => CurrentGroup?.Name ?? MobileLangResources.Get(MobileLangResourceKind.ProjectGroupMoveAction);
+
+    internal void NotifyGroupChanged()
+    {
+        OnPropertyChanged(nameof(CurrentGroup));
+        OnPropertyChanged(nameof(HasGroupDot));
+        OnPropertyChanged(nameof(GroupDotBrush));
+        OnPropertyChanged(nameof(GroupActionLabel));
+        OnPropertyChanged(nameof(CanMoveToGroup));
+    }
 
     private RemoteBranchWorkspace? SelectedWorkspace =>
         SelectedWorkspaceKey is { Length: > 0 } key && key != DefaultWorkspaceKey
@@ -473,6 +823,13 @@ public sealed partial class ProjectSectionViewModel : ObservableObject, IDisposa
     {
         if (!CanViewChanges) return;
         _navigator.ShowChanges(Project, SelectedWorkspace?.Path);
+    }
+
+    [RelayCommand]
+    private void MoveToGroup()
+    {
+        if (!CanMoveToGroup) return;
+        _moveToGroup?.Invoke(Project);
     }
 
     public void SelectWorkspaceTab(string? workspaceKey)
@@ -589,10 +946,10 @@ public sealed partial class ProjectSectionViewModel : ObservableObject, IDisposa
 
     private void RebuildDisplayedSessions()
     {
-        DisplayedSessions.Clear();
+        var next = new List<SessionRowViewModel>(Sessions.Count);
         if (!HasWorkspaces || SelectedWorkspaceKey is null)
         {
-            foreach (var row in Sessions) DisplayedSessions.Add(row);
+            next.AddRange(Sessions);
         }
         else if (SelectedWorkspaceKey == DefaultWorkspaceKey)
         {
@@ -601,7 +958,7 @@ public sealed partial class ProjectSectionViewModel : ObservableObject, IDisposa
             {
                 if (string.IsNullOrEmpty(row.Session.WorkspaceId) || !knownIds.Contains(row.Session.WorkspaceId))
                 {
-                    DisplayedSessions.Add(row);
+                    next.Add(row);
                 }
             }
         }
@@ -609,9 +966,10 @@ public sealed partial class ProjectSectionViewModel : ObservableObject, IDisposa
         {
             foreach (var row in Sessions)
             {
-                if (row.Session.WorkspaceId == SelectedWorkspaceKey) DisplayedSessions.Add(row);
+                if (row.Session.WorkspaceId == SelectedWorkspaceKey) next.Add(row);
             }
         }
+        MobileCollectionSync.SyncByReference(DisplayedSessions, next);
         OnPropertyChanged(nameof(HasDisplayedSessions));
         OnPropertyChanged(nameof(IsDisplayedEmpty));
     }

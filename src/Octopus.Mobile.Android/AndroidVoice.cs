@@ -4,7 +4,6 @@ using Android.Content;
 using Android.Content.PM;
 using Android.Media;
 using Android.OS;
-using Android.Provider;
 using Android.Speech;
 using Android.Util;
 using Android.Views;
@@ -452,7 +451,7 @@ internal sealed class AndroidSpeechSession(Context context, VoiceSettings settin
     {
         try
         {
-            return Settings.Secure.GetString(context.ContentResolver, "voice_recognition_service");
+            return global::Android.Provider.Settings.Secure.GetString(context.ContentResolver, "voice_recognition_service");
         }
         catch (Exception)
         {

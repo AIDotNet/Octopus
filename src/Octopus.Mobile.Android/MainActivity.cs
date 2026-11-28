@@ -25,6 +25,9 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
 
     public override void OnCreate()
     {
+        // Initialize diagnostics first so startup crashes, native exits and early network errors are captured.
+        AndroidDiagnosticsPlatform.Install(this);
+
         // Route relay and update HTTP requests through Android's native Java/Conscrypt stack so HarmonyOS / OEM
         // certificate stores, NetworkSecurityConfig, and system proxies are respected consistently.
         RelayHttp.HandlerFactory = static automaticDecompression => new AndroidMessageHandler
@@ -35,6 +38,15 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
         ConfigureWebSocketRoots();
         UseRealHosts(this);
         base.OnCreate();
+    }
+
+    public override void OnTrimMemory([GeneratedEnum] TrimMemory level)
+    {
+        base.OnTrimMemory(level);
+        if (level >= TrimMemory.RunningLow)
+        {
+            Diagnostics.MobileDiagnostics.NoteMemoryWarning($"Android.OnTrimMemory.{level}");
+        }
     }
 
     private void ConfigureWebSocketRoots()
@@ -50,9 +62,10 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
                 RelayHttp.WebSocketCertificateValidationCallback = RelayHttp.CreateCustomRootsValidator(roots);
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Never block app startup if the bundled root CA resource cannot be read.
+            Diagnostics.MobileDiagnostics.Warn("NET", $"Could not load bundled WebSocket root CAs: {ex.Message}");
         }
     }
 
@@ -68,6 +81,7 @@ public sealed class AndroidApp : AvaloniaAndroidApplication<MobileApp>
             .UseOctopusMobile()
             .AfterSetup(_ =>
             {
+                Diagnostics.MobileDiagnostics.AttachDispatcher();
                 Avalonia.Threading.Dispatcher.UIThread.Post(HookAndroidKeyboardInset, Avalonia.Threading.DispatcherPriority.Loaded);
             });
 

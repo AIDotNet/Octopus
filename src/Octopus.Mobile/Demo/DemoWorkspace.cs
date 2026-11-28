@@ -31,8 +31,10 @@ public sealed partial class DemoWorkspace : IRemoteWorkspace
     public DemoWorkspace(bool localOnly = false)
     {
         var mac = new RemoteHost("mac", "MacBook Pro", HostLink.Lan, isPaired: true) { Agents = [Claude, Codex] };
-        var octopus = Add(mac, "Octopus", "~/code/Octopus", "#5B5BD6");
-        var server = Add(mac, "OctopusServer", "~/code/OctopusServer", "#1F9D74");
+        var coreGroup = new RemoteProjectGroup(mac, "g-core", "核心产品") { Color = "#6366F1", MergeWorkspaces = true };
+        mac.ProjectGroups.Add(coreGroup);
+        var octopus = Add(mac, "Octopus", "~/code/Octopus", "#5B5BD6", coreGroup.Id);
+        var server = Add(mac, "OctopusServer", "~/code/OctopusServer", "#1F9D74", coreGroup.Id);
         var arc = Add(mac, "TKCode.Arc", "~/code/TKCode.Arc", "#D97757");
 
         var handshake = Add(octopus, "远程协议握手实现", Claude, "Fable 5.2 · 极高", SessionActivity.Waiting, "要运行 dotnet test 吗？");
@@ -331,11 +333,60 @@ public sealed partial class DemoWorkspace : IRemoteWorkspace
         return outcome;
     }
 
-    private static RemoteProject Add(RemoteHost host, string name, string path, string? color = null)
+    public bool SupportsProjectGroups(RemoteHost host) => host.IsPaired;
+
+    public Task<RemoteProjectGroup> CreateProjectGroupAsync(RemoteHost host, string name, string? color = null, bool mergeWorkspaces = false, IReadOnlyList<string>? projectIds = null, CancellationToken cancellationToken = default)
+    {
+        var trimmed = name.Trim();
+        if (trimmed.Length == 0) throw new IOException("分组名称不能为空。");
+        var group = new RemoteProjectGroup(host, "g" + _nextId++, trimmed)
+        {
+            Color = string.IsNullOrWhiteSpace(color) ? "#5B5BD6" : color.Trim(),
+            MergeWorkspaces = mergeWorkspaces,
+        };
+        host.ProjectGroups.Add(group);
+        if (projectIds is not null)
+        {
+            var ids = projectIds.ToHashSet(StringComparer.Ordinal);
+            foreach (var project in host.Projects)
+            {
+                if (ids.Contains(project.Id)) project.GroupId = group.Id;
+            }
+        }
+        return Task.FromResult(group);
+    }
+
+    public Task<RemoteProjectGroup> UpdateProjectGroupAsync(RemoteProjectGroup group, string? name = null, string? color = null, bool clearColor = false, bool? mergeWorkspaces = null, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(name)) group.Name = name.Trim();
+        if (clearColor) group.Color = null;
+        else if (color is not null) group.Color = string.IsNullOrWhiteSpace(color) ? null : color.Trim();
+        if (mergeWorkspaces is { } merge) group.MergeWorkspaces = merge;
+        return Task.FromResult(group);
+    }
+
+    public Task DeleteProjectGroupAsync(RemoteProjectGroup group, CancellationToken cancellationToken = default)
+    {
+        foreach (var project in group.Host.Projects)
+        {
+            if (string.Equals(project.GroupId, group.Id, StringComparison.Ordinal)) project.GroupId = null;
+        }
+        group.Host.ProjectGroups.Remove(group);
+        return Task.CompletedTask;
+    }
+
+    public Task SetProjectGroupAsync(RemoteProject project, string? groupId, CancellationToken cancellationToken = default)
+    {
+        project.GroupId = string.IsNullOrWhiteSpace(groupId) ? null : groupId;
+        return Task.CompletedTask;
+    }
+
+    private static RemoteProject Add(RemoteHost host, string name, string path, string? color = null, string? groupId = null)
     {
         var project = new RemoteProject(host, host.Id + "/" + name, name, path)
         {
             Color = color,
+            GroupId = groupId,
             IsGitRepository = true,
             DefaultBranch = "main",
         };

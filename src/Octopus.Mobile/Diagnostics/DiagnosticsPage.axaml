@@ -1,0 +1,244 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:vm="using:Octopus.Mobile.Diagnostics"
+           x:Class="Octopus.Mobile.Diagnostics.DiagnosticsPage"
+           x:DataType="vm:DiagnosticsViewModel"
+           IsScrollable="True">
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource DiagnosticsTitle}"
+                     ShowBack="True"
+                     BackText="{l:MobileLangResource Back}"
+                     BackCommand="{Binding BackCommand}">
+            <arcm:Navbar.Trailing>
+                <arcm:IconButton Name="DiagRefreshButton"
+                                 Icon="{x:Static arc:ArcIcons.RefreshCw}"
+                                 Command="{Binding ReloadCommand}"
+                                 AutomationProperties.Name="{l:MobileLangResource Refresh}" />
+            </arcm:Navbar.Trailing>
+        </arcm:Navbar>
+    </arcm:Page.Header>
+
+    <StackPanel Margin="0,8,0,32" Spacing="16">
+        <!-- 1. Explicit Opt-in Consent (OFF by default) -->
+        <arcm:ListGroup Header="{l:MobileLangResource DiagnosticsConsentHeader}">
+            <arcm:ListItem Name="DiagConsentRow"
+                           Content="{l:MobileLangResource DiagnosticsConsentToggle}"
+                           Subtitle="{l:MobileLangResource DiagnosticsConsentToggleHint}">
+                <arcm:ListItem.Trailing>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <arc:Badge Name="DiagConsentBadge"
+                                   Size="Small"
+                                   Tone="{Binding ConsentBadgeTone}"
+                                   Content="{Binding ConsentBadgeText}" />
+                        <arcm:Switch Name="DiagConsentSwitch"
+                                     IsChecked="{Binding IsCollectionEnabled, Mode=TwoWay}" />
+                    </StackPanel>
+                </arcm:ListItem.Trailing>
+            </arcm:ListItem>
+            <arcm:ListCell>
+                <StackPanel Spacing="4">
+                    <TextBlock Name="DiagEnvSummary"
+                               Classes="secondary"
+                               Text="{Binding EnvironmentSummary}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Name="DiagStorageSummary"
+                               Classes="muted"
+                               FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                               Text="{Binding StorageSummary}" />
+                </StackPanel>
+            </arcm:ListCell>
+        </arcm:ListGroup>
+
+        <!-- Opt-in empty state when collection is disabled (default) -->
+        <arc:EmptyState Name="DiagConsentEmptyState"
+                        Margin="16,4"
+                        Icon="{x:Static arc:ArcIcons.FileText}"
+                        Title="{l:MobileLangResource DiagnosticsDisabledTitle}"
+                        Description="{l:MobileLangResource DiagnosticsDisabledDesc}"
+                        IsVisible="{Binding IsCollectionDisabled}">
+            <arc:EmptyState.Action>
+                <arcm:Button Name="DiagEnableButton"
+                             Variant="Filled"
+                             Content="{l:MobileLangResource DiagnosticsEnableAction}"
+                             Command="{Binding RequestEnableCollectionCommand}" />
+            </arc:EmptyState.Action>
+        </arc:EmptyState>
+
+        <!-- Active collection UI (visible only after explicit user consent) -->
+        <StackPanel Spacing="16" IsVisible="{Binding IsCollectionEnabled}">
+            <!-- Privacy guarantee alert -->
+            <arc:Alert Name="DiagPrivacyAlert"
+                       Margin="16,0"
+                       Tone="Info"
+                       IsOpen="True"
+                       Content="{l:MobileLangResource DiagnosticsPrivacyHint}" />
+
+            <!-- Export & Send to Developers -->
+            <StackPanel Spacing="10">
+                <arcm:ListGroup Header="{l:MobileLangResource DiagnosticsSectionSend}">
+                    <arcm:ListCell>
+                        <StackPanel Spacing="8">
+                            <TextBlock Classes="fieldLabel" Text="{l:MobileLangResource DiagnosticsUserNoteLabel}" />
+                            <arcm:TextField Name="DiagUserNoteField"
+                                            Text="{Binding UserNote, Mode=TwoWay}"
+                                            PlaceholderText="{l:MobileLangResource DiagnosticsUserNotePlaceholder}" />
+                        </StackPanel>
+                    </arcm:ListCell>
+                    <arcm:ListItem Name="DiagMaskIdentifiersRow"
+                                   Content="{l:MobileLangResource DiagnosticsMaskIdentifiers}"
+                                   Subtitle="{l:MobileLangResource DiagnosticsMaskIdentifiersHint}">
+                        <arcm:ListItem.Trailing>
+                            <arcm:Switch Name="DiagMaskIdentifiersSwitch"
+                                         IsChecked="{Binding MaskIdentifiers, Mode=TwoWay}" />
+                        </arcm:ListItem.Trailing>
+                    </arcm:ListItem>
+                    <arcm:ListItem Name="DiagPreviewRow"
+                                   Icon="{x:Static arc:ArcIcons.FileText}"
+                                   Content="{l:MobileLangResource DiagnosticsPreviewAction}"
+                                   Subtitle="{l:MobileLangResource DiagnosticsPreviewHint}"
+                                   ShowChevron="True"
+                                   Command="{Binding OpenPreviewCommand}" />
+                </arcm:ListGroup>
+
+                <StackPanel Margin="16,0" Spacing="10">
+                    <arcm:Button Name="DiagShareBundleButton"
+                                 Variant="Filled"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{l:MobileLangResource DiagnosticsExportZip}"
+                                 Command="{Binding ShareBundleCommand}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <arc:CopyButton Name="DiagCopySummaryButton"
+                                        Grid.Column="0"
+                                        HorizontalAlignment="Stretch"
+                                        Value="{Binding CopyableSummary}"
+                                        Label="{l:MobileLangResource DiagnosticsCopySummary}"
+                                        CopiedLabel="{l:MobileLangResource DiagnosticsCopiedShort}" />
+                        <arcm:Button Name="DiagGitHubIssueButton"
+                                     Grid.Column="1"
+                                     Variant="Tinted"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource DiagnosticsOpenIssue}"
+                                     Command="{Binding OpenGitHubIssueCommand}" />
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Recent crash & native-exit records -->
+            <arcm:ListGroup Name="DiagRecordsGroup"
+                            Header="{l:MobileLangResource DiagnosticsSectionRecords}"
+                            ItemsSource="{Binding Records}"
+                            IsVisible="{Binding ShowRecordsList}">
+                <arcm:ListGroup.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DiagnosticRecordRowViewModel">
+                        <arcm:ListItem Icon="{x:Static arc:ArcIcons.FileText}"
+                                       Content="{Binding Title}"
+                                       Subtitle="{Binding Subtitle}"
+                                       ShowChevron="True"
+                                       Command="{Binding SelectCommand}">
+                            <arcm:ListItem.Trailing>
+                                <arc:Badge Size="Small"
+                                           Tone="{Binding BadgeTone}"
+                                           Content="{Binding BadgeText}" />
+                            </arcm:ListItem.Trailing>
+                        </arcm:ListItem>
+                    </DataTemplate>
+                </arcm:ListGroup.ItemTemplate>
+            </arcm:ListGroup>
+
+            <arc:EmptyState Name="DiagEmptyState"
+                            Margin="16,0"
+                            Icon="{x:Static arc:ArcIcons.Check}"
+                            Title="{l:MobileLangResource DiagnosticsEmptyTitle}"
+                            Description="{l:MobileLangResource DiagnosticsEmpty}"
+                            IsVisible="{Binding ShowEmptyRecords}" />
+        </StackPanel>
+
+        <!-- Maintenance: always allow clearing previously stored logs -->
+        <Panel Margin="16,0" IsVisible="{Binding CanClearLogs}">
+            <arcm:Button Name="DiagClearLogsButton"
+                         Variant="Tinted"
+                         HorizontalAlignment="Stretch"
+                         HorizontalContentAlignment="Center"
+                         Foreground="{arc:ArcDesignTokenResource Danger}"
+                         Content="{l:MobileLangResource DiagnosticsClearLogs}"
+                         Command="{Binding RequestClearLogsCommand}" />
+        </Panel>
+    </StackPanel>
+
+    <arcm:Page.Overlay>
+        <Panel>
+            <!-- Log content preview sheet -->
+            <arcm:Sheet Name="DiagPreviewSheet"
+                        IsOpen="{Binding IsPreviewOpen, Mode=TwoWay}"
+                        MaxHeightFraction="0.86"
+                        Title="{Binding PreviewTitle}">
+                <Grid RowDefinitions="*,Auto">
+                    <ScrollViewer Grid.Row="0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Auto">
+                        <Border Margin="16,4,16,16"
+                                Padding="12"
+                                CornerRadius="10"
+                                Background="{arc:ArcDesignTokenResource SurfaceMuted}">
+                            <SelectableTextBlock Name="DiagPreviewTextBlock"
+                                                 Text="{Binding PreviewText}"
+                                                 FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                                 FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                                 TextWrapping="Wrap" />
+                        </Border>
+                    </ScrollViewer>
+                    <Border Grid.Row="1" Classes="sheetFooter">
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                            <arc:CopyButton Grid.Column="0"
+                                            HorizontalAlignment="Stretch"
+                                            Value="{Binding CopyableSummary}"
+                                            Label="{l:MobileLangResource DiagnosticsCopySummary}"
+                                            CopiedLabel="{l:MobileLangResource DiagnosticsCopiedShort}" />
+                            <arcm:Button Grid.Column="1"
+                                         Variant="Filled"
+                                         HorizontalAlignment="Stretch"
+                                         HorizontalContentAlignment="Center"
+                                         Content="{l:MobileLangResource DiagnosticsExportZip}"
+                                         Command="{Binding ShareBundleCommand}" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </arcm:Sheet>
+
+            <!-- Informed opt-in consent dialog -->
+            <arcm:Dialog Name="DiagConsentDialog"
+                         IsOpen="{Binding IsConsentDialogOpen, Mode=TwoWay}"
+                         IsDismissible="True"
+                         Title="{l:MobileLangResource DiagnosticsConsentDialogTitle}"
+                         Message="{l:MobileLangResource DiagnosticsConsentDialogBody}">
+                <arcm:Button Content="{l:MobileLangResource Cancel}" Variant="Plain" />
+                <arcm:Button Name="DiagConsentConfirmButton"
+                             Content="{l:MobileLangResource DiagnosticsConsentConfirm}"
+                             Variant="Filled"
+                             Command="{Binding ConfirmEnableCollectionCommand}" />
+            </arcm:Dialog>
+
+            <!-- Destructive clear-logs confirmation dialog -->
+            <arcm:Dialog Name="DiagClearDialog"
+                         IsOpen="{Binding IsClearDialogOpen, Mode=TwoWay}"
+                         IsDismissible="True"
+                         Title="{l:MobileLangResource DiagnosticsClearDialogTitle}"
+                         Message="{l:MobileLangResource DiagnosticsClearDialogBody}">
+                <arcm:Button Content="{l:MobileLangResource Cancel}" Variant="Plain" />
+                <arcm:Button Name="DiagClearConfirmButton"
+                             Content="{l:MobileLangResource DiagnosticsClearLogs}"
+                             Variant="Filled"
+                             arcm:Dialog.IsDestructive="True"
+                             Command="{Binding ConfirmClearLogsCommand}" />
+            </arcm:Dialog>
+
+            <!-- Native Arc.Mobile toast feedback -->
+            <arcm:Toast Name="DiagToast" />
+        </Panel>
+    </arcm:Page.Overlay>
+</arcm:Page>

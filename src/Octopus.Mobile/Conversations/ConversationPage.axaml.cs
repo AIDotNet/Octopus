@@ -19,6 +19,7 @@ public partial class ConversationPage : Page, IClosablePage
 
     private readonly ConversationViewModel _viewModel;
     private bool _pinnedToBottom = true;
+    private bool _scrollQueued;
     private Point _holdOrigin;
     private bool _holding;
 
@@ -158,10 +159,16 @@ public partial class ConversationPage : Page, IClosablePage
         }
     }
 
-    private void PostScrollToBottom() => Dispatcher.UIThread.Post(() =>
+    private void PostScrollToBottom()
     {
-        if (_pinnedToBottom) TimelineScroll.ScrollToEnd();
-    }, DispatcherPriority.Background);
+        if (_scrollQueued) return;
+        _scrollQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _scrollQueued = false;
+            if (_pinnedToBottom) TimelineScroll.ScrollToEnd();
+        }, DispatcherPriority.Background);
+    }
 
     // Hold to talk: the bar captures the finger, so it keeps getting moves while the overlay is drawn over everything.
     private void OnHoldPressed(object? sender, PointerPressedEventArgs e)

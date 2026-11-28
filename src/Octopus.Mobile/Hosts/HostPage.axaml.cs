@@ -22,12 +22,15 @@ public partial class HostPage : Page, IClosablePage
         viewModel.NewSession.BaseBranches.CollectionChanged += OnBaseBranchesChanged;
         viewModel.NewSession.AvailableExistingBranches.CollectionChanged += OnExistingBranchesChanged;
         viewModel.NewSession.CurrentTaskOptions.CollectionChanged += OnTaskOptionsChanged;
+        viewModel.GroupEditor.MoveSheetChanged += FillMoveGroupActions;
+        viewModel.Host.ProjectGroups.CollectionChanged += OnProjectGroupsChanged;
         // Holding a session row opens its menu (design/ui/移动端功能扩展方案.html, M-C ①).
         _ = new LongPress(this, OnLongPress);
         FillModels();
         FillBaseBranches();
         FillExistingBranches();
         FillTaskOptions();
+        FillMoveGroupActions();
     }
 
     public void OnClosed()
@@ -36,6 +39,8 @@ public partial class HostPage : Page, IClosablePage
         _viewModel.NewSession.BaseBranches.CollectionChanged -= OnBaseBranchesChanged;
         _viewModel.NewSession.AvailableExistingBranches.CollectionChanged -= OnExistingBranchesChanged;
         _viewModel.NewSession.CurrentTaskOptions.CollectionChanged -= OnTaskOptionsChanged;
+        _viewModel.GroupEditor.MoveSheetChanged -= FillMoveGroupActions;
+        _viewModel.Host.ProjectGroups.CollectionChanged -= OnProjectGroupsChanged;
         _viewModel.Dispose();
     }
 
@@ -55,6 +60,42 @@ public partial class HostPage : Page, IClosablePage
     private void OnBaseBranchesChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillBaseBranches();
     private void OnExistingBranchesChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillExistingBranches();
     private void OnTaskOptionsChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillTaskOptions();
+    private void OnProjectGroupsChanged(object? sender, NotifyCollectionChangedEventArgs e) => FillMoveGroupActions();
+
+    private void FillMoveGroupActions()
+    {
+        MoveProjectGroupSheet.Actions.Clear();
+        var editor = _viewModel.GroupEditor;
+        var target = editor.MoveProjectTarget;
+        if (target is null) return;
+
+        foreach (var group in _viewModel.Host.ProjectGroups)
+        {
+            var isCurrent = string.Equals(target.GroupId, group.Id, StringComparison.Ordinal);
+            MoveProjectGroupSheet.Actions.Add(new ActionSheetItem
+            {
+                Content = isCurrent ? $"✓ {group.Name}" : group.Name,
+                Command = editor.MoveProjectToGroupCommand,
+                CommandParameter = group.Id,
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(target.GroupId))
+        {
+            MoveProjectGroupSheet.Actions.Add(new ActionSheetItem
+            {
+                Content = MobileLangResources.Get(MobileLangResourceKind.ProjectGroupMoveRemove),
+                Command = editor.MoveProjectToGroupCommand,
+                CommandParameter = null,
+            });
+        }
+
+        MoveProjectGroupSheet.Actions.Add(new ActionSheetItem
+        {
+            Content = MobileLangResources.Get(MobileLangResourceKind.ProjectGroupMoveNew),
+            Command = editor.MoveProjectToNewGroupCommand,
+        });
+    }
 
     private void FillModels()
     {

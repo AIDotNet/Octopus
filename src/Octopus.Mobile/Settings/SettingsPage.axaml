@@ -1,0 +1,251 @@
+<arcm:Page xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:arc="https://github.com/AIDotNet/TKCode.Arc"
+           xmlns:arcm="https://github.com/AIDotNet/TKCode.Arc.Mobile"
+           xmlns:l="using:Octopus.Mobile.Localization"
+           xmlns:voice="using:Octopus.Mobile.Voice"
+           xmlns:vm="using:Octopus.Mobile.Settings"
+           x:Class="Octopus.Mobile.Settings.SettingsPage"
+           x:DataType="vm:SettingsViewModel"
+           IsScrollable="True">
+    <arcm:Page.Header>
+        <arcm:Navbar Title="{l:MobileLangResource SettingsTitle}"
+                     ShowBack="True"
+                     BackText="{l:MobileLangResource TabMe}"
+                     BackCommand="{Binding BackCommand}" />
+    </arcm:Page.Header>
+
+    <StackPanel Margin="0,8,0,32" Spacing="16">
+        <!-- Live Settings Search with clear button -->
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="16,0">
+            <arcm:Searchbar Name="SettingsSearchField"
+                            Grid.Column="0"
+                            Text="{Binding SearchQuery, Mode=TwoWay}"
+                            PlaceholderText="{l:MobileLangResource SettingsSearchPlaceholder}" />
+            <arcm:IconButton Name="SettingsClearSearchBtn"
+                             Grid.Column="1"
+                             Icon="{x:Static arc:ArcIcons.X}"
+                             Command="{Binding ClearSearchCommand}"
+                             IsVisible="{Binding HasSearchQuery}"
+                             AutomationProperties.Name="{l:MobileLangResource SettingsClearSearch}" />
+        </Grid>
+
+        <!-- Empty search results state -->
+        <StackPanel Name="SettingsSearchEmptyState"
+                    Margin="24,24"
+                    Spacing="12"
+                    IsVisible="{Binding HasNoSearchResults}">
+            <TextBlock Classes="muted"
+                       Text="{l:MobileLangResource SettingsSearchEmpty}"
+                       TextAlignment="Center" />
+            <arcm:Button Name="SettingsResetSearchButton"
+                         Variant="Tinted"
+                         HorizontalAlignment="Center"
+                         Content="{l:MobileLangResource SettingsClearSearch}"
+                         Command="{Binding ClearSearchCommand}" />
+        </StackPanel>
+
+        <!-- Action status feedback banner (probe result or reset confirmation; always visible across search filters) -->
+        <Border Name="SettingsStatusBanner" Classes="alertCard" Margin="16,0" IsVisible="{Binding HasProbeStatus}">
+            <TextBlock Text="{Binding ProbeStatusMessage}"
+                       FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                       Foreground="{arc:ArcDesignTokenResource Accent}" />
+        </Border>
+
+        <!-- 1. Appearance & Display -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowAppearanceSection}">
+            <TextBlock Classes="sectionHeader" Margin="20,0" Text="{l:MobileLangResource SettingsSectionAppearance}" />
+            <Border Classes="surfaceCard" Margin="16,0" Padding="14,12">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{l:MobileLangResource SettingsTheme}"
+                               FontSize="{arc:ArcDesignTokenResource TypeSM}"
+                               FontWeight="SemiBold" />
+                    <arcm:Segmented Name="ThemeSegmented"
+                                    ItemsSource="{Binding ThemeLabels}"
+                                    SelectedIndex="{Binding SelectedThemeIndex, Mode=TwoWay}" />
+                </StackPanel>
+            </Border>
+            <arcm:ListGroup>
+                <arcm:ListItem Name="CompactDensityRow"
+                               Content="{l:MobileLangResource SettingsCompactDensity}"
+                               Subtitle="{l:MobileLangResource SettingsCompactDensityHint}">
+                    <arcm:ListItem.Trailing>
+                        <arcm:Switch Name="CompactDensitySwitch" IsChecked="{Binding CompactDensity, Mode=TwoWay}" />
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+            </arcm:ListGroup>
+        </StackPanel>
+
+        <!-- 2. Background & Anti-Freeze Protection -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowPerformanceSection}">
+            <arcm:ListGroup Header="{l:MobileLangResource SettingsSectionPerformance}">
+                <arcm:ListItem Name="SuspendStreamRow"
+                               Content="{l:MobileLangResource SettingsSuspendStream}"
+                               Subtitle="{l:MobileLangResource SettingsSuspendStreamHint}">
+                    <arcm:ListItem.Trailing>
+                        <arcm:Switch Name="SuspendStreamSwitch" IsChecked="{Binding SuspendStreamInBackground, Mode=TwoWay}" />
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+                <arcm:ListItem Name="SnapshotResyncRow"
+                               Content="{l:MobileLangResource SettingsSnapshotResync}"
+                               Subtitle="{l:MobileLangResource SettingsSnapshotResyncHint}">
+                    <arcm:ListItem.Trailing>
+                        <arcm:Switch Name="SnapshotResyncSwitch" IsChecked="{Binding SnapshotResyncOnResume, Mode=TwoWay}" />
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+                <arcm:ListItem Name="ProbeHostsRow"
+                               Icon="{x:Static arc:ArcIcons.RefreshCw}"
+                               Content="{l:MobileLangResource SettingsProbeNow}"
+                               Subtitle="{l:MobileLangResource SettingsProbeNowHint}"
+                               Command="{Binding ProbeHostsNowCommand}">
+                    <arcm:ListItem.Trailing>
+                        <arc:ArcSpinner IsVisible="{Binding IsProbing}" VerticalAlignment="Center" />
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+            </arcm:ListGroup>
+        </StackPanel>
+
+        <!-- 3. Terminal & Voice Input -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowTerminalSection}">
+            <arcm:ListGroup Header="{l:MobileLangResource SettingsSectionTerminal}">
+                <arcm:ListItem Name="SettingsVoiceRow"
+                               Icon="{x:Static voice:VoiceGlyphs.Microphone}"
+                               Content="{l:MobileLangResource MeVoiceInput}"
+                               Subtitle="{Binding VoiceEngineName}"
+                               ShowChevron="True"
+                               Command="{Binding OpenVoiceSettingsCommand}"
+                               IsVisible="{Binding IsVoiceSupported}" />
+                <arcm:ListItem Name="TerminalFontSizeRow"
+                               Icon="{x:Static arc:ArcIcons.Terminal}"
+                               Content="{l:MobileLangResource SettingsTerminalFontSize}"
+                               Subtitle="{Binding TerminalFontSizeText}">
+                    <arcm:ListItem.Trailing>
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Button Name="SmallerFontBtn"
+                                    Classes="chipBtn"
+                                    IsEnabled="{Binding CanSmallerFont}"
+                                    Command="{Binding SmallerFontCommand}">
+                                <TextBlock Text="A-" />
+                            </Button>
+                            <Button Name="LargerFontBtn"
+                                    Classes="chipBtn"
+                                    IsEnabled="{Binding CanLargerFont}"
+                                    Command="{Binding LargerFontCommand}">
+                                <TextBlock Text="A+" />
+                            </Button>
+                        </StackPanel>
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+                <arcm:ListItem Name="PasteConfirmRow"
+                               Content="{l:MobileLangResource SettingsTerminalPasteConfirm}"
+                               Subtitle="{l:MobileLangResource SettingsTerminalPasteConfirmHint}">
+                    <arcm:ListItem.Trailing>
+                        <arcm:Switch Name="PasteConfirmSwitch" IsChecked="{Binding TerminalPasteConfirm, Mode=TwoWay}" />
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+            </arcm:ListGroup>
+            <!-- Live terminal font size preview -->
+            <Border Classes="terminalFontPreview" Margin="16,0">
+                <TextBlock Name="TerminalFontPreviewLabel"
+                           FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                           FontSize="{Binding TerminalFontSize}"
+                           Text="{Binding TerminalFontPreviewText}"
+                           TextTrimming="CharacterEllipsis" />
+            </Border>
+        </StackPanel>
+
+        <!-- 4. Account, Server & Paired Hosts -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowAccountSection}">
+            <arcm:ListGroup Header="{l:MobileLangResource SettingsSectionDevices}">
+                <arcm:ListItem Icon="{x:Static arc:ArcIcons.Monitor}"
+                               Content="{Binding OnlineHostsSummary}"
+                               Subtitle="{Binding ServerHostDisplay}">
+                    <arcm:ListItem.Trailing>
+                        <Border Classes="pill" IsVisible="{Binding IsLocalOnly}">
+                            <TextBlock Text="{l:MobileLangResource SettingsLocalOnlyBadge}" />
+                        </Border>
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+                <arcm:ListItem Name="SettingsAddHostRow"
+                               Icon="{x:Static arc:ArcIcons.Plus}"
+                               Content="{l:MobileLangResource AddHost}"
+                               Subtitle="{l:MobileLangResource UseLocalHint}"
+                               ShowChevron="True"
+                               Command="{Binding OpenAddHostCommand}" />
+                <arcm:ListItem Name="SettingsCustomServerRow"
+                               Icon="{x:Static arc:ArcIcons.Server}"
+                               Content="{l:MobileLangResource MeSwitchCustom}"
+                               Subtitle="{l:MobileLangResource MeSwitchCustomHint}"
+                               ShowChevron="True"
+                               Command="{Binding OpenCustomServerCommand}" />
+                <arcm:ListItem Name="SettingsManageWebRow"
+                               Icon="{x:Static arc:ArcIcons.ExternalLink}"
+                               Content="{l:MobileLangResource MeManageWeb}"
+                               Subtitle="{Binding ServerHostDisplay}"
+                               ShowChevron="True"
+                               Command="{Binding OpenAccountWebCommand}"
+                               IsVisible="{Binding HasAccountWeb}" />
+            </arcm:ListGroup>
+
+            <Panel Margin="16,0">
+                <arcm:Button Variant="Tinted"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             Foreground="{arc:ArcDesignTokenResource Danger}"
+                             Content="{l:MobileLangResource SignOut}"
+                             Command="{Binding SignOutCommand}"
+                             IsVisible="{Binding IsSignedIn}" />
+                <arcm:Button Variant="Filled"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             Content="{l:MobileLangResource SignInStart}"
+                             Command="{Binding SignInCommand}"
+                             IsVisible="{Binding IsSignedOut}" />
+            </Panel>
+        </StackPanel>
+
+        <!-- 5. Updates, Diagnostics, Reset & About -->
+        <StackPanel Spacing="10" IsVisible="{Binding ShowAboutSection}">
+            <arcm:ListGroup Header="{l:MobileLangResource MeSectionAbout}">
+                <arcm:ListItem Name="SettingsDiagnosticsRow"
+                               Icon="{x:Static arc:ArcIcons.FileText}"
+                               Content="{l:MobileLangResource DiagnosticsTitle}"
+                               Subtitle="{l:MobileLangResource DiagnosticsEntrySubtitle}"
+                               ShowChevron="True"
+                               Command="{Binding OpenDiagnosticsCommand}">
+                    <arcm:ListItem.Trailing>
+                        <arc:Badge Size="Small"
+                                   Tone="{Binding DiagnosticsBadgeTone}"
+                                   Content="{Binding DiagnosticsBadgeText}" />
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+                <arcm:ListItem Icon="{x:Static arc:ArcIcons.Info}"
+                               Content="{l:MobileLangResource SettingsVersionTitle}"
+                               Subtitle="{Binding AppVersionText}" />
+                <arcm:ListItem Icon="{x:Static arc:ArcIcons.RefreshCw}"
+                               Content="{l:MobileLangResource UpdateRowTitle}"
+                               Subtitle="{Binding Updater.StatusText}"
+                               ShowChevron="{Binding !Updater.IsBusy}"
+                               Command="{Binding Updater.ActCommand}"
+                               IsVisible="{Binding Updater.IsSupported}">
+                    <arcm:ListItem.Trailing>
+                        <Panel>
+                            <arc:ArcSpinner IsVisible="{Binding Updater.IsBusy}" VerticalAlignment="Center" />
+                            <Border Classes="pill action" IsVisible="{Binding !!Updater.ActionText}">
+                                <TextBlock Text="{Binding Updater.ActionText}" />
+                            </Border>
+                        </Panel>
+                    </arcm:ListItem.Trailing>
+                </arcm:ListItem>
+            </arcm:ListGroup>
+            <Panel Margin="16,0">
+                <arcm:Button Name="ResetDefaultsButton"
+                             Variant="Tinted"
+                             HorizontalAlignment="Stretch"
+                             HorizontalContentAlignment="Center"
+                             Content="{l:MobileLangResource SettingsResetDefaults}"
+                             Command="{Binding ResetDefaultsCommand}" />
+            </Panel>
+        </StackPanel>
+    </StackPanel>
+</arcm:Page>

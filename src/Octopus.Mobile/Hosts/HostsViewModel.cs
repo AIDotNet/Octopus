@@ -7,10 +7,12 @@ using CommunityToolkit.Mvvm.Input;
 using Octopus.Mobile.Account;
 using Octopus.Mobile.Bots;
 using Octopus.Mobile.Common;
+using Octopus.Mobile.Diagnostics;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Updates;
 using Octopus.Mobile.Workspace;
+using TKCode.Arc;
 
 namespace Octopus.Mobile.Hosts;
 
@@ -47,6 +49,10 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         MobileHost.Voice.Changed += OnVoiceChanged;
         workspace.Hosts.CollectionChanged += OnHostsChanged;
         workspace.OtherDevices.CollectionChanged += OnOtherDevicesChanged;
+        workspace.ResumingChanged += OnResumingChanged;
+        MobileDiagnostics.PendingNoticeChanged += OnDiagnosticsNoticeChanged;
+        IsResuming = workspace.IsResuming;
+        SyncCrashNotice(MobileDiagnostics.PendingNotice);
         RebuildAll();
         RebuildOtherDevices();
     }
@@ -111,6 +117,20 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial bool IsAccountOpen { get; set; }
     /// <summary>The sheet of a phone used without an account ("Sign in", "Leave local network mode") is showing.</summary>
     [ObservableProperty] public partial bool IsLocalOpen { get; set; }
+    /// <summary>True while background-to-foreground connection probe and snapshot recovery runs asynchronously.</summary>
+    [ObservableProperty] public partial bool IsResuming { get; private set; }
+    [ObservableProperty] public partial bool ShowCrashNotice { get; set; }
+    [ObservableProperty] public partial AlertTone CrashNoticeTone { get; private set; } = AlertTone.Danger;
+    [ObservableProperty] public partial string CrashNoticeTitle { get; private set; } = "";
+    [ObservableProperty] public partial string CrashNoticeSubtitle { get; private set; } = "";
+
+    partial void OnShowCrashNoticeChanged(bool value)
+    {
+        if (!value && MobileDiagnostics.PendingNotice is not null)
+        {
+            MobileDiagnostics.DismissPendingNotice();
+        }
+    }
 
     public bool IsActivityAllClear => HasHosts && !HasAttention && !HasWorking;
     public bool HasHosts => !IsEmpty;
@@ -219,6 +239,15 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void OpenVoiceSettings() => _navigator.ShowVoiceSettings();
 
+    [RelayCommand]
+    private void OpenSettings() => _navigator.ShowSettings();
+
+    [RelayCommand]
+    private void OpenDiagnostics() => _navigator.ShowDiagnostics();
+
+    [RelayCommand]
+    private void DismissCrashNotice() => MobileDiagnostics.DismissPendingNotice();
+
     private void OnVoiceChanged() => Avalonia.Threading.Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(VoiceEngineName)));
 
     [RelayCommand]
@@ -249,6 +278,8 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
     {
         _workspace.Hosts.CollectionChanged -= OnHostsChanged;
         _workspace.OtherDevices.CollectionChanged -= OnOtherDevicesChanged;
+        _workspace.ResumingChanged -= OnResumingChanged;
+        MobileDiagnostics.PendingNoticeChanged -= OnDiagnosticsNoticeChanged;
         Updater.PropertyChanged -= OnUpdaterChanged;
         Bots.SummaryChanged -= OnBotsSummaryChanged;
         MobileHost.Voice.Changed -= OnVoiceChanged;
@@ -256,6 +287,32 @@ public sealed partial class HostsViewModel : ObservableObject, IDisposable
         UnwatchAll();
         ClearRows();
     }
+
+    private void OnDiagnosticsNoticeChanged(PendingCrashNotice? notice)
+    {
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) SyncCrashNotice(notice);
+        else Avalonia.Threading.Dispatcher.UIThread.Post(() => SyncCrashNotice(notice));
+    }
+
+    private void SyncCrashNotice(PendingCrashNotice? notice)
+    {
+        if (notice is null)
+        {
+            ShowCrashNotice = false;
+            CrashNoticeTitle = "";
+            CrashNoticeSubtitle = "";
+            return;
+        }
+        ShowCrashNotice = true;
+        CrashNoticeTone = notice.IsRecovered ? AlertTone.Warning : AlertTone.Danger;
+        CrashNoticeTitle = MobileLangResources.Get(
+            notice.IsRecovered
+                ? MobileLangResourceKind.DiagnosticsBannerRecoveredTitle
+                : MobileLangResourceKind.DiagnosticsBannerCrashTitle);
+        CrashNoticeSubtitle = $"{notice.ReportId} · {notice.Summary}";
+    }
+
+    private void OnResumingChanged(bool resuming) => IsResuming = resuming;
 
     private void OnBotsSummaryChanged() => OnPropertyChanged(nameof(BotsTabLabel));
 

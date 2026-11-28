@@ -1,11 +1,15 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Octopus.Mobile.Common;
 using Octopus.Mobile.Demo;
+using Octopus.Mobile.Diagnostics;
 using Octopus.Mobile.Shell;
 using Octopus.Mobile.Workspace;
 using TKCode.Arc;
+using TKCode.Arc.DesignTokens;
 using TKCode.Arc.Fonts;
 using TKCode.Arc.Localization;
 using TKCode.Arc.Mobile;
@@ -73,6 +77,7 @@ public static class MobileHost
     public static void NotifyBackgrounded()
     {
         if (Interlocked.Exchange(ref s_backgrounded, 1) != 0) return;
+        MobileDiagnostics.NoteBackgrounded();
         Workspace.OnAppBackgrounded();
         Backgrounded?.Invoke();
     }
@@ -81,6 +86,7 @@ public static class MobileHost
     public static void NotifyForegrounded()
     {
         if (Interlocked.Exchange(ref s_backgrounded, 0) == 0) return;
+        MobileDiagnostics.NoteForegrounded();
         Workspace.OnAppForegrounded();
         Foregrounded?.Invoke();
     }
@@ -93,9 +99,10 @@ public static class MobileHost
     public static void HandleDeepLink(Uri uri)
     {
         if (!string.Equals(uri.Scheme, "octopus", StringComparison.OrdinalIgnoreCase)) return;
+        MobileDiagnostics.Info("LINK", $"Deep link received: {uri}");
         if (string.Equals(uri.Host, "auth-done", StringComparison.OrdinalIgnoreCase))
         {
-            if (Account.IsSignedIn) _ = Workspace.RefreshAsync();
+            if (Account.IsSignedIn) Workspace.RefreshAsync().SafeFireAndForget("AUTH");
             return;
         }
         if (string.Equals(uri.Host, "pair", StringComparison.OrdinalIgnoreCase)
@@ -139,6 +146,7 @@ public class MobileApp : Application
     {
         // Created through its class, not loaded by URI: a trimmed (NativeAOT) build does not keep the URI lookup.
         Styles.Add(new MobileStyles());
+        Common.MobilePreferences.Current.ApplyTheme();
         switch (ApplicationLifetime)
         {
             case ISingleViewApplicationLifetime single:
@@ -168,7 +176,7 @@ public class MobileApp : Application
             };
         }
         // Once per start and quietly: a newer version shows in the "Me" tab; nothing downloads without a tap.
-        _ = MobileHost.Updater.CheckQuietlyAsync();
+        MobileHost.Updater.CheckQuietlyAsync().SafeFireAndForget("UPDATE");
         base.OnFrameworkInitializationCompleted();
     }
 
@@ -178,13 +186,45 @@ public class MobileApp : Application
 /// <summary>How every head (a phone, the desktop preview, a test host) sets up Avalonia and Arc for the phone app.</summary>
 public static class MobileSetup
 {
-    /// <summary>Fonts, Arc's touch controls and the app's own text. The theme follows the system.</summary>
+    // Selective registration of mobile-friendly TKCode.Arc controls (Alert, Badge, EmptyState, CopyButton) via .NET 10
+    // UnsafeAccessorType keeps R8 / iOS NativeAOT trimming able to drop the other ~174 unused Arc controls.
+    [UnsafeAccessor(UnsafeAccessorKind.StaticMethod, Name = "AlertTheme")]
+    private static extern ArcThemeAsset CreateAlertThemeAsset(
+        [UnsafeAccessorType("TKCode.Arc.Generated.TKCodeArc.ArcGeneratedThemeAssets, TKCode.Arc")] object? target);
+
+    [UnsafeAccessor(UnsafeAccessorKind.StaticMethod, Name = "BadgeTheme")]
+    private static extern ArcThemeAsset CreateBadgeThemeAsset(
+        [UnsafeAccessorType("TKCode.Arc.Generated.TKCodeArc.ArcGeneratedThemeAssets, TKCode.Arc")] object? target);
+
+    [UnsafeAccessor(UnsafeAccessorKind.StaticMethod, Name = "EmptyStateTheme")]
+    private static extern ArcThemeAsset CreateEmptyStateThemeAsset(
+        [UnsafeAccessorType("TKCode.Arc.Generated.TKCodeArc.ArcGeneratedThemeAssets, TKCode.Arc")] object? target);
+
+    [UnsafeAccessor(UnsafeAccessorKind.StaticMethod, Name = "CopyButtonTheme")]
+    private static extern ArcThemeAsset CreateCopyButtonThemeAsset(
+        [UnsafeAccessorType("TKCode.Arc.Generated.TKCodeArc.ArcGeneratedThemeAssets, TKCode.Arc")] object? target);
+
+    /// <summary>Fonts, Arc's touch controls, selectively registered Arc components, and the app's own text.</summary>
     public static AppBuilder UseOctopusMobile(this AppBuilder builder) =>
         builder.WithInterFont()
                .WithArcFonts()
                .UseArc(arc => arc
                    .UseLanguages(InitialLanguage, [LanguageTags.ZhCN, LanguageTags.EnUS])
                    .UseArcMobile()
+                   .UsePackage("TKCode.Arc.Mobile.SharedControls", static p => p
+                       .AddTokens([
+                           AlertTokens.Descriptor,
+                           BadgeTokens.Descriptor,
+                           EmptyStateTokens.Descriptor,
+                           CopyButtonTokens.Descriptor,
+                           ButtonTokens.Descriptor,
+                       ])
+                       .AddThemes([
+                           CreateAlertThemeAsset(null),
+                           CreateBadgeThemeAsset(null),
+                           CreateEmptyStateThemeAsset(null),
+                           CreateCopyButtonThemeAsset(null),
+                       ]))
                    // The app's own package: its text (Localization/).
                    .UsePackage("Octopus.Mobile", static p => TKCode.Arc.Generated.OctopusMobile.ArcGeneratedAssets.AddTo(p)));
 

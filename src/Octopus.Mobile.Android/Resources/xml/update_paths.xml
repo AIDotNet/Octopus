@@ -3,4 +3,5 @@
      the system installer (AndroidUpdatePlatform). -->
 <paths>
     <cache-path name="updates" path="updates/" />
+    <cache-path name="diagnostics" path="diagnostics/" />
 </paths>

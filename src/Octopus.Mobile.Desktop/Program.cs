@@ -10,9 +10,20 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // "--demo": made-up computers and sessions, no network (what the app showed before it could talk to a host).
-        if (!args.Contains("--demo")) UseRealHosts();
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        var dataDirectory = ResolveDataDirectory();
+        DesktopDiagnosticsPlatform.Install(dataDirectory);
+
+        try
+        {
+            // "--demo": made-up computers and sessions, no network (what the app showed before it could talk to a host).
+            if (!args.Contains("--demo")) UseRealHosts(dataDirectory);
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.MobileDiagnostics.RecordCrash("Desktop.Main", ex, isTerminating: true);
+            throw;
+        }
     }
 
     // Also used by the XAML previewer of your IDE. UseOctopusMobile() (MobileApp.cs) sets up the fonts and Arc.
@@ -20,7 +31,13 @@ internal static class Program
         AppBuilder.Configure<MobileApp>()
                   .UsePlatformDetect()
                   .UseOctopusMobile()
+                  .AfterSetup(_ => Diagnostics.MobileDiagnostics.AttachDispatcher())
                   .LogToTrace();
+
+    private static string ResolveDataDirectory() =>
+        Environment.GetEnvironmentVariable("OCTOPUS_MOBILE_DATA_DIR") is { Length: > 0 } given
+            ? given
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Octopus", "mobile-preview");
 
     /// <summary>
     /// The preview as a phone of its own: its key, sign-in and paired hosts live in a folder of this computer
@@ -28,11 +45,8 @@ internal static class Program
     /// OCTOPUS_RELAY_URL is the official service "Sign in" goes to; it wins over the address the build was given
     /// (OctopusServiceUrl in Directory.Build.props). With neither, "Sign in" asks for an address.
     /// </summary>
-    private static void UseRealHosts()
+    private static void UseRealHosts(string directory)
     {
-        var directory = Environment.GetEnvironmentVariable("OCTOPUS_MOBILE_DATA_DIR") is { Length: > 0 } given
-            ? given
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Octopus", "mobile-preview");
         var remote = new MobileRemote(new FileMobileStore(directory), $"{Environment.MachineName} (phone preview)", Environment.GetEnvironmentVariable("OCTOPUS_RELAY_URL") is { Length: > 0 } official ? official : null);
         remote.Load();
         MobileHost.Workspace = remote.Workspace;

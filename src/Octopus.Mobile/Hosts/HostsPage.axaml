@@ -12,6 +12,7 @@
            IsScrollable="True">
     <arcm:Page.Resources>
         <StreamGeometry x:Key="GroupUsersGlyph">M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75</StreamGeometry>
+        <StreamGeometry x:Key="SettingsGlyph">M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z</StreamGeometry>
         <!-- One computer row: how it is reached, and a pill with what needs the person there (a lock: its access
              password gets in). Offline it is faded and does nothing. -->
         <DataTemplate x:Key="HostRow" x:DataType="vm:HostRowViewModel">
@@ -147,19 +148,71 @@
                                      Command="{Binding SelectAccountTabCommand}"
                                      IsVisible="{Binding IsSignedOut}" />
                     </Panel>
-                    <!-- Connection badge on Me tab -->
+                    <!-- Connection badge + Settings entry button on Me tab -->
                     <Border Classes="pill"
                             Classes.success="{Binding IsSignedIn}"
                             IsVisible="{Binding IsAccountTab}"
-                            Margin="0,0,4,0">
+                            Margin="0,0,2,0">
                         <TextBlock Text="{Binding AccountStatusBadge}" />
                     </Border>
+                    <arcm:IconButton Name="NavSettingsButton"
+                                     Icon="{StaticResource SettingsGlyph}"
+                                     Command="{Binding OpenSettingsCommand}"
+                                     AutomationProperties.Name="{l:MobileLangResource SettingsTitle}"
+                                     IsVisible="{Binding IsAccountTab}" />
                 </StackPanel>
             </arcm:Navbar.Trailing>
         </arcm:Navbar>
     </arcm:Page.Header>
 
     <StackPanel Margin="0,4,0,24" Spacing="14">
+        <!-- Non-blocking foreground resume sync capsule -->
+        <Border Name="ResumeSyncPill"
+                Classes="resumeSyncPill"
+                Margin="16,4,16,0"
+                IsVisible="{Binding IsResuming}">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+                <TextBlock Text="{l:MobileLangResource ResumeSyncing}"
+                           FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                           FontWeight="SemiBold"
+                           Foreground="{arc:ArcDesignTokenResource Accent}" />
+            </StackPanel>
+        </Border>
+
+        <!-- Post-crash or recovered-exception alert (shown only when user opted into diagnostics collection) -->
+        <arc:Alert Name="CrashNoticeBanner"
+                   Margin="16,4,16,0"
+                   Tone="{Binding CrashNoticeTone}"
+                   Title="{Binding CrashNoticeTitle}"
+                   IsOpen="{Binding ShowCrashNotice, Mode=TwoWay}"
+                   IsDismissible="True">
+            <StackPanel Spacing="10">
+                <TextBlock Name="CrashNoticeSubtitleText"
+                           Classes="secondary"
+                           Text="{Binding CrashNoticeSubtitle}"
+                           MaxLines="2"
+                           TextTrimming="CharacterEllipsis"
+                           TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <arcm:Button Name="CrashNoticeIgnoreButton"
+                                 Grid.Column="0"
+                                 Variant="Tinted"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{l:MobileLangResource DiagnosticsBannerIgnore}"
+                                 Command="{Binding DismissCrashNoticeCommand}" />
+                    <arcm:Button Name="CrashNoticeSendButton"
+                                 Grid.Column="1"
+                                 Variant="Filled"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center"
+                                 Content="{l:MobileLangResource DiagnosticsBannerSend}"
+                                 Command="{Binding OpenDiagnosticsCommand}" />
+                </Grid>
+            </StackPanel>
+        </arc:Alert>
+
         <!-- Update reminder banner shown on Activity & Computers tabs when an update is available, downloading, ready or failed. -->
         <Border Name="UpdateReminderBanner"
                 Classes="updateBanner"
@@ -252,9 +305,12 @@
             </StackPanel>
         </Border>
 
-        <Panel>
+        <!-- Lazy single-tab visual host: only the active root tab is mounted in the visual tree (prevents background wakeup layout storms). -->
+        <ContentControl Name="ActiveTabSlot" />
+
+        <Panel Name="TabsStagingHost" IsVisible="False">
         <!-- ==================== Tab 0: Activity (动态收件箱) ==================== -->
-        <StackPanel Name="ActivityTabContent" Spacing="18" IsVisible="{Binding IsActivityTab}">
+        <StackPanel Name="ActivityTabContent" Spacing="18">
             <!-- Cloud relay upgrade banner when in local-only mode -->
             <Border Name="LocalUpgradeBanner"
                     Classes="alertCard"
@@ -330,7 +386,7 @@
         </StackPanel>
 
         <!-- ==================== Tab 1: Bots (Scheme A: 跨电脑折叠会话卡) ==================== -->
-        <Panel IsVisible="{Binding IsBotsTab}">
+        <Panel Name="BotsTabHost">
         <StackPanel Name="BotsTabContent" Spacing="12" DataContext="{Binding Bots}" x:DataType="bots:BotsTabViewModel">
             <!-- Inline error banner -->
             <Border Margin="16,0" Padding="12,8" CornerRadius="10"
@@ -653,7 +709,7 @@
         </Panel>
 
         <!-- ==================== Tab 2: Computers (电脑分组) ==================== -->
-        <StackPanel Name="HostsTabContent" Spacing="18" IsVisible="{Binding IsHostsTab}">
+        <StackPanel Name="HostsTabContent" Spacing="18">
             <arcm:ListGroup Name="OnlineGroup"
                             Header="{l:MobileLangResource HostsOnline}"
                             ItemsSource="{Binding Online}"
@@ -716,8 +772,8 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- ==================== Tab 2: Me (我的 / 账号中心) ==================== -->
-        <StackPanel Name="AccountTabContent" Spacing="18" IsVisible="{Binding IsAccountTab}">
+        <!-- ==================== Tab 3: Me (我的 / 账号与设置总入口) ==================== -->
+        <StackPanel Name="AccountTabContent" Spacing="18">
             <!-- Signed-in identity card -->
             <Border Name="ProfileCard"
                     Classes="surfaceCard"
@@ -765,6 +821,16 @@
                                  Command="{Binding SignInCommand}" />
                 </StackPanel>
             </Border>
+
+            <!-- Dedicated Settings Center entry inside Me tab -->
+            <arcm:ListGroup Name="MeSettingsGroup">
+                <arcm:ListItem Name="MeSettingsRow"
+                               Icon="{StaticResource SettingsGlyph}"
+                               Content="{l:MobileLangResource SettingsTitle}"
+                               Subtitle="{l:MobileLangResource SettingsEntrySubtitle}"
+                               ShowChevron="True"
+                               Command="{Binding OpenSettingsCommand}" />
+            </arcm:ListGroup>
 
             <!-- Account & connection actions -->
             <arcm:ListGroup Name="MeConnectionGroup" Header="{l:MobileLangResource MeSectionAccount}">

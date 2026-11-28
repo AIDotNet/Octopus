@@ -16,6 +16,7 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
 
     private readonly object _gate = new();
     private readonly List<ProjectMessage> _projects = [];
+    private readonly List<ProjectGroupMessage> _projectGroups = [];
     private readonly List<ItemMessage> _items = [];
     private readonly Dictionary<string, WorkspaceOptionsMessage> _workspaceOptions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FakeTerminal> _terminals = new(StringComparer.Ordinal);
@@ -160,9 +161,104 @@ internal sealed class FakeHostWorkspace : IHostWorkspace
         }
     }
 
+    public ProjectGroupMessage AddProjectGroup(string name, string? color = null, bool mergeWorkspaces = false, params ProjectMessage[] members)
+    {
+        var group = new ProjectGroupMessage
+        {
+            Id = "g" + Interlocked.Increment(ref _nextId),
+            Name = name,
+            Color = color,
+            MergeWorkspaces = mergeWorkspaces,
+        };
+        lock (_gate)
+        {
+            _projectGroups.Add(group);
+            foreach (var member in members) member.GroupId = group.Id;
+        }
+        Changed?.Invoke();
+        return group;
+    }
+
     public Task<IReadOnlyList<ProjectMessage>> ListProjectsAsync()
     {
         lock (_gate) return Task.FromResult<IReadOnlyList<ProjectMessage>>([.. _projects]);
+    }
+
+    public Task<IReadOnlyList<ProjectGroupMessage>> ListProjectGroupsAsync()
+    {
+        lock (_gate) return Task.FromResult<IReadOnlyList<ProjectGroupMessage>>([.. _projectGroups]);
+    }
+
+    public Task<ProjectGroupMessage> CreateProjectGroupAsync(CreateProjectGroupMessage request)
+    {
+        var name = request.Name.Trim();
+        if (name.Length == 0) throw new RemoteException(RemoteProtocol.InvalidParams, "Group name is required.");
+        var group = new ProjectGroupMessage
+        {
+            Id = "g" + Interlocked.Increment(ref _nextId),
+            Name = name,
+            Color = request.Color,
+            MergeWorkspaces = request.MergeWorkspaces,
+        };
+        lock (_gate)
+        {
+            _projectGroups.Add(group);
+            if (request.ProjectIds is { Count: > 0 } ids)
+            {
+                var set = ids.ToHashSet(StringComparer.Ordinal);
+                foreach (var p in _projects)
+                {
+                    if (set.Contains(p.Id)) p.GroupId = group.Id;
+                }
+            }
+        }
+        Changed?.Invoke();
+        return Task.FromResult(group);
+    }
+
+    public Task<ProjectGroupMessage> UpdateProjectGroupAsync(UpdateProjectGroupMessage request)
+    {
+        ProjectGroupMessage group;
+        lock (_gate)
+        {
+            group = _projectGroups.FirstOrDefault(g => g.Id == request.GroupId)
+                ?? throw new RemoteException(RemoteMethods.NotFound, "No such project group.");
+            if (!string.IsNullOrWhiteSpace(request.Name)) group.Name = request.Name.Trim();
+            if (request.ClearColor) group.Color = null;
+            else if (request.Color is not null) group.Color = request.Color;
+            if (request.MergeWorkspaces is { } merge) group.MergeWorkspaces = merge;
+        }
+        Changed?.Invoke();
+        return Task.FromResult(group);
+    }
+
+    public Task DeleteProjectGroupAsync(string groupId)
+    {
+        lock (_gate)
+        {
+            var removed = _projectGroups.RemoveAll(g => g.Id == groupId);
+            if (removed == 0) throw new RemoteException(RemoteMethods.NotFound, "No such project group.");
+            foreach (var p in _projects)
+            {
+                if (p.GroupId == groupId) p.GroupId = null;
+            }
+        }
+        Changed?.Invoke();
+        return Task.CompletedTask;
+    }
+
+    public Task SetProjectGroupAsync(string projectId, string? groupId)
+    {
+        lock (_gate)
+        {
+            var project = _projects.FirstOrDefault(p => p.Id == projectId)
+                ?? throw new RemoteException(RemoteMethods.NotFound, "No such project.");
+            if (!string.IsNullOrWhiteSpace(groupId) && _projectGroups.All(g => g.Id != groupId))
+                throw new RemoteException(RemoteMethods.NotFound, "No such project group.");
+            project.GroupId = string.IsNullOrWhiteSpace(groupId) ? null : groupId;
+        }
+        Changed?.Invoke();
+        return Task.CompletedTask;
     }
 
     public Task<ProjectMessage> CreateProjectAsync(CreateProjectMessage request) => Task.FromResult(AddProject(request.Name ?? Path.GetFileName(request.Path), request.Path));

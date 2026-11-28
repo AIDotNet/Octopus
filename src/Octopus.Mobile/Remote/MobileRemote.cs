@@ -27,6 +27,7 @@ public sealed class MobileRemote : IDisposable
     public MobileRemote(IMobileStore store, string deviceName, string? officialServer = null)
     {
         var vault = new MobileVault(store);
+        Common.MobilePreferences.Current.Load(store.DataDirectory);
         var settings = new MobileSettings(store.DataDirectory, officialServer ?? MobileBuild.ServiceUrl);
         _identity = new Lazy<Task<DeviceIdentity>>(() => DeviceIdentityStore.LoadOrCreateAsync(vault, Path.Combine(store.DataDirectory, "device.key")));
         _session = new RelaySession(() => settings.Server, vault, () => _identity.Value, kind: "phone");
@@ -64,8 +65,8 @@ public sealed class MobileRemote : IDisposable
             RemoteMethods.CapabilityUpload,
             RemoteMethods.CapabilityProtocolV2, RemoteMethods.CapabilityCompression, RemoteMethods.CapabilityFileStream,
             RemoteMethods.CapabilitySessionResume, RemoteMethods.CapabilityTransportQuic, RemoteMethods.CapabilityTransportP2p,
-            RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons, RemoteMethods.CapabilityBots,
-            RemoteMethods.CapabilityBotGroups],
+            RemoteMethods.CapabilityTransportMigrate, RemoteMethods.CapabilityProjectIcons, RemoteMethods.CapabilityProjectGroups,
+            RemoteMethods.CapabilityBots, RemoteMethods.CapabilityBotGroups],
         TerminalBuild = typeof(TKCode.Terminal.Core.TerminalCore).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
         Transport = TransportNegotiation.CreateDefault(),
     };

@@ -1331,4 +1331,84 @@
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+
+    <!-- Desktop-faithful Project Groups (collapsible tinted capsules, single-group banner, merge tags, color swatches) -->
+    <Style Selector="Border.groupCapsule">
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource Surface}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+    <Style Selector="Border.groupBanner">
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.groupMergeTag">
+        <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+        <Setter Property="Padding" Value="6,1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.groupMergeTag TextBlock">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.groupSwatchBtn">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="CornerRadius" Value="15" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.groupSwatchBtn.selected">
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Foreground}" />
+    </Style>
+
+    <!-- Non-blocking foreground resume sync indicator -->
+    <Style Selector="Border.resumeSyncPill">
+        <Setter Property="CornerRadius" Value="{arc:ArcDesignTokenResource RadiusPill}" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource AccentSubtle}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Accent}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!-- Live terminal monospace font / multi-line paste preview card -->
+    <Style Selector="Border.terminalFontPreview">
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="Background" Value="{arc:ArcDesignTokenResource SurfaceMuted}" />
+        <Setter Property="BorderBrush" Value="{arc:ArcDesignTokenResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!-- Live Compact Density mode applied at MobileShell root when MobilePreferences.CompactDensity is enabled -->
+    <Style Selector="shell|MobileShell.compact Border.projectCard">
+        <Setter Property="CornerRadius" Value="14" />
+    </Style>
+    <Style Selector="shell|MobileShell.compact Button.cardHeaderBtn">
+        <Setter Property="Padding" Value="10,8,4,8" />
+    </Style>
+    <Style Selector="shell|MobileShell.compact Border.groupCapsule">
+        <Setter Property="CornerRadius" Value="14" />
+    </Style>
+    <Style Selector="shell|MobileShell.compact Border.groupBanner">
+        <Setter Property="Padding" Value="10,8" />
+    </Style>
+    <Style Selector="shell|MobileShell.compact Border.surfaceCard">
+        <Setter Property="Padding" Value="12,10" />
+    </Style>
 </Styles>

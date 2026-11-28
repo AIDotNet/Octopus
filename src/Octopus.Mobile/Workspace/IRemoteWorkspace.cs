@@ -109,11 +109,40 @@ public partial interface IRemoteWorkspace
     /// <summary>Reads the computers again (the account's, when signed in) and connects to the paired ones that are there. Cheap enough to call whenever the list is looked at.</summary>
     Task RefreshAsync();
 
-    /// <summary>Called when the mobile app moves to the background so periodic network activity can quiet down.</summary>
+    /// <summary>True while background-to-foreground connection probe and snapshot recovery is in progress.</summary>
+    bool IsResuming => false;
+
+    /// <summary>Raised on the UI thread when <see cref="IsResuming"/> starts or completes.</summary>
+    event Action<bool>? ResumingChanged
+    {
+        add { }
+        remove { }
+    }
+
+    /// <summary>Called when the mobile app moves to the background so periodic network activity and live streams can quiet down.</summary>
     void OnAppBackgrounded() { }
 
     /// <summary>Called when the mobile app returns to the foreground: probes active links, evicts half-open sockets, and refreshes state.</summary>
     void OnAppForegrounded() { }
+
+    /// <summary>True when the host supports syncing and managing Desktop project groups (<c>project.groups</c>).</summary>
+    bool SupportsProjectGroups(RemoteHost host) => false;
+
+    /// <summary>Creates a new project group on the host (syncs with Desktop ProjectGroup).</summary>
+    Task<RemoteProjectGroup> CreateProjectGroupAsync(RemoteHost host, string name, string? color = null, bool mergeWorkspaces = false, IReadOnlyList<string>? projectIds = null, CancellationToken cancellationToken = default) =>
+        throw new IOException("Project groups are not supported by this host.");
+
+    /// <summary>Updates a project group's name, color, or MergeWorkspaces setting on the host.</summary>
+    Task<RemoteProjectGroup> UpdateProjectGroupAsync(RemoteProjectGroup group, string? name = null, string? color = null, bool clearColor = false, bool? mergeWorkspaces = null, CancellationToken cancellationToken = default) =>
+        throw new IOException("Project groups are not supported by this host.");
+
+    /// <summary>Dissolves a project group on the host (projects remain ungrouped, never deleted).</summary>
+    Task DeleteProjectGroupAsync(RemoteProjectGroup group, CancellationToken cancellationToken = default) =>
+        throw new IOException("Project groups are not supported by this host.");
+
+    /// <summary>Moves a project into a group, or out of any group when <paramref name="groupId"/> is null.</summary>
+    Task SetProjectGroupAsync(RemoteProject project, string? groupId, CancellationToken cancellationToken = default) =>
+        throw new IOException("Project groups are not supported by this host.");
 }
 
 public enum PairingOutcome

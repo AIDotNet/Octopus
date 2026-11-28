@@ -676,6 +676,20 @@
                       HorizontalScrollBarVisibility="Disabled"
                       BringIntoViewOnFocusChange="False">
             <StackPanel Margin="12,10,12,14" Spacing="12">
+                <!-- Non-blocking foreground resume sync indicator when returning directly into an open conversation -->
+                <Border Name="ConversationResumeSyncPill"
+                        Classes="resumeSyncPill"
+                        IsVisible="{Binding IsResuming}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <arc:ArcSpinner Width="12" Height="12" VerticalAlignment="Center" />
+                        <TextBlock Text="{l:MobileLangResource ResumeSyncing}"
+                                   FontSize="{arc:ArcDesignTokenResource TypeXS}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{arc:ArcDesignTokenResource Accent}"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Name="EarlierNotice"
                            Classes="muted"
                            FontSize="{arc:ArcDesignTokenResource TypeXS}"
@@ -855,6 +869,7 @@
                                 <!-- Rich NativeAOT-safe Markdown body (tables, inline code/links, images, code blocks) below the unified work area. -->
                                 <common:MobileMarkdownView Name="AssistantMarkdown"
                                                            Markdown="{Binding Text}"
+                                                           IsStreaming="{Binding IsStreaming}"
                                                            LinkTargetCommand="{Binding $parent[arcm:Page].((vm:ConversationViewModel)DataContext).OpenLinkCommand}"
                                                            IsVisible="{Binding HasText}" />
 

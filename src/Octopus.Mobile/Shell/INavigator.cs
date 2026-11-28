@@ -56,6 +56,10 @@ public interface INavigator
     void ShowCustomServer(string? initialLink) => ShowCustomServer();
     /// <summary>Me › Voice input: which engine turns speech into text, and its keys.</summary>
     void ShowVoiceSettings() { }
+    /// <summary>Me › Settings: unified mobile Settings Center (appearance, anti-freeze recovery, voice, terminal, account &amp; updates).</summary>
+    void ShowSettings() { }
+    /// <summary>Settings › Diagnostics &amp; Logs: inspect sanitized crash/runtime logs and share bundles with developers.</summary>
+    void ShowDiagnostics() { }
     /// <summary>Back to the first page, whatever is on top of it.</summary>
     void ShowFirst();
     /// <summary>Leaves the page on top.</summary>

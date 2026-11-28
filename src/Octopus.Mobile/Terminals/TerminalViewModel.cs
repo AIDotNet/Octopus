@@ -78,7 +78,7 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         ];
         // Closed from its own menu: the page leaves (the program on the host has ended).
         Actions = new SessionActionsViewModel(workspace, navigator, session, _ => navigator.Back());
-        FontSize = DefaultFontSize;
+        FontSize = Math.Clamp(MobilePreferences.Current.TerminalFontSize, MinFontSize, MaxFontSize);
         WorkspaceMenu = new SessionWorkspaceViewModel(session, workspace, navigator, Actions, BackCommand)
         {
             ShowFontSizeControls = true,
@@ -136,6 +136,12 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial bool IsUploading { get; private set; }
     /// <summary>How far the picture is, for the line above the input.</summary>
     [ObservableProperty] public partial string UploadText { get; private set; } = "";
+    /// <summary>True while awaiting user confirmation to paste multi-line text (controlled by <see cref="MobilePreferences.TerminalPasteConfirm"/>).</summary>
+    [ObservableProperty] public partial bool IsPasteConfirmOpen { get; set; }
+    [ObservableProperty] public partial string PasteConfirmBody { get; private set; } = "";
+    [ObservableProperty] public partial string PendingPastePreview { get; private set; } = "";
+    private string? _pendingPastePayload;
+    private bool _clearComposerAfterPaste;
 
     /// <summary>The page hands over its terminal once it exists.</summary>
     public void Attach(ITerminalSurface surface)
@@ -194,13 +200,61 @@ public sealed partial class TerminalViewModel : ObservableObject, IDisposable
         if (IsDirect) _surface?.FocusTerminal();
     }
 
-    /// <summary>Sends the composed line and Enter. An empty line still sends Enter: that confirms a default.</summary>
+    /// <summary>Sends the composed line and Enter. Multi-line content asks for confirmation when <see cref="MobilePreferences.TerminalPasteConfirm"/> is enabled.</summary>
     [RelayCommand]
     private void Send()
     {
-        _surface?.SendText(ComposeText + "\r");
-        ComposeText = "";
+        if (TrySendOrConfirmPaste(ComposeText, appendEnter: true, clearComposer: true))
+        {
+            ComposeText = "";
+        }
     }
+
+    /// <summary>
+    /// Sends <paramref name="text"/> directly unless it spans multiple lines and <see cref="MobilePreferences.TerminalPasteConfirm"/>
+    /// is enabled, in which case a confirmation dialog is opened and <c>false</c> is returned.
+    /// </summary>
+    public bool TrySendOrConfirmPaste(string text, bool appendEnter = false, bool clearComposer = false)
+    {
+        var payload = appendEnter ? text + "\r" : text;
+        if (MobilePreferences.Current.TerminalPasteConfirm && IsMultiLine(text))
+        {
+            var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
+            _pendingPastePayload = payload;
+            _clearComposerAfterPaste = clearComposer;
+            PasteConfirmBody = MobileLangResources.Format(MobileLangResourceKind.TerminalPasteConfirmBody, lines.Length);
+            PendingPastePreview = lines.Length <= 4
+                ? string.Join('\n', lines)
+                : string.Join('\n', lines.Take(4)) + "\n…";
+            IsPasteConfirmOpen = true;
+            return false;
+        }
+        _surface?.SendText(payload);
+        return true;
+    }
+
+    [RelayCommand]
+    private void ConfirmPaste()
+    {
+        var payload = _pendingPastePayload;
+        var clearComposer = _clearComposerAfterPaste;
+        _pendingPastePayload = null;
+        _clearComposerAfterPaste = false;
+        IsPasteConfirmOpen = false;
+        if (payload is not null) _surface?.SendText(payload);
+        if (clearComposer) ComposeText = "";
+    }
+
+    [RelayCommand]
+    private void CancelPaste()
+    {
+        _pendingPastePayload = null;
+        _clearComposerAfterPaste = false;
+        IsPasteConfirmOpen = false;
+    }
+
+    private static bool IsMultiLine(string text) =>
+        text.Contains('\n', StringComparison.Ordinal) || text.Contains('\r', StringComparison.Ordinal);
 
     /// <summary>
     /// Sends a picture the person chooses to the host and puts the path the host keeps it at where the session takes

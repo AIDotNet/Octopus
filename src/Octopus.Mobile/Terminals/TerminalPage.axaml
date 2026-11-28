@@ -118,6 +118,40 @@
     </Grid>
 
     <arcm:Page.Overlay>
-        <common:SessionWorkspaceOverlay Name="WorkspaceOverlay" DataContext="{Binding WorkspaceMenu}" />
+        <Panel>
+            <common:SessionWorkspaceOverlay Name="WorkspaceOverlay" DataContext="{Binding WorkspaceMenu}" />
+
+            <arcm:Dialog Name="PasteConfirmDialog"
+                         IsOpen="{Binding IsPasteConfirmOpen, Mode=TwoWay}"
+                         Title="{l:MobileLangResource TerminalPasteConfirmTitle}">
+                <StackPanel Spacing="12">
+                    <TextBlock Classes="secondary"
+                               Text="{Binding PasteConfirmBody}"
+                               TextWrapping="Wrap" />
+                    <Border Classes="terminalFontPreview">
+                        <TextBlock Text="{Binding PendingPastePreview}"
+                                   FontFamily="{arc:ArcDesignTokenResource MonoFontFamily}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
+                    </Border>
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                        <arcm:Button Name="CancelPasteButton"
+                                     Grid.Column="0"
+                                     Variant="Tinted"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource Cancel}"
+                                     Command="{Binding CancelPasteCommand}" />
+                        <arcm:Button Name="ConfirmPasteButton"
+                                     Grid.Column="1"
+                                     Variant="Filled"
+                                     HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Center"
+                                     Content="{l:MobileLangResource TerminalPasteConfirmAction}"
+                                     Command="{Binding ConfirmPasteCommand}" />
+                    </Grid>
+                </StackPanel>
+            </arcm:Dialog>
+        </Panel>
     </arcm:Page.Overlay>
 </arcm:Page>

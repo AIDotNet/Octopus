@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 using Avalonia.Threading;
 using Octopus.Core.Terminals;
+using Octopus.Mobile.Common;
+using Octopus.Mobile.Diagnostics;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Workspace;
 using Octopus.Remote.Client;
@@ -35,6 +37,12 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
     private readonly Dictionary<string, HostState> _states = new(StringComparer.Ordinal);
     private int _refreshing;
     private int _refreshAgain;
+    private volatile bool _isBackgrounded;
+    private long _backgroundedAtTick;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _dirtyHostsWhileBackgrounded = new(StringComparer.Ordinal);
+    private int _resumeInFlight;
+    private int _resumeAgain;
+    private volatile bool _isResuming;
     private bool _disposed;
 
     /// <summary>What is known of one computer beyond what the pages show.</summary>
@@ -66,32 +74,111 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
     public ObservableCollection<AccountDevice> OtherDevices { get; } = [];
     public bool MirrorsTerminals => true;
     public bool HasPairedHosts => _connections.Hosts.Peers.Count > 0;
+    public bool IsResuming => _isResuming;
+    public event Action<bool>? ResumingChanged;
+
+    public bool SupportsProjectGroups(RemoteHost host) =>
+        _connections.ClientOf(host.Id) is { SupportsProjectGroups: true };
 
     public void OnAppBackgrounded()
     {
-        // Nothing destructive on pause: connections stay alive for short app switches and are probed on resume.
+        _isBackgrounded = true;
+        Volatile.Write(ref _backgroundedAtTick, Environment.TickCount64);
+        if (MobilePreferences.Current.SuspendStreamInBackground)
+        {
+            PauseConversationsForBackground();
+        }
     }
 
     public void OnAppForegrounded()
     {
+        _isBackgrounded = false;
         if (_disposed) return;
-        _ = ResumeAfterBackgroundAsync();
+        if (Interlocked.Exchange(ref _resumeInFlight, 1) == 1)
+        {
+            Volatile.Write(ref _resumeAgain, 1);
+            return;
+        }
+        ResumeAfterBackgroundLoopAsync().SafeFireAndForget("RESUME");
     }
 
-    private async Task ResumeAfterBackgroundAsync()
+    private async Task ResumeAfterBackgroundLoopAsync()
+    {
+        SetResuming(true);
+        try
+        {
+            do
+            {
+                Volatile.Write(ref _resumeAgain, 0);
+                await ResumeAfterBackgroundOnceAsync().ConfigureAwait(false);
+            }
+            while (!_disposed && !_isBackgrounded && Volatile.Read(ref _resumeAgain) == 1);
+        }
+        finally
+        {
+            Volatile.Write(ref _resumeInFlight, 0);
+            SetResuming(false);
+        }
+    }
+
+    private async Task ResumeAfterBackgroundOnceAsync()
     {
         try
         {
-            await _connections.ProbeAndReconnectAsync().ConfigureAwait(false);
-            if (_disposed) return;
+            var backgroundedAt = Interlocked.Exchange(ref _backgroundedAtTick, 0);
+            var longBackground = backgroundedAt > 0 && Environment.TickCount64 - backgroundedAt >= 15_000;
+            DrainAndDiscardStaleAcpUpdates();
+            await _connections.ProbeAndReconnectAsync(TimeSpan.FromSeconds(2.5)).ConfigureAwait(false);
+            if (_disposed || _isBackgrounded) return;
             await RefreshAsync().ConfigureAwait(false);
-            if (_disposed) return;
-            ReattachOpenConversationsIfNeeded();
+            if (_disposed || _isBackgrounded) return;
+            await ReloadStaleConnectedHostsAsync(reloadAllConnected: longBackground).ConfigureAwait(false);
+            if (_disposed || _isBackgrounded) return;
+            ReattachOpenConversationsIfNeeded(forceBackgroundPaused: MobilePreferences.Current.SnapshotResyncOnResume);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Background resume recovery is best-effort and must never crash the app.
+            MobileDiagnostics.Error("RESUME", "Foreground recovery pass failed", ex);
         }
+    }
+
+    /// <summary>
+    /// Reloads connected hosts whose workspace/item change pushes were skipped while backgrounded (or all connected
+    /// hosts after a long background pause) so returning to foreground never displays stale project/session lists.
+    /// </summary>
+    private async Task ReloadStaleConnectedHostsAsync(bool reloadAllConnected)
+    {
+        var dirty = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var hostId in _dirtyHostsWhileBackgrounded.Keys)
+        {
+            if (_dirtyHostsWhileBackgrounded.TryRemove(hostId, out _)) dirty.Add(hostId);
+        }
+        if (!reloadAllConnected && dirty.Count == 0) return;
+
+        var targets = await UiAsync(() =>
+        {
+            var list = new List<(string HostId, RemoteHostClient Client, HostState State)>();
+            foreach (var (hostId, state) in _states)
+            {
+                if (!reloadAllConnected && !dirty.Contains(hostId)) continue;
+                if (_connections.ClientOf(hostId) is { } client)
+                {
+                    list.Add((hostId, client, state));
+                }
+            }
+            return list;
+        }).ConfigureAwait(false);
+
+        if (targets.Count == 0 || _disposed || _isBackgrounded) return;
+        await Task.WhenAll(targets.Select(t => LoadAsync(t.HostId, t.Client, t.State))).ConfigureAwait(false);
+    }
+
+    private void SetResuming(bool resuming)
+    {
+        if (_isResuming == resuming) return;
+        _isResuming = resuming;
+        Ui(() => ResumingChanged?.Invoke(resuming));
     }
 
     public async Task RefreshAsync()
@@ -321,6 +408,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 Color = message.Color,
                 Icon = message.Icon,
                 ImageKey = message.Image,
+                GroupId = message.GroupId,
                 IsGitRepository = message.IsGitRepository,
                 DefaultBranch = message.DefaultBranch,
             };
@@ -331,6 +419,94 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
             }
             return project;
         }).ConfigureAwait(false);
+    }
+
+    public async Task<RemoteProjectGroup> CreateProjectGroupAsync(
+        RemoteHost host,
+        string name,
+        string? color = null,
+        bool mergeWorkspaces = false,
+        IReadOnlyList<string>? projectIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        ProjectGroupMessage? created = null;
+        await WithClientAsync(host, async client =>
+        {
+            if (!client.SupportsProjectGroups) throw new IOException("This computer needs an update to manage project groups.");
+            created = await client.CreateProjectGroupAsync(new CreateProjectGroupMessage
+            {
+                Name = name.Trim(),
+                Color = string.IsNullOrWhiteSpace(color) ? null : color.Trim(),
+                MergeWorkspaces = mergeWorkspaces,
+                ProjectIds = projectIds is { Count: > 0 } ? [.. projectIds] : null,
+            }, cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+        return await UiAsync(() => UpsertProjectGroup(host, created!)).ConfigureAwait(false);
+    }
+
+    public async Task<RemoteProjectGroup> UpdateProjectGroupAsync(
+        RemoteProjectGroup group,
+        string? name = null,
+        string? color = null,
+        bool clearColor = false,
+        bool? mergeWorkspaces = null,
+        CancellationToken cancellationToken = default)
+    {
+        ProjectGroupMessage? updated = null;
+        await WithClientAsync(group.Host, async client =>
+        {
+            if (!client.SupportsProjectGroups) throw new IOException("This computer needs an update to manage project groups.");
+            updated = await client.UpdateProjectGroupAsync(new UpdateProjectGroupMessage
+            {
+                GroupId = group.Id,
+                Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
+                Color = clearColor ? null : color,
+                ClearColor = clearColor,
+                MergeWorkspaces = mergeWorkspaces,
+            }, cancellationToken).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+        return await UiAsync(() => UpsertProjectGroup(group.Host, updated!)).ConfigureAwait(false);
+    }
+
+    public Task DeleteProjectGroupAsync(RemoteProjectGroup group, CancellationToken cancellationToken = default) =>
+        WithClientAsync(group.Host, async client =>
+        {
+            if (!client.SupportsProjectGroups) throw new IOException("This computer needs an update to manage project groups.");
+            await client.DeleteProjectGroupAsync(group.Id, cancellationToken).ConfigureAwait(false);
+            await UiAsync(() =>
+            {
+                foreach (var project in group.Host.Projects)
+                {
+                    if (string.Equals(project.GroupId, group.Id, StringComparison.Ordinal))
+                    {
+                        project.GroupId = null;
+                    }
+                }
+                group.Host.ProjectGroups.Remove(group);
+            }).ConfigureAwait(false);
+        });
+
+    public Task SetProjectGroupAsync(RemoteProject project, string? groupId, CancellationToken cancellationToken = default) =>
+        WithClientAsync(project.Host, async client =>
+        {
+            if (!client.SupportsProjectGroups) throw new IOException("This computer needs an update to manage project groups.");
+            var normalized = string.IsNullOrWhiteSpace(groupId) ? null : groupId;
+            await client.SetProjectGroupAsync(project.Id, normalized, cancellationToken).ConfigureAwait(false);
+            await UiAsync(() => project.GroupId = normalized).ConfigureAwait(false);
+        });
+
+    private static RemoteProjectGroup UpsertProjectGroup(RemoteHost host, ProjectGroupMessage msg)
+    {
+        var existing = host.ProjectGroups.FirstOrDefault(g => string.Equals(g.Id, msg.Id, StringComparison.Ordinal));
+        var group = existing ?? new RemoteProjectGroup(host, msg.Id, msg.Name);
+        group.Name = msg.Name;
+        group.Color = msg.Color;
+        group.MergeWorkspaces = msg.MergeWorkspaces;
+        if (existing is null)
+        {
+            host.ProjectGroups.Add(group);
+        }
+        return group;
     }
 
     private static RemoteFolderEntry FolderOf(BrowseEntryMessage entry) => new(entry.Name, entry.Path, entry.Kind, entry.IsExistingProject);
@@ -656,27 +832,43 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         }
     }
 
-    private void OnWorkspaceChanged(string hostId) => Ui(() =>
+    private void OnWorkspaceChanged(string hostId)
     {
-        if (_states.TryGetValue(hostId, out var state) && _connections.ClientOf(hostId) is { } client) _ = LoadAsync(hostId, client, state);
-    });
+        if (_isBackgrounded)
+        {
+            _dirtyHostsWhileBackgrounded[hostId] = 0;
+            return;
+        }
+        Ui(() =>
+        {
+            if (_states.TryGetValue(hostId, out var state) && _connections.ClientOf(hostId) is { } client) _ = LoadAsync(hostId, client, state);
+        });
+    }
 
-    private void OnItemChanged(string hostId, ItemMessage item) => Ui(() =>
+    private void OnItemChanged(string hostId, ItemMessage item)
     {
-        if (!_states.TryGetValue(hostId, out var state)) return;
-        var session = state.Host.Projects.FirstOrDefault(project => project.Id == item.ProjectId)?.Sessions.FirstOrDefault(known => known.Id == item.Id);
-        if (session is not null)
+        if (_isBackgrounded)
         {
-            session.Title = item.Title;
-            session.Activity = ActivityOf(item.Activity);
-            ApplyOrigin(session, item);
+            _dirtyHostsWhileBackgrounded[hostId] = 0;
+            return;
         }
-        else if (_connections.ClientOf(hostId) is { } client)
+        Ui(() =>
         {
-            // An item this phone has not heard of yet: the lists are read again.
-            _ = LoadAsync(hostId, client, state);
-        }
-    });
+            if (!_states.TryGetValue(hostId, out var state)) return;
+            var session = state.Host.Projects.FirstOrDefault(project => project.Id == item.ProjectId)?.Sessions.FirstOrDefault(known => known.Id == item.Id);
+            if (session is not null)
+            {
+                session.Title = item.Title;
+                session.Activity = ActivityOf(item.Activity);
+                ApplyOrigin(session, item);
+            }
+            else if (_connections.ClientOf(hostId) is { } client)
+            {
+                // An item this phone has not heard of yet: the lists are read again.
+                _ = LoadAsync(hostId, client, state);
+            }
+        });
+    }
 
     private void OnAccountChanged()
     {
@@ -714,14 +906,16 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         {
             using var limit = new CancellationTokenSource(CallTimeout);
             var ct = limit.Token;
-            // Agents, projects, bots, and (when supported) bot groups are independent; fetch in parallel.
+            // Agents, projects (+ Desktop groups), bots, and (when supported) bot groups are independent; fetch in parallel.
             var agentsTask = client.ListAgentsAsync(ct);
-            var projectsTask = client.ListProjectsAsync(ct);
+            var projectListTask = client.ListProjectsWithGroupsAsync(ct);
             var botsTask = client.SupportsBots ? client.ListBotsAsync(ct) : Task.FromResult<IReadOnlyList<BotMessage>>([]);
             var botGroupsTask = client.SupportsBotGroups ? client.ListBotGroupsAsync(ct) : Task.FromResult<IReadOnlyList<BotGroupMessageDto>>([]);
-            await Task.WhenAll(agentsTask, projectsTask, botsTask, botGroupsTask).ConfigureAwait(false);
+            await Task.WhenAll(agentsTask, projectListTask, botsTask, botGroupsTask).ConfigureAwait(false);
             var agents = await agentsTask.ConfigureAwait(false);
-            var projects = await projectsTask.ConfigureAwait(false);
+            var projectList = await projectListTask.ConfigureAwait(false);
+            var projects = projectList.Projects;
+            var projectGroups = projectList.Groups ?? [];
             var bots = await botsTask.ConfigureAwait(false);
             var botGroups = await botGroupsTask.ConfigureAwait(false);
             var itemPairs = await Task.WhenAll(projects.Select(async project =>
@@ -744,6 +938,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                     state.Agents = agents.ToDictionary(agent => agent.Id, StringComparer.Ordinal);
                     state.Host.Agents = mappedAgents;
                 }
+                ApplyProjectGroups(state.Host, projectGroups);
                 Apply(state, client, projects, items);
                 ApplyBots(state.Host, bots);
                 ApplyBotGroups(state.Host, botGroups);
@@ -752,6 +947,21 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         catch (Exception e) when (e is IOException or RemoteException or OperationCanceledException or ObjectDisposedException)
         {
         }
+    }
+
+    private static void ApplyProjectGroups(RemoteHost host, IReadOnlyList<ProjectGroupMessage> groupMessages)
+    {
+        var target = new List<RemoteProjectGroup>(groupMessages.Count);
+        foreach (var msg in groupMessages)
+        {
+            var group = host.ProjectGroups.FirstOrDefault(known => string.Equals(known.Id, msg.Id, StringComparison.Ordinal))
+                ?? new RemoteProjectGroup(host, msg.Id, msg.Name);
+            group.Name = msg.Name;
+            group.Color = msg.Color;
+            group.MergeWorkspaces = msg.MergeWorkspaces;
+            target.Add(group);
+        }
+        Replace(host.ProjectGroups, target);
     }
 
     // The host's projects and items into the page's: what is still there keeps its object (a page may be showing it).
@@ -766,6 +976,7 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
                 ?? new RemoteProject(host, message.Id, message.Name, message.Path);
             project.Color = message.Color;
             project.Icon = message.Icon;
+            project.GroupId = string.IsNullOrWhiteSpace(message.GroupId) ? null : message.GroupId;
             if (!string.IsNullOrWhiteSpace(message.Image)) activeImages.Add(message.Image);
             SyncProjectImage(host.Id, client, project, message.Image);
             project.IsGitRepository = message.IsGitRepository;
@@ -853,19 +1064,11 @@ internal sealed partial class RemoteWorkspace : IRemoteWorkspace, IDisposable
         }
     }
 
-    private static void Replace<T>(ObservableCollection<T> collection, List<T> target) where T : class
-    {
-        if (collection.SequenceEqual(target, ReferenceEqualityComparer.Instance)) return;
-        collection.Clear();
-        foreach (var item in target) collection.Add(item);
-    }
+    private static void Replace<T>(ObservableCollection<T> collection, List<T> target) where T : class =>
+        MobileCollectionSync.SyncByReference(collection, target);
 
-    private static void ReplaceValues<T>(ObservableCollection<T> collection, List<T> target)
-    {
-        if (collection.SequenceEqual(target)) return;
-        collection.Clear();
-        foreach (var item in target) collection.Add(item);
-    }
+    private static void ReplaceValues<T>(ObservableCollection<T> collection, List<T> target) =>
+        MobileCollectionSync.SyncByValue(collection, target);
 
     private static RemoteBranchWorkspace MapWorkspace(WorkspaceMessage ws) =>
         new(ws.Id, ws.Name, ws.Branch, ws.Path, ws.TaskKind, ws.TaskKey, ws.TaskTitle, ws.TaskUrl);

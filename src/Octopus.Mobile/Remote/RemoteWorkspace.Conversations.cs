@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using Avalonia.Threading;
 using Octopus.App.Common.Mentions;
+using Octopus.Mobile.Common;
 using Octopus.Mobile.Localization;
 using Octopus.Mobile.Workspace;
 using Octopus.Remote.Client;
@@ -81,15 +83,41 @@ internal sealed partial class RemoteWorkspace
         }
     }
 
-    /// <summary>After returning from background, reattach any open conversation that was left connecting, errored, or on a stale client.</summary>
-    private void ReattachOpenConversationsIfNeeded() => Ui(() =>
+    /// <summary>
+    /// Marks every currently open conversation as paused while the app is backgrounded and drops queued stale deltas
+    /// so returning to foreground fetches one clean snapshot instead of replaying hundreds of intermediate frames.
+    /// </summary>
+    private void PauseConversationsForBackground()
+    {
+        DrainAndDiscardStaleAcpUpdates();
+        Ui(() =>
+        {
+            foreach (var conversation in _conversations)
+            {
+                if (!conversation.IsDisposed) conversation.PausedInBackground = true;
+            }
+        });
+    }
+
+    private void DrainAndDiscardStaleAcpUpdates()
+    {
+        while (_pendingAcpUpdates.TryDequeue(out _)) { }
+        Volatile.Write(ref _acpDrainScheduled, 0);
+    }
+
+    /// <summary>After returning from background, reattach any open conversation that was paused in background, left connecting, errored, or on a stale client.</summary>
+    private void ReattachOpenConversationsIfNeeded(bool forceBackgroundPaused = false) => Ui(() =>
     {
         foreach (var conversation in _conversations.ToList())
         {
             if (conversation.IsDisposed || conversation.Attaching) continue;
+            var wasPaused = conversation.PausedInBackground;
+            conversation.PausedInBackground = false;
             var currentClient = _connections.ClientOf(conversation.Session.Project.Host.Id);
             if (currentClient is null) continue;
-            if (!ReferenceEquals(conversation.Client, currentClient) || conversation.State is ConversationState.Error or ConversationState.Connecting)
+            if (!ReferenceEquals(conversation.Client, currentClient)
+                || conversation.State is ConversationState.Error or ConversationState.Connecting
+                || (forceBackgroundPaused && wasPaused))
             {
                 ReattachSoon(conversation);
             }
@@ -155,16 +183,22 @@ internal sealed partial class RemoteWorkspace
     // ---- events ----
 
     // Each connection's acp/update events, routed by item to the conversations of that host.
-    // Queued and drained on the UI thread in batches so bursts after background wakeups never freeze the UI.
+    // While backgrounded (when stream suspension is enabled), updates are dropped immediately and replaced by a single
+    // snapshot upon foreground resume. While foregrounded, bounded batches drain at Background priority so touch input
+    // and scrolling always stay responsive.
     private void Listen(string hostId, RemoteHostClient client)
     {
         if (_acpListeners.ContainsKey(client)) return;
         Action<AcpUpdateMessage> listener = update =>
         {
+            if (_isBackgrounded && MobilePreferences.Current.SuspendStreamInBackground)
+            {
+                return;
+            }
             _pendingAcpUpdates.Enqueue((client, update));
             if (Interlocked.Exchange(ref _acpDrainScheduled, 1) == 0)
             {
-                Ui(DrainAcpUpdates);
+                Dispatcher.UIThread.Post(DrainAcpUpdates, DispatcherPriority.Background);
             }
         };
         _acpListeners[client] = (hostId, listener);
@@ -173,7 +207,12 @@ internal sealed partial class RemoteWorkspace
 
     private void DrainAcpUpdates()
     {
-        const int maxPerTick = 64;
+        if (_disposed || (_isBackgrounded && MobilePreferences.Current.SuspendStreamInBackground))
+        {
+            DrainAndDiscardStaleAcpUpdates();
+            return;
+        }
+        const int maxPerTick = 16;
         var processed = 0;
         while (processed < maxPerTick && _pendingAcpUpdates.TryDequeue(out var item))
         {
@@ -181,9 +220,9 @@ internal sealed partial class RemoteWorkspace
             processed++;
         }
         Volatile.Write(ref _acpDrainScheduled, 0);
-        if (!_pendingAcpUpdates.IsEmpty && Interlocked.Exchange(ref _acpDrainScheduled, 1) == 0)
+        if (!_pendingAcpUpdates.IsEmpty && !_isBackgrounded && Interlocked.Exchange(ref _acpDrainScheduled, 1) == 0)
         {
-            Ui(DrainAcpUpdates);
+            Dispatcher.UIThread.Post(DrainAcpUpdates, DispatcherPriority.Background);
         }
     }
 
@@ -273,6 +312,7 @@ internal sealed partial class RemoteWorkspace
         public RemoteHostClient? Client;
         public bool Attaching;
         public bool AttachAgain;
+        public bool PausedInBackground;
         public bool IsDisposed { get; private set; }
 
         private RemoteHost Host => Session.Project.Host;

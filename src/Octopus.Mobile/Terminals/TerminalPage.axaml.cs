@@ -92,6 +92,7 @@ public partial class TerminalPage : Page, ITerminalSurface, IClosablePage
     private void OnForegrounded() => Dispatcher.UIThread.Post(() =>
     {
         if (!_attached || MobileHost.IsBackgrounded) return;
+        _viewModel.RefreshQuickReplies();
         _replies.Start();
     });
 

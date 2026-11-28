@@ -30,7 +30,8 @@
         <MetricsSupport>false</MetricsSupport>
         <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
         <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
-        <UseSystemResourceKeys>true</UseSystemResourceKeys>
+        <!-- Keep readable BCL exception messages in iOS crash reports instead of opaque resource keys. -->
+        <UseSystemResourceKeys>false</UseSystemResourceKeys>
     </PropertyGroup>
 
     <ItemGroup>

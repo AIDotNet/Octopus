@@ -71,11 +71,22 @@ jobs:
           -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME"
           -o artifacts/android
 
+      - name: Archive Android R8 mapping (if generated)
+        run: |
+          mkdir -p artifacts/android-symbols
+          find src/Octopus.Mobile.Android/obj/Release -name 'mapping.txt' -exec cp {} artifacts/android-symbols/ \; || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: octopus-mobile-android
           path: artifacts/android/*-Signed.apk
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octopus-mobile-android-symbols
+          path: artifacts/android-symbols/
+          if-no-files-found: ignore
 
   ios:
     name: ios
@@ -110,14 +121,24 @@ jobs:
       - name: Build (device, NativeAOT, unsigned)
         run: dotnet build src/Octopus.Mobile.iOS -c Release -p:RuntimeIdentifier=ios-arm64 -p:EnableCodeSigning=false
 
-      - name: Pack the simulator app
+      - name: Pack the simulator app and device dSYM symbols
         run: |
           app=$(find src/Octopus.Mobile.iOS/bin/Debug -name '*.app' -type d -path '*iossimulator-arm64*' | head -1)
-          mkdir -p artifacts/ios
+          mkdir -p artifacts/ios artifacts/ios-symbols
           ditto -c -k --keepParent "$app" artifacts/ios/Octopus-simulator.zip
+          dsym=$(find src/Octopus.Mobile.iOS/bin/Release -name '*.dSYM' -type d -path '*ios-arm64*' | head -1 || true)
+          if [ -n "$dsym" ]; then
+            ditto -c -k --keepParent "$dsym" artifacts/ios-symbols/Octopus-device.dSYM.zip
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: octopus-mobile-ios-simulator
           path: artifacts/ios/Octopus-simulator.zip
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octopus-mobile-ios-dsym
+          path: artifacts/ios-symbols/
+          if-no-files-found: ignore
